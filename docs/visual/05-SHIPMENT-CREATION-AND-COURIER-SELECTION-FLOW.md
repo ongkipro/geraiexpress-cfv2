@@ -28,7 +28,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
                                 ▼
  STAGE 4: Recipient (`Kontak > Penerima`) + Live COD Phone Risk Score + Item & Packing Add-Ons
                                 ▼
- STAGE 5: Locked `INV #8K4M2P7` Summary → Payment (`Tunai | QRIS | Transfer`) → `Bayar & Cetak (Enter)`
+ STAGE 5: Locked `INV #8K4M2P7` Summary → Payment (`Tunai | QRIS | Transfer | Deposit Reseller`) → `Bayar & Cetak (Enter)`
           • Serialized through `GeraiVaultDO` (handles `provider_unpaid_hold` gracefully if balance is low)
                                 ▼
  STAGE 6: Issued AWB State!

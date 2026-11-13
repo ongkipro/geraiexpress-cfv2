@@ -29,7 +29,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 
 ### Key Sub-Tabs Inside `Kiriman`:
 - **Tab `Pickup & Manifest`:** groups the 18 ready parcels by courier (`J&T: 11`, `SiCepat: 5`, `JNE: 2` + `🚐 Mobil` hint), opens barcode scan-into-sack mode (loud red alert on wrong courier), captures courier finger signature, or records `Diantar Mandiri ke Cabang`.
-- **Tab `Kendala & Klaim`:** filters `Tidak Bergerak (48j–4h | 5–14h | >14h)`, `Gagal Antar`, `Selisih Berat / Cordest` (side-by-side counter scale photo vs Mengantar `penyesuaian` invoice), and `Bisa Klaim` with live filing countdowns.
+- **Tab `Kendala & Klaim`:** filters `Tidak Bergerak (48 jam–4 hari | 5–14 hari | 15–30 hari | >30 hari)`, `Gagal Antar`, `Selisih Berat / Cordest` (side-by-side counter scale photo vs Mengantar `penyesuaian` invoice), and `Bisa Klaim` with live filing countdowns.
 - **Tab `Meja Retur`:** scans arriving RTS AWBs, reveals `true_sender_json`, logs box condition + R2 photo, sends 1-click WhatsApp **4-digit `Kode Ambil`**, and verifies handover back to the true sender.
 
 ---
@@ -73,7 +73,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 ├────────────────────────┴────────────────────────┴─────────────────────────┴────────────────────────┤
 │ ⚠️ 1 Kiriman (`INV #5N7R3V4` · Rp15.200) menunggu pembayaran saldo Mengantar → [💳 Bayar Batch Skrg]│
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Tabs: [● Mutasi Sync Mengantar (`/invoices`)] [Laba per INV] [Kas Loket & Shift] [Cadangan Retur*] │
+│ Tabs: [Ringkasan] [● Mutasi Sync] [Laba per INV] [Kas & Shift] [Cadangan Retur*] [Selisih Sync]    │
 ├──────────────────┬────────────────────────┬──────────────────────┬────────────────┬────────────────┤
 │ Waktu & No. Inv  │ Tipe Invoice Mengantar │ Terkait INV / AWB    │ Mutasi (Rp)    │ Saldo Berjalan │
 ├──────────────────┼────────────────────────┼──────────────────────┼────────────────┼────────────────┤
@@ -96,7 +96,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
    - `Mini-Site (*.gerai.cc)` — live preview of `berkahjaya.gerai.cc`, logo upload, hours, Google Maps pin, printable **A4/A5 Counter QR Tent Card**, Pro custom domain CNAME.
    - `Ekspedisi Aktif` — per-courier on/off toggles for the outlet & mini-site + courier rules & assigned discount visibility.
    - `Printer & Packing` — Web-Bluetooth pair/test, default paper size (`58mm` / `80mm` / `10×15`), print density (`Normal` / `Tebal`), shop packing add-on catalog (`Plastik`, `Bubble`, `Kardus`).
-   - `Outlet & Mengantar` — pickup `area_id` & map pinpoint, seller connection health, webhook status, plus an optional collapsed **`Data Usaha (opsional)`** section: `Bentuk Usaha` [Perorangan | UD | CV | PT | Koperasi | Lainnya], `Nama Resmi`, `NIB`, `NPWP`, `Alamat Terdaftar`, `Penanggung Jawab` — helper: *"Boleh dikosongkan. Diisi jika perlu faktur atau kerja sama resmi."*
+   - `Outlet & Mengantar` — pickup `area_id` & map pinpoint, seller connection health, webhook status, plus an optional collapsed **`Data Usaha (opsional)`** section: `Bentuk Usaha` [Perorangan | UD | CV | PT | Koperasi | Lainnya], `Nama Resmi`, `NIB`, `NPWP`, `Alamat Terdaftar`, `Nama Brand`, `Penanggung Jawab` (nama, jabatan, email, HP) — helper: *"Boleh dikosongkan. Diisi jika perlu faktur atau kerja sama resmi."*
    - `Anggota` — invite/revoke `Kasir` accounts, view staff audit trail.
    - `API & MCP` — issue/revoke scoped `gx_live_...` keys, link to `/api/v1/docs` Scalar UI, copy `/mcp` endpoint URL for AI assistants.
 2. **Super Admin `Sistem & Audit > Profil Perusahaan`:** form for `platform_legal_profile` grouped as `Identitas Badan Usaha` (Nama PT, NIB, NPWP, No. Akta & Tanggal, SK Kemenkumham, No. PSE), `Alamat` (Terdaftar, Korespondensi), `Kontak Resmi` (Email Dukungan, WhatsApp Dukungan, Email Pelindungan Data), `Direksi` (Nama Direktur). Empty fields show `Belum diisi`; header badge `Data perusahaan belum lengkap (n kolom)` until launch-required fields are filled. Save requires TOTP + audit reason.

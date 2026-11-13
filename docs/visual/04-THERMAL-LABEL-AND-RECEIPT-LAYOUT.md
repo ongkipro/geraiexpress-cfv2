@@ -73,7 +73,7 @@ Berat    : 1.200g / Vol 1.500g
            (Masuk tarif 2 kg)
 --------------------------------
 Ongkos Kirim         Rp   24.000
-Asuransi             Rp        0
+Asuransi                       -
 Kardus M             Rp    3.000
 Potongan Promo      -Rp        0
 --------------------------------

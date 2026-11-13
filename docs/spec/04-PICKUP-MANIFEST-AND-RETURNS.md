@@ -26,7 +26,7 @@ Under `ADR-0005`, 100% of failed deliveries (`RTS`) return to the outlet's addre
 
 1. **Step 1 — Scan Arriving Return:** cashier scans the returned AWB (or `INV` slug printed on the label) → records physical box condition (`Baik | Penyok/Rusak | Terbuka`) + 1 R2 evidence photo → status becomes `rts_at_gerai`.
 2. **Step 2 — Unmask True Sender & Send 4-Digit Pickup OTP:**
-   - System reveals `true_sender_json` (the real walk-in sender or reseller who dropped the parcel) and generates a **4-digit pickup code (`Kode Ambil`)**.
+   - System reveals `true_sender_json` (audit-logged as `true_sender_reveal`, ADR-0005) (the real walk-in sender or reseller who dropped the parcel) and generates a **4-digit pickup code (`Kode Ambil`)**.
    - 1-click WhatsApp button sends a pre-filled Indonesian notice with `INV`, AWB, parcel condition, storage deadline, and the 4-digit pickup code.
 3. **Step 3 — Verified Counter Handback:**
    - When the sender/reseller visits the outlet, cashier verifies the 4-digit code (or ID + signature override) → status closes cleanly at `rts_returned_to_sender`.
@@ -37,7 +37,7 @@ Under `ADR-0005`, 100% of failed deliveries (`RTS`) return to the outlet's addre
 ## 3. Proactive Exception Buckets & Claim Countdown Assistant (`/kiriman?tab=kendala`)
 
 1. **Four Live Operational Sub-Filters:**
-   - `Tidak Bergerak` (`48j–4h`, `5–14h`, `15–30h`, `>30h` without tracking scan),
+   - `Tidak Bergerak` (`48 jam–4 hari`, `5–14 hari`, `15–30 hari`, `>30 hari` without a tracking scan),
    - `Gagal Antar / Butuh Instruksi` (`DELIVERY PROBLEM` / `undelivery_hold`),
    - `Selisih Berat / Cordest` (compares counter `actual_weight_gram` + R2 scale photo against Mengantar adjustment invoices),
    - `Bisa Klaim` (eligible lost/damaged shipments).

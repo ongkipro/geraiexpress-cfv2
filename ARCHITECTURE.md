@@ -41,7 +41,7 @@ Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queu
                                │ (ONLY for the 4 Mengantar Partner API routes in Production)
                                ▼
                      ┌─────────────────────────────────────────────────────────┐
-                     │ `infra/partner-relay` (~40 LOC Stateless Node Container)│
+                     │ `infra/partner-relay` (≤ 80 LOC Stateless Node/Go Relay)│
                      │ • Inbound: HMAC-signed (`X-Relay-Signature`) + TLS      │
                      │ • Outbound: 1 Static Public IPv4 allowlisted at Partner │
                      └───────────────────────────┬─────────────────────────────┘
@@ -101,6 +101,6 @@ geraiexpress-cfv2/
 │   ├── mengantar-sdk/          # Redacting Public API + Partner API (`direct`/`relay`) typed client
 │   └── thermal-print/          # 58mm/80mm ESC/POS encoder (`Potong Disini`) + 32-col HTML previewer
 ├── infra/
-│   └── partner-relay/          # ~40 LOC stateless HMAC-verified static-IPv4 forwarder + Compose
-└── docs/                       # ADRs, technical specs (01..09), and visual/flow specs (01..06)
+│   └── partner-relay/          # ≤ 80 LOC stateless HMAC-verified static-IPv4 forwarder + Compose
+└── docs/                       # ADRs, research (01), technical specs (01..10), visual/flow specs (01..07)
 ```

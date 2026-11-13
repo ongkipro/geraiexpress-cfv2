@@ -22,6 +22,8 @@ Market and regulatory evidence established three constraints:
      - `FULL_GERAI_MASK`: prints Gerai identity as sender upon sender request while preserving `true_sender_json` internally.
 2. **Mandatory Paired Safeguards:**
    - Every masked shipment requires counter prohibited-goods confirmation (`prohibited_ack_at`) and a verified `true_sender` WhatsApp contact.
+   - **Reveal audit:** opening `true_sender_json` on an issued masked `INV` (shipment detail, `Meja Retur`, claim) writes an `audit_logs` row (`action = 'true_sender_reveal'`, actor, `INV`, reason). The contact book itself (`Kontak > Pengirim`) shows the owner's own contacts and is not a reveal.
+   - **Masking quota:** `tenants.masking_daily_quota` caps masked sends per outlet per WIB day; over the cap the presets fall back to `Standar Gerai` with the message `Kuota masking hari ini habis`.
    - **Meja Retur (`Return Intake`)** is a P0 launch module: scanning an arriving RTS AWB reveals `true_sender_json`, records parcel condition + R2 photo, generates a **4-digit pickup OTP** via WhatsApp, and logs final handover back to the true sender.
    - Super Admin holds an instant per-outlet `masking_enabled` kill-switch.
    - Local masked thermal labels are gated per courier by a physical hub-scan pilot test in Milestone M6.

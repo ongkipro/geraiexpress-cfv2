@@ -55,14 +55,14 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │ Ukuran: [30] × [20] × [15] cm → Berat Tagih: 2.000 g (2kg) │ ─────────────────────────────────────── │
 │                                                            │ Kurir      : J&T Express · EZ (2-3 hr)  │
 │ 2. PILIH EKSPEDISI   [● Reguler (6)] [Cargo (4)]           │ Ongkir     :               Rp  24.000   │
-│ (●) J&T EZ       2-3 hr  [🥇 TERMURAH]          Rp 24.000  │ Asuransi   :               Rp       0   │
+│ (●) J&T EZ       2-3 hr  [🥇 TERMURAH]          Rp 24.000  │ Asuransi   :                       -    │
 │ ( ) SiCepat REG  1-2 hr  [⚡ TERCEPAT]          Rp 26.000  │ Kardus M   :               Rp   3.000   │
 │ ( ) SPX Std      2-4 hr  [🟣 Drop-off saja]     Rp 23.500  │ Potongan   :              −Rp       0   │
 │                                                            │ ═══════════════════════════════════════ │
 │ 3. PENGIRIM (`/kontak/pengirim`) & MASKING                 │ TOTAL BAYAR:               Rp  27.000   │
 │ Preset: [Standar] [● Dropship Toko] [Privasi COD] [Gerai]  │                                         │
 │ Kontak: [ Toko Hijab Nisa (WA Asli: 0812xxxx)          ▾ ] │ PEMBAYARAN MEJA KASIR                   │
-│                                                            │ [● Tunai]  [ QRIS Gerai ]  [ Transfer ] │
+│                                                            │ [● Tunai] [QRIS] [Transfer] [Deposit]   │
 │ 4. PENERIMA (`/kontak/penerima`) & ISI PAKET               │ Diterima : [ Rp 50.000 ] → Kembali 23rb │
 │ HP  : [ 0857-2233-8821 ] [🟢 Aman COD · 6x Sukses / 0 RTS] │                                         │
 │ Nama: [ Rina Kartika   ] Jln: [ Jl. Dago Asri No. 14...  ] │ CETAK: [● 58mm Label+Struk] [10×15 PDF] │

@@ -93,9 +93,20 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
 
 ### 4.2 Relay rules (the whole program)
 
-1. **One secret:** `RELAY_SECRET` (HMAC-SHA256), timestamp window ±60 s. No nonce store: a replayed request can
-   only repeat a Partner call that already carries a valid Mengantar signature (itself bound to a ±5-minute
-   timestamp by Mengantar), and the four routes are either reads or provider-idempotent on `externalUserId`.
+1. **One secret:** `RELAY_SECRET` (HMAC-SHA256; `RELAY_SECRET_PREVIOUS` is also accepted only during a rotation
+   window, §7), timestamp window ±60 s. Requests travel inside TLS end to end (Cloudflare edge, then Full (strict)
+   with the Origin CA certificate), so a third party cannot capture one to replay it.
+   **Duplicate guard:** the relay keeps an in-memory map of `X-Relay-Signature` values seen in the last 120 s and
+   answers a repeat with `409 relay_duplicate` without calling Mengantar. This blocks accidental double sends from
+   client or proxy retries; it is not a database and is lost on restart, which is acceptable because the
+   timestamp window is shorter than a restart.
+   Route semantics (Partner research §4–7), which decide what a retry may do:
+   | Route | Body key | Repeat effect |
+   |---|---|---|
+   | `POST /sellers` (register) | `externalUserId` | Idempotent for a known `externalUserId` |
+   | `POST /sellers/list` | filter | Read |
+   | `POST /sellers/api-key` | `sellerId` | Returns the current key; creates one only if none exists |
+   | `POST /sellers/api-key/regenerate` | `sellerId` | **Not idempotent**: every call invalidates the previous `apiKey` and rotates `callbackSecret`, which `api-key` cannot return later |
 2. **Closed allowlist:** `X-Relay-Target` must be exactly one of the four Partner paths
    (`/sellers`, `/sellers/list`, `/sellers/api-key`, `/sellers/api-key/regenerate` under `/api/partner/v1`).
    The upstream origin is fixed config (`MENGANTAR_PARTNER_ORIGIN`), never taken from the request. Redirects are
@@ -124,8 +135,13 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 
 - `PARTNER_TRANSPORT=relay` is required in production; there is **no direct-fetch fallback** (it would fail with
   `IP_NOT_ALLOWED` and adds a second code path).
-- A timeout after the request may have reached Mengantar is `maybe_sent`. Reconcile with
-  `POST /sellers/list { externalUserId }` through the relay before any retry (ADR-0003).
+- A timeout after the request may have reached Mengantar is `maybe_sent`. Recovery is per route:
+  - `POST /sellers`: reconcile with `POST /sellers/list { externalUserId }` before any retry.
+  - `POST /sellers/list`, `POST /sellers/api-key`: safe to retry with a fresh signature.
+  - `POST /sellers/api-key/regenerate`: **never retried automatically.** Read the current key with
+    `POST /sellers/api-key { sellerId }`; if `webhook_state = 'active'`, set it to `secret_mismatch` and ask the
+    owner to re-enter the new callback secret in Mengantar (PR-02b). Super Admin sees
+    `Kunci diganti — perbarui secret webhook`.
 - Relay unreachable → the outlet stays `registration_pending`; Super Admin sees **`Relay tidak terjangkau`** in
   `Sistem & Audit > Kesehatan Integrasi & Relay`. Counter work of already-connected outlets is unaffected.
 
@@ -136,10 +152,13 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 - Coolify application `partner-relay`, image pinned by digest, no published host ports (Traefik routes
   `relay.geraiexpress.com` to the container), `restart: unless-stopped`, memory limit 128 MB, read-only root
   filesystem, non-root user.
-- Relay env (Coolify): `RELAY_SECRET`, `MENGANTAR_PARTNER_ORIGIN`. Worker secrets: `PARTNER_RELAY_URL`,
+- Relay env (Coolify): `RELAY_SECRET`, optional `RELAY_SECRET_PREVIOUS` (rotation only), `MENGANTAR_PARTNER_ORIGIN`. Worker secrets: `PARTNER_RELAY_URL`,
   `PARTNER_RELAY_SECRET` (same value as `RELAY_SECRET`), `MENGANTAR_PARTNER_ID`, `MENGANTAR_PARTNER_SECRET`.
 - DNS: `relay.geraiexpress.com` A record, proxied, to the VPS address; covered by the existing
-  `*.geraiexpress.com` Origin CA certificate.
+  `*.geraiexpress.com` Origin CA certificate; zone SSL mode Full (strict).
+- `apps/worker` binds explicit hostnames only (`app.`, `owner.`, `hooks.`, apex, `*.gerai.cc`), **never**
+  `*.geraiexpress.com/*`, so a Worker `fetch` to `relay.` reaches the VPS instead of the Worker itself.
+- Traefik access logs for this router stay at the default (no headers, no bodies).
 - Size target: ≤ 80 lines of Node or Go, zero runtime dependencies beyond the standard library.
 
 ---
@@ -162,8 +181,9 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 ## 7. Operating procedures
 
 - **IP change (rebuild, migration, Option B → A/C):** add the new address to the Mengantar allowlist first,
-  confirm step 4 of §6 from the new host, switch DNS, then ask Mengantar to remove the old address. Never the
-  reverse order.
+  confirm step 4 of §6 from the new host (run it inside the new container, or through a temporary proxied
+  hostname such as `relay-next.geraiexpress.com`, because the firewall only admits Cloudflare), switch DNS, then
+  ask Mengantar to remove the old address. Never the reverse order.
 - **Secret rotation:** set `RELAY_SECRET_PREVIOUS` = old value and `RELAY_SECRET` = new value on the relay, update
   the Worker, then remove `RELAY_SECRET_PREVIOUS` after 10 minutes.
 - **Reserved IP conversion:** convert the instance's current IPv4 to a Reserved IP in Vultr so the address does not

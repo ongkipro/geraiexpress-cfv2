@@ -46,7 +46,8 @@ Modern browsers resolve every `*.localhost` subdomain to `127.0.0.1` without `/e
 - `KEK_SECRET` — 32-byte `AES-256-GCM` master key wrapping seller Mengantar credentials.
 - `MENGANTAR_PARTNER_ID` (`ongkirich`) & `MENGANTAR_PARTNER_SECRET`.
 - `PARTNER_TRANSPORT` — `"direct"` (local/sandbox) or `"relay"` (production).
-- `PARTNER_RELAY_URL` & `PARTNER_RELAY_SECRET` — HMAC credentials for `infra/partner-relay`.
+- `PARTNER_RELAY_URL` & `PARTNER_RELAY_SECRET` — HMAC credentials for `infra/partner-relay` (`docs/spec/10`).
+- `MENGANTAR_PUBLIC_ORIGIN` & `MENGANTAR_PARTNER_ORIGIN` — environment-specific provider origins (sandbox vs production); never inferred from each other.
 - `TURNSTILE_SECRET_KEY` — Cloudflare Turnstile secret (test dummy key locally).
 - `SMTP_URL` / `MAIL_API_KEY` — Bahasa Indonesia OTP mail transport (Mailpit locally; fail-closed in prod until SPF/DKIM verified).
 

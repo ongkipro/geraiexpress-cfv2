@@ -5,7 +5,8 @@
 - **Purpose:** one place that says *where* every navigation element sits, *what* every page contains, and *who*
   sees it. Wireframes in `02`, `05`, `06` show page bodies; this file owns the frame around them.
 - All visible strings are normative Indonesian. Sizes follow the comfort contract: body 16 px, nothing visible
-  under 14 px, inputs 44 px (toolbar 40 px), sidebar links 40 px / 16 px, header 64 px.
+  under 14 px, inputs 44 px (toolbar 40 px desktop), sidebar links 40 px / 16 px, header 64 px; every touch
+  target on phones ≥ 44 px (`h-11 md:h-10`).
 
 ---
 
@@ -39,26 +40,27 @@
 
 | Zone | Contains | Never contains |
 |---|---|---|
-| Sidebar header | Outlet logo + name (`▾` opens outlet switcher only when the user belongs to >1 outlet), mini-site link | Promo, upgrade banners |
+| Sidebar header | Outlet logo + name (`▾` opens the outlet switcher only when the user is a member of >1 tenant, PR-24), mini-site link | Promo, upgrade banners |
 | Sidebar nav | The 6 menus, in this order; `Kontak` expands to 2 sub-items; badge counts only on `Kiriman` (items needing action) | Third-level links, settings sub-tabs, external links |
 | Sidebar footer | Printer status (🟢/🟠/🔴 + text), active shift + cashier name, collapse toggle | Logout (lives in the account menu) |
 | Header left | Page title of the current menu (breadcrumb only on detail pages: `Kiriman › INV 8K4M2P7`) | Menu duplication |
-| Header right | Global search (INV, AWB, phone; `Ctrl+K`), notifications, account menu, **`📷 Scan QR`** and **`+ Kiriman Baru`** (the one primary button on every page except POS itself) | More than one primary button |
+| Header right | Global search (INV, AWB, phone; `Ctrl+K`), notifications, account menu, **`📷 Scan QR`** and **`+ Kiriman Baru`** — primary style only on `Dashboard`, `/kasir` and `/kiriman`; on every page that has its own primary action (§3) it renders as an outline button, and it is hidden on `/kiriman/:slug` | More than one primary button per screen |
 | Page body | Title row → in-page tabs → filters/toolbar → content → sticky action bar when the page has a commit action | A second navigation sidebar |
 
-Account menu (`Ani ▾`): `Profil Saya` · `Ukuran Teks: Normal / Besar` · `Bantuan & Panduan` · `Keluar`.
-`Ukuran Teks: Besar` scales the root rem by 112.5 % (never `zoom`, never locks browser zoom).
+Account menu (`Ani ▾`): `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`
+(same three steps as `docs/visual/01`) · `Bantuan & Panduan` · `Keluar`. Text size scales the root rem (never
+`zoom`, never locks browser zoom).
 
 ### 1.2 Tablet 768–1023 px
 
-Sidebar becomes the 56 px icon rail with labels under icons (14 px). Header keeps search as an icon button
+Sidebar becomes the 56 px icon rail: icons only, label shown as a tooltip on hover and keyboard focus (as in §1.1). Header keeps search as an icon button
 that opens a full-width search sheet. `+ Kiriman Baru` stays visible.
 
 ### 1.3 Phone < 768 px (Android 360–412)
 
 ```text
 ┌──────────────────────────────────────┐
-│ ☰  Kiriman              [🔍] [📷]    │ ← header 56 px: menu drawer, title, search, scan
+│ ☰  Kiriman              [🔍] [📷]    │ ← header 64 px (contract): menu drawer, title, search, scan
 ├──────────────────────────────────────┤
 │                                      │
 │  PAGE BODY (single column, 16 px)    │
@@ -115,7 +117,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/kasir` | O K | Kasir | `+ Kiriman Baru` | tabs `Kiriman Baru · Multi-Paket · Cek Cepat · Shift Kas`; default tab = recent drafts + scan QR box | Margin toggle owner only |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Bayar & Cetak` | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
 | `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`) | Cost/margin rows owner only |
-| `/kasir/multi` | O K | Kasir › Multi-Paket | `Bayar & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | — |
+| `/kasir/multi` | O K | Kasir › Multi-Paket | `Bayar & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | Kasir sees customer price only |
 | `/kasir/cek-cepat` | O K | Kasir › Cek Cepat | `Buat Kiriman dari Hasil Ini` | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
 | `/kasir/shift` | O K | Kasir › Shift Kas | `Buka Shift` / `Tutup Shift` | opening cash → live totals (Tunai/QRIS/Transfer) → closing count → variance | Kasir: own shift; owner: all shifts |
 | `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Draf QR · Menunggu Saldo · Pickup & Manifest · Kendala & Klaim · Meja Retur` → filter bar → table | Cost/margin columns + CSV owner only |
@@ -126,7 +128,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/kontak/penerima` | O K | Kontak › Penerima | `+ Tambah Penerima` | search → table (nama, HP, kota, riwayat COD 🟢🟡🔴) | — |
 | `/kontak/penerima/:id` | O K | Kontak › Penerima › Rina K. | `+ Kiriman ke Penerima Ini` | addresses → COD history → shipments | — |
 | `/keuangan` | O | Keuangan | `Sinkronkan Sekarang` | 4 balance cards → `Menunggu Saldo` alert → tabs `Ringkasan & Saldo Mengantar · Mutasi Sync Mengantar · Laba per INV · Kas Loket & Shift · Cadangan Retur · Selisih Sync` | Route and API return 403 for Kasir |
-| `/pengaturan` | O (K: printer only) | Pengaturan | `Simpan` (sticky bar, appears on change) | tabs `Mini-Site · Ekspedisi Aktif · Printer & Packing · Outlet & Mengantar (+ Data Usaha opsional) · Anggota · API & MCP` | Kasir sees only `Printer & Packing › Printer` |
+| `/pengaturan` | O (K: printer only) | Pengaturan | Owner: `Simpan` (sticky bar, appears on change) | tabs `Mini-Site · Ekspedisi Aktif · Printer & Packing · Outlet & Mengantar (+ Data Usaha opsional) · Anggota · API & MCP` | Kasir sees only `Printer & Packing › Printer`: pair/test Bluetooth and density on this device (stored locally, no `Simpan`) |
 | `/kasir/layar-pelanggan` | O K (paired device) | Layar Pelanggan | — | outlet logo → locked line items → total (40 px) → outlet QRIS → `Terima kasih` | P1 (PR-22); no navigation, no cost fields |
 | `/notifikasi` | O K | Notifikasi | `Tandai Semua Dibaca` | grouped by day; each item deep-links | — |
 | `*` 403 / 404 / offline | O K | — | `Kembali ke Dashboard` | plain explanation + who can grant access (403) | Offline: POS queues nothing silently; shows `Koneksi terputus` banner |
@@ -141,14 +143,15 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/gerai/:slug` | Gerai › Berkah Jaya | — (read-only) | health, RTS %, Mengantar connection/webhook state, masking toggle, freeze (TOTP) |
 | `/tarif` | Tarif & Kurir | `Simpan Perubahan` (TOTP + reason) | tabs `Diskon & Cashback Gerai · Katalog & Aturan Kurir`; observed vs assigned bps editor |
 | `/pengawasan` | Pengawasan | — | tabs `Pantauan Kiriman & Sync · Radar Risiko COD`; cross-tenant search is read-only |
-| `/sistem` | Sistem & Audit | `Simpan` on `Profil Perusahaan` only | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan` |
+| `/sistem` | Sistem & Audit | `Simpan` on `Profil Perusahaan` only (TOTP + reason) | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan` |
 
 ### 3.4 Public (`geraiexpress.com`, `<slug>.gerai.cc`)
 
 Public pages follow `docs/visual/03` and the public size floor (body ≥ 17 px, nothing under 14 px).
 Routes: `geraiexpress.com/ · /fitur · /cara-kerja · /simulasi-kasir · /hubungi-kami · /ketentuan · /privasi`;
-mini-site `/ · /kirim/:slug · /lacak · /lacak/:kode · /inv/:slug`. Footer of both renders only the filled fields
-of `platform_legal_profile` (`DEC-218`).
+mini-site `/ · /kirim/:slug · /lacak · /lacak/:kode · /inv/:slug`. `geraiexpress.com` footer renders only the filled
+public fields of `platform_legal_profile` (never NPWP); mini-site footers show the outlet identity plus
+`Didukung GeraiExpress` and a `/privasi` link (`DEC-218`, spec 01 §2.1b).
 
 ---
 
@@ -156,10 +159,10 @@ of `platform_legal_profile` (`DEC-218`).
 
 | Frame element | shadcn component | Comfort edits (in the owned file, never per call) |
 |---|---|---|
-| Sidebar | `Sidebar`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuSub` | `SidebarMenuButton` `h-10 text-base`; rail `size-10!`; `SIDEBAR_WIDTH_ICON 3.5rem` |
+| Sidebar | `Sidebar`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuSub` | `SidebarMenuButton` `h-11 md:h-10 text-base`; rail `size-10!`; `SIDEBAR_WIDTH_ICON 3.5rem` |
 | Header search | `Command` in `Dialog` (`Ctrl+K`) | input `h-11 text-base` |
-| Account / outlet menu | `DropdownMenu` | items `h-10 text-base` |
-| In-page tabs | `Tabs` | trigger `h-10 text-base` |
+| Account / outlet menu | `DropdownMenu` | items `h-11 md:h-10 text-base` |
+| In-page tabs | `Tabs` | trigger `h-11 md:h-10 text-base` |
 | Tables | `Table` (+ TanStack for sorting/pagination) | head `h-11 text-sm font-medium`, cell `px-3 py-2 text-base`, `tabular-nums` for money/weights |
 | Forms | `Field`, `Input`, `Select`, `Textarea`, `ToggleGroup` (gram/kg) | `h-11 text-base` everywhere |
 | Status | `Badge` | `text-sm`, icon + text + color |

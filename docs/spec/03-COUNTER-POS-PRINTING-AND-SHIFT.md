@@ -21,7 +21,7 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - Selecting destination subdistrict immediately streams parallel courier cards.
 2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset.**
 3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks local D1 `recipient_contacts` delivery/RTS counters (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
-4. **Item Declaration, Mandatory Insurance Guard (`>= Rp500.000`), & Shop Packing Add-Ons.**
+4. **Item Declaration, Insurance Prompt (>= Rp500.000) (`>= Rp500.000`), & Shop Packing Add-Ons.**
 5. **Payment Collection & 1-Click Print.**
 
 ---
