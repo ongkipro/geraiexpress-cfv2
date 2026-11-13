@@ -1,0 +1,235 @@
+{
+  "url": "https://ui.shadcn.com/view/new-york-v4/dashboard-01",
+  "capturedAt": "2026-11-13T07:58:43.451Z",
+  "viewports": {
+    "360": {
+      "height": 1956,
+      "viewportHeight": 800,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "main",
+          "y": 0,
+          "h": 1956,
+          "cols": 1,
+          "bg": "lab(100 0 0)",
+          "media": 19,
+          "heading": "Documents"
+        }
+      ],
+      "title": "dashboard-01 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 956
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 699
+        },
+        {
+          "v": "12px",
+          "c": 210
+        },
+        {
+          "v": "30px",
+          "c": 24
+        },
+        {
+          "v": "16px",
+          "c": 23
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 437
+          },
+          {
+            "v": "lab(48.496 0 0)",
+            "c": 387
+          },
+          {
+            "v": "rgb(0, 0, 0)",
+            "c": 132
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [],
+      "buttons": 51,
+      "primaryButtons": 0,
+      "outboundLinks": 1,
+      "images": 0,
+      "h1": {
+        "el": "h1 \"Documents\"",
+        "words": 1,
+        "lines": 1
+      }
+    },
+    "768": {
+      "height": 2012,
+      "viewportHeight": 1024,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "div",
+          "y": 0,
+          "h": 2012,
+          "cols": 2,
+          "bg": "lab(98.26 0 0)",
+          "media": 20,
+          "heading": "Documents"
+        }
+      ],
+      "title": "dashboard-01 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 1126
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 823
+        },
+        {
+          "v": "12px",
+          "c": 247
+        },
+        {
+          "v": "16px",
+          "c": 32
+        },
+        {
+          "v": "30px",
+          "c": 24
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 563
+          },
+          {
+            "v": "lab(48.496 0 0)",
+            "c": 400
+          },
+          {
+            "v": "rgb(0, 0, 0)",
+            "c": 138
+          },
+          {
+            "v": "oklab(0 0 0 / 0.7)",
+            "c": 13
+          },
+          {
+            "v": "lab(98.26 0 0)",
+            "c": 12
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [],
+      "buttons": 60,
+      "primaryButtons": 0,
+      "outboundLinks": 1,
+      "images": 1,
+      "h1": {
+        "el": "h1 \"Documents\"",
+        "words": 1,
+        "lines": 1
+      }
+    },
+    "1440": {
+      "height": 1436,
+      "viewportHeight": 900,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "div",
+          "y": 0,
+          "h": 1436,
+          "cols": 2,
+          "bg": "lab(98.26 0 0)",
+          "media": 20,
+          "heading": "Documents"
+        }
+      ],
+      "title": "dashboard-01 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 1317
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 968
+        },
+        {
+          "v": "12px",
+          "c": 293
+        },
+        {
+          "v": "16px",
+          "c": 32
+        },
+        {
+          "v": "30px",
+          "c": 24
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 626
+          },
+          {
+            "v": "lab(48.496 0 0)",
+            "c": 438
+          },
+          {
+            "v": "rgb(0, 0, 0)",
+            "c": 167
+          },
+          {
+            "v": "oklab(0 0 0 / 0.6)",
+            "c": 48
+          },
+          {
+            "v": "oklab(0 0 0 / 0.7)",
+            "c": 13
+          },
+          {
+            "v": "lab(7.78201 -0.0000149012 0)",
+            "c": 13
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [
+        7,
+        18,
+        15,
+        15
+      ],
+      "buttons": 68,
+      "primaryButtons": 0,
+      "outboundLinks": 1,
+      "images": 1,
+      "h1": {
+        "el": "h1 \"Documents\"",
+        "words": 1,
+        "lines": 1
+      }
+    }
+  }
+}

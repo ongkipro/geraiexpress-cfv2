@@ -1,0 +1,166 @@
+{
+  "url": "https://ui.shadcn.com/view/new-york-v4/sidebar-07",
+  "capturedAt": "2026-11-13T07:58:51.876Z",
+  "viewports": {
+    "360": {
+      "height": 1482,
+      "viewportHeight": 800,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "main",
+          "y": 0,
+          "h": 1482,
+          "cols": 1,
+          "bg": "lab(100 0 0)",
+          "media": 1,
+          "heading": null
+        }
+      ],
+      "title": "sidebar-07 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 13
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 13
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 13
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [],
+      "buttons": 1,
+      "primaryButtons": 0,
+      "outboundLinks": 0,
+      "images": 0,
+      "h1": null
+    },
+    "768": {
+      "height": 1024,
+      "viewportHeight": 1024,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "div",
+          "y": 0,
+          "h": 1024,
+          "cols": 2,
+          "bg": "rgba(0, 0, 0, 0)",
+          "media": 2,
+          "heading": null
+        }
+      ],
+      "title": "sidebar-07 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 192
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 153
+        },
+        {
+          "v": "12px",
+          "c": 39
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 150
+          },
+          {
+            "v": "lab(48.496 0 0)",
+            "c": 22
+          },
+          {
+            "v": "oklab(0 0 0 / 0.7)",
+            "c": 20
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [
+        22
+      ],
+      "buttons": 8,
+      "primaryButtons": 0,
+      "outboundLinks": 0,
+      "images": 1,
+      "h1": null
+    },
+    "1440": {
+      "height": 900,
+      "viewportHeight": 900,
+      "outline": [
+        {
+          "kind": "section",
+          "tag": "div",
+          "y": 0,
+          "h": 900,
+          "cols": 2,
+          "bg": "rgba(0, 0, 0, 0)",
+          "media": 2,
+          "heading": null
+        }
+      ],
+      "title": "sidebar-07 - shadcn/ui",
+      "fonts": [
+        {
+          "v": "Geist",
+          "c": 192
+        }
+      ],
+      "sizes": [
+        {
+          "v": "14px",
+          "c": 153
+        },
+        {
+          "v": "12px",
+          "c": 39
+        }
+      ],
+      "palette": {
+        "text": [
+          {
+            "v": "lab(0 0 0)",
+            "c": 150
+          },
+          {
+            "v": "lab(48.496 0 0)",
+            "c": 22
+          },
+          {
+            "v": "oklab(0 0 0 / 0.7)",
+            "c": 20
+          }
+        ],
+        "background": []
+      },
+      "navLabels": [
+        22
+      ],
+      "buttons": 8,
+      "primaryButtons": 0,
+      "outboundLinks": 0,
+      "images": 1,
+      "h1": null
+    }
+  }
+}
