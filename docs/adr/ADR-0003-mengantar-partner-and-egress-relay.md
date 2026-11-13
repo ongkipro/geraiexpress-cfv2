@@ -14,7 +14,7 @@ GeraiExpress operates as an official Mengantar partner (`Partner ID: ongkirich`)
    - Each outlet owns its Mengantar prepaid balance, top-ups, Non-COD debits, return-shipping debits, and COD disbursements; GeraiExpress syncs and reconciles every movement via `GET /invoices`, `GET /order`, and `GET /batch` (`docs/spec/09-MENGANTAR-FINANCIAL-SYNC-AND-RECONCILIATION.md`).
 2. **Dual-Mode Partner Transport (`MengantarPartnerTransport`):**
    - `PARTNER_TRANSPORT="direct"` (local dev & Sandbox): Worker calls Mengantar Sandbox Partner API directly.
-   - `PARTNER_TRANSPORT="relay"` (Production): Worker sends HMAC-signed requests (`X-Relay-Timestamp`, `X-Relay-Signature`) exclusively for the 4 Partner routes to **`infra/partner-relay`**, a ≤ 80-line stateless Node/Go container deployed on a minimal VPS whose **static public IPv4** is registered with Mengantar.
+   - `PARTNER_TRANSPORT="relay"` (Production): Worker sends HMAC-signed requests (`X-Relay-Timestamp`, `X-Relay-Id`, `X-Relay-Target`, `X-Relay-Signature`) exclusively for the 4 Partner routes to **`infra/partner-relay`**, a ≤ 80-line stateless Node/Go container deployed on a minimal VPS whose **static public IPv4** is registered with Mengantar.
    - All **Public API** traffic continues directly from Cloudflare Workers to Mengantar with zero relay hop.
 
 Host choice, relay contract, deployment shape, M6 checks and IP-change procedure: `docs/spec/10-PARTNER-RELAY-VPS-STATIC-EGRESS.md` (`DEC-219`).

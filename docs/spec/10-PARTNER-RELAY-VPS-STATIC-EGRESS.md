@@ -139,6 +139,7 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 - `PARTNER_TRANSPORT=relay` is required in production; there is **no direct-fetch fallback** (it would fail with
   `IP_NOT_ALLOWED` and adds a second code path).
 - A timeout after the request may have reached Mengantar is `maybe_sent`. Recovery is per route:
+  - An unexpected `409 relay_duplicate` means an earlier copy already entered the relay: treat it as `maybe_sent`.
   - `POST /sellers`: reconcile with `POST /sellers/list { externalUserId }` before any retry.
   - `POST /sellers/list`, `POST /sellers/api-key`: safe to retry with a fresh signature.
   - `POST /sellers/api-key/regenerate`: **never retried automatically.** Read the current key with
