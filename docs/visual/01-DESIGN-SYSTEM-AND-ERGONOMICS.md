@@ -10,7 +10,7 @@ The visual language of `geraiexpress-cfv2` is **calm, high-contrast, Apple-clean
 2. **40+ Eye Comfort & Instant Font Scaling:**
    - Body and input text minimum **`16px`** (`17px` on public reading pages); secondary metadata minimum `14px` (never `10–11px` low-contrast micro-text for operational facts).
    - Top-bar quick text-scale toggle in `app.geraiexpress.com`: **`Normal (100%)` · `Besar (112%)` · `Sangat Besar (125%)`** persisted in `localStorage`.
-3. **Unambiguous Input & Touch Targets:** every interactive control has >= **`44px` (`min-h-11`)** touch height and an explicit `>= 3:1` border (`#7A7A7A` on `#FFFFFF`).
+3. **Unambiguous Input & Touch Targets:** every interactive control has >= **`44px` (`h-11`)** touch height on phones and for every form input (desktop sidebar, tabs and menus may use `md:h-10`, comfort contract) and an explicit `>= 3:1` border (`#7A7A7A` on `#FFFFFF`).
 4. **Strict Tabular Numerals (`tabular-nums`):** all Rupiah amounts, gram/kg weights, percentages, and timers use `font-variant-numeric: tabular-nums` right-aligned in tables/receipts.
 5. **Compact Navigation (`DEC-213`):** 6 top-level menus on the Gerai workspace and 5 on Super Admin. Related sub-workflows live in clean horizontal tabs with live count badges.
 

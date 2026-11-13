@@ -10,7 +10,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ KIRIMAN                                           [+ Kiriman Baru]  [+ Multi-Paket]  [⬇ Ekspor CSV]│
+│ KIRIMAN                                                             [+ Multi-Paket]  [⬇ Ekspor CSV]│
 │ Tabs: [● Semua (412)] [Draf QR (5)] [Menunggu Saldo (1)] [Pickup & Manifest (18)]                  │
 │       [Kendala & Klaim (3)] [↩️ Meja Retur (2)]                                                    │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
@@ -43,7 +43,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 │ Pengirim Asli (WA Retur) │ Nama Tercetak ("Sebagai") │ Preset Default   │ Volume     │ Deposit     │
 ├──────────────────────────┼───────────────────────────┼──────────────────┼────────────┼─────────────┤
 │ Ibu Siti Nisa            │ TOKO HIJAB NISA           │ Dropship Toko    │ 94 kiriman │ Rp 250.000  │
-│ WA: 0812-3456-7890       │ HP Label: 0812-3456-7890  │ (Tanpa Gerai)    │ Bulan ini  │ [Mutasi]    │
+│ WA: 0812-3456-7890 ✓     │ HP Label: 0812-3456-7890  │ (Tanpa Gerai)    │ Bulan ini  │ [Mutasi]    │
 │ Bpk Hendra Wijaya        │ Hendra Wijaya             │ Standar Gerai    │ 29 kiriman │ —           │
 └──────────────────────────┴───────────────────────────┴──────────────────┴────────────┴─────────────┘
 
@@ -53,7 +53,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 │ Nama & No. HP Penerima   │ Kecamatan Mengantar & Alamat Jalan     │ Riwayat COD      │ Aksi        │
 ├──────────────────────────┼────────────────────────────────────────┼──────────────────┼─────────────┤
 │ Rina Kartika             │ Coblong, Kota Bandung 40132            │ 🟢 6 Sukses /    │ [Kirim →]   │
-│ 0857-2233-8821 (WA ✓)    │ Jl. Dago Asri No. 14 RT 02 RW 05       │    0 Retur (0%)  │ [Edit]      │
+│ 0857-2233-8821           │ Jl. Dago Asri No. 14 RT 02 RW 05       │    0 Retur (0%)  │ [Edit]      │
 │ Doni Saputra             │ Ilir Barat I, Kota Palembang 30137     │ 🔴 1 Sukses /    │ [Kirim →]   │
 │ 0819-0011-2233           │ Jl. Angkatan 45 Lorong Bakti No. 8     │    2 Retur (67%) │ [Edit]      │
 └──────────────────────────┴────────────────────────────────────────┴──────────────────┴─────────────┘

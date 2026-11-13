@@ -19,9 +19,9 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - Weight defaults to **`1000`** with an inline 1-click **`[ gram ● | kg ]`** segmented toggle (`1250` `[gram ●]` ⇄ `1,25` `[kg ●]`), quick chips (`500 g`, `1.000 g`, `2 kg`, `5 kg`, `10 kg`), and helper text `= 1,25 kg · Masuk tarif 1 kg (toleransi s.d. 1.300 g)`.
    - **Unit-Mistake Guard:** entering `< 10` in `gram` mode (e.g., typing `2` intending `2 kg`) or `>= 100` in `kg` mode (e.g., typing `1000` intending `1000 g`) displays a 1-click yellow fix chip and blocks submission until confirmed.
    - Selecting destination subdistrict immediately streams parallel courier cards.
-2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset.**
+2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Bayar & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
 3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks local D1 `recipient_contacts` delivery/RTS counters (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
-4. **Item Declaration, Insurance Prompt (>= Rp500.000) (`>= Rp500.000`), & Shop Packing Add-Ons.**
+4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.**
 5. **Payment Collection & 1-Click Print.**
 
 ---

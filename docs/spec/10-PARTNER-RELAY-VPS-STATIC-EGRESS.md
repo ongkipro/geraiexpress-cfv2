@@ -81,8 +81,9 @@ Moving between A, B and C later is the same procedure as §7 ("IP change").
 ```http
 POST https://relay.geraiexpress.com/forward
 X-Relay-Timestamp: 1767000000
+X-Relay-Id: 0b7e2c4a-5f1d-4e8b-9c3a-2d6f8e1a4b70
 X-Relay-Target: /api/partner/v1/sellers/list
-X-Relay-Signature: hex(HMAC-SHA256(RELAY_SECRET, ts + "\n" + target + "\n" + hex(sha256(body))))
+X-Relay-Signature: hex(HMAC-SHA256(RELAY_SECRET, ts + "\n" + id + "\n" + target + "\n" + hex(sha256(body))))
 Content-Type: application/json
 partner-id: <assigned Partner ID>
 timestamp: <unix seconds, produced by the Worker>
@@ -96,10 +97,12 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
 1. **One secret:** `RELAY_SECRET` (HMAC-SHA256; `RELAY_SECRET_PREVIOUS` is also accepted only during a rotation
    window, §7), timestamp window ±60 s. Requests travel inside TLS end to end (Cloudflare edge, then Full (strict)
    with the Origin CA certificate), so a third party cannot capture one to replay it.
-   **Duplicate guard:** the relay keeps an in-memory map of `X-Relay-Signature` values seen in the last 120 s and
-   answers a repeat with `409 relay_duplicate` without calling Mengantar. This blocks accidental double sends from
-   client or proxy retries; it is not a database and is lost on restart, which is acceptable because the
-   timestamp window is shorter than a restart.
+   **Duplicate guard:** the Worker generates `X-Relay-Id` (UUID) once per intentional attempt; a transport retry of
+   the same attempt reuses it, a deliberate Worker retry gets a new one. The relay keeps an in-memory map of
+   `X-Relay-Id` values seen in the last 120 s and answers a repeat with `409 relay_duplicate` without calling
+   Mengantar. This blocks accidental double sends from client or proxy retries without blocking legitimate
+   calls in the same second. The map is lost on restart; that is acceptable because TLS prevents capture and
+   `api-key/regenerate` is never retried automatically (§4.3).
    Route semantics (Partner research §4–7), which decide what a retry may do:
    | Route | Body key | Repeat effect |
    |---|---|---|
@@ -116,9 +119,9 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
    headers `content-type`, `partner-id`, `timestamp`, `signature`.
 4. **Bounds:** request body ≤ 64 KB, response ≤ 1 MB, upstream timeout 15 s, max 4 concurrent upstream calls.
    The partner-wide 60/min and 1,000 registrations/day limits are enforced in the Worker by `PartnerQuotaDO`.
-5. **Logging:** method, target path, upstream status, latency, request id. **Never** bodies or headers:
+5. **Logging:** method, target path, upstream status, latency, `X-Relay-Id`. **Never** bodies or headers:
    `api-key` responses contain seller API keys and callback secrets.
-6. **Errors:** relay refusals use `relay_*` codes (`relay_auth_failed`, `relay_target_denied`,
+6. **Errors:** relay refusals use `relay_*` codes (`relay_auth_failed`, `relay_target_denied`, `relay_duplicate`,
    `relay_upstream_timeout`) so they are never confused with Mengantar's `403 IP_NOT_ALLOWED`.
 7. **Health:** `GET /healthz` → `200 {"ok":true}` without calling Mengantar.
 8. **Edge protection:** a Cloudflare WAF rate-limiting rule on `relay.geraiexpress.com` (e.g. 30 requests/min
@@ -140,7 +143,8 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
   - `POST /sellers/list`, `POST /sellers/api-key`: safe to retry with a fresh signature.
   - `POST /sellers/api-key/regenerate`: **never retried automatically.** Read the current key with
     `POST /sellers/api-key { sellerId }`; if `webhook_state = 'active'`, set it to `secret_mismatch` and ask the
-    owner to re-enter the new callback secret in Mengantar (PR-02b). Super Admin sees
+    owner to copy the rotated Webhook Secret from Mengantar Seller Settings into `Pengaturan > Outlet & Mengantar`
+    (PR-02b). Super Admin sees
     `Kunci diganti — perbarui secret webhook`.
 - Relay unreachable → the outlet stays `registration_pending`; Super Admin sees **`Relay tidak terjangkau`** in
   `Sistem & Audit > Kesehatan Integrasi & Relay`. Counter work of already-connected outlets is unaffected.

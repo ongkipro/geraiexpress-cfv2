@@ -49,7 +49,7 @@
 | `GET /api/v1/shipments` & `GET /api/v1/shipments/:slug` | `tracking:read` | List or fetch shipment details by `INV` slug or `?awb=`. |
 | `POST /api/v1/shipments/:slug/issue` | `shipments:issue` | Atomically dispatches order to Mengantar via `GeraiVaultDO` (`Idempotency-Key` required). |
 | `POST /api/v1/shipments/:slug/pay-unpaid` | `shipments:issue` | Completes payment via Mengantar `POST /order/pay-unpaid` after balance top-up. |
-| `GET / POST /api/v1/contacts/senders` | `contacts:*` | Manage `Kontak > Pengirim` (walk-in & reseller masking profiles). |
+| `GET / POST /api/v1/contacts/senders` | `contacts:*` | Manage `Kontak > Pengirim` (walk-in & reseller masking profiles). `wa_verified_*` is read-only over the API; changing `true_phone` clears it. |
 | `GET / POST /api/v1/contacts/recipients` | `contacts:*` | Manage `Kontak > Penerima` + COD delivery/return stats. |
 | `GET /api/v1/finance/summary` | `finance:read` | Read Dual-Book financial summary and synced Mengantar balance. |
 | `POST /api/v1/finance/sync` | `finance:sync` | Trigger rate-limited on-demand Mengantar `/invoices` sync. |

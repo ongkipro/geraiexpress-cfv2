@@ -34,4 +34,4 @@ Fix drift in the owning file; never silently work around a specification contrad
    - **Never emit or serve `*.map` source maps** in production client assets.
    - Never bundle `MENGANTAR_PARTNER_SECRET`, seller API keys (note: Mengantar Public API places the seller key in the URL path — **never log, return, or trace raw upstream request URLs**), or `PARTNER_RELAY_SECRET` into client code.
 6. **Indonesian Counter Ergonomics (35–55+ Operators):**
-   - Body and input text minimum `16px`, touch targets minimum `44px` (`min-h-11`), high-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).
+   - Body and input text minimum `16px`, touch targets minimum `44px` on phones and for all form inputs (`h-11`; desktop sidebar/tabs/menus may use `md:h-10` per `design/admin-contract.json`), high-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).

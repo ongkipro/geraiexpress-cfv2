@@ -72,6 +72,9 @@ that opens a full-width search sheet. `+ Kiriman Baru` stays visible.
 ```
 
 - Bottom bar: `Beranda` (Dashboard) · `Kasir` · center **`＋`** (= `+ Kiriman Baru`, 56 px) · `Kiriman` · `Lainnya`.
+  The center `＋` follows the header rule: filled only on `Dashboard`, `/kasir`, `/kiriman`; outline elsewhere.
+  Commit flows (`/kasir/multi`, `/kasir/shift`, `/kiriman/pickup/:batch`, `/kiriman/retur/:awb`) replace the
+  bottom bar with their sticky commit bar. Page bodies never repeat a `+ Kiriman Baru` button.
 - `Lainnya` opens a sheet with `Kontak › Pengirim`, `Kontak › Penerima`, `Keuangan` (owner only), `Pengaturan`,
   printer status, `Keluar`.
 - On `/kiriman/:slug` the bottom bar is replaced by the sticky **checkout bar** (`Total Rp 27.000` + `Bayar & Cetak`).
@@ -116,7 +119,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/` | K | Tugas Loket Hari Ini | `+ Kiriman Baru` | shift card → `Siap Pickup` per courier → `Meja Retur` waiting → recent INV list | No money totals, no Mengantar balance |
 | `/kasir` | O K | Kasir | `+ Kiriman Baru` | tabs `Kiriman Baru · Multi-Paket · Cek Cepat · Shift Kas`; default tab = recent drafts + scan QR box | Margin toggle owner only |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Bayar & Cetak` | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
-| `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`) | Cost/margin rows owner only |
+| `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`); masked INV: `Lihat Pengirim Asli` (reason + audit) | Cost/margin rows owner only |
 | `/kasir/multi` | O K | Kasir › Multi-Paket | `Bayar & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | Kasir sees customer price only |
 | `/kasir/cek-cepat` | O K | Kasir › Cek Cepat | `Buat Kiriman dari Hasil Ini` | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
 | `/kasir/shift` | O K | Kasir › Shift Kas | `Buka Shift` / `Tutup Shift` | opening cash → live totals (Tunai/QRIS/Transfer) → closing count → variance | Kasir: own shift; owner: all shifts |
@@ -140,7 +143,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/` | Ringkasan | — | 4 KPI (gerai aktif, kiriman hari ini, pengajuan, sync/relay health) → alerts list → volume trend |
 | `/gerai` | Gerai | — | tabs `Pengajuan Baru · Direktori Gerai · Domain Mitra` |
 | `/gerai/pengajuan/:id` | Gerai › Pengajuan › Berkah Jaya | `Setujui & Buka Akun Seller Mengantar` | applicant data → pickup map → relay status → slug readiness → reject with reason |
-| `/gerai/:slug` | Gerai › Berkah Jaya | — (read-only) | health, RTS %, Mengantar connection/webhook state, masking toggle, freeze (TOTP) |
+| `/gerai/:slug` | Gerai › Berkah Jaya | — (read-only data) | health, RTS %, Mengantar connection/webhook state; controls (TOTP + reason): masking toggle, `Kuota masking harian`, freeze |
 | `/tarif` | Tarif & Kurir | `Simpan Perubahan` (TOTP + reason) | tabs `Diskon & Cashback Gerai · Katalog & Aturan Kurir`; observed vs assigned bps editor |
 | `/pengawasan` | Pengawasan | — | tabs `Pantauan Kiriman & Sync · Radar Risiko COD`; cross-tenant search is read-only |
 | `/sistem` | Sistem & Audit | `Simpan` on `Profil Perusahaan` only (TOTP + reason) | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan` |
@@ -151,7 +154,7 @@ Public pages follow `docs/visual/03` and the public size floor (body ≥ 17 px, 
 Routes: `geraiexpress.com/ · /fitur · /cara-kerja · /simulasi-kasir · /hubungi-kami · /ketentuan · /privasi`;
 mini-site `/ · /kirim/:slug · /lacak · /lacak/:kode · /inv/:slug`. `geraiexpress.com` footer renders only the filled
 public fields of `platform_legal_profile` (never NPWP); mini-site footers show the outlet identity plus
-`Didukung GeraiExpress` and a `/privasi` link (`DEC-218`, spec 01 §2.1b).
+`Didukung jaringan resmi GeraiExpress` and a link to `https://geraiexpress.com/privasi` (`DEC-218`, spec 01 §2.1b).
 
 ---
 

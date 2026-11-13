@@ -29,7 +29,7 @@ Designed for neighborhood WhatsApp groups, shopfront QR banners, and local onlin
 │  ✓ Cocok untuk Olshop & Dropshipper: kirim atas nama toko Anda sendiri, dijemput kurir tiap sore.│
 │  ✓ Isi data dari rumah lewat menu di atas — sampai toko tinggal timbang & tempel resi 15 detik!  │
 ├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│  Didukung jaringan resmi GeraiExpress                                     Kebijakan Privasi      │
+│  Didukung jaringan resmi GeraiExpress                                     Kebijakan Privasi ↗    │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
