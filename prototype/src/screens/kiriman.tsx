@@ -1,6 +1,6 @@
 import * as React from "react"
 import { DateRangeFilter } from "@/components/date-range-filter"
-import { DEFAULT_DATE_PRESET, type DatePreset } from "@/lib/date-range"
+import { DEFAULT_PERIOD, type Period } from "@/lib/date-range"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,7 +19,7 @@ const tabs = [
 ] as const
 
 export function Kiriman({ role, href }: { role: "owner" | "kasir"; href: (p: string) => string }) {
-  const [preset, setPreset] = React.useState<DatePreset>(DEFAULT_DATE_PRESET)
+  const [period, setPeriod] = React.useState<Period>(DEFAULT_PERIOD)
   return (
     <div className="flex flex-col gap-4">
       <PageHead title="Kiriman">
@@ -42,7 +42,7 @@ export function Kiriman({ role, href }: { role: "owner" | "kasir"; href: (p: str
       <div className="flex flex-wrap gap-2">
         <label className="sr-only" htmlFor="cari-kiriman">Cari kiriman</label>
         <Input id="cari-kiriman" className="max-w-md" placeholder="Cari INV, AWB, nama, atau HP" />
-        <DateRangeFilter value={preset} onChange={setPreset} />
+        <DateRangeFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* Desktop table */}

@@ -5,7 +5,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartToo
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DateRangeFilter } from "@/components/date-range-filter"
 import { daily, rupiah, shipments } from "@/data"
-import { DEFAULT_DATE_PRESET, rangeLabel, resolvePreset, shortDate, type DatePreset } from "@/lib/date-range"
+import { DEFAULT_PERIOD, rangeLabel, resolvePeriod, shortDate, type Period } from "@/lib/date-range"
 import { PageHead, PaidBadge, Section, StatusBadge } from "./shared"
 
 const chartConfig = {
@@ -24,11 +24,20 @@ const couriers = [
 const hourly = Array.from({ length: 13 }, (_, i) => ({ date: `${String(8 + i).padStart(2, "0")}.00`, nonCod: [1, 2, 3, 4, 3, 2, 2, 3, 4, 5, 3, 2, 1][i], cod: [0, 1, 1, 2, 1, 1, 1, 2, 2, 2, 1, 1, 0][i] }))
 
 export function Dashboard({ role, href }: { role: "owner" | "kasir"; href: (p: string) => string }) {
-  const [preset, setPreset] = React.useState<DatePreset>(DEFAULT_DATE_PRESET)
+  const [period, setPeriod] = React.useState<Period>(DEFAULT_PERIOD)
   if (role === "kasir") return <KasirHome href={href} />
 
-  const r = resolvePreset(preset, new Date("2026-11-14T07:00:00Z"))
-  const rows = r.interval === "hour" ? hourly : daily.filter((d) => d.date >= r.start && d.date <= r.end).map((d) => ({ ...d, date: shortDate(d.date) }))
+  const r = resolvePeriod(period, new Date("2026-11-14T07:00:00Z"))
+  const inRange = daily.filter((d) => d.date >= r.start && d.date <= r.end)
+  const rows =
+    r.interval === "hour"
+      ? hourly
+      : r.interval === "day"
+        ? inRange.map((d) => ({ ...d, date: shortDate(d.date) }))
+        : Array.from({ length: Math.ceil(inRange.length / 7) }, (_, w) => {
+            const wk = inRange.slice(w * 7, w * 7 + 7)
+            return { date: `mg ${shortDate(wk[0].date)}`, nonCod: wk.reduce((a, d) => a + d.nonCod, 0), cod: wk.reduce((a, d) => a + d.cod, 0) }
+          })
   const total = rows.reduce((a, d) => a + d.nonCod + d.cod, 0)
   const cod = rows.reduce((a, d) => a + d.cod, 0)
   const unpaid = shipments.filter((s) => !s.paid)
@@ -43,7 +52,7 @@ export function Dashboard({ role, href }: { role: "owner" | "kasir"; href: (p: s
   return (
     <div className="flex flex-col gap-6">
       <PageHead title="Ringkasan Gerai">
-        <DateRangeFilter value={preset} onChange={setPreset} />
+        <DateRangeFilter value={period} onChange={setPeriod} />
       </PageHead>
 
       <section aria-label="Angka utama" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -56,7 +65,7 @@ export function Dashboard({ role, href }: { role: "owner" | "kasir"; href: (p: s
         ))}
       </section>
 
-      <Section title="Grafik pengiriman" aside={<span className="text-sm text-muted-foreground">{rangeLabel(r.start, r.end)} · per {r.interval === "hour" ? "jam" : "hari"}</span>}>
+      <Section title="Grafik pengiriman" aside={<span className="text-sm text-muted-foreground">{rangeLabel(r.start, r.end)} · per {r.interval === "hour" ? "jam" : r.interval === "day" ? "hari" : "minggu"}</span>}>
         <figure>
           <ChartContainer config={chartConfig} className="aspect-auto h-72 w-full">
             <BarChart data={rows} margin={{ left: 0, right: 8, top: 8 }}>

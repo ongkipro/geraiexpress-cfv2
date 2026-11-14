@@ -11,6 +11,9 @@ export const DATE_PRESETS = [
 ] as const
 
 export type DatePreset = (typeof DATE_PRESETS)[number]["value"]
+export type Period = { kind: "preset"; preset: DatePreset } | { kind: "custom"; start: string; end: string; interval?: "hour" | "day" | "week" }
+export const MAX_RANGE_DAYS = 180
+export const DEFAULT_PERIOD: Period = { kind: "preset", preset: "7d" }
 
 /** Default: last 7 days including today — a counter's week (weekday vs weekend) in one view. */
 export const DEFAULT_DATE_PRESET: DatePreset = "7d"
@@ -48,9 +51,24 @@ export function resolvePreset(p: DatePreset, now = new Date()): { start: string;
   }
 }
 
+export const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+export function daysInclusive(a: string, b: string) {
+  const t = (x: string) => Date.UTC(+x.slice(0, 4), +x.slice(5, 7) - 1, +x.slice(8, 10))
+  return Math.round(Math.abs(t(b) - t(a)) / 86_400_000) + 1
+}
+/** docs/visual/08 §1.4: hour for a single day, day up to 92 days, week beyond. */
+export function resolvePeriod(p: Period, now = new Date()) {
+  const r = p.kind === "preset" ? resolvePreset(p.preset, now) : { start: p.start, end: p.end, interval: "day" as const }
+  const n = daysInclusive(r.start, r.end)
+  return { ...r, interval: n === 1 ? ("hour" as const) : n <= 92 ? ("day" as const) : ("week" as const) }
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
 export const shortDate = (iso: string) => {
   const [, m, d] = iso.split("-").map(Number)
   return `${d} ${MONTHS[m - 1]}`
 }
-export const rangeLabel = (start: string, end: string) => (start === end ? shortDate(start) : `${shortDate(start)} – ${shortDate(end)}`)
+export const rangeLabel = (start: string, end: string, year = false) => {
+  const y = year ? ` ${end.slice(0, 4)}` : ""
+  return start === end ? `${shortDate(start)}${y}` : `${shortDate(start)} – ${shortDate(end)}${y}`
+}

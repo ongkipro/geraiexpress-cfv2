@@ -90,6 +90,7 @@ const titles: Record<string, string> = {
   "/keuangan": "Keuangan",
   "/pengaturan": "Pengaturan",
 }
+const titleFor = (p: string) => titles[p] ?? (p.startsWith("/pengaturan/") ? "Pengaturan" : undefined)
 
 export default function App() {
   const { path, params } = useHashRoute()
@@ -142,7 +143,7 @@ export default function App() {
               <nav aria-label="Menu utama">
                 <SidebarMenu>
                   {items.map((it) => {
-                    const active = it.sub ? path.startsWith("/kontak") : path === it.path || (it.path === "/kasir" && path.startsWith("/kasir"))
+                    const active = it.sub ? path.startsWith("/kontak") : path === it.path || (it.path !== "/" && path.startsWith(it.path + "/"))
                     return (
                       <SidebarMenuItem key={it.label}>
                         <SidebarMenuButton isActive={active} tooltip={it.label} render={<a href={href(it.path)} aria-current={active ? "page" : undefined} />}>
@@ -184,7 +185,7 @@ export default function App() {
           <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b bg-card px-4">
             <SidebarTrigger className="hidden md:inline-flex" aria-label="Ciutkan menu" />
             <MobileMenu href={href} items={items} />
-            <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em]">{onPos ? "Kiriman › INV 8K4M2P7" : titles[path] ?? "Kasir"}</h1>
+            <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em]">{onPos ? "Kiriman › INV 8K4M2P7" : titleFor(path) ?? "Kasir"}</h1>
             <div className="ml-auto flex items-center gap-2">
               <Button variant="outline" className="hidden w-72 justify-start text-muted-foreground lg:inline-flex" aria-label="Cari INV, AWB, atau nomor HP">
                 <SearchIcon data-icon="inline-start" />
@@ -245,8 +246,9 @@ function Screen({ path, role, href }: { path: string; role: Role; href: (p: stri
     case "/keuangan":
       return <Keuangan />
     case "/pengaturan":
-      return <Pengaturan role={role} />
+      return <Pengaturan role={role} item={null} href={href} />
     default:
+      if (path.startsWith("/pengaturan/")) return <Pengaturan role={role} item={path.split("/")[2]} href={href} />
       return <p>Halaman tidak ditemukan.</p>
   }
 }

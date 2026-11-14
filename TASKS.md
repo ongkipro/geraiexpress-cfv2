@@ -33,7 +33,7 @@ tenant B's record).
 - **Done when:** `dotuiux check <url> --surface admin` has 0 FAIL and `admin-geometry.mjs <url> --contract
   design/admin-contract.json --viewports 390,1366,1536` exits 0 on every listed screen.
 
-### TASK-004: Prototype the period filter and settings sub-navigation
+### TASK-004: Prototype the period filter and settings sub-navigation — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
 - **Requirement:** DEC-221, DEC-223 (`docs/visual/08`)
 - **Risk Level:** R1
 - **Job:** implementation (throwaway prototype)

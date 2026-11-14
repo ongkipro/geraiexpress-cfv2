@@ -56,3 +56,4 @@ Colour/opacity transitions ≤ 150 ms; none on scroll; reduced motion removes al
 allow: primary-actions — admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
 allow: nav-label — tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
 allow: marker-count — status badges are per table row in operational lists; each is dot + text, neutral chip
+allow: icon-overload — settings list on phones: a trailing chevron on every row is the platform cue that the row opens its own page (visual 08 §2.2); no icon tiles
