@@ -92,7 +92,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 
 ## 4. `Pengaturan` Tabs (`/pengaturan`) & Super Admin Key Screens (`owner.geraiexpress.com`)
 
-1. **Gerai `Pengaturan` (6 Clean Tabs):**
+1. **Gerai `Pengaturan` — superseded by `docs/visual/08` §2 (DEC-223: settings sub-menu, one route per item). The item contents below still apply, regrouped as Profil Gerai, Mini-Site, Data Usaha · Ekspedisi Aktif, Printer & Struk, Packing & Biaya Tambahan · Anggota, Mengantar, API & MCP:**
    - `Mini-Site (*.gerai.cc)` — live preview of `berkahjaya.gerai.cc`, logo upload, hours, Google Maps pin, printable **A4/A5 Counter QR Tent Card**, Pro custom domain CNAME.
    - `Ekspedisi Aktif` — per-courier on/off toggles for the outlet & mini-site + courier rules & assigned discount visibility.
    - `Printer & Packing` — Web-Bluetooth pair/test, default paper size (`58mm` / `80mm` / `10×15`), print density (`Normal` / `Tebal`), shop packing add-on catalog (`Plastik`, `Bubble`, `Kardus`).

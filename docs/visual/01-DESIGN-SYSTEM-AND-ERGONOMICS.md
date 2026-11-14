@@ -18,6 +18,8 @@ The visual language of `geraiexpress-cfv2` is **calm, high-contrast, Apple-clean
 
 ## 2. Color Tokens (WCAG AA/AAA Verified)
 
+> **Signed-in workspace palette superseded by DEC-222 (2026-11-14):** accent `#2547C8`, canvas `#F6F8FC`, ink `#1B2B44`, muted `#55657D`, borders `#D9DFEA`, inputs `#7B879C`, chart blue `#2547C8` + orange `#E07A2F`. The table below remains the public-page palette and the status colours.
+
 | Token | Hex | Usage | Contrast on White |
 |---|---|---|---|
 | `--bg-canvas` | `#FFFFFF` | Primary workspace surface & cards over parchment | — |

@@ -33,6 +33,16 @@ tenant B's record).
 - **Done when:** `dotuiux check <url> --surface admin` has 0 FAIL and `admin-geometry.mjs <url> --contract
   design/admin-contract.json --viewports 390,1366,1536` exits 0 on every listed screen.
 
+### TASK-004: Prototype the period filter and settings sub-navigation
+- **Requirement:** DEC-221, DEC-223 (`docs/visual/08`)
+- **Risk Level:** R1
+- **Job:** implementation (throwaway prototype)
+- **Allowed Paths:** `prototype/**`
+- **Depends On:** TASK-001
+- **Done when:** the prototype shows the period filter (presets + two-month range calendar, phone sheet) and
+  `/pengaturan` with the grouped sub-menu and three item pages; `dotuiux check --surface admin` 0 fail and
+  `admin-geometry.mjs` exit 0 at 390/1366/1536 on those routes.
+
 ### TASK-002: Owner picks the visual direction
 - **Requirement:** `DESIGN.md` Direction
 - **Risk Level:** R0

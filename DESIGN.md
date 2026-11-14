@@ -25,13 +25,17 @@ this file holds the accepted constraints only and the build is visually UNVERIFI
   checkout bar (visual 07 §1.3).
 - C3: list pages = title → in-page tabs with counts → filter bar → table; tables become cards under 768 px.
 - C4: POS = 60/40 split at ≥ 1024 px (inputs left, locked summary + payment + print right); single column on phones.
-- C5: dashboard (owner) = 4 KPI → `Perlu Tindakan` chips → trend + courier table; Kasir home has no money totals.
+- C5: dashboard (owner) = period filter: presets + calendar range (default 7 hari terakhir, visual 08 §1) → 4 KPI → shipment chart → shipment history →
+  courier table + `Perlu tindakan`; Kasir home has no money totals.
+- C6: settings = left settings menu + one form per route on desktop; grouped list of rows → item page on phones
+  (visual 08 §2); never a row of horizontal tabs.
 
 ## Tokens
 
 ### Colour
-Accent `#0066CC`; ink `#1D1D1F` / `#333333` / `#595959`; canvas `#FFFFFF`, parchment `#F5F5F7`; borders
-`#D2D2D7` (hairline), `#7A7A7A` (inputs). Status pairs as in `docs/visual/01` §2 (safe, warn, danger, pickup-warn).
+Light Mengantar-style blue (DEC-222): accent `#2547C8`; ink `#1B2B44`, muted `#55657D`; canvas `#F6F8FC`, cards
+`#FFFFFF`; borders `#D9DFEA`, inputs `#7B879C`; chart Non-COD `#2547C8`, COD `#E07A2F` (always with legend).
+Status pairs as in `docs/visual/01` §2 (safe, warn, danger, pickup-warn).
 
 ### Type
 System UI stack (`-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif`); mono only for INV,

@@ -12,7 +12,7 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 3. Cashier performs three physical steps:
    - places parcel on scale, verifies `actual_weight_gram` (`[ gram ● | kg ]`) + optional `P×L×T`,
    - confirms parcel contents are permitted (+ optional 1-tap scale photo),
-   - collects `Tunai / QRIS / Transfer` → presses **`Bayar & Cetak Resi (Ctrl+Enter)`**.
+   - records `QRIS gerai / Tunai / Transfer / Bayar nanti` → presses **`Tandai Lunas & Cetak (Ctrl+Enter)`** (DEC-220).
 
 ### Path B — Direct Walk-In POS (`< 45s`)
 1. **Weight & Destination First:**
@@ -22,7 +22,11 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Bayar & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
 3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks local D1 `recipient_contacts` delivery/RTS counters (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
 4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.**
-5. **Payment Collection & 1-Click Print.**
+5. **Record Payment & 1-Click Print (DEC-220):** the outlet collects money itself; the POS only records it.
+   - `Catat pembayaran` segmented control: `QRIS gerai` · `Tunai` (cash received → change) · `Transfer` · `Bayar nanti`.
+   - QRIS/Transfer: the cashier checks the outlet's own QRIS notification or bank mutation and confirms; no proof upload.
+   - Primary button: `Tandai Lunas & Cetak · Rp…` or, for `Bayar nanti`, `Simpan & Cetak (belum dibayar)`.
+   - An unpaid INV shows `Belum dibayar` on the receipt preview, in Kiriman (`Belum Dibayar` tab, `Tandai Lunas` row action), on the Dashboard KPI, and as a warning when the parcel is scanned into a pickup manifest.
 
 ---
 

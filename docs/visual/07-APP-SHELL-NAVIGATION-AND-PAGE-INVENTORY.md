@@ -115,7 +115,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 
 | Route | Role | Title / breadcrumb | Primary | Content blocks (order) | Owner vs Kasir |
 |---|---|---|---|---|---|
-| `/` | O | Dashboard | `+ Kiriman Baru` | period switch → 4 KPI → `Perlu Tindakan` chips → trend chart + courier RTS table → top senders + source/tier | — |
+| `/` | O | Dashboard | `+ Kiriman Baru` | period filter (WIB presets + calendar range, default `7 hari terakhir`, DEC-221, visual 08 §1) → 4 KPI (kiriman, tercatat dibayar, belum dibayar, saldo Mengantar aman) → `Grafik pengiriman` (stacked Non-COD/COD bars) → `Riwayat pengiriman` (INV, ekspedisi, penerima, tagihan, pembayaran, status) → courier performance + `Perlu tindakan` | — |
 | `/` | K | Tugas Loket Hari Ini | `+ Kiriman Baru` | shift card → `Siap Pickup` per courier → `Meja Retur` waiting → recent INV list | No money totals, no Mengantar balance |
 | `/kasir` | O K | Kasir | `+ Kiriman Baru` | tabs `Kiriman Baru · Multi-Paket · Cek Cepat · Shift Kas`; default tab = recent drafts + scan QR box | Margin toggle owner only |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Bayar & Cetak` | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
@@ -123,7 +123,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/kasir/multi` | O K | Kasir › Multi-Paket | `Bayar & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | Kasir sees customer price only |
 | `/kasir/cek-cepat` | O K | Kasir › Cek Cepat | `Buat Kiriman dari Hasil Ini` | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
 | `/kasir/shift` | O K | Kasir › Shift Kas | `Buka Shift` / `Tutup Shift` | opening cash → live totals (Tunai/QRIS/Transfer) → closing count → variance | Kasir: own shift; owner: all shifts |
-| `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Draf QR · Menunggu Saldo · Pickup & Manifest · Kendala & Klaim · Meja Retur` → filter bar → table | Cost/margin columns + CSV owner only |
+| `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Belum Dibayar · Draf QR · Menunggu Saldo · Pickup & Manifest · Kendala & Klaim · Meja Retur` → search + period filter (visual 08 §1) → table with `Pembayaran` column and `Tandai Lunas` row action | Cost/margin columns + CSV owner only |
 | `/kiriman/pickup/:batch` | O K | Kiriman › Manifest J&T 16:00 | `Selesai & Tanda Tangan` | scan box (wrong courier = red alert + sound) → scanned list → missing list → signature | — |
 | `/kiriman/retur/:awb` | O K | Kiriman › Meja Retur › JT77… | `Kirim Kode Ambil` | true sender → condition + photo → WA OTP → handover verify | — |
 | `/kontak/pengirim` | O K | Kontak › Pengirim | `+ Tambah Pengirim` | search → table (nama, HP, mask brand, jumlah kiriman, deposit) | Deposit column owner only |
@@ -131,8 +131,9 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/kontak/penerima` | O K | Kontak › Penerima | `+ Tambah Penerima` | search → table (nama, HP, kota, riwayat COD 🟢🟡🔴) | — |
 | `/kontak/penerima/:id` | O K | Kontak › Penerima › Rina K. | `+ Kiriman ke Penerima Ini` | addresses → COD history → shipments | — |
 | `/keuangan` | O | Keuangan | `Sinkronkan Sekarang` | 4 balance cards → `Menunggu Saldo` alert → tabs `Ringkasan & Saldo Mengantar · Mutasi Sync Mengantar · Laba per INV · Kas Loket & Shift · Cadangan Retur · Selisih Sync` | Route and API return 403 for Kasir |
-| `/pengaturan` | O (K: printer only) | Pengaturan | Owner: `Simpan` (sticky bar, appears on change) | tabs `Mini-Site · Ekspedisi Aktif · Printer & Packing · Outlet & Mengantar (+ Data Usaha opsional) · Anggota · API & MCP` | Kasir sees only `Printer & Packing › Printer`: pair/test Bluetooth and density on this device (stored locally, no `Simpan`) |
+| `/pengaturan` | O (K: printer only) | Pengaturan | — | settings sub-menu (desktop: left menu + content; phone: grouped list of rows) per `docs/visual/08` §2; nine item routes `/pengaturan/<item>` | Kasir sees only `Printer & Struk` (device part, saved locally) |
 | `/kasir/layar-pelanggan` | O K (paired device) | Layar Pelanggan | — | outlet logo → locked line items → total (40 px) → outlet QRIS → `Terima kasih` | P1 (PR-22); no navigation, no cost fields |
+| `/pengaturan/<item>` | O (K: `printer`) | Pengaturan › <item> | `Simpan` in sticky save bar, only when dirty | one short form of `Card` sections (visual 08 §2.3) | 403 for Kasir except `printer` |
 | `/notifikasi` | O K | Notifikasi | `Tandai Semua Dibaca` | grouped by day; each item deep-links | — |
 | `*` 403 / 404 / offline | O K | — | `Kembali ke Dashboard` | plain explanation + who can grant access (403) | Offline: POS queues nothing silently; shows `Koneksi terputus` banner |
 

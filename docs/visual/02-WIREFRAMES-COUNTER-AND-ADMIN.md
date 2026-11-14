@@ -8,7 +8,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 
 ```text
 ┌──────────────────┬───────────────────────────────────────────────────────────────────────────────────┐
-│ [G] BERKAH JAYA  │ DASHBOARD GERAI              Periode: [Hari Ini] [7 Hari] [Bulan Ini ●] [Huruf:A+]│
+│ [G] BERKAH JAYA  │ DASHBOARD GERAI              [Periode ▾ 7 hari terakhir · 8–14 Nov]               │
 │ berkahjaya       │                                                      [📷 Scan QR] [+ Kiriman Baru]│
 │ .gerai.cc ↗      ├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
 │ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA BERSIH GERAI  │ SALDO MENGANTAR SYNC │
@@ -33,6 +33,8 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │                  │ 3. Bpk Hendra Wijaya ..... 29 pkt     │ Tier GOLD [████████░░] 88 pkt → PLATINUM  │
 └──────────────────┴───────────────────────────────────────┴───────────────────────────────────────────┘
 ```
+*(Dashboard update 2026-11-14, DEC-220..222: the period control is a shadcn dropdown (default `7 hari terakhir`), the trend block is `Grafik pengiriman` (stacked Non-COD/COD bars), a `Riwayat pengiriman` table with `Pembayaran` (Lunas · QRIS/Tunai/Transfer or Belum dibayar) and status follows it, and the money KPI is `Tercatat dibayar` / `Belum dibayar`. The prototype in `prototype/` is the current visual reference.)*
+
 *(Role Rule: When a **Kasir** signs in, `Keuangan` is absent from the left sidebar and `/` renders only **Tugas Loket Hari Ini** — pickup queues, uncollected returns, active shift status, and `+ Kiriman Baru` — with zero profit, cost, or Mengantar balance cards.)*
 
 ---

@@ -10,6 +10,7 @@ export function Pos({ role }: { role: "owner" | "kasir" }) {
   const [weight, setWeight] = React.useState("1200")
   const [mode, setMode] = React.useState("non-cod")
   const [pick, setPick] = React.useState(0)
+  const [pay, setPay] = React.useState("qris")
   const grams = unit === "gram" ? Number(weight) : Math.round(Number(weight.replace(",", ".")) * 1000)
   const guard = unit === "gram" ? Number(weight) > 0 && Number(weight) < 10 : Number(weight.replace(",", ".")) >= 100
   const q = quotes[pick]
@@ -112,21 +113,28 @@ export function Pos({ role }: { role: "owner" | "kasir" }) {
           </div>
         </section>
         <section className="rounded-lg border bg-card p-4">
-          <h2 className="mb-3 text-lg font-semibold">Pembayaran</h2>
-          <ToggleGroup aria-label="Metode bayar" defaultValue={["tunai"]} variant="outline" spacing={0} className="flex-wrap">
+          <h2 className="text-lg font-semibold">Catat pembayaran</h2>
+          <p className="mb-3 text-muted-foreground">Uang diterima langsung oleh gerai. Sistem hanya mencatat.</p>
+          <ToggleGroup aria-label="Cara bayar" value={[pay]} onValueChange={(v) => v[0] && setPay(String(v[0]))} variant="outline" spacing={0} className="flex-wrap">
+            <ToggleGroupItem value="qris">QRIS gerai</ToggleGroupItem>
             <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
-            <ToggleGroupItem value="qris">QRIS</ToggleGroupItem>
             <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
-            <ToggleGroupItem value="deposit">Deposit</ToggleGroupItem>
+            <ToggleGroupItem value="nanti">Bayar nanti</ToggleGroupItem>
           </ToggleGroup>
-          <Field className="mt-4">
-            <FieldLabel htmlFor="diterima">Uang diterima</FieldLabel>
-            <Input id="diterima" inputMode="numeric" defaultValue="50.000" className="tabular-nums" />
-            <FieldDescription>Kembalian {rupiah(50000 - total)}</FieldDescription>
-          </Field>
+          {pay === "tunai" ? (
+            <Field className="mt-4">
+              <FieldLabel htmlFor="diterima">Uang diterima</FieldLabel>
+              <Input id="diterima" inputMode="numeric" defaultValue="50.000" className="tabular-nums" />
+              <FieldDescription>Kembalian {rupiah(50000 - total)}</FieldDescription>
+            </Field>
+          ) : pay === "qris" || pay === "transfer" ? (
+            <p className="mt-4 text-muted-foreground">Cek notifikasi {pay === "qris" ? "QRIS" : "mutasi bank"} gerai, lalu tandai lunas. Bukti tidak wajib.</p>
+          ) : (
+            <p className="mt-4 rounded-md bg-warn-bg p-3 text-warn">INV tercatat <strong>Belum dibayar</strong>. Resi tetap bisa dicetak; tagih sebelum paket diserahkan ke kurir.</p>
+          )}
         </section>
         <div className="sticky bottom-0 -mx-4 border-t bg-card p-4 lg:static lg:mx-0 lg:rounded-lg lg:border">
-          <Button size="lg" className="w-full">Bayar & Cetak · {rupiah(total)}</Button>
+          <Button size="lg" className="w-full">{pay === "nanti" ? "Simpan & Cetak (belum dibayar)" : `Tandai Lunas & Cetak · ${rupiah(total)}`}</Button>
           <p className="mt-2 text-center text-sm text-muted-foreground">Cetak 58 mm label + struk · Ctrl+Enter</p>
         </div>
       </aside>

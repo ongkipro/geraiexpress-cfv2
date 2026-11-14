@@ -40,3 +40,14 @@ export function Section({ title, children, aside }: { title: string; children: R
     </section>
   )
 }
+
+// Counter payment is recorded, not processed: the INV is either paid (with the method the cashier
+// recorded) or unpaid. Text carries the meaning; the dot is a second cue.
+export function PaidBadge({ paid }: { paid: null | string }) {
+  return (
+    <Badge variant="outline" className="gap-1.5 bg-card text-foreground">
+      <span className={`size-2 rounded-full ${paid ? "bg-safe" : "bg-warn"}`} aria-hidden />
+      {paid ? `Lunas · ${paid}` : "Belum dibayar"}
+    </Badge>
+  )
+}
