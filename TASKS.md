@@ -17,7 +17,7 @@ tenant B's record).
 
 ## M0 — Design lock (pre-code)
 
-### TASK-001: Prototype the app shell and key screens with mock data
+### TASK-001: Prototype the app shell and key screens with mock data — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
 - **Requirement:** DEC-213 (compact 6/5-menu navigation), `docs/visual/07`
 - **Risk Level:** R1
 - **Job:** implementation (throwaway prototype, not production code)

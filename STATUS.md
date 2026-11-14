@@ -1,7 +1,7 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-13
-Status: M0 specification complete; awaiting prototype, visual pick and owner sign-off
+Status: M0 specification complete; prototype built and gated; awaiting owner visual pick and sign-off
 State: PLANNED
 Review-Risk: R0
 Independent-Review: PASS (docs only — Fable 5.1 rounds 1–3, Gemini 4 Carbon rounds 1–3; see `docs/review/`)
@@ -17,8 +17,9 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 
 ## Next
 
-1. TASK-001: prototype the shell and key screens in `prototype/` with mock data; prove with `dotuiux check` and
-   `admin-geometry.mjs` at 390/1366/1536.
+1. TASK-001 done: `prototype/` (shadcn base-nova, comfort primitives, 3 directions). Gates: `design/evidence/
+   prototype-gates.md` (0 fail / 0 warn on 10 routes; admin-geometry exit 0 at 390/1366/1536). Preview:
+   `http://100.127.67.86:55180/` while the preview task runs.
 2. TASK-002: owner picks one of 2–3 rendered visual directions; record `Picked-by` in `DESIGN.md`.
 3. TASK-003: owner signs off M0; then TASK-101 starts M1.
 
