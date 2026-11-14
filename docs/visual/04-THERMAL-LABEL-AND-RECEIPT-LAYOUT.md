@@ -77,8 +77,9 @@ Asuransi                       -
 Kardus M             Rp    3.000
 Potongan Promo      -Rp        0
 --------------------------------
-TOTAL DIBAYAR        Rp   27.000
-TUNAI: Rp 50.000 | Kembali 23rb
+TOTAL                Rp   27.000
+LUNAS · TUNAI        Rp   50.000
+Kembali              Rp   23.000
 --------------------------------
 Lacak & struk digital aman:
       berkahjaya.gerai.cc       
@@ -86,6 +87,24 @@ Lacak & struk digital aman:
          [ QR 8K4M2P7 ]         
  Simpan struk ini sbg bukti sah 
 ```
+
+### 2.1b Payment line variants (DEC-220 — payment is recorded, not processed)
+
+The line under `TOTAL` always states the recorded payment status. Each is exactly 32 columns:
+
+```text
+LUNAS · QRIS GERAI   Rp   27.000
+LUNAS · TRANSFER     Rp   27.000
+LUNAS · DEPOSIT      Rp   27.000
+LUNAS · TUNAI        Rp   50.000
+Kembali              Rp   23.000
+████ BELUM DIBAYAR Rp 27.000 ███
+```
+
+- `BELUM DIBAYAR` is printed inverted (white on black) so neither the sender nor the cashier mistakes an unpaid
+  receipt for a paid one. When the INV is later marked paid, `Cetak Ulang` prints the receipt with the paid line
+  and `Dicetak ulang` under the INV number; the old paper is not valid proof of payment.
+- The parcel label never shows payment status (it is a customer–outlet matter, not a courier one).
 
 ### 2.2 `COD BARANG` Variation Block (What Changes on Paper)
 - **Top Label (for Courier & Buyer):** replaces `NON-COD` line with:
@@ -108,41 +127,137 @@ Lacak & struk digital aman:
 
 ---
 
-## 3. Format B — `100 × 150 mm` (A6 Standard Courier Sticker) & `100 × 100 mm`
+## 3. Format B — 100 mm Thermal Stickers (`DEC-224`)
+
+Three outputs on 100 mm wide **direct-thermal sticker paper** for a thermal label printer (203 dpi = 800 dots wide,
+no ink or ribbon). Paper rolls: `100×150 mm` for `10×15` formats, `100×100 mm` for `10×10`. The printer's paper
+size must match the chosen format; the print drawer shows the expected roll (`Pakai kertas thermal 100×150`). The parcel label
+block is identical in all three; only what surrounds it changes.
+
+| Format (UI name) | Paper | Content | Who keeps what |
+|---|---|---|---|
+| **`10×15 · Paket + Bukti`** *(default)* | 100×150 mm | 100×100 mm parcel label + `✂ potong di sini` + 100×50 mm sender stub | Label → box · stub → sender |
+| **`10×10 · Paket saja`** | 100×100 mm | Parcel label only | Label → box (receipt via WhatsApp or 58 mm) |
+| **`10×15 · Paket saja`** | 100×150 mm | Parcel label only, roomier recipient/item blocks, no stub | Label → box (receipt via WhatsApp or 58 mm) |
+
+### 3.1 `10×15 · Paket + Bukti` (default)
 
 ```text
-┌────────────────────────────────────────────────────────────┐
-│ [LOGO GERAI / KOSONG]                J&T EXPRESS · EZ      │
-│ WA Bantuan: 0811-2233-4455           Dicetak: 12/11 14:22  │
-├────────────────────────────────────────────────────────────┤
-│                                                            │
-│         ||||||||||||||||||||||||||||||||||||||||||         │
-│                     JX88  2910  4412                       │
-│                                                            │
-├──────────────────────────────┬─────────────────────────────┤
-│ KODE SORTIR / RAYON          │ ███████████████████████████ │
-│   ████████████████████████   │ █  COD — BAYAR KE KURIR   █ │
-│   █      BDO-CBL02       █   │ █      Rp 167.560         █ │
-│   ████████████████████████   │ ███████████████████████████ │
-│ KEC. COBLONG · 40132         │ Dilarang buka sebelum bayar │
-├──────────────────────────────┴─────────────────────────────┤
-│ PENERIMA:                                                  │
-│ RINA KARTIKA                           📞 0857-****-8821   │
-│ Jl. Dago Asri No. 14 RT 02 RW 05 (Dekat Masjid Al-Huda)    │
-│ Kel. Dago, KEC. COBLONG, KOTA BANDUNG, JAWA BARAT 40132    │
-├───────────────────────────────────────────────┬────────────┤
-│ PENGIRIM:                                     │ [QR LACAK] │
-│ TOKO HIJAB NISA · 0812-3456-7890              │            │
-│ Kota Bandung                                  │ INV:8K4M2P7│
-├───────────────────────────────────────────────┴────────────┤
-│ Berat: 1.200 g · Ukuran: 30×20×15 · Tagih: 2.000 g (2 Kg)  │
-│ Isi  : Pakaian / Kerudung (2 pcs) · Asuransi: Tidak        │
-│ Wajib rekam video paket utuh saat dibuka untuk klaim rusak │
-└────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ J&T EXPRESS · EZ                         Cetak 14/11 14:22   │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│        ||||||||||||||||||||||||||||||||||||||||||            │
+│                     JX88  2910  4412                         │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  ████████████████   KEC. COBLONG · KOTA BANDUNG 40132        │
+│  █  BDO-CBL02   █   ██████████████████████████████████       │
+│  ████████████████   █ COD · TAGIH PENERIMA Rp 167.560 █      │
+│                     ██████████████████████████████████       │
+│                     Dilarang buka paket sebelum bayar        │
+├──────────────────────────────────────────────────────────────┤
+│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
+│ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
+├──────────────────────────────────────────────────────────────┤
+│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890   [QR] INV 8K4M2P7│
+│ Isi: Pakaian (2 pcs) · Berat 1.200 g · Tagih 2 kg            │
+│ Rekam video saat membuka paket untuk klaim kerusakan         │
+╞════════════════════ ✂ potong di sini ════════════════════════╡
+│ BUKTI KIRIM · INV 8K4M2P7                Berkah Jaya Express │
+│ J&T EZ · AWB JX88 2910 4412 · ke Kota Bandung                │
+│ Berat tagih 2 kg · Ongkir Rp 24.000 · Kardus Rp 3.000        │
+│ TOTAL Rp 27.000 · LUNAS · QRIS GERAI                         │
+│ Lacak: berkahjaya.gerai.cc/lacak/8k4m2p7          [QR]       │
+│ WA gerai 0811-2233-4455 · simpan bukti ini                   │
+└──────────────────────────────────────────────────────────────┘
 ```
-*(In `100 × 100 mm` compact mode, header height and address padding tighten by 22% while keeping the borderless barcode zone and sorting/COD banner untouched. In `A4` mode, operators select `1 / 2 / 4 Label per Halaman` with dashed cut guides.)*
 
----
+- **Top 100×100 mm (parcel):** courier + service, borderless barcode band with grouped AWB, sorting pill (or
+  subdistrict + postcode fallback), COD banner when COD, recipient block, masked sender per preset, neutral
+  `INV` + tracking QR, dispute footer. Never shows the counter payment status (courier does not need it).
+- **Cut line:** dashed full-width line with `✂ potong di sini`; 3 mm blank band above and below so the cut never
+  touches the barcode or the stub text.
+- **Bottom 100×50 mm (`Bukti Kirim`, for the sender):** INV, AWB, courier + destination city, billed weight and
+  charges, **payment status line** (`LUNAS · QRIS GERAI` / `LUNAS · TUNAI` / `LUNAS · TRANSFER` /
+  inverted `BELUM DIBAYAR Rp …`, `DEC-220`), tracking URL + QR, outlet WhatsApp. Masking presets apply to the stub
+  as well (Dropship Toko prints the reseller brand, never the outlet, on both parts).
+- COD variant of the stub: `Ditagih ke penerima Rp 167.560 · Estimasi cair Rp 150.000` replaces the charges line.
+
+### 3.2 `10×10 · Paket saja`
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ J&T EXPRESS · EZ                         Cetak 14/11 14:22   │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│        ||||||||||||||||||||||||||||||||||||||||||            │
+│                     JX88  2910  4412                         │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  ████████████████   KEC. COBLONG · KOTA BANDUNG 40132        │
+│  █  BDO-CBL02   █   ██████████████████████████████████       │
+│  ████████████████   █ COD · TAGIH PENERIMA Rp 167.560 █      │
+│                     ██████████████████████████████████       │
+│                     Dilarang buka paket sebelum bayar        │
+├──────────────────────────────────────────────────────────────┤
+│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
+│ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
+├──────────────────────────────────────────────────────────────┤
+│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890   [QR] INV 8K4M2P7│
+│ Isi: Pakaian (2 pcs) · Berat 1.200 g · Tagih 2 kg            │
+│ Rekam video saat membuka paket untuk klaim kerusakan         │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Same parcel block as §3.1, nothing below it. The POS offers `Kirim bukti ke WA pengirim` right after printing,
+so the sender still gets proof.
+
+### 3.3 `10×15 · Paket saja`
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ J&T EXPRESS · EZ                         Cetak 14/11 14:22   │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│        ||||||||||||||||||||||||||||||||||||||||||            │
+│                     JX88  2910  4412                         │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  ████████████████   KEC. COBLONG · KOTA BANDUNG 40132        │
+│  █  BDO-CBL02   █   ██████████████████████████████████       │
+│  ████████████████   █ COD · TAGIH PENERIMA Rp 167.560 █      │
+│                     ██████████████████████████████████       │
+│                     Dilarang buka paket sebelum bayar        │
+├──────────────────────────────────────────────────────────────┤
+│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
+│ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
+├──────────────────────────────────────────────────────────────┤
+│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890                   │
+│ Kota Bandung                                                 │
+├──────────────────────────────────────────────────────────────┤
+│ Isi    : Pakaian / Kerudung (2 pcs) · Asuransi: tidak        │
+│ Berat  : 1.200 g · Ukuran 30×20×15 cm · Tagih 2.000 g (2 kg) │
+│ Catatan: Rekam video saat membuka paket untuk klaim rusak    │
+│                                                              │
+│                                   [QR LACAK]   INV 8K4M2P7   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Uses the extra 50 mm for a two-line item/weight block and a separate sender line; still no sender stub.
+
+### 3.4 Shared rules for all three
+
+- Barcode band ≥ 14 mm tall, ≥ 3 mm quiet zone left/right, no vertical borders through it; AWB under it in
+  4-character groups.
+- Smallest printed text 8 pt (≈ 2.8 mm cap height); recipient name 14 pt bold; sorting pill 18 pt bold inverted.
+- Text clamps from §1.4 apply; long addresses wrap to max 3 lines, never shrink below 8 pt.
+- Output is a vector PDF sized exactly to the paper (no margins added by the app) plus a direct ESC/POS/TSPL raster
+  for supported Bluetooth 100 mm printers; `print_count` and `first_printed_at` track duplicates (§5).
+- A4 `1/2/4 per halaman` remains a PDF fallback for outlets with only an office printer.
 
 ## 4. Four Masking Presets — Exact Paper Matrix
 
@@ -161,11 +276,11 @@ Lacak & struk digital aman:
 
 ## 5. In-App Print Preview & Printer Control Drawer UX
 
-1. **Fast Default (No Modal Friction):** When `[🟢 BT: POS-58 Siap]` is connected in the top bar, pressing `Bayar & Cetak (Ctrl+Enter)` prints immediately using the outlet's saved format (`58mm Label+Struk`, `58mm Label Saja`, or `10×15 PDF`).
+1. **Fast Default (No Modal Friction):** When `[🟢 BT: POS-58 Siap]` is connected in the top bar, pressing `Tandai Lunas & Cetak (Ctrl+Enter)` prints immediately using the outlet's saved format (`10×15 · Paket + Bukti`, `10×10 · Paket saja`, `10×15 · Paket saja`, or the 58 mm `Label + Struk` roll).
 2. **Interactive Live Thermal Drawer (`[ 👁 Pratinjau & Atur Cetak ]`):**
    - Renders a **true-scale paper preview** (white thermal roll with serrated tear edges and animated `✂ Potong Disini` line) that updates live as the operator toggles:
-     - Ukuran Kertas: `[● 58mm Roll]` `[80mm Roll]` `[10×15 A6]` `[10×10]` `[A4 4-Label]`
-     - Isi Cetakan 58mm: `[● Label + Struk Pelanggan]` `[Hanya Label Paket]` `[Hanya Struk Ulang]`
+     - Format: `[● 10×15 · Paket + Bukti]` `[10×10 · Paket saja]` `[10×15 · Paket saja]` `[58 mm roll]` (A4 via `Lainnya ▾`)
+     - Isi 58 mm roll: `[● Label + Struk Pelanggan]` `[Hanya Label Paket]` `[Hanya Struk Ulang]`
      - Tampilkan Ongkir di Label Non-COD: `[ Mati ● | Nyala ]`
      - Ketebalan Tinta Thermal: `[ Normal | ● Tebal ]`
    - **Duplicate-Print Guard:** if `print_count >= 1`, button reads **`Cetak Ulang Label (Sudah dicetak 1x · 14:22)`** in amber so staff never accidentally stick duplicate labels onto two different parcels.

@@ -28,11 +28,12 @@ This document details the end-to-end UX of creating a shipment and choosing a co
                                 ▼
  STAGE 4: Recipient (`Kontak > Penerima`) + Live COD Phone Risk Score + Item & Packing Add-Ons
                                 ▼
- STAGE 5: Locked `INV #8K4M2P7` Summary → Payment (`Tunai | QRIS | Transfer | Deposit Reseller`) → `Bayar & Cetak (Enter)`
+ STAGE 5: Locked `INV #8K4M2P7` Summary → Record payment (`QRIS gerai | Tunai | Transfer | Deposit Reseller | Bayar nanti`, DEC-220) → `Tandai Lunas & Cetak (Ctrl+Enter)` or `Simpan & Cetak (belum dibayar)`
           • Serialized through `GeraiVaultDO` (handles `provider_unpaid_hold` gracefully if balance is low)
                                 ▼
  STAGE 6: Issued AWB State!
-          • Auto-prints 58mm `Potong Disini` / 10×15 PDF + 1-tap WhatsApp receipt share
+          • Auto-prints the outlet's default format (`10×15 · Paket + Bukti`, `10×10 · Paket saja`,
+            `10×15 · Paket saja`, or 58 mm roll — DEC-224) + 1-tap WhatsApp receipt share
           • Quick buttons: `[ + Kiriman Baru ]` or `[ + Tambah Paket Pengirim Ini ]`
 ```
 
@@ -98,10 +99,10 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 │ ← INV #8K4M2P7         [🟢 BT: POS-58]│          │ ✅ RESI TERBIT — INV #8K4M2P7         │
 ├──────────────────────────────────────┤          │ J&T EZ · AWB: JX88 2910 4412         │
 │ [📷 Scan QR dari Rumah]              │          │ Kode Sortir : BDO-CBL02              │
-│                                      │          │ Tunai Lunas : Rp 27.000 (Kembali 23rb│
+│                                      │          │ LUNAS · QRIS gerai · Rp 27.000       │
 │ 1. Tujuan & Berat                    │          ├──────────────────────────────────────┤
-│ [● Non-COD] [COD Barang] [COD Ongkir]│          │ [ 🖨️ Cetak 58mm (Label + Struk) ]    │
-│ Tujuan: [Coblong, Kota Bandung    ✕] │   ───►   │ [ 🏷️ Cetak Stiker 10×15 PDF     ]    │
+│ [● Non-COD] [COD Barang] [COD Ongkir]│          │ [ 🖨️ Cetak 10×15 Paket + Bukti  ]    │
+│ Tujuan: [Coblong, Kota Bandung    ✕] │   ───►   │ [ Format lain ▾  · 1x dicetak   ]    │
 │ Berat : [ 1200 ] [gram ●│kg] (=1,2kg)│          │ [ 💬 Kirim Struk ke WA Pengirim ]    │
 │ Ukuran: [30]×[20]×[15] cm → Tagih 2kg│          │ [ 💬 Info Resi ke WA Penerima   ]    │
 │                                      │          ├──────────────────────────────────────┤
@@ -115,6 +116,27 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 │    Isi: [Pakaian] [✓] Kardus (+3rb)  │
 ├──────────────────────────────────────┤
 │ TOTAL BAYAR: Rp 27.000   [Rincian ▴] │
-│ [   Bayar & Cetak Resi (INV 8K4M2P7) ]│
+│ [  Tandai Lunas & Cetak · INV 8K4M2P7]│
 └──────────────────────────────────────┘
+```
+
+
+---
+
+## 4. Print step in the flow (DEC-220, DEC-224)
+
+```text
+ Tandai Lunas & Cetak / Simpan & Cetak
+          │
+          ├─ outlet default format = 10×15 · Paket + Bukti ─► prints label + sender stub (one sheet)
+          │                                                   cashier tears at ✂, label on box, stub to sender
+          ├─ default = 10×10 · Paket saja or 10×15 · Paket saja ─► prints label only
+          │                                                   screen offers [Kirim bukti ke WA pengirim]
+          └─ default = 58 mm roll ─► label + Struk Jujur on one roll (§2 of visual 04)
+
+ After printing: print_count = 1. Any later print of the same INV shows the amber
+ `Cetak Ulang Label (sudah dicetak 1x · 14:22)` and asks for a reason.
+ Bluetooth failure → [Buka PDF / Cetak Sistem] in the same drawer; the AWB is never lost.
+ Unpaid INV (`Bayar nanti`) prints with the stub/receipt line `BELUM DIBAYAR`; marking it paid later offers
+ `Cetak ulang bukti` (stub or 58 mm receipt only, never a second parcel label).
 ```

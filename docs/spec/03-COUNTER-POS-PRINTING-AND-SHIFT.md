@@ -19,7 +19,7 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - Weight defaults to **`1000`** with an inline 1-click **`[ gram ● | kg ]`** segmented toggle (`1250` `[gram ●]` ⇄ `1,25` `[kg ●]`), quick chips (`500 g`, `1.000 g`, `2 kg`, `5 kg`, `10 kg`), and helper text `= 1,25 kg · Masuk tarif 1 kg (toleransi s.d. 1.300 g)`.
    - **Unit-Mistake Guard:** entering `< 10` in `gram` mode (e.g., typing `2` intending `2 kg`) or `>= 100` in `kg` mode (e.g., typing `1000` intending `1000 g`) displays a 1-click yellow fix chip and blocks submission until confirmed.
    - Selecting destination subdistrict immediately streams parallel courier cards.
-2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Bayar & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
+2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Tandai Lunas & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
 3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks local D1 `recipient_contacts` delivery/RTS counters (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
 4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.**
 5. **Record Payment & 1-Click Print (DEC-220):** the outlet collects money itself; the POS only records it.
@@ -44,13 +44,16 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 
 ### 3.1 Mode 1 — Direct Web-Bluetooth ESC/POS (58mm & 80mm Rolls)
 Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Epson) paired directly to Android Chrome or desktop Chrome/Edge:
-- **Zero-Popup Fast Path:** once a default Bluetooth printer is paired (`[🟢 BT: POS-58 Siap]`), clicking `Bayar & Cetak` prints immediately without extra dialogs.
+- **Zero-Popup Fast Path:** once a default Bluetooth printer is paired (`[🟢 BT: POS-58 Siap]`), clicking `Tandai Lunas & Cetak` (or `Simpan & Cetak` for an unpaid INV) prints immediately without extra dialogs.
 - **BLE Flow Control:** transmits encoded ESC/POS bytes in **20-byte chunks** with controlled pacing to prevent cheap printer buffer overflows, plus `beginBatch() / endBatch()` connection keep-alive during multi-parcel runs.
 - **Print Density Selector:** `Normal` vs `Tebal (Dark)` dithering/heating setting in `/pengaturan` so thin budget thermal rolls still produce crisp, high-contrast barcodes.
 - **One-Roll Combo (`Potong Disini`):** prints the **Parcel Label** on the top half, a clear `-------- ✂ Potong Disini --------` cut line, and the **Customer Receipt (`Struk Jujur`)** on the bottom half.
 - **Instant Browser/PDF Fallback:** if Bluetooth disconnects or iOS Safari is used, POS automatically falls back to 1-tap PDF/system print so counter lines never stall.
 
-### 3.2 Mode 2 — 100×150 mm (A6), 100×100 mm Stickers & A4 Multi-Up (1/2/4 per Sheet)
+### 3.2 Mode 2 — 100 mm Thermal Stickers (DEC-224) & A4 Fallback
+- **Three formats:** `10×15 · Paket + Bukti` (default: 100×100 parcel label + cut line + 100×50 sender stub), `10×10 · Paket saja`, `10×15 · Paket saja` (no sender stub). Layouts: `docs/visual/04` §3.
+- Outlet default in `Pengaturan › Printer & Struk`; per-print override in the print drawer. With `Paket saja` formats the post-issue screen offers `Kirim bukti ke WA pengirim`.
+- A4 `1/2/4 per halaman` is a PDF fallback only.
 - Generates crisp vector PDFs with **borderless horizontal barcode bands** (preserving >= 3 mm left/right `Code128` quiet zones so laser scanners never misread vertical box borders).
 - Tracks `print_count` and `first_printed_at` per `INV`, warning operators before duplicate reprints so one AWB is never taped onto two boxes.
 

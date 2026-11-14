@@ -4,7 +4,7 @@
 - **Related:** DEC-201, DEC-211, DEC-216
 
 ## Context
-At a busy counter, two staff devices may submit the same shipment or click `Bayar & Cetak` twice on a slow mobile connection. Furthermore, Mengantar's Public API:
+At a busy counter, two staff devices may submit the same shipment or click `Tandai Lunas & Cetak` twice on a slow mobile connection. Furthermore, Mengantar's Public API:
 1. Provides **no native idempotency key** on `POST /order` or `POST /order/pay-unpaid`, and
 2. Rejects concurrent batch creation on J&T Premium and SiCepat with HTTP 409 (`Batch Concurrency` rule).
 

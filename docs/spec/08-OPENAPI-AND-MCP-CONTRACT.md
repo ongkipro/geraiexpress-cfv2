@@ -24,11 +24,11 @@
 
 | Surface | Endpoint | Consumer | Authentication |
 |---|---|---|---|
-| **1. Outlet Partner OpenAPI & MCP** | `https://app.geraiexpress.com/api/v1/*` · Docs: `/api/v1/docs` · MCP: `https://app.geraiexpress.com/mcp` | Outlet Owner's AI assistant, reseller WooCommerce/Shopify stores, shop WhatsApp bots | `Authorization: Bearer gx_live_<token>` (SHA-256 hashed in D1, managed in `Pengaturan > API & MCP`) |
+| **1. Outlet Partner OpenAPI & MCP** | `https://app.geraiexpress.com/api/v1/*` · Docs: `/api/v1/docs` · MCP: `https://app.geraiexpress.com/mcp` | Outlet Owner's AI assistant, reseller WooCommerce/Shopify stores, shop WhatsApp bots | `Authorization: Bearer gx_live_<token>` (SHA-256 hashed in D1, managed in `Pengaturan › API & MCP` (`/pengaturan/api-mcp`)) |
 | **2. Mini-Site Public API & WebMCP** | `https://<gerai-slug>.gerai.cc/api/public/*` · MCP: `https://<gerai-slug>.gerai.cc/mcp` | Public buyers/resellers & public AI shopping assistants | Strict per-IP rate limiting (+ Turnstile on browser forms; capped draft quota on MCP) |
 | **3. Super Admin Internal Schema** | `https://owner.geraiexpress.com/api/owner/*` *(internal build artifact only; no public docs)* | `web-owner` console | `__Host-ge_owner` cookie + `aal2` TOTP |
 
-### Granular Token Scopes (`Pengaturan > API & MCP` — Owner Only)
+### Granular Token Scopes (`Pengaturan › API & MCP` (`/pengaturan/api-mcp`) — Owner Only)
 - `rates:read` — search subdistricts & compare customer shipping rates (never exposes outlet net cost unless `finance:read` is also granted).
 - `finance:read` — read outlet net costs, margins, synced Mengantar `/invoices` ledger, and dashboard analytics *(for Owner's private AI assistant only)*.
 - `finance:sync` — trigger on-demand Mengantar `/invoices` synchronization (`POST /api/v1/finance/sync` & `sync_mengantar_finance`, rate-limited per outlet).

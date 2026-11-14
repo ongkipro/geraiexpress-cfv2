@@ -144,7 +144,7 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
   - `POST /sellers/list`, `POST /sellers/api-key`: safe to retry with a fresh signature.
   - `POST /sellers/api-key/regenerate`: **never retried automatically.** Read the current key with
     `POST /sellers/api-key { sellerId }`; if `webhook_state = 'active'`, set it to `secret_mismatch` and ask the
-    owner to copy the rotated Webhook Secret from Mengantar Seller Settings into `Pengaturan > Outlet & Mengantar`
+    owner to copy the rotated Webhook Secret from Mengantar Seller Settings into `Pengaturan › Mengantar` (`/pengaturan/mengantar`)
     (PR-02b). Super Admin sees
     `Kunci diganti — perbarui secret webhook`.
 - Relay unreachable → the outlet stays `registration_pending`; Super Admin sees **`Relay tidak terjangkau`** in

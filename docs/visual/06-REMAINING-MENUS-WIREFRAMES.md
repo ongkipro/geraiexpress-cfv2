@@ -95,7 +95,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 1. **Gerai `Pengaturan` — superseded by `docs/visual/08` §2 (DEC-223: settings sub-menu, one route per item). The item contents below still apply, regrouped as Profil Gerai, Mini-Site, Data Usaha · Ekspedisi Aktif, Printer & Struk, Packing & Biaya Tambahan · Anggota, Mengantar, API & MCP:**
    - `Mini-Site (*.gerai.cc)` — live preview of `berkahjaya.gerai.cc`, logo upload, hours, Google Maps pin, printable **A4/A5 Counter QR Tent Card**, Pro custom domain CNAME.
    - `Ekspedisi Aktif` — per-courier on/off toggles for the outlet & mini-site + courier rules & assigned discount visibility.
-   - `Printer & Packing` — Web-Bluetooth pair/test, default paper size (`58mm` / `80mm` / `10×15`), print density (`Normal` / `Tebal`), shop packing add-on catalog (`Plastik`, `Bubble`, `Kardus`).
+   - `Printer & Packing` — Web-Bluetooth pair/test, default label format (`10×15 · Paket + Bukti` / `10×10 · Paket saja` / `10×15 · Paket saja` / 58 mm roll, DEC-224), print density (`Normal` / `Tebal`), shop packing add-on catalog (`Plastik`, `Bubble`, `Kardus`).
    - `Outlet & Mengantar` — pickup `area_id` & map pinpoint, seller connection health, webhook status, plus an optional collapsed **`Data Usaha (opsional)`** section: `Bentuk Usaha` [Perorangan | UD | CV | PT | Koperasi | Lainnya], `Nama Resmi`, `NIB`, `NPWP`, `Alamat Terdaftar`, `Nama Brand`, `Penanggung Jawab` (nama, jabatan, email, HP) — helper: *"Boleh dikosongkan. Diisi jika perlu faktur atau kerja sama resmi."*
    - `Anggota` — invite/revoke `Kasir` accounts, view staff audit trail.
    - `API & MCP` — issue/revoke scoped `gx_live_...` keys, link to `/api/v1/docs` Scalar UI, copy `/mcp` endpoint URL for AI assistants.
