@@ -52,6 +52,8 @@ geraiexpress-cfv2/
 ├── PRD.md                             # Evidence-backed Product Requirements Document (PR-01..PR-24)
 ├── ARCHITECTURE.md                    # Cloudflare Serverless topology, DO locking, and Mengantar relay
 ├── ROADMAP.md                         # Milestones M0..M6 and verification exit gates
+├── TASKS.md                           # Sole execution queue (M0 design tasks + M1 contracts)
+├── STATUS.md                          # Only workflow-state authority: Now / Next / Blockers
 ├── DESIGN.md                          # UI direction, composition contract and tokens (dotuiux)
 ├── design/                            # brief.md, refs/ teardowns, admin-contract.json (comfort size contract)
 └── docs/

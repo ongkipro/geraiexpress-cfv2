@@ -32,6 +32,7 @@ Modern browsers resolve every `*.localhost` subdomain to `127.0.0.1` without `/e
 - `pnpm db:seed:local` — seed 1 local Super Admin + 1 synthetic review outlet `berkahjaya` (uses deterministic offline mock quotes; **never calls live Mengantar without explicit sandbox keys**).
 - `pnpm dev` — run `wrangler dev` + Vite HMR for `web-app` and `web-owner`.
 - `pnpm check` — run `typecheck` + `lint` + `test:unit` + `test:worker` + `security:bundle-audit`.
+- Every Worker host answers `GET /healthz` → `200 {"ok":true}` without touching D1 or Mengantar (liveness only).
 
 ---
 

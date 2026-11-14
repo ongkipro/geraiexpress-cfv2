@@ -25,9 +25,9 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
 ## 2. Authentication, Host-Locked Sessions & Secret Wrapping
 
 1. **Owned Authentication:**
-   - Email-first 6-digit OTP verification in Bahasa Indonesia before password setup; staff join exclusively via single-use 7-day email invitations bound to a fixed role.
+   - Email-first 6-digit OTP verification in Bahasa Indonesia before password setup; an OTP expires after 10 minutes, and 5 wrong entries lock that email's OTP for 15 minutes (`Terlalu banyak percobaan, coba lagi dalam 15 menit`); staff join exclusively via single-use 7-day email invitations bound to a fixed role.
    - Passwords hashed via Web Crypto `PBKDF2-SHA256` at **`100,000` iterations** (to be regression-tested in `workerd` at M1 against the current Cloudflare Workers WebCrypto iteration ceiling) with unique 16-byte random salts plus server pepper (`AUTH_SESSION_PEPPER`).
-   - Super Admin accounts require **TOTP (`aal2`)** with recency checks on sensitive reads and mutations.
+   - Super Admin accounts require **TOTP (`aal2`)** with recency checks on sensitive reads and mutations (re-TOTP when the last verification is older than 15 minutes).
 2. **Domain-Isolated Cookies, CSRF & Bearer Separation:**
    - `app.geraiexpress.com` → `__Host-ge_app` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, 7-day rolling max).
    - `owner.geraiexpress.com` → `__Host-ge_owner` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, 12-hour max).
