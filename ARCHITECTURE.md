@@ -73,7 +73,7 @@ Every request enters `hostClassifierMiddleware` first:
 2. **`app.geraiexpress.com` (`GERAI_WORKSPACE`)** — serves Outlet Owner & Cashier PWA, `/api/app/*`, `/api/v1/*` (Bearer API key), and `/mcp`. Uses host-only `__Host-ge_app` cookie.
 3. **`owner.geraiexpress.com` (`PLATFORM_OWNER`)** — serves Super Admin SPA and `/api/owner/*`. Uses isolated `__Host-ge_owner` cookie (12h max) + mandatory `aal2` TOTP verification.
 4. **`hooks.geraiexpress.com` (`WEBHOOK_INGEST`)** — accepts `POST /webhooks/mengantar/:webhookToken` only. Verifies `x-signature = HMAC_SHA256("{x-timestamp}.{rawBody}")` within ±5 minutes and enqueues to `mengantar-webhooks`.
-5. **`<slug>.gerai.cc` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from KV/D1, serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and public read-only `/mcp`. Physically isolated from `geraiexpress.com` cookies.
+5. **`<slug>.gerai.cc` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from KV/D1, serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and a restricted public `/mcp` (read tools plus `create_public_prebooking_inv` draft creation). Physically isolated from `geraiexpress.com` cookies.
 
 ---
 
@@ -102,5 +102,5 @@ geraiexpress-cfv2/
 │   └── thermal-print/          # 58mm/80mm ESC/POS encoder (`Potong Disini`) + 32-col HTML previewer
 ├── infra/
 │   └── partner-relay/          # ≤ 80 LOC stateless HMAC-verified static-IPv4 forwarder + Compose
-└── docs/                       # ADRs, research (01), technical specs (01..10), visual/flow specs (01..07)
+└── docs/                       # ADRs, research (01..03), technical specs (01..10), visual/flow specs (01..08)
 ```

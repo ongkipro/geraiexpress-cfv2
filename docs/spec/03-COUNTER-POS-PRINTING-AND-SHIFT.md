@@ -26,7 +26,26 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - `Catat pembayaran` segmented control: `QRIS gerai` · `Tunai` (cash received → change) · `Transfer` · `Bayar nanti`.
    - QRIS/Transfer: the cashier checks the outlet's own QRIS notification or bank mutation and confirms; no proof upload.
    - Primary button: `Tandai Lunas & Cetak · Rp…` or, for `Bayar nanti`, `Simpan & Cetak (belum dibayar)`.
-   - An unpaid INV shows `Belum dibayar` on the receipt preview, in Kiriman (`Belum Dibayar` tab, `Tandai Lunas` row action), on the Dashboard KPI, and as a warning when the parcel is scanned into a pickup manifest.
+   - An unpaid INV shows `Belum dibayar` on the receipt preview, in Kiriman (`Belum Dibayar` tab, `Tandai Lunas` row action), on the Dashboard KPI, and as a **warning (not a block)** when the parcel is scanned into a pickup manifest. Only `provider_unpaid_hold` (Mengantar balance too low, no AWB) **blocks** handover.
+
+### 1.1 Counter payment state machine (DEC-220)
+
+| From | Event | To | Who | Receipt row |
+|---|---|---|---|---|
+| (new INV, `counter_due_idr > 0`) | create | `unpaid` | O K | — |
+| (new INV, `counter_due_idr = 0`) | create | `not_required` | O K | — |
+| `unpaid` | `mark_paid` | `paid` | O K | `mark_paid` (+amount, method) |
+| `paid` | `void_payment` (reason) | `unpaid` | O; K only in the same open shift | `void_payment` (−amount) |
+| `unpaid` / `not_required` | INV cancelled | `voided` | O K | — |
+| `paid` | INV cancelled | `voided` | O (void payment first, reason required) | `void_payment` then cancel |
+
+- `mark_paid` requires method and, for `tunai`, `cash_received_idr >= counter_due_idr`; an `Idempotency-Key` makes a
+  double tap a no-op (same receipt returned).
+- `void_payment` (owner, or Kasir within the same open shift) appends a negative receipt in the **current** shift;
+  re-payment appends a new `mark_paid`.
+- Shift attribution: money counts in the shift where `mark_paid` happened (`counter_receipts.shift_id`), not the shift
+  that created the INV.
+- `not_required`: COD Barang modes with `K + S - V = 0` (nothing collected at the counter).
 
 ---
 
@@ -42,7 +61,14 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 
 ## 3. Bulletproof Thermal Printing Architecture
 
-### 3.1 Mode 1 — Direct Web-Bluetooth ESC/POS (58mm & 80mm Rolls)
+**Primary path (owner, 2026-11-14): the outlet PC.** Outlets print from a Windows PC/laptop browser to a USB (or
+network) 100 mm thermal printer installed with its OS driver. The app produces an exact-size PDF (100×150 or 100×100
+mm, zero margins) and opens the browser print dialog; setup requires the driver paper size to match and scaling
+`100% / Ukuran sebenarnya`. Optional zero-dialog printing: Chrome/Edge started with `--kiosk-printing` on a dedicated
+counter profile (documented in the onboarding guide, never required). Android/Bluetooth (Mode 1) is a secondary path
+for outlets without a PC and for 58 mm budget printers.
+
+### 3.1 Mode 1 (secondary) — Direct Web-Bluetooth ESC/POS (58mm & 80mm Rolls)
 Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Epson) paired directly to Android Chrome or desktop Chrome/Edge:
 - **Zero-Popup Fast Path:** once a default Bluetooth printer is paired (`[🟢 BT: POS-58 Siap]`), clicking `Tandai Lunas & Cetak` (or `Simpan & Cetak` for an unpaid INV) prints immediately without extra dialogs.
 - **BLE Flow Control:** transmits encoded ESC/POS bytes in **20-byte chunks** with controlled pacing to prevent cheap printer buffer overflows, plus `beginBatch() / endBatch()` connection keep-alive during multi-parcel runs.
@@ -50,7 +76,7 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 - **One-Roll Combo (`Potong Disini`):** prints the **Parcel Label** on the top half, a clear `-------- ✂ Potong Disini --------` cut line, and the **Customer Receipt (`Struk Jujur`)** on the bottom half.
 - **Instant Browser/PDF Fallback:** if Bluetooth disconnects or iOS Safari is used, POS automatically falls back to 1-tap PDF/system print so counter lines never stall.
 
-### 3.2 Mode 2 — 100 mm Thermal Stickers (DEC-224) & A4 Fallback
+### 3.2 Mode 2 (primary) — 100 mm Thermal Stickers via PC Browser (DEC-224) & A4 Fallback
 - **Three formats:** `10×15 · Paket + Bukti` (default: 100×100 parcel label + cut line + 100×50 sender stub), `10×10 · Paket saja`, `10×15 · Paket saja` (no sender stub). Layouts: `docs/visual/04` §3.
 - Outlet default in `Pengaturan › Printer & Struk`; per-print override in the print drawer. With `Paket saja` formats the post-issue screen offers `Kirim bukti ke WA pengirim`.
 - A4 `1/2/4 per halaman` is a PDF fallback only.
@@ -63,5 +89,5 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 ## 4. Per-Shift Cash Drawer Reconciliation (`/kasir/shift`)
 
 1. **Open Shift:** cashier enters opening cash float (`Modal Awal Laci`, e.g., `Rp150.000`).
-2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` across every `INV` paid in that shift.
+2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` from `counter_receipts` whose `shift_id` is this shift (so an INV created unpaid in shift A and paid in shift B counts in B).
 3. **Close Shift:** cashier counts physical bills in the drawer (`Uang Tunai Fisik Dihitung`). Any non-zero variance (`counted_cash_idr - expected_cash_idr != 0`) requires a structured reason code + note before closing and triggers an alert card on the Owner's Dashboard.

@@ -13,7 +13,7 @@
 - **Maps Integration:** Google Maps JS API (`maps`, `marker`, `places`, `geocoding` libraries) with `PlaceAutocompleteElement`, `AdvancedMarkerElement`, and fallback coordinate `(-7.245538, 112.737863)` (Surabaya).
 - **Livechat / Telemetry:** `helpdesk.autokirim.com/livechat-loader.js` (`window.BeChatSettings`) and Google Tag Manager (`GTM-MHJ4P22`).
 
-### 1.2 Complete Authenticated Sidebar & Route Map (23 Routes Across 10 Groups)
+### 1.2 Complete Authenticated Sidebar & Route Map (25 Routes Across 10 Groups)
 
 | # | Sidebar Group | Sub-Menu Label | URL Path | Primary Function & Observed JS Module |
 |---:|---|---|---|---|
@@ -109,11 +109,11 @@
 
 ---
 
-## 3. Code-Level Bugs & UX Pain Points Found in `app.autokirim.com` (And How `geraiexpress-cfv2` Fixes Them)
+## 3. Code-Level Bugs & UX Pain Points Found in `app.autokirim.com` (And the Planned `geraiexpress-cfv2` Mitigation)
 
 1. **Bug in `report_commission.js` (Line 53):** sends `end_date` twice in the JSON payload (`start_date: $("#startdate").val(), end_date: $("#enddate").val(), end_date: $("#resi").val()`), overwriting `end_date` with the AWB search box value!
 2. **Bug in `report_mutation.js` (Line 73):** when `/report/mutation-list` returns an empty state, it appends the error row to `#commission-list tbody` (which does not exist on the mutation page) with `colspan="16"` instead of `#mutation-list tbody` (`colspan="9"`).
 3. **Modal-Heavy Order Creation:** creating 1 walk-in shipment in `/order/regular` requires opening and closing **4 to 5 separate Bootstrap modals** (`#senderModal`, `#recipientModal`, `#packetModal`, `#commodityModal`, `#reviewModal`), whereas counter cashiers need a single-screen flow.
 4. **31-Day Hard Cap on All Date Pickers:** every `daterangepicker` in AutoKirim hard-caps `maxSpan: { days: 31 }` and `minDate` to 90 days ago, preventing quarterly/6-month analysis. `geraiexpress-cfv2` supports up to **180 days** with fast presets (`Hari ini`, `Kemarin`, `7 hari terakhir`, `30 hari terakhir`, `Bulan ini`, `Bulan lalu`, `90 hari terakhir` + 2-month range calendar, `DEC-221`).
 5. **QRIS Redirect Friction:** choosing QRIS in AutoKirim redirects away from POS to `/order/qris/:id` to top up the platform wallet first. In `geraiexpress-cfv2` (`DEC-220`), outlets receive money directly on their own counter QRIS/cash/transfer and simply record `Lunas · QRIS gerai` or `Bayar nanti` in 1 click.
-6. **Return Blind Spot When `isSenderPP == false`:** when an outlet ships using its own pickup point (`isSenderPP: false`) and masks the sender address/phone, RTS parcels return to the outlet without a dedicated return-intake workflow. `geraiexpress-cfv2` closes this with **`Meja Retur`** (`PR-17`, 4-digit WhatsApp `Kode Ambil`).
+6. **[I] Return Blind Spot When `isSenderPP == false` (scoped to the inspected surfaces):** when an outlet ships using its own pickup point (`isSenderPP: false`) and masks the sender address/phone, no dedicated return-intake screen was found among the inspected menus and modules (this does not prove the deployed system has none). `geraiexpress-cfv2` specifies **`Meja Retur`** (`PR-17`, 4-digit WhatsApp `Kode Ambil`).

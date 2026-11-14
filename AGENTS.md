@@ -35,3 +35,9 @@ Fix drift in the owning file; never silently work around a specification contrad
    - Never bundle `MENGANTAR_PARTNER_SECRET`, seller API keys (note: Mengantar Public API places the seller key in the URL path — **never log, return, or trace raw upstream request URLs**), or `PARTNER_RELAY_SECRET` into client code.
 6. **Indonesian Counter Ergonomics (35–55+ Operators):**
    - Body and input text minimum `16px`, touch targets minimum `44px` on phones and for all form inputs (`h-11`; desktop sidebar/tabs/menus may use `md:h-10` per `design/admin-contract.json`), high-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).
+
+## Example data policy
+
+All names, phone numbers, addresses and amounts in wireframes and examples are synthetic. Phone numbers are always
+written redacted (`08xx-xxxx-NNNN`); never paste real customer, seller or account data (including from research
+captures) into this repository.

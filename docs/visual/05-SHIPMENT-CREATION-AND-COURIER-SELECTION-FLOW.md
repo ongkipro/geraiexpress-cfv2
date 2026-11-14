@@ -45,7 +45,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 
 ```text
 ┌─ 2. PILIH EKSPEDISI & LAYANAN ─────────────────────────────────────────────────────────────────────┐
-│ Kategori : [ ● Reguler (6 kurir) ]   [ Cargo ≥10 kg (4 kurir) ]   [ Semua (10) ]                   │
+│ Kategori : [ ● Reguler (6 kurir) ]   [ Cargo ≥5 kg  (4 kurir) ]   [ Semua (10) ]                   │
 │ Urutkan  : [ ● Ongkir Termurah ]     [ Estimasi Tercepat ]        [ Retur Terendah ]               │
 │                                                                                                    │
 │ ┌─ SOROTAN TERBAIK ──────────────────────────────────────────────────────────────────────────────┐ │
@@ -74,7 +74,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 
 ```text
 ┌─ 2. PILIH EKSPEDISI COD  (Harga Barang: Rp 150.000) ───────────────────────────────────────────────┐
-│ Beban Biaya COD: (●) Dibebankan ke Penerima (Terima Utuh)   ( ) Dipotong dari Pencairan Pengirim   │
+│ Biaya COD: (●) Dibayar Penerima   ( ) Dipotong dari Pengirim   ( ) COD All-In (barang saja)        │
 │ Urutkan        : [ ● Pencairan Bersih Terbesar ]   [ Tagihan Penerima Termurah ]   [ Aman COD ]    │
 │                                                                                                    │
 │ ┌────────────────────────────────────────────────────────────────────────────────────────────────┐ │
@@ -111,7 +111,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 │ ( ) SiCepat REG ⚡        Rp 26.000  │          └──────────────────────────────────────┘
 │                                      │
 │ 3. Pengirim: [Toko Hijab Nisa 🎭  ▾] │
-│ 4. Penerima: [085722338821] [🟢 Aman]│
+│ 4. Penerima: [08xxxxxx8821] [🟢 Aman]│
 │    [Rina Kartika · Jl. Dago Asri...] │
 │    Isi: [Pakaian] [✓] Kardus (+3rb)  │
 ├──────────────────────────────────────┤

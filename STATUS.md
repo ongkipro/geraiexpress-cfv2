@@ -1,18 +1,18 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Updated: 2026-11-13
+Updated: 2026-11-14
 Status: M0 specification complete; prototype built and gated; awaiting owner visual pick and sign-off
 State: PLANNED
 Review-Risk: R0
-Independent-Review: PASS (docs only — Fable 5.1 rounds 1–3, Gemini 4 Carbon rounds 1–3; see `docs/review/`)
+Independent-Review: PENDING for 2026-11-14 additions (DEC-220..226, visual 08, research 02–03; GPT-6.1 Sol round 1 = REQUEST_CHANGES, fixes applied); earlier docs PASS (Fable 1–3, Carbon 1–3)
 Primary-Worker: pi session (Claude), 2026-11-12/13
 Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high)
 Independent-Review-Head: 16d0d60
 
 ## Now
 
-M0 documentation is complete and committed locally (no remote): PRD PR-01..PR-24, DECISIONS DEC-201..DEC-219,
-ADR-0001..0005, specs 01–10, visual 01–07, research 01, `DESIGN.md` (direction pending), `design/` brief, refs and
+M0 documentation is complete and committed locally (no remote): PRD PR-01..PR-24, DECISIONS DEC-201..DEC-226 (DEC-226 proposed),
+ADR-0001..0005, specs 01–10, visual 01–08, research 01–03, `DESIGN.md` (direction pending), `design/` brief, refs and
 comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
 
 ## Next
@@ -24,6 +24,8 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 3. TASK-003: owner signs off M0; then TASK-101 starts M1.
 
 ## Blockers
+
+- DEC-226 (meaning of the Super Admin assigned discount under Scheme 1) needs the owner's choice before M2 pricing work.
 
 None for M0. Open items that do not block design but must close before the stated milestone:
 - Mengantar Q23 (IP restriction on Public API writes / label generation for Partner-created sellers) — before M6.

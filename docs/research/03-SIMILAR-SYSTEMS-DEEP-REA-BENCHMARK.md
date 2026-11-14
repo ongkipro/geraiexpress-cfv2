@@ -25,7 +25,7 @@ Why renaming Menu #2 from `Kasir` to **`Buat Pengiriman`** (`DEC-225`) is the ri
 
 ### 2.1 `bosAgen` (`app.bosagen.com` — Extracted from `bosagen_app.map` & `bosagen_c1.map`)
 1. **Role-Split Views & Sidebars (`router.js`, `sidemenushipper.js`, `sidemenushippercs.js`):**
-   - `role_id == 12` (CS / Counter Staff) loads `DashboardShipperCs.vue` and `sidemenushippercs.js`, which strips `BukuBos` (`Saldo`, `Ongkir`, `Ongkir Retur`), `Pengaturan Kurir` (`/kustom-kurir`), `Rekening`, and `Buat PIN`, and disables Excel export in `Riwayat.vue` (`:disabled="downloading || userInfo.role_id == 3"`).
+   - `role_id == 12` (CS / Counter Staff) loads `DashboardShipperCs.vue` and `sidemenushippercs.js`, which strips `BukuBos` (`Saldo`, `Ongkir`, `Ongkir Retur`), `Pengaturan Kurir` (`/kustom-kurir`), `Rekening`, and `Buat PIN`, ; separately, `Riwayat.vue` disables the Excel download for `role_id == 3` (`:disabled="downloading || userInfo.role_id == 3"`) — the role 3 mapping was not established, so this is not attributed to CS (role 12).
    - Owners (`role_id > 10 && role_id != 12`) can switch between `DashboardShipperNew.vue` (`reguler`) and `DashboardShipperLite.vue`.
 2. **Web-Bluetooth Thermal Printing (`ReceiptPrinter.js` & `ShippingReceiptPrinter.js`):**
    - Uses `@point-of-sale/webbluetooth-receipt-printer` and `@point-of-sale/receipt-printer-encoder` (`columns: 32`).
@@ -34,8 +34,8 @@ Why renaming Menu #2 from `Kasir` to **`Buat Pengiriman`** (`DEC-225`) is the ri
      - **Top half (Parcel Label):** Atkinson-dithered logo (`312×72`), `code128` barcode, 3-column table `[courierCode, service_code, COD / NON COD]`, `Pengirim`, `Penerima` + full address, `Berat Barang`, `Nilai COD` (if COD), and inverted double-height `sorting_code`.
      - **Cut line:** `['--------', 'Potong Disini', '--------']`.
      - **Bottom half (`-- Bagian ini untuk customer --`):** repeats logo, barcode, sender, recipient, weight, and if COD prints **`Total Pencairan`** (`data.grand_total`) instead of `Nilai COD`.
-   - **Critical Flaws Found in `bosAgen`'s Printer Code (Fixed in `geraiexpress-cfv2`):**
-     - *Flaw 1 — External Barcode Leak & Latency:* `getPrintPreview()` renders barcodes and QR codes via `<img src="https://bwipjs-api.metafloor.com/?...">`, leaking every AWB to a third-party server and breaking offline/slow-network previews. `geraiexpress-cfv2` renders `Code128` and QR codes **100% locally in the browser/Worker**.
+   - **Critical Flaws Found in `bosAgen`'s Printer Code (Planned Mitigation in `geraiexpress-cfv2`):**
+     - *Flaw 1 — External Barcode Leak & Latency:* `getPrintPreview()` renders barcodes and QR codes via `<img src="https://bwipjs-api.metafloor.com/?...">`, leaking every AWB to a third-party server and breaking offline/slow-network previews. `geraiexpress-cfv2` specifies rendering `Code128` and QR codes **locally in the browser/Worker** (no third-party image service).
      - *Flaw 2 — No Non-COD Price or Payment Status on Customer Stub:* on Non-COD shipments, `bosAgen`'s bottom stub prints zero Rupiah figures and no payment status. `geraiexpress-cfv2` prints the full itemized breakdown + `LUNAS · QRIS GERAI / TUNAI / TRANSFER` or inverted `BELUM DIBAYAR` (`DEC-220`) on both the **10×5 cm sender stub** (`10×15 · Paket + Bukti`, `DEC-224`) and the 58 mm roll.
 3. **Claims, Retur Batch & Held Funds (`FormClaim.vue`, `FormClosingClaim.vue`, `router_ext.js`):**
    - `FormClaim.vue` supports multi-file image attachment upload (`userfile[]`), category selection (`v-select`), and a `special` flag (*"Ajukan Klaim Khusus"*).

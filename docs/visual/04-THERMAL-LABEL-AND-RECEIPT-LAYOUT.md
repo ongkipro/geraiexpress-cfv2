@@ -12,7 +12,7 @@ This specification refines **both** the physical paper typography of our thermal
 2. **0.5-Second Courier Eye Hierarchy (Top-Down Sorting Order):**
    - **Priority #1 — Sorting Code or Destination Subdistrict/Postcode Fallback:** inverted white-on-black pill (`█ BDO-CBL02 █` when `DESTINATION_CODE` is returned on post-issue `GET /order?order_id=`; if `NULL`, cleanly renders `█ COBLONG 40132 █` — never invented) so sorting-hub workers toss parcels into the right sack instantly.
    - **Priority #2 — High-Contrast Payment Banner (`NON-COD` vs `COD`):** on COD parcels, an unmistakable inverted block prints **`COD — TAGIH PENERIMA: Rp 167.560`** paired with **`"DILARANG BUKA PAKET SEBELUM BAYAR KE KURIR"`** to stop recipient open-and-refuse disputes.
-   - **Priority #3 — Recipient Block:** bold name, phone (or `0857-****-8821` when `Privasi Penerima` is active), street + landmark, and full subdistrict/city/postcode.
+   - **Priority #3 — Recipient Block:** bold name, phone (or `08xx-****-8821` when `Privasi Penerima` is active), street + landmark, and full subdistrict/city/postcode.
    - **Priority #4 — Masked Sender + Neutral `INV` Return Key:** prints sender according to the 4 masking presets, while always keeping the short neutral code **`INV: 8K4M2P7`** in the corner so if the parcel returns (`RTS`) to the outlet, `Meja Retur` identifies the true sender in 1 scan!
 3. **Dispute-Shield Footer on Every Parcel Label:**
    - Prints exact counter weight & dimensions (`Berat: 1.200 g | Ukuran: 30×20×15 cm | Tagih: 2.000 g`) to deter arbitrary hub re-weighing, plus **`"Wajib video paket utuh saat dibuka untuk klaim kerusakan"`**.
@@ -40,17 +40,17 @@ Designed for 58mm Bluetooth pocket printers (`48mm / 384 dots` printable width).
       ████████████████████      
       █    BDO-CBL02     █      
       ████████████████████      
-  NON-COD (ONGKIR SUDAH LUNAS)  
+            NON-COD             
 --------------------------------
 PENERIMA:
 RINA KARTIKA
-0857-2233-8821
+08xx-xxxx-8821
 Jl. Dago Asri No. 14 RT 02/05
 (Dekat Masjid Al-Huda)
 KEC. COBLONG, KOTA BANDUNG 40132
 --------------------------------
 PENGIRIM:
-TOKO HIJAB NISA (0812-3456-7890)
+TOKO HIJAB NISA (08xx-xxxx-7890)
 Kota Bandung        INV: 8K4M2P7
 --------------------------------
 Berat : 1.200 g (Tagih: 2.000 g)
@@ -60,8 +60,8 @@ Isi   : Pakaian (2 pcs)
 
 ------- ✂ Potong Disini --------
 
-       GERAI BERKAH JAYA        
-      WA: 0811-2233-4455        
+        TOKO HIJAB NISA         
+       WA: 0812-xxxx-7890       
    STRUK BUKTI TERIMA KIRIMAN   
 --------------------------------
 INV ID   : 8K4M2P7
@@ -157,20 +157,20 @@ block is identical in all three; only what surrounds it changes.
 │                     ██████████████████████████████████       │
 │                     Dilarang buka paket sebelum bayar        │
 ├──────────────────────────────────────────────────────────────┤
-│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ PENERIMA  RINA KARTIKA · 08xx-****-8821                      │
 │ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
 │ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
 ├──────────────────────────────────────────────────────────────┤
-│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890   [QR] INV 8K4M2P7│
+│ PENGIRIM  TOKO HIJAB NISA · 08xx-xxxx-7890   [QR] INV 8K4M2P7│
 │ Isi: Pakaian (2 pcs) · Berat 1.200 g · Tagih 2 kg            │
 │ Rekam video saat membuka paket untuk klaim kerusakan         │
 ╞════════════════════ ✂ potong di sini ════════════════════════╡
-│ BUKTI KIRIM · INV 8K4M2P7                Berkah Jaya Express │
+│ BUKTI KIRIM · INV 8K4M2P7                    TOKO HIJAB NISA │
 │ J&T EZ · AWB JX88 2910 4412 · ke Kota Bandung                │
-│ Berat tagih 2 kg · Ongkir Rp 24.000 · Kardus Rp 3.000        │
-│ TOTAL Rp 27.000 · LUNAS · QRIS GERAI                         │
+│ COD Barang · Tagih penerima Rp 167.560 · Kardus Rp 3.000     │
+│ Bayar di loket Rp 3.000 · LUNAS · QRIS · Cair Rp 150.000     │
 │ Lacak: berkahjaya.gerai.cc/lacak/8k4m2p7          [QR]       │
-│ WA gerai 0811-2233-4455 · simpan bukti ini                   │
+│ Simpan bukti ini untuk klaim dan pencairan COD               │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -183,7 +183,13 @@ block is identical in all three; only what surrounds it changes.
   charges, **payment status line** (`LUNAS · QRIS GERAI` / `LUNAS · TUNAI` / `LUNAS · TRANSFER` /
   inverted `BELUM DIBAYAR Rp …`, `DEC-220`), tracking URL + QR, outlet WhatsApp. Masking presets apply to the stub
   as well (Dropship Toko prints the reseller brand, never the outlet, on both parts).
-- COD variant of the stub: `Ditagih ke penerima Rp 167.560 · Estimasi cair Rp 150.000` replaces the charges line.
+- The specimen above is one consistent INV: `Dropship Toko` preset + COD Barang `buyer_bears_fee` (spec 02 §3.4): the stub
+  shows the reseller brand (never the outlet), what the courier collects, what was paid at the counter, and the sender
+  payable. A Non-COD stub instead shows `Ongkir · Kardus · Biaya Layanan Loket · TOTAL · LUNAS · QRIS GERAI` (or
+  inverted `BELUM DIBAYAR`).
+- Unknown insurance (`insurance_fee_idr = NULL`) always prints `—`, never `tidak`.
+- **Dropship rule (ADR-0005):** with `Dropship Toko`, both the parcel label and the sender part (stub or 58 mm
+  receipt) carry the reseller brand and the reseller's own WhatsApp; outlet name, logo and WhatsApp never appear.
 
 ### 3.2 `10×10 · Paket saja`
 
@@ -202,11 +208,11 @@ block is identical in all three; only what surrounds it changes.
 │                     ██████████████████████████████████       │
 │                     Dilarang buka paket sebelum bayar        │
 ├──────────────────────────────────────────────────────────────┤
-│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ PENERIMA  RINA KARTIKA · 08xx-****-8821                      │
 │ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
 │ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
 ├──────────────────────────────────────────────────────────────┤
-│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890   [QR] INV 8K4M2P7│
+│ PENGIRIM  TOKO HIJAB NISA · 08xx-xxxx-7890   [QR] INV 8K4M2P7│
 │ Isi: Pakaian (2 pcs) · Berat 1.200 g · Tagih 2 kg            │
 │ Rekam video saat membuka paket untuk klaim kerusakan         │
 └──────────────────────────────────────────────────────────────┘
@@ -232,14 +238,14 @@ so the sender still gets proof.
 │                     ██████████████████████████████████       │
 │                     Dilarang buka paket sebelum bayar        │
 ├──────────────────────────────────────────────────────────────┤
-│ PENERIMA  RINA KARTIKA · 0857-****-8821                      │
+│ PENERIMA  RINA KARTIKA · 08xx-****-8821                      │
 │ Jl. Dago Asri No. 14 RT 02 RW 05 (dekat Masjid Al-Huda)      │
 │ Kel. Dago, Kec. Coblong, Kota Bandung 40132                  │
 ├──────────────────────────────────────────────────────────────┤
-│ PENGIRIM  TOKO HIJAB NISA · 0812-3456-7890                   │
+│ PENGIRIM  TOKO HIJAB NISA · 08xx-xxxx-7890                   │
 │ Kota Bandung                                                 │
 ├──────────────────────────────────────────────────────────────┤
-│ Isi    : Pakaian / Kerudung (2 pcs) · Asuransi: tidak        │
+│ Isi    : Pakaian / Kerudung (2 pcs) · Asuransi: —            │
 │ Berat  : 1.200 g · Ukuran 30×20×15 cm · Tagih 2.000 g (2 kg) │
 │ Catatan: Rekam video saat membuka paket untuk klaim rusak    │
 │                                                              │
@@ -266,7 +272,7 @@ Uses the extra 50 mm for a two-line item/weight block and a separate sender line
 | **Top Outlet Logo & WA** | Shown | **Hidden** (blank clean header) | Follows base (`1` or `2`) | Shown |
 | **Sender Name & Phone** | Walk-in sender | **Reseller Store Name & Phone** | Follows base (`1` or `2`) | **Outlet Name & Business WA** |
 | **Sender Location Line** | Sender city/area (or street if opted in) | Reseller city only (never outlet street) | Follows base (`1` or `2`) | Outlet district & city |
-| **Recipient Phone on Paper** | Full | Full | **Masked (`0857-****-8821`)** *(courier app still gets full number)* | Full |
+| **Recipient Phone on Paper** | Full | Full | **Masked (`08xx-****-8821`)** *(courier app still gets full number)* | Full |
 | **Non-COD Shipping Price** | Optional toggle | **Hidden by default** | Hidden on Non-COD; **COD collect total always shown** | Optional toggle |
 | **Neutral `INV: 8K4M2P7` Tag** | Shown | **Shown** (neutral alphanumeric code for return scan) | Shown | Shown |
 

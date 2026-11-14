@@ -13,7 +13,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │ .gerai.cc ↗      ├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
 │ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA BERSIH GERAI  │ SALDO MENGANTAR SYNC │
 │ ● Dashboard      │ 412 Paket (+18%▲) │ Rp 9.840.000      │ Rp 2.190.500       │ Aman : Rp 840.000*   │
-│ ○ Buat Kiriman   │ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Sync Rp1,98jt+Est  │ COD  : Rp 4.850.000  │
+│ ○ Buat Pengiriman│ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Sync Rp1,98jt+Est  │ COD  : Rp 4.850.000  │
 │ ○ Kiriman   (22) ├───────────────────┴───────────────────┴────────────────────┴──────────────────────┤
 │ ○ Kontak ▾       │ *Saldo Mengantar Rp915.000 (Sync 3 mnt lalu ✓) − Cadangan 3 Paket Retur Rp75.000  │
 │   ├─ Pengirim    │                                                                                   │
@@ -45,7 +45,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 
 ```text
 ┌────────────────────────────────────────────────────────────┬─────────────────────────────────────────┐
-│ Buat Pengiriman: [● Paket Baru] [Multi-Paket] [Cek Cepat]  │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
+│ [● Paket Reguler] [Paket Massal] [Cek Ongkir] [Shift]      │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
 ├────────────────────────────────────────────────────────────┼─────────────────────────────────────────┤
 │ KIRIMAN BARU — INV #8K4M2P7        [📷 Scan QR dari Rumah]  │ RINGKASAN KUNCI (INV #8K4M2P7)           │
 │ ────────────────────────────────────────────────────────── │ ─────────────────────────────────────── │
@@ -66,9 +66,9 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │ Kontak: [ Toko Hijab Nisa (WA Asli: 0812xxxx)          ▾ ] │ PEMBAYARAN MEJA KASIR                   │
 │                                                            │ [● Tunai] [QRIS] [Transfer] [Deposit]   │
 │ 4. PENERIMA (`/kontak/penerima`) & ISI PAKET               │ Diterima : [ Rp 50.000 ] → Kembali 23rb │
-│ HP  : [ 0857-2233-8821 ] [🟢 Aman COD · 6x Sukses / 0 RTS] │                                         │
-│ Nama: [ Rina Kartika   ] Jln: [ Jl. Dago Asri No. 14...  ] │ CETAK: [● 58mm Label+Struk] [10×15 PDF] │
-│ Isi : [ Pakaian (2 pcs)] [✓] Kardus M (+3rb) [📷 Foto Timb]│ [Pratinjau Resi] [BAYAR & CETAK (Enter)]│
+│ HP  : [ 08xx-xxxx-8821 ] [🟢 Aman COD · 6x Sukses / 0 RTS] │                                         │
+│ Nama: [ Rina Kartika   ] Jln: [ Jl. Dago Asri No. 14...  ] │ CETAK: [● 10×15 Paket+Bukti] [Lainnya▾] │
+│ Isi : [ Pakaian (2 pcs)] [✓] Kardus M (+3rb) [📷 Foto Timb]│ [Pratinjau] [TANDAI LUNAS & CETAK]      │
 └────────────────────────────────────────────────────────────┴─────────────────────────────────────────┘
 ```
 

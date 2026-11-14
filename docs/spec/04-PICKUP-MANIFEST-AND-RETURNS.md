@@ -13,9 +13,9 @@ Because every shipment uses the outlet's physical address as its upstream pickup
    - For `scheduledPickup` couriers, reserves a slot via `POST /time` enforcing a configurable >= 120-minute lead time (reconciling the 90-min API vs 2-hour web UI rule; `POST /time` timezone interpretation is to be verified in M4 sandbox and stored as provider `_id` + raw timestamp echo).
 3. **Barcode Scan-into-Sack Guard:**
    - When the courier arrives, the cashier scans each parcel's barcode into that courier's manifest.
-   - Scanning a parcel belonging to a **different courier** or a `cancelled / unpaid` `INV` triggers an **audible error tone + red banner** (`"SALAH KURIR! Paket ini milik SiCepat, bukan J&T"`), preventing misrouted sacks.
+   - Scanning a parcel belonging to a **different courier**, a `cancelled` INV, or a `provider_unpaid_hold` INV (no AWB) **blocks** with an audible error tone + red banner (`"SALAH KURIR! Paket ini milik SiCepat, bukan J&T"`). A counter-`unpaid` INV (DEC-220) only shows an amber warning `Belum dibayar pelanggan — tagih dulu` and may still be handed over.
 4. **Courier Signature & Custody Proof:**
-   - Courier enters name + finger signature on screen (or cashier snaps a photo of the signed printed manifest, stored in R2), transitioning scanned `INV`s to `handed_to_courier`.
+   - Cashier records `driver_name`, `driver_phone`, `driver_vehicle_no` (all required, spec 01 §2.4); the driver signs on screen (or the cashier photographs the signed printed Surat Jalan, stored in R2), transitioning scanned `INV`s to `handed_to_courier` and generating the Surat Jalan PDF.
 5. **Branch Drop-Off Fallback:** if a courier misses pickup, the cashier can mark the batch `Diantar Mandiri ke Cabang` with an automatic reminder to drop within the same subdistrict (`kecamatan`) to avoid carrier rayon holds.
 
 ---

@@ -152,7 +152,9 @@ tenant B's record).
 - **Accepted Invariants:** integers only; `billed_kg` rules incl. sub-kg and 1 kg-minimum couriers; COD gross-up
   applied once; insurance `NULL` stays `NULL`; unit-mistake guard thresholds (`< 10` gram, `>= 100` kg).
 - **Done when:** unit tests cover every worked example in spec 02 and visual 05 with exact Rupiah results,
-  plus property tests that no function returns a non-integer `_idr` value.
+  plus property tests that no function returns a non-integer `_idr` value; the five `cod_fee_mode` rows of spec 02 §3.4
+  (incl. `seller credit − sender payable = P − M`), the all-in negative-payout guard, and the `P = 12000`, net `9599` → cost
+  `9599` (not `9600`) regression.
 
 ---
 

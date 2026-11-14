@@ -14,8 +14,13 @@ Under Scheme 1 (`DEC-203`), each outlet owns its Mengantar seller balance (top-u
 2. **Book 2 — Mengantar Seller Mirror Book (`mengantar_invoice_mirror` & `mengantar_invoice_subitems`):** an idempotent mirror of Mengantar's `GET /api/public/{API_KEY}/invoices` stream, reconciled 1:1 to local `shipments` (`(tenant_id, slug)`) via `cnote_no` (AWB), `ORDER_ID`, and `batch` code.
 
 **Realized vs Estimated Profit:**
-- Pre-reconciliation (`payment_sync_state = 'provider_paid_estimated'`): labeled **`Estimasi Laba`** (`counter_total_paid_idr - gerai_shipping_cost_idr`).
-- Post-reconciliation (`payment_sync_state = 'provider_invoice_reconciled'`): promoted to **`Laba Terealisasi (Sync Mengantar ✓)`** using the exact integer amounts settled in `mengantar_invoice_mirror`.
+- **`Estimasi Laba` (accrued):** per mode, `(P - M) + K + S - V_outlet` (spec 02 §3.3) from issue time; for COD modes the
+  counter-due may be only `K + S - V`, so profit is **never** computed as `counter_total_paid_idr - gerai_shipping_cost_idr`.
+- **`Laba Kas` (cash-realized, `Sync Mengantar ✓`):** the same margin recomputed with `provider_reconciled_cost_idr` (Non-COD)
+  or `reconciled_provider_cod_credit_idr - sender_cod_payable_idr` (COD), counted only when the counter part is `paid`
+  (or `not_required`). Provider reconciliation alone never marks an unpaid counter customer as paid (DEC-220).
+- **Sender COD payable** is a liability of the outlet to the walk-in sender, distinct from Mengantar's seller credit;
+  `Keuangan` shows `Hutang COD ke Pengirim` until the outlet records `sender_cod_payout`.
 
 ---
 
@@ -33,7 +38,7 @@ Query parameters: `page`, `size`, `invoiceFilter`, `keyword` (accepts `cnote_no`
 |---|---|---|---|
 | **`typeAddBalance`** | **Observed** (`/invoices` capture) | Seller balance top-up (`statusCleared` / `statusExpired`). *(Note: Public API has no `POST` top-up endpoint; sellers top up in Mengantar Web/App, and `/invoices` reflects it).* | Upsert mirror row; when `statusCleared`, update `synced_balance_idr` and flag any `provider_unpaid_hold` batches as ready for `pay-unpaid`. |
 | **`typePayment`** | **Observed** (`/invoices` capture) | 1. `"Payment for Non-COD batch <batch>"` (`subItems[].amount == -estimatedSpecialPrice`)<br>2. `"Payment for returned order <AWB>"` (**Return shipping debit**)<br>3. Descriptions containing `"penyesuaian"` *(bundle-observed weight/Cordest adjustment)* | Match `cnote_no` / `batch` / `ORDER_ID` to `(tenant_id, slug)`:<br>• Batch payment → set `provider_reconciled_cost_idr` & `provider_invoice_reconciled`.<br>• Return payment → add to `reconciled_extra_adjustment_idr` & release `Active_Return_Exposure_Idr`.<br>• `"penyesuaian"` → flag `INV` in `Kendala > Selisih Berat/Cordest`. |
-| **`typeReconciliation`** | **Observed** (`/invoices` capture) | COD Auto-Reconciliation payout (`invoice.amount == sum(subItems.amount)`; per-AWB `subItem.amount == COD_AMOUNT - estimatedSpecialPrice`). | Match each `subItem.cnote_no` → set `reconciled_cod_net_payout_idr = subItem.amount` & mark `provider_invoice_reconciled`. |
+| **`typeReconciliation`** | **Observed** (`/invoices` capture) | COD Auto-Reconciliation payout (`invoice.amount == sum(subItems.amount)`; per-AWB `subItem.amount == COD_AMOUNT - estimatedSpecialPrice`). | Match each `subItem.cnote_no` → set `reconciled_provider_cod_credit_idr = subItem.amount` (Mengantar seller credit, not the sender payable) & mark `provider_invoice_reconciled`; flag a `Selisih Sync` row if it differs from `expected_provider_cod_credit_idr`. |
 | **`typeRefund`** | **Observed** (`/invoices` capture) | Approved claim credit (`"Claim approved for damaged or lost / returned order <AWB>"`). *(Note: `DELETE /order` cancellation refund behavior is **Unknown**; cancellations reconcile via `GET /order` `isDeleted/status` first, independent of counter `Void`, and link any subsequent refund invoice if emitted).* | Match `<AWB>` to `shipment_claims` → mark claim `paid` & record `CLAIM_PAYOUT_CREDITED`. |
 | **`typeWithdraw`** | **Observed** (`/invoices` capture) | Seller balance withdrawal to bank (`statusCleared`). | Record payout in mirror & update `synced_balance_idr`. |
 | `typeCorrection`, `typeDeduction`, `typeMismatchM/P`, `typeAddBalanceCredit`, `typeWithdrawal`, `typeWithdrawApi`, or **any unknown `type`** | *Bundle-derived / Open-ended* | Additional adjustment or future provider types. | Never drop unknown types: persist verbatim in `mengantar_invoice_mirror` and surface unlinked/unrecognized rows in the **`Selisih Sync`** review tab. |

@@ -5,7 +5,7 @@
 - **Purpose:** one place that says *where* every navigation element sits, *what* every page contains, and *who*
   sees it. Wireframes in `02`, `05`, `06` show page bodies; this file owns the frame around them.
 - All visible strings are normative Indonesian. Sizes follow the comfort contract: body 16 px, nothing visible
-  under 14 px, inputs 44 px (toolbar 40 px desktop), sidebar links 40 px / 16 px, header 64 px; every touch
+  under 14 px, all form inputs and selects 44 px (only navigation, tabs and menu items may be 40 px on desktop), sidebar links 40 px / 16 px, header 64 px; every touch
   target on phones ≥ 44 px (`h-11 md:h-10`).
 
 ---
@@ -117,7 +117,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 |---|---|---|---|---|---|
 | `/` | O | Dashboard | `+ Kiriman Baru` | period filter (WIB presets + calendar range, default `7 hari terakhir`, DEC-221, visual 08 §1) → 4 KPI (kiriman, tercatat dibayar, belum dibayar, saldo Mengantar aman) → `Grafik pengiriman` (stacked Non-COD/COD bars) → `Riwayat pengiriman` (INV, ekspedisi, penerima, tagihan, pembayaran, status) → courier performance + `Perlu tindakan` | — |
 | `/` | K | Tugas Loket Hari Ini | `+ Kiriman Baru` | shift card → `Siap Pickup` per courier → `Meja Retur` waiting → recent INV list | No money totals, no Mengantar balance |
-| `/kasir` | O K | Buat Pengiriman | `+ Kiriman Baru` | tabs `Kiriman Baru · Multi-Paket · Cek Cepat · Shift Kas`; default tab = recent drafts + scan QR box | Margin toggle owner only |
+| `/kasir` | O K | Buat Pengiriman | `+ Kiriman Baru` | tabs `Paket Reguler · Paket Massal · Cek Ongkir Cepat · Shift Loket`; default tab = recent drafts + scan QR box | Margin toggle owner only |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Tandai Lunas & Cetak` (or `Simpan & Cetak` when `Bayar nanti`) | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
 | `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`); masked INV: `Lihat Pengirim Asli` (reason + audit) | Cost/margin rows owner only |
 | `/kasir/multi` | O K | Buat Pengiriman › Multi-Paket | `Tandai Lunas & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | Kasir sees customer price only |
