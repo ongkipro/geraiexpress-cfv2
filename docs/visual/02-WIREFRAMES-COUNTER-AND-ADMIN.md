@@ -13,7 +13,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │ .gerai.cc ↗      ├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
 │ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA BERSIH GERAI  │ SALDO MENGANTAR SYNC │
 │ ● Dashboard      │ 412 Paket (+18%▲) │ Rp 9.840.000      │ Rp 2.190.500       │ Aman : Rp 840.000*   │
-│ ○ Kasir          │ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Sync Rp1,98jt+Est  │ COD  : Rp 4.850.000  │
+│ ○ Buat Kiriman   │ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Sync Rp1,98jt+Est  │ COD  : Rp 4.850.000  │
 │ ○ Kiriman   (22) ├───────────────────┴───────────────────┴────────────────────┴──────────────────────┤
 │ ○ Kontak ▾       │ *Saldo Mengantar Rp915.000 (Sync 3 mnt lalu ✓) − Cadangan 3 Paket Retur Rp75.000  │
 │   ├─ Pengirim    │                                                                                   │
@@ -39,13 +39,13 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 
 ---
 
-## 2. Counter POS Overview (`Kasir`) — `app.geraiexpress.com/kiriman/8k4m2p7`
+## 2. Counter POS Overview (`Buat Pengiriman` — `/kiriman/8k4m2p7`, `DEC-225`)
 
 *(Full step-by-step courier selection & mobile flow is detailed in `05-SHIPMENT-CREATION-AND-COURIER-SELECTION-FLOW.md`.)*
 
 ```text
 ┌────────────────────────────────────────────────────────────┬─────────────────────────────────────────┐
-│ Sub-Tab Kasir: [● Kiriman Baru] [Multi-Paket] [Cek Cepat]  │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
+│ Buat Pengiriman: [● Paket Baru] [Multi-Paket] [Cek Cepat]  │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
 ├────────────────────────────────────────────────────────────┼─────────────────────────────────────────┤
 │ KIRIMAN BARU — INV #8K4M2P7        [📷 Scan QR dari Rumah]  │ RINGKASAN KUNCI (INV #8K4M2P7)           │
 │ ────────────────────────────────────────────────────────── │ ─────────────────────────────────────── │

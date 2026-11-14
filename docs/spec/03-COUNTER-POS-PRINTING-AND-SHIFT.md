@@ -56,6 +56,7 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 - A4 `1/2/4 per halaman` is a PDF fallback only.
 - Generates crisp vector PDFs with **borderless horizontal barcode bands** (preserving >= 3 mm left/right `Code128` quiet zones so laser scanners never misread vertical box borders).
 - Tracks `print_count` and `first_printed_at` per `INV`, warning operators before duplicate reprints so one AWB is never taped onto two boxes.
+- **Bulk Label Print (`Cetak Resi Massal`, `DEC-225`):** in `Kiriman`, operators filter by `Status Cetak` (`Belum Cetak` / `Sudah Cetak`), select up to **50 `INV`s**, and generate one merged 100 mm thermal PDF in 1 click.
 
 ---
 

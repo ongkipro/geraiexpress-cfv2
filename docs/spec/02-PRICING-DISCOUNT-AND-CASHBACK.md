@@ -40,11 +40,15 @@ This specification defines exact integer arithmetic for weights, customer tariff
 Let `P = publish_shipping_idr`, `M = gerai_shipping_cost_idr`, `I = insurance_fee_idr ?? 0` (*Mengantar Public API currently exposes no separate insurance fee parameter; `insurance_fee_idr` stays `NULL` until a verified provider field exists*), `K = packing_addon_idr`, `V = promo_discount_idr`, `G = item_value_idr`, and `F = cod_service_fee_idr` (integer `codFee` from Mengantar's two-pass seller estimate).
 
 1. **`NON_COD` (Paid Upfront at the Counter):**
-   - `Customer_Receipt_Total = P + I + K - V`
+   - Let `S = counter_service_fee_idr` (`0` by default; optional `Rp1.000–Rp200.000` on `NON_COD` / `COD_SHIPPING` when enabled by the outlet in `Pengaturan › Packing & Biaya Tambahan`, `DEC-225`).
+   - `Customer_Receipt_Total = P + I + K + S - V`
    - `Expected_Mengantar_Debit = M` *(plus `I` only if provider bills insurance in `/invoices`)*
-   - `Estimated_Counter_Margin = (P - M) + K - V_outlet_funded`
-2. **`COD_GOODS` (Recipient Pays Goods + Shipping to Courier):**
-   - Uses Mengantar's **two-pass quote** (`COD_AMOUNT` on estimate = `G + P`, while Create Order `COD` = total collected from recipient `G + P + F` when fee is borne by recipient, or `G + P` when absorbed by sender, matching Mengantar's documented `"Goods Value + Shipping Fee + COD Fee"` definition).
+   - `Estimated_Counter_Margin = (P - M) + K + S - V_outlet_funded`
+2. **`COD_GOODS` (Recipient Pays Goods + Shipping to Courier — Three Explicit Fee Modes, `DEC-225`):**
+   - Item value bounds: `Rp10.000 <= G <= Rp5.000.000` for COD (`Rp10.000 <= G <= Rp20.000.000` for Non-COD/DFOD).
+   - **Mode 1 — `buyer_bears_fee` (*"Admin COD Dibayar Pembeli / Markup Otomatis"*):** uses Mengantar's two-pass quote so `cod_collection_total_idr = G + P + I + F` and sender receives full `estimated_cod_net_payout_idr = G`.
+   - **Mode 2 — `sender_bears_fee`:** `cod_collection_total_idr = G + P + I`, and `estimated_cod_net_payout_idr = G - F`.
+   - **Mode 3 — `cod_all_in` (*"Admin COD & Ongkir Dibayar Pengirim / COD All-In"*):** recipient pays only the item price (`cod_collection_total_idr = G`, min `Rp10.000`), and shipping + COD fee are deducted from the sender's payout (`estimated_cod_net_payout_idr = G - P - I - F`).
    - Both **`Tagih ke Penerima`** (`cod_collection_total_idr`) and **`Estimasi Cair Bersih`** (`estimated_cod_net_payout_idr`) print clearly on the sender's receipt stub.
 3. **`COD_SHIPPING` / DFOD (`G = 0`, Recipient Pays Shipping + COD Fee on Delivery):**
    - Displays an explicit counter notice that uninsured `G = 0` shipments carry minimal carrier loss coverage (`1x ongkir`).
