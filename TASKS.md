@@ -43,6 +43,13 @@ tenant B's record).
   `/pengaturan` with the grouped sub-menu and three item pages; `dotuiux check --surface admin` 0 fail and
   `admin-geometry.mjs` exit 0 at 390/1366/1536 on those routes.
 
+### TASK-005: Re-run dotuiux + admin-geometry after the DEC-222 palette change
+- **Requirement:** DEC-222
+- **Risk Level:** R0
+- **Allowed Paths:** `design/evidence/prototype-gates.md`
+- **Depends On:** working headless Chrome on the host
+- **Done when:** `bash` gate script rows show 0 fail and admin-geometry exit 0 on all prototype routes.
+
 ### TASK-002: Owner picks the visual direction
 - **Requirement:** `DESIGN.md` Direction
 - **Risk Level:** R0

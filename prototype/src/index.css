@@ -56,40 +56,41 @@
 }
 
 :root {
-    /* DESIGN.md tokens. Direction A (default): light Mengantar-style blue workspace, system UI font. */
+    color-scheme: light;
+    /* DEC-222: clean white + Mengantar blue. Direction A (default), system UI font. */
     --app-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --background: #F6F8FC;
-    --foreground: #1B2B44;
+    --background: #FFFFFF;
+    --foreground: #203551;
     --card: #FFFFFF;
-    --card-foreground: #1B2B44;
+    --card-foreground: #203551;
     --popover: #FFFFFF;
-    --popover-foreground: #1B2B44;
-    --primary: #2547C8;
+    --popover-foreground: #203551;
+    --primary: #2E47BA;
     --primary-foreground: #FFFFFF;
-    --secondary: #EEF2FD;
-    --secondary-foreground: #1E3A9E;
-    --muted: #F6F8FC;
+    --secondary: #EEF1FB;
+    --secondary-foreground: #2E47BA;
+    --muted: #F5F7FA;
     --muted-foreground: #55657D;
-    --accent: #EEF2FD;
-    --accent-foreground: #1E3A9E;
+    --accent: #EEF1FB;
+    --accent-foreground: #2E47BA;
     --destructive: #C92A2A;
-    --border: #D9DFEA;
+    --border: #E3E8F0;
     --input: #7B879C;
-    --ring: #2547C8;
-    --chart-1: #2547C8;
+    --ring: #2E47BA;
+    --chart-1: #2E47BA;
     --chart-2: #E07A2F;
     --chart-3: #1E7E34;
     --chart-4: #6B2FBA;
     --chart-5: #55657D;
     --radius: 0.5rem;
     --sidebar: #FFFFFF;
-    --sidebar-foreground: #1B2B44;
-    --sidebar-primary: #2547C8;
+    --sidebar-foreground: #203551;
+    --sidebar-primary: #2E47BA;
     --sidebar-primary-foreground: #FFFFFF;
-    --sidebar-accent: #EEF2FD;
-    --sidebar-accent-foreground: #1E3A9E;
-    --sidebar-border: #D9DFEA;
-    --sidebar-ring: #2547C8;
+    --sidebar-accent: #EEF1FB;
+    --sidebar-accent-foreground: #2E47BA;
+    --sidebar-border: #E3E8F0;
+    --sidebar-ring: #2E47BA;
     --safe: #1E7E34; --safe-bg: #EAF7ED;
     --warn: #9A5B00; --warn-bg: #FFF4E0;
     --danger: #C92A2A; --danger-bg: #FFEBEB;
@@ -122,39 +123,6 @@ html[data-text="besar"] { font-size: 112.5%; }
 html[data-text="sangat-besar"] { font-size: 125%; }
 
 
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-}
 
 @layer base {
   * {

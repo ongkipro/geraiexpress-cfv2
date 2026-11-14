@@ -33,8 +33,9 @@ this file holds the accepted constraints only and the build is visually UNVERIFI
 ## Tokens
 
 ### Colour
-Light Mengantar-style blue (DEC-222): accent `#2547C8`; ink `#1B2B44`, muted `#55657D`; canvas `#F6F8FC`, cards
-`#FFFFFF`; borders `#D9DFEA`, inputs `#7B879C`; chart Non-COD `#2547C8`, COD `#E07A2F` (always with legend).
+Clean white + Mengantar blue, light only (DEC-222): canvas/cards `#FFFFFF` with `#E3E8F0` hairlines; accent
+`#2E47BA`, tint `#EEF1FB`; ink `#203551`, muted `#55657D`; inputs `#7B879C`; chart Non-COD `#2E47BA`, COD `#E07A2F`
+(always with legend). `color-scheme: light`; no dark palette at launch.
 Status pairs as in `docs/visual/01` §2 (safe, warn, danger, pickup-warn).
 
 ### Type
