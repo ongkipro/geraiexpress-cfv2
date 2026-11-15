@@ -1,13 +1,12 @@
 import { DurableObject } from "cloudflare:workers"
 import { TENANT_MIGRATIONS, TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { applyTenantMigrations, readSchemaState, tableExists, type MigrateResult, type SchemaState } from "./core/migrate"
+import { normalizeSlug } from "@gx/domain/slug"
+import { allocateSlug, slugTaken, type SlugPurpose } from "./slug"
 import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, type OutboxTopic } from "./core/outbox"
 
-export class TenantNotReadyError extends Error {
-  constructor(readonly state: SchemaState) {
-    super("TENANT_NOT_READY")
-  }
-}
+export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
+export type VaultResult<T> = { ok: true; value: T } | { ok: false; refused: VaultRefusal }
 
 const IDENTITY_DDL = "CREATE TABLE IF NOT EXISTS vault_identity (id INTEGER PRIMARY KEY CHECK (id = 1), tenant_id TEXT NOT NULL CHECK (length(tenant_id) > 0), created_at INTEGER NOT NULL)"
 
@@ -45,12 +44,31 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ...readSchemaState(this.ctx.storage), tenantId: this.tenantId() }
   }
 
-  /** Guard every feature RPC: right tenant, current schema, not in recovery. */
-  protected ready(tenantId: string): void {
+  /**
+   * Guard every feature RPC: right tenant, current schema, not in recovery. Returns a refusal code instead of throwing,
+   * so a refusal crosses the RPC boundary as data (no remote exception, no partial work).
+   */
+  protected refusal(tenantId: string): VaultRefusal | null {
     const bound = this.tenantId()
-    if (bound !== tenantId) throw new Error(bound ? "TENANT_MISMATCH" : "TENANT_NOT_PROVISIONED")
+    if (bound !== tenantId) return bound ? "TENANT_MISMATCH" : "TENANT_NOT_PROVISIONED"
     const s = readSchemaState(this.ctx.storage)
-    if (s.state !== "ok" || s.version !== TENANT_SCHEMA_VERSION) throw new TenantNotReadyError(s)
+    if (s.state !== "ok" || s.version !== TENANT_SCHEMA_VERSION) return "TENANT_NOT_READY"
+    return null
+  }
+
+  /** Allocates one INV slug (feature tasks call `allocateSlug` inside their own transaction instead). */
+  async allocateSlug(tenantId: string, purpose: SlugPurpose): Promise<VaultResult<string>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: allocateSlug(this.ctx.storage, purpose, Date.now()) }
+  }
+
+  /** Case-insensitive existence check (`INV 8K4M2P7`, `#8k4m2p7`, `8k4m2p7`). */
+  async slugExists(tenantId: string, input: string): Promise<VaultResult<boolean>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const slug = normalizeSlug(input)
+    return { ok: true, value: slug !== null && slugTaken(this.ctx.storage, slug) }
   }
 
   /**

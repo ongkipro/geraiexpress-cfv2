@@ -85,3 +85,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
     probe `sqlite_master` read-only and create tables only inside `migrate`.
   - Concurrency tests on two DO RPCs flake under `nice`; assert the end state, not the overlap.
   - Numeric/hex/shorthand IPv4 (`0x7f.0.0.1`, `127.1`) pass a label regex; require the last label to start with a letter.
+
+## 2026-11-16 — TASK-107 money/weight math + TASK-108 INV slug (M1, R3)
+
+- Scope: `packages/domain` (`money`, `weight`, `slug`), tenant migration `0002_inv_slugs`, `allocateSlug`
+  (synchronous, inside callers' transactions) and refusal-as-data RPCs (`{ ok:false, refused }`).
+- Evidence: 52 domain unit tests incl. every spec 02 §3.4 row, 9599, not-yet-applied fixture (M = 9.000, N = 9.600),
+  insured Laba Kas 5.400, COD-fee fixed point and `COD_FEE_UNSTABLE`, 2,000-case property test; 10,000 slugs → 0
+  duplicates; reviewer-carbon round 1 REQUEST_CHANGES (7 findings fixed), round 2 APPROVE.
+- Gotchas: `sender_bears_fee` can go negative when `G < F` on long-haul routes — rejected (`COD_FEE_EXCEEDS_GOODS`);
+  `Number("")` is `0`, so a blank `COD_FEE` must be parsed strictly or it silently matches `F = 0`; BigInt division
+  truncates toward zero, so `mulDivFloor` only accepts non-negative operands.

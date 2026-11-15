@@ -87,3 +87,9 @@ export const outbox = sqliteTable(
   },
   (t) => [index("outbox_due").on(t.nextAttemptAt)],
 )
+
+export const invSlugs = sqliteTable("inv_slugs", {
+  slug: text("slug").primaryKey(),
+  purpose: text("purpose", { enum: ["draft", "minisite_qr", "bulk", "api"] }).notNull(),
+  createdAt: integer("created_at").notNull(),
+})

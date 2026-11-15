@@ -2,7 +2,16 @@
   "name": "@gx/domain",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit -p tsconfig.json" },
-  "devDependencies": { "typescript": "~6.0.3" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./money": "./src/money/index.ts",
+    "./weight": "./src/weight/index.ts",
+    "./slug": "./src/slug/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
 }

@@ -1,13 +1,13 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-16
-Status: M1 in progress — TASK-101, TASK-103, TASK-102 done (Carbon APPROVE); next TASK-107/108/110 → TASK-104..106 → TASK-111/109/112 → TASK-199
+Status: M1 in progress — TASK-101, 103, 102, 107, 108 done (Carbon APPROVE); next TASK-110 → TASK-104..106 → TASK-111/109/112 → TASK-199
 State: IN_PROGRESS
 Review-Risk: R4
-Independent-Review: TASK-102/103 PASS — reviewer-carbon round 1 REQUEST_CHANGES (2 P1, 4 P2, 1 P3, all fixed), round 2 APPROVE (`docs/review/TASK-102-103/`); TASK-101 PASS (round 2 APPROVE, `docs/review/TASK-101/`)
+Independent-Review: TASK-107/108 PASS — reviewer-carbon round 1 REQUEST_CHANGES (1 P1, 5 P2, 1 P3, fixed), round 2 APPROVE (`docs/review/TASK-107-108/`); TASK-102/103 PASS — reviewer-carbon round 1 REQUEST_CHANGES (2 P1, 4 P2, 1 P3, all fixed), round 2 APPROVE (`docs/review/TASK-102-103/`); TASK-101 PASS (round 2 APPROVE, `docs/review/TASK-101/`)
 Primary-Worker: pi session (Claude Opus 5.5 via 9router-fantastico), 2026-11-16
 Independent-Reviewer: reviewer-carbon (9router-fantastico/ag/gemini-4-carbon-high)
-Independent-Review-Head: TASK-102/103 working tree (diff `docs/review/TASK-102-103/TASK-102-103.diff`)
+Independent-Review-Head: TASK-107/108 working tree (diff `docs/review/TASK-107-108/TASK-107-108.diff.gz`)
 
 ## Now
 
@@ -15,6 +15,8 @@ M1 build on branch `dev` (worktree `~/Projects/.worktrees/geraiexpress-cfv2/dev`
 
 | Task | State | Evidence |
 |---|---|---|
+| TASK-107 Money/weight math | DONE 2026-11-16 | `packages/domain` money + weight: every spec 02 §3.4 row, 9599, not-yet-applied fixture, insured Laba Kas, COD fee fixed point, guards, 2,000-case property test (S, V sampled); mutation (9599) red |
+| TASK-108 INV slug | DONE 2026-11-16 | rejection-sampled CSPRNG slug; tenant migration `0002_inv_slugs`; 10,000 slugs → 0 duplicates; same slug in two tenants; case-insensitive `INV: …`; mutations (upsert, biased bytes) red |
 | TASK-103 Storage foundation | DONE 2026-11-16 | two migration tracks; `migrate(version)` RPC with per-step rollback and `recovery`; versioned absolute-upsert outbox with safety alarm; `pnpm do:migrate --env local` dry run + run + re-run; bidirectional Drizzle↔SQL drift test (D1 + object); Workers tests incl. failure-path (tenant in recovery → 503, others 200) |
 | TASK-102 Host classifier | DONE 2026-11-16 | five contexts; D1 `tenant_hostnames` (≤ 30 s cache); 404/403/503; DCV/probe rules; cross-context 404 matrix; four mutations each turned a test red |
 | TASK-101 Scaffold | DONE 2026-11-16 | `pnpm check` exit 0 incl. clean-clone copy (`pnpm install --frozen-lockfile`); `wrangler dev` `/healthz` 200 on 5 hosts; both shells served host-isolated (Workers tests `spa.test.ts`); dotuiux 0 fail + admin-geometry exit 0 at 390/1366/1536 on both shells; bundle audit mutation-proved (`.map`, client secret name) |
@@ -23,7 +25,7 @@ Live owner actions so far: none required by TASK-101.
 
 ## Next
 
-1. TASK-107/108 (money/weight math, INV slug), TASK-110 (observability base), then TASK-104..106, TASK-111, TASK-109, TASK-112.
+1. TASK-110 (observability base), then TASK-104..106, TASK-111, TASK-109, TASK-112, TASK-199.
 2. Every R3/R4 task: reviewer-carbon until APPROVE, archive under `docs/review/TASK-<id>/`.
 
 ## Blockers
