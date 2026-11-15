@@ -177,3 +177,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Read-only check today: `mail.geraiexpress.com` SPF/DKIM absent (not onboarded); `_dmarc.geraiexpress.com` is
   `p=reject` without `rua` — onboarding must publish aligned DKIM before any send.
 - Awaiting owner: Email Sending onboarding, DMARC decision, 12 inbox sends from staging, mail-tester ≥ 9/10.
+
+## 2026-11-16 — TASK-199 M1 close
+
+- Integrated run (`pnpm gate TASK-199`, docs/WORKFLOW.md §5): typecheck, lint, unit, build, worker, migrations,
+  isolation, security (bundle audit + red fixtures + `security-check .`), e2e (Playwright 390/768/1280) — every gate
+  RECORDED PASS by `delivery-ledger`; hosted CI green (run 43763855473 on b181a5c).
+- M1 shipped: scaffold, storage foundation, host classifier, email outbox, accounts, Super Admin TOTP, money/weight
+  math, INV slug, CI and deploy workflows, observability base, isolation suite, deliverability tooling (197 tests).
+- Owner-gated before production sign-up: staging resources/secrets/environments + first staging deploy (TASK-109),
+  staging alert webhook (TASK-110), Email Sending onboarding + inbox tests (TASK-112), first Super Admin bootstrap
+  per environment (TASK-106). Independent review: one final reviewer-carbon pass after M6 code (owner directive);
+  TASK-101..103 and 107/108 already APPROVED per task.

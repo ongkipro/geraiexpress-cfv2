@@ -21,7 +21,10 @@
     "do:migrate": "node scripts/do-migrate/do-migrate.mjs",
     "probes": "node scripts/probes/probes.mjs",
     "ci:red-fixtures": "bash scripts/ci/red-fixtures.sh",
-    "email:deliverability": "node scripts/email/deliverability.mjs"
+    "email:deliverability": "node scripts/email/deliverability.mjs",
+    "test:migrations": "pnpm --filter @gx/worker exec vitest run test/migrations",
+    "test:isolation": "pnpm --filter @gx/worker exec vitest run test/isolation test/host",
+    "gate": "bash scripts/ci/integrated-gate.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
