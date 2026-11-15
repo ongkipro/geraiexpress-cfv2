@@ -251,3 +251,15 @@ export const knownDevices = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.deviceHash] })],
 )
+
+export const superAdmins = sqliteTable("super_admins", {
+  userId: text("user_id").primaryKey(),
+  totpSecretEncrypted: text("totp_secret_encrypted"),
+  totpState: text("totp_state", { enum: ["pending", "active", "reset"] }).notNull().default("pending"),
+  totpLastStep: integer("totp_last_step"),
+  enrolledBy: text("enrolled_by"),
+  enrolledAt: integer("enrolled_at"),
+  status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+})

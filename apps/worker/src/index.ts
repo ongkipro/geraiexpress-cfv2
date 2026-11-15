@@ -1,10 +1,12 @@
 import { appApi } from "./api/app"
+import { ownerApi } from "./api/owner"
 import { serveSpa } from "./assets/spa"
 import { classify, hostShape, normalizeHost, probeSignature } from "./host/classify"
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
 import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDevLastMail } from "./ops/dev-mail"
 import { handleDoMigrate } from "./ops/do-migrate"
+import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
 
@@ -12,6 +14,7 @@ export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
 
 const APP_API = appApi()
+const OWNER_API = ownerApi()
 
 // Path families that belong to exactly one context; on any other context they are a neutral 404 (ADR-0002).
 const API_FAMILIES = [/^\/api\//, /^\/webhooks\//, /^\/internal\//, /^\/mcp(\/|$)/]
@@ -66,6 +69,8 @@ export default {
       case "PLATFORM_OWNER":
         if (path === "/internal/ops/do-migrate" && request.method === "POST") return handleDoMigrate(request, env)
         if (path === "/internal/dev/last-mail" && request.method === "GET") return handleDevLastMail(request, env)
+        if (path === "/internal/ops/bootstrap-admin" && request.method === "POST") return handleBootstrapAdmin(request, env)
+        if (path.startsWith("/api/owner/")) return OWNER_API.fetch(request, env, exec)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "owner")
       case "MARKETING_APEX":

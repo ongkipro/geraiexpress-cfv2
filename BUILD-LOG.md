@@ -138,3 +138,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - The admin size contract's `header` selector matches any `<header>` element; card headings use `div`.
   - Playwright 1.65 needs Chromium 1255; locally use `channel: "chrome"` (system Chrome 157) instead of downloading.
   - e2e must start from fresh local state: persisted auth throttles from a previous run turn later runs red.
+
+## 2026-11-16 — TASK-106 Super Admin TOTP (M1, R4)
+
+- Shipped: control migration `0004_super_admin`; RFC 6238 TOTP (Web Crypto HMAC-SHA1, ±1 step, replay guard);
+  `/api/owner` sub-app (`aal1` login → enrol/verify TOTP → `aal2`; `owner_recent` 15-min recency for sensitive reads
+  and mutations; admin enrolment and TOTP recovery by another admin with reason + audit; never self);
+  `/internal/ops/bootstrap-admin` for the very first admin; owner screens `/masuk`, `/totp` (QR once, `uqr`).
+- Evidence: 8 Workers tests (aal gating, replay, 5-wrong lock, recency on read + mutation, recovery audit + session
+  revocation, 12 h cookie, non-impersonation scan of every `/api/owner` route); Playwright full suite 7/7; UI gates
+  0 fail; mutation (recency gate) red. Review deferred to the final Carbon pass.
+- Dependency: `uqr` 0.1.3 (MIT, unjs; zero dependencies) for local QR rendering — also needed for labels (TASK-306).

@@ -22,7 +22,7 @@ tenant B's record).
 
 ## In progress
 
-TASK-101..105, 107, 108, 110 DONE 2026-11-16 (see STATUS.md). In progress: M1 (TASK-106 next).
+TASK-101..108, 110 DONE 2026-11-16 (see STATUS.md). In progress: M1 (TASK-111 next).
 
 ## Pending
 
