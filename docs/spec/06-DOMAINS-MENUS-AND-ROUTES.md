@@ -16,7 +16,7 @@ This specification is the single source of truth for **host routing**, **unified
 | `relay.geraiexpress.com` | `apps/worker` only | Production Partner API egress relay on the VPS (`docs/spec/10`); **not** served by the Worker | HMAC `X-Relay-Signature` |
 | `cname.gerai.cc` *(CNAME target, DEC-228)* | Pro outlets with their own domain (e.g., `kirim.tokobudi.id`) | *Cloudflare for SaaS* custom hostname → same Worker; lifecycle, root-domain branches and routing rules in `docs/spec/11` | Public (same as mini-site) |
 
-**`gerai-slug` Validation:** `3–30` chars matching `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`; blocks reserved platform/protocol words (`www`, `app`, `api`, `owner`, `admin`, `hq`, `hooks`, `relay`, `custom`, `mcp`, `docs`, `mail`, `mengantar`) and official courier brand names (`jne`, `jnt`, `sicepat`, `spx`, `pos`, `lion`, `sap`, `paxel`, `anteraja`, `idexpress`, `ninja`, `tiki`). Slugs may not end in `-stg` (reserved for staging mini-sites, spec 07 §7).
+**`gerai-slug` Validation:** `3–30` chars matching `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`; blocks reserved platform/protocol words (`www`, `app`, `api`, `owner`, `admin`, `hq`, `hooks`, `relay`, `custom`, `mcp`, `docs`, `mail`, `mengantar`) and official courier brand names (`jne`, `jnt`, `sicepat`, `spx`, `pos`, `lion`, `sap`, `paxel`, `anteraja`, `idexpress`, `ninja`, `tiki`). Slugs may not end in `-stg` (reserved for staging mini-sites, spec 07 §7). `cname` and `fallback` are reserved (Cloudflare for SaaS target and fallback origin, spec 11 §1).
 
 ---
 

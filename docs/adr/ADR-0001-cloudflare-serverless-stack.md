@@ -15,7 +15,7 @@ In `geraiexpress` v1, running a full Next.js application through `@opennextjs/cl
 Adopt **Option 3**:
 - **HTTP, OpenAPI & MCP Layer:** one TypeScript Cloudflare Worker using Hono and `@hono/zod-openapi` serves JSON APIs, OpenAPI 3.1 + Scalar docs, stateless Streamable HTTP MCP endpoints, and edge-cached Indonesian SSR pages (`geraiexpress.com` and `*.gerai.cc`).
 - **Authenticated Workspaces:** `app.geraiexpress.com` and `owner.geraiexpress.com` are built with **Vite + React 19 + TanStack Router/Query + Tailwind + shadcn/ui** and served via **Workers Static Assets** with zero Worker CPU spent on static asset delivery.
-- **State & Storage:** **Cloudflare D1** (Drizzle ORM) for relational tables, **Durable Objects (`GeraiVaultDO`)** for per-outlet atomic serialization, **Cloudflare R2** for zero-egress media storage, and **Cloudflare Queues + Cron** for webhook ingestion and Mengantar financial sync.
+- **State & Storage:** **Cloudflare D1** (Drizzle ORM) for the control plane and **SQLite-backed Durable Objects (`GeraiVaultDO`)** for each gerai's data and atomic serialization (as amended by ADR-0006), **Cloudflare R2** for zero-egress media storage, and **Cloudflare Queues + Cron** for webhook ingestion and Mengantar financial sync.
 
 ## Consequences
 - **Positive:** sub-megabyte Worker script, near-zero cold start across Indonesian/Singapore PoPs, native SEO/WhatsApp OpenGraph for outlet mini-sites, and instant desktop-like counter responsiveness with Web-Bluetooth support.

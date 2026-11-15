@@ -35,7 +35,8 @@ journal lives in the DO while the shipment row lives in D1.
 1. **D1 (`DB`) = control plane only.** Tables that are global, cross-tenant or needed before a tenant is known:
    `users`, `sessions`, `email_otps`, `super_admins`, `tenants`, `tenant_members`, `tenant_hostnames` (spec 11),
    `tenant_api_keys` (hashed), `tenant_discount_rules`, `courier_service_catalog`, `platform_legal_profile`,
-   `audit_logs` (platform scope), and a **thin shipment index** `shipment_index(tenant_id, slug, awb_number,
+   `audit_logs` (platform scope), `webhook_routes` (token hash → tenant), `recipient_risk_index` (hashed phone →
+   per-tenant COD counts, Super Admin only), and a **thin shipment index** `shipment_index(tenant_id, slug, awb_number,
    status, created_at)` used only for Super Admin cross-tenant search and public `/lacak` lookup.
 2. **`GeraiVaultDO` (SQLite storage, one per `tenant_id`, `getByName(tenant_id)`) = all tenant data:** outlets,
    contacts, quotes, shipments, events, receipts, shifts, pickup batches, returns, claims, cashback, both ledgers,

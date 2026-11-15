@@ -92,7 +92,8 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
 
 - Push only when asked, fast-forward only, from a green head; check the range for secrets, AI trailers and a
   non-noreply author.
-- **Approval per action:** `wrangler deploy`, D1/DO migrations on production, DNS, Cloudflare for SaaS settings,
+- **Approval per action:** every `wrangler deploy` (staging through the protected GitHub `staging` environment, production
+  through the manual production workflow), D1/DO migrations on production, DNS, Cloudflare for SaaS settings,
   custom-hostname create/delete, Email Sending domain onboarding, Mengantar production calls, relay VPS changes.
 - Release order per milestone: staging Worker (`env.staging`) → smoke (`/healthz` on every host, one synthetic tenant
   flow) → owner approval → production deploy → `OBSERVABILITY.md` checks → `RELEASE.md` snapshot

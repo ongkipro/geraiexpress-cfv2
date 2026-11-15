@@ -26,7 +26,10 @@ Plans, prices and limits change: re-read the linked Cloudflare page at M6 provis
 2. Enable Cloudflare for SaaS on `gerai.cc` (non-Enterprise needs a payment method on the account).
 3. Originless fallback: proxied `AAAA fallback 100::`; set as fallback origin; wait for **Active**.
 4. Proxied `CNAME cname → fallback.gerai.cc` (the customer-facing target).
-5. Worker route `*/*` on `gerai.cc` → the Worker; add `cname.gerai.cc/*` → Worker explicitly (O2O safety).
+5. Worker route `*/*` on `gerai.cc` → the production Worker; add `cname.gerai.cc/*` → Worker explicitly (O2O safety).
+   Staging: the route `*-stg.gerai.cc/*` → the **staging** Worker (more specific routes win), so `<slug>-stg` hosts never
+   reach production bindings. Staging does not create custom hostnames; custom-domain flows are tested in staging with
+   a separate test zone owned by the team.
 6. API token for the Worker: zone-scoped to `gerai.cc`, custom-hostname edit + quota read only; stored as secret
    `CF_SAAS_API_TOKEN`. Never an account-wide token.
 
@@ -35,6 +38,8 @@ Plans, prices and limits change: re-read the linked Cloudflare page at M6 provis
 Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
 
 1. Pass through `/.well-known/acme-challenge/*` and `/.well-known/pki-validation/*` untouched (HTTP DCV).
+   `GET /.well-known/geraiexpress-probe/<nonce>` is answered **for pending hosts too** with
+   `HMAC(probe_secret, host + nonce)` only (no tenant name or data); it is the activation probe of §5 step 5.
 2. Normalise `Host` (lowercase, strip port and trailing dot); ignore `X-Forwarded-Host`; reject IP literals and hosts
    over 253 chars.
 3. Exact match on platform hosts → platform context (ARCHITECTURE §3), no tenant.
@@ -63,7 +68,7 @@ tenant; `tenants.routing_version` increments on any change.
 | 2 | Worker | `POST /zones/{gerai.cc}/custom_hostnames` with `ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } }`; GET again after a short delay for `ownership_verification` and `ssl.validation_records`. Create **before** the owner saves a proxied CNAME (O2O Error 1014). |
 | 3 | Owner | Adds the DNS record shown in the app (§6). |
 | 4 | Worker (Cron every 10 min + `Periksa Lagi` button) | `GET` status; the button sends `PATCH` with the same `ssl` method to restart validation. |
-| 5 | Worker | When `status = active` **and** `ssl.status = active`, run an HTTPS probe to `https://<host>/.well-known/geraiexpress-tenant` expecting this tenant's marker; only then set `state = active` and bump `routing_version`. |
+| 5 | Worker | When `status = active` **and** `ssl.status = active`, the Worker requests `https://<host>/.well-known/geraiexpress-probe/<random nonce>` and compares the response with its own `HMAC(probe_secret, host + nonce)`; only a match proves the host reaches this deployment, then it sets `state = active` and bumps `routing_version`. Every other path on a pending host stays a neutral 404 (lifecycle test). |
 | 6 | Worker | Canonical URLs, QR posters and receipts switch to the custom host only after step 5. A failed probe keeps `<slug>.gerai.cc` primary. |
 | 7 | Worker (daily reaper) | Delete hostnames `pending`/`failed` for 7 days, `moved`, or of churned/purged tenants: `DELETE` the custom hostname (stops billing), set `purged`. Never rely on Cloudflare's own deletion. |
 

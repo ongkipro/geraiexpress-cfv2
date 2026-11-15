@@ -36,14 +36,19 @@ No receipts, shipment updates or promotions by email (receipts go to WhatsApp li
 ## 3. Sending path
 
 1. The auth flow writes an `email_outbox` row in D1 (`id`, `template_id`, `to_email_hash`, `to_email_encrypted`,
-   `payload_json` with no secrets except the OTP hash reference, `state`, `attempts`, `next_attempt_at`, `created_at`,
-   `sent_at`, `provider_message_id`, `last_error_code`) in the same transaction as the OTP/invite.
+   `payload_encrypted` — AES-256-GCM with `KEK_SECRET`, holding the rendered variables including the plain OTP or
+   invite link so a retry after a crash can rebuild the message —, `expires_at` (= the OTP/link expiry), `state`,
+   `attempts`, `next_attempt_at`, `created_at`, `sent_at`, `provider_message_id`, `last_error_code`) in the same D1
+   batch as the OTP hash/invite. `payload_encrypted` is nulled on `sent`, on terminal failure and at `expires_at`.
 2. One function `sendMail(env, message)` (the only caller of `env.EMAIL.send`) builds subject, `text` **and** `html`
    from the Indonesian template, sends, and records the result.
-3. Retry: transient errors back off (1 min, 5 min, 15 min, max 4 attempts); `E_RECIPIENT_SUPPRESSED` and hard bounces
-   are terminal and shown as `Email tidak dapat menerima pesan. Periksa alamat email.`
+3. Retry: transient errors back off (30 s, 2 min, 5 min; max 4 attempts) and **never after `expires_at`** (an expired
+   OTP is not sent; the user requests a new one). `E_RECIPIENT_SUPPRESSED` and hard bounces are terminal and shown as
+   `Email tidak dapat menerima pesan. Periksa alamat email.`
 4. OTP rate limits (spec 05 §2) apply before the outbox: max 3 OTP emails per address per 15 min and 10 per IP per hour.
-5. The OTP value itself is never stored in plain text (hash + pepper) and never logged; logs carry `to_email_hash`.
+5. The OTP is verified against its hash + pepper; its plain value exists only inside `payload_encrypted` until sent or
+   expired and is never written to production logs (logs carry `to_email_hash`). Locally, `wrangler dev` writes the
+   simulated message to local files — acceptable for development only (§5).
 
 ## 4. Content rules (deliverability)
 

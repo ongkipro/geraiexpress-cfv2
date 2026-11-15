@@ -42,7 +42,7 @@ seller**; GeraiExpress cannot reduce or raise it by calculation, and the documen
   Mengantar's side and becomes the billed rate; activation is recorded with date, channel and the observed
   `discountPercent` from `/order/estimate`.
 - **Until then (fallback):** `assigned_gerai_discount_bps`
-is an **internal commercial estimate** used for margin preview and the `assigned <= observed` guard only; reconciled
+is an **internal commercial reference** used for the Super Admin's `Selisih tarif` view and the `assigned <= observed` guard only (`Estimasi Laba` always uses `N`, §3); reconciled
 profit always uses `provider_reconciled_cost_idr`. Any gap (`assigned < observed`) is shown to the owner as
 `Selisih tarif` and is never booked as platform revenue (a platform-fee settlement of the gap is rejected for launch).
 
@@ -133,7 +133,7 @@ per-mode fee fixture. Second fixture for the fallback case (DEC-226 not yet prov
 - **`Laba Kas` (cash-realized):** one predicate for every mode (spec 09 uses the same): counted only when
   (a) `counter_payment_status IN ('paid','not_required')` **and** (b) the provider side is reconciled —
   `provider_reconciled_cost_idr IS NOT NULL` for `none`, `reconciled_provider_cod_credit_idr IS NOT NULL` for COD modes.
-  Value: `none` → `(P − provider_reconciled_cost_idr − I0) + K + S − V`; COD → `(reconciled_provider_cod_credit_idr −
+  Value: `none` → `counter_due_idr − provider_reconciled_cost_idr`, where `provider_reconciled_cost_idr` is the **total** Mengantar debit for that INV (shipping **plus** insurance, from `/invoices`); with the fixture and `I = 1.000`: `16.000 − 10.600 = 5.400`; COD → `(reconciled_provider_cod_credit_idr −
   sender_cod_payable_idr) + K + S − V`. Provider reconciliation alone never implies that an unpaid counter customer has
   paid. Dashboards show `Estimasi Laba` and `Laba Kas` as **two separate numbers**, never summed.
 

@@ -98,7 +98,7 @@ tenant B's record).
 
 ### TASK-102: Host classifier and host-locked cookies
 - **Requirement:** ADR-0002 (dual-domain white-label SaaS)
-- **Risk Level:** R3
+- **Risk Level:** R4
 - **Job:** implementation
 - **Allowed Paths:** `apps/worker/src/host/**`, `apps/worker/test/host/**`
 - **Protected Paths:** `apps/worker/src/auth/**`
@@ -106,7 +106,9 @@ tenant B's record).
 - **Accepted Invariants:** the five contexts in `ARCHITECTURE.md` §3; cross-context paths return 404; `relay.` is
   never served by the Worker (`docs/spec/10` §5).
 - **Done when:** worker tests prove: each `.localhost` host maps to its context; `/api/owner/*` on `app.` → 404;
-  an `app.` cookie is not accepted on `owner.` and vice versa; unknown `*.gerai.cc` slug → 404 page.
+  an `app.` cookie is not accepted on `owner.` and vice versa; unknown `*.gerai.cc` slug → 404 page; host
+  normalisation (case, port, trailing dot, IP literal, ignored `X-Forwarded-Host`); one mutation that weakens the
+  classifier makes a test fail; independent R4 review archived.
 
 ### TASK-103: Control-plane D1 schema and `GeraiVaultDO` tenant store (core tables)
 - **Requirement:** ADR-0006, `docs/spec/01` §0 and §2
@@ -168,7 +170,8 @@ tenant B's record).
   applied once; insurance `NULL` stays `NULL`; unit-mistake guard thresholds (`< 10` gram, `>= 100` kg).
 - **Done when:** unit tests cover every worked example in spec 02 and visual 05 with exact Rupiah results,
   plus property tests that no function returns a non-integer `_idr` value; the five `cod_fee_mode` rows of spec 02 §3.4
-  (incl. `seller credit − sender payable = P − M`), the all-in negative-payout guard, and the `P = 12000`, net `9599` → cost
+  (incl. `seller credit − sender payable = P − N`, and the fallback fixture `M = 10800`, `N = 9600` leaving flows unchanged), the
+  insured Non-COD `Laba Kas` regression (`I = 1000` → `5400`), the quote-pass fixed point (`COD_FEE_UNSTABLE`), the all-in negative-payout guard, and the `P = 12000`, net `9599` → cost
   `9599` (not `9600`) regression.
 
 ### TASK-108: CI pipeline and staging deploy
@@ -181,8 +184,9 @@ tenant B's record).
 - **Accepted Invariants:** actions pinned by SHA; `permissions: contents: read`; no secrets for fork PRs; production
   deploy only through a manual, approval-protected workflow.
 - **Done when:** a pushed branch runs `ci.yml` green on GitHub (hosted run link in `STATUS.md`); a deliberately broken
-  unit test makes it red; `deploy-staging.yml` exists but its first run waits for the owner's approval of the
-  staging Cloudflare resources.
+  unit test makes it red; `deploy-staging.yml` runs only after a reviewer approves the `staging` GitHub environment
+  for that run (no unattended deploy), and the first run additionally needs the owner's approval of the staging
+  Cloudflare resources.
 
 ### TASK-109: Host isolation test suite
 - **Requirement:** `docs/spec/11` §3 and §8, ADR-0002

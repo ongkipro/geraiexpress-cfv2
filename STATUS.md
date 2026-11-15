@@ -4,10 +4,10 @@ Updated: 2026-11-15
 Status: M0 signed off by owner 2026-11-14 (Direction A, DEC-226 accepted); M1 may start after an independent review APPROVE (TASK-006)
 State: PLANNED
 Review-Risk: R0
-Independent-Review: PENDING (TASK-006) — GPT-6.1 Sol round 1 and round 2 = REQUEST_CHANGES (all 13 round-2 findings fixed 2026-11-15); round 3 to cover those fixes plus DEC-227..229, ADR-0006, specs 11–12, docs/WORKFLOW.md; earlier docs PASS (Fable 1–3, Carbon 1–3)
+Independent-Review: PENDING (TASK-006) — GPT-6.1 Sol rounds 1–3 = REQUEST_CHANGES; all round-3 findings (15) fixed 2026-11-15; round 4 reviews the delta; earlier docs PASS (Fable 1–3, Carbon 1–3)
 Primary-Worker: pi session (Claude), 2026-11-12/13
 Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high), reviewer (gpt-6.1-sol)
-Independent-Review-Head: 7fbad94 (Sol round 2)
+Independent-Review-Head: b425216 (Sol round 3)
 
 ## Now
 
@@ -26,7 +26,7 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 4. 2026-11-15: owner accepted DEC-227 (Cloudflare Email Sending only), DEC-228 (D1 control plane + per-gerai SQLite
    Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 tasks TASK-108..110 added.
-5. Next: GPT-6.1 Sol round 3 (TASK-006); TASK-101 starts only after APPROVE.
+5. Next: GPT-6.1 Sol round 4 (TASK-006); TASK-101 starts only after APPROVE.
 
 ## Blockers
 

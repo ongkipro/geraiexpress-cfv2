@@ -20,7 +20,7 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - **Unit-Mistake Guard:** entering `< 10` in `gram` mode (e.g., typing `2` intending `2 kg`) or `>= 100` in `kg` mode (e.g., typing `1000` intending `1000 g`) displays a 1-click yellow fix chip and blocks submission until confirmed.
    - Selecting destination subdistrict immediately streams parallel courier cards.
 2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Tandai Lunas & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
-3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks local D1 `recipient_contacts` delivery/RTS counters (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
+3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks this gerai's `recipient_contacts` delivery/RTS counters (tenant object) (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists; optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
 4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.**
 5. **Record Payment & 1-Click Print (DEC-220):** the outlet collects money itself; the POS only records it.
    - `Catat pembayaran` segmented control: `QRIS gerai` · `Tunai` (cash received → change) · `Transfer` · `Bayar nanti`.
@@ -51,7 +51,9 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 
 - **Eligible:** COD Barang INV whose `reconciled_provider_cod_credit_idr IS NOT NULL` (the money reached the outlet's
   Mengantar balance). Owner may override with a reason (`Bayar sebelum cair`), audit-logged; Kasir never can.
-- **Who:** owner always; Kasir only when the owner enabled `Kasir boleh bayar COD` and only inside an open shift.
+- **Who:** owner; Kasir only when the owner enabled `Kasir boleh bayar COD`. **Every `tunai` payout and its reversal
+  requires an open shift** (the cash leaves that drawer), whoever performs it; `transfer` payouts need no shift and
+  never touch drawer totals.
 - **Amount:** `amount <= sender_cod_payable_idr − COALESCE(sender_cod_paid_idr, 0)`; partial payouts allowed; each one
   is a `sender_cod_payout` receipt (`direction = out`, method `tunai`/`transfer`) with an `Idempotency-Key`.
   `sender_cod_paid_idr` is the sum of non-voided payouts and is updated in the same Durable Object transaction.
@@ -91,10 +93,7 @@ For resellers who bring many parcels at once. One sender, one set of parcels, on
    `Lihat`, `Cetak Semua` and `Batalkan yang Belum Terbit` (cancels only INVs without AWB; issued ones follow the normal
    cancel rules with read-back).
 
-Data: `bulk_import_batches` (`id`, `tenant_id`, `sender_contact_id`, `source` (`manual | csv | xlsx`), `file_name`,
-`row_count`, `ready_count`, `failed_count`, `state` (`draft | checking | ready | dispatching | done | partially_failed |
-cancelled`), `created_by`, timestamps) and `bulk_import_rows` (`batch_id`, `row_no`, raw values JSON, normalised
-fields, `area_id`, `errors_json`, `shipment_slug`).
+Data: `bulk_import_batches`, `bulk_import_rows` and the atomic batch payment are defined in spec 01 §2.5.
 
 ### 1.4 `Cek Resi` (`/kasir/cek-resi`, DEC-229)
 

@@ -101,8 +101,9 @@ are manual, labelled, and never part of CI.
 
 - `ci.yml` on every push/PR: `pnpm install --frozen-lockfile` → `pnpm check` → Playwright (Chromium, 390/1366) →
   upload evidence; actions pinned by SHA, `permissions: contents: read`, no secrets on PR from forks.
-- `deploy-staging.yml` on `main`: `wrangler deploy --env staging` with a scoped `CLOUDFLARE_API_TOKEN` (environment
-  secret), then `/healthz` smoke on every host. Production deploy is a separate manual workflow requiring the owner's
+- `deploy-staging.yml` on `main`: waits for an approval on the protected `staging` GitHub environment (each run), then
+  `wrangler deploy --env staging` with a scoped `CLOUDFLARE_API_TOKEN` (environment secret) and a `/healthz` smoke on
+  every host. Production deploy is a separate manual workflow requiring the owner's
   approval in the GitHub environment (AGENTS approval gate), never automatic.
 - Tenant DO migrations on deploy: `pnpm do:migrate --env <env>` walks tenants in batches, records progress in D1
   `tenant_schema_versions`, and stops on the first failure (that tenant enters `recovery`).
@@ -112,5 +113,5 @@ are manual, labelled, and never part of CI.
 | Env | Hosts | Data | Mengantar | Email |
 |---|---|---|---|---|
 | local | `*.localhost:8787` | local D1 + local DO storage | mock / recorded fixtures | simulated |
-| staging | `staging.geraiexpress.com`, `app-staging.`, `owner-staging.`, `hooks-staging.geraiexpress.com`; mini-sites `<slug>-stg.gerai.cc` (first-level labels only, so Universal SSL covers them) | separate D1 + DO namespace | sandbox keys | real, test inboxes only |
+| staging | `staging.geraiexpress.com`, `app-staging.`, `owner-staging.`, `hooks-staging.geraiexpress.com`; mini-sites `<slug>-stg.gerai.cc` (first-level labels so Universal SSL covers them; routed to the staging Worker by `*-stg.gerai.cc/*`, spec 11 §2) | separate D1 + DO namespace | sandbox keys | real, test inboxes only |
 | production | spec 06 | production | production (Partner via relay) | real |

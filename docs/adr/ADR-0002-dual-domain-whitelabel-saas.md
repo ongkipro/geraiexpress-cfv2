@@ -24,4 +24,4 @@ The Worker's entry middleware classifies `Host` strictly and returns an Indonesi
 ## Consequences
 - **Security:** Because `gerai.cc` and custom domains are distinct `eTLD+1` origins from `geraiexpress.com`, browsers physically never attach `__Host-ge_app` or `__Host-ge_owner` cookies to outlet mini-site requests.
 - **Commercial:** Short URLs (`berkahjaya.gerai.cc`) fit cleanly on 58mm thermal receipts, WhatsApp bios, and storefront banners while remaining neutral for local resellers.
-- **Obligation:** Enforce a strict `RESERVED_SLUGS` denylist (`www`, `app`, `api`, `owner`, `admin`, `hooks`, `custom`, `mcp`, courier trademarks, etc.) at outlet registration.
+- **Obligation:** Enforce a strict `RESERVED_SLUGS` denylist (`www`, `app`, `api`, `owner`, `admin`, `hooks`, `custom`, `cname`, `fallback`, `mcp`, courier trademarks, etc.) at outlet registration.

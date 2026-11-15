@@ -58,7 +58,7 @@ Existing software fails them in two ways:
 ### 3.3 Dual-Book Finance & Precision Mengantar Sync
 | ID | Requirement | Pri | Acceptance Criteria |
 |---|---|---|---|
-| **PR-11** | **Super Admin Discount & Cashback Matrix:** per-outlet × courier/service integer `bps` rules with effective timestamps, audit reasons, and automatic `assigned_bps <= observed_bps` ceiling guard. | P0 | Blocks accidental platform/outlet negative spread unless subsidy is explicitly authorized. |
+| **PR-11** | **Super Admin Discount & Cashback Matrix:** per-outlet × courier/service integer `bps` rules with effective timestamps, audit reasons, and automatic `assigned_bps <= observed_bps` ceiling guard. | P0 | Blocks accidental platform/outlet negative spread; no subsidy at launch (DEC-226). |
 | **PR-12** | **Precision Mengantar Financial Sync (`Keuangan`):** syncs `GET /invoices` (observed `typeAddBalance`, `typePayment`, `typeReconciliation`, `typeRefund`, `typeWithdraw`, plus bundle-observed `typeCorrection` and any future unknown types routed to `Selisih Sync`, alongside running `balanceAmount`), reconciles them 1:1 against local `INV` slugs, and handles `isPaid: false` unpaid orders via `POST /order/pay-unpaid` once top-up clears. | P0 | Local Mengantar Mirror balance matches `balanceAmount` from Mengantar; discrepancies or unknown invoice types surface in `Selisih Sync`. |
 | **PR-13** | **Anti-Freeze Return Risk Reserve (`Saldo Aman`):** calculates estimated return-shipping exposure strictly for active `RTS` / disputed `INV`s without freezing unrelated funds, displaying the exact contributing `INV` list to the Owner. | P0 | Solves the #1 negative review pain across competing agent apps. |
 

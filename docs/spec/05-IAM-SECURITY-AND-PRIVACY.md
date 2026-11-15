@@ -18,7 +18,7 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
 | Manage active couriers, mini-site, packing prices, staff, API/MCP keys | **✗** | **✗** | **✓** | – |
 | Approve outlet → provision Mengantar seller account | **✗** | **✗** | **✗** | **✓ (Requires TOTP `aal2`)** |
 | Configure per-outlet × courier discount/cashback, masking kill-switch & `masking_daily_quota` | **✗** | **✗** | **✗** | **✓ (TOTP + Audit reason)** |
-| Inspect cross-outlet COD phone risk history | **✗** | Sees 3-color badge only | Sees 3-color badge only | **✓ (`risk_review` + Audit)** |
+| Inspect cross-outlet COD phone risk history | **✗** | Sees 3-color badge only | Sees 3-color badge only | **✓ (`risk_review` + Audit; hashed-phone index, spec 01 §2.6)** |
 
 ---
 
@@ -34,7 +34,7 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
    - State-changing requests on `/api/app/*` and `/api/owner/*` enforce Hono `Origin` / CSRF verification.
    - Programmatic `/api/v1/*` and `/mcp` routes accept **`Authorization: Bearer` tokens exclusively** and ignore browser cookies completely.
 3. **Envelope Encryption for Mengantar Credentials (`AES-256-GCM`):**
-   - Seller `apiKey` and `webhookSecret` values, plus `encrypted_npwp` (DEC-218), are encrypted with `AES-256-GCM` (random 96-bit IV per ciphertext) using Worker secret `KEK_SECRET` before D1 persistence.
+   - Seller `apiKey` and `webhookSecret` values and the tenant's `encrypted_npwp` (DEC-218) are encrypted with `AES-256-GCM` (random 96-bit IV per ciphertext) using Worker secret `KEK_SECRET` before they are written to the tenant's `GeraiVaultDO` storage (ADR-0006); the platform's own NPWP in `platform_legal_profile` (D1) uses the same encryption.
    - Plaintext keys are never returned to any UI or API response and are redacted from all upstream URL logs.
 
 ---
