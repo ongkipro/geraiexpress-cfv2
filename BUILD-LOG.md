@@ -149,3 +149,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   revocation, 12 h cookie, non-impersonation scan of every `/api/owner` route); Playwright full suite 7/7; UI gates
   0 fail; mutation (recency gate) red. Review deferred to the final Carbon pass.
 - Dependency: `uqr` 0.1.3 (MIT, unjs; zero dependencies) for local QR rendering — also needed for labels (TASK-306).
+
+## 2026-11-16 — TASK-111 host and tenant isolation suite, M1 surfaces (R4)
+
+- Shipped: `apps/worker/test/isolation/m1-isolation.test.ts` (8 cases over two seeded tenants and the platform hosts).
+- Evidence: suite green; mutation (membership lookup without the user check) → 4 failures. Later surfaces add
+  their cases here (API keys TASK-503, webhooks TASK-204, `/lacak` TASK-501, media TASK-302).
