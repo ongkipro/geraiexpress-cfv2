@@ -309,7 +309,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Depends On:** TASK-107, TASK-201 (estimate client returns `discountPercent`), TASK-203
 - **Accepted Invariants:** `assigned_bps <= platform_pricing_policy.max_discount_bps` (default 3000, scope configurable);
   `apply_channel` `mengantar_team` (request list) with `partner_api` adapter slot; verification state `Belum diterapkan /
-  Sesuai / Selisih` from observed `discountPercent` (tolerance 1 bp); customers always pay the publish tariff;
+  Sesuai / Selisih` from `observed_bps` per service class (regular `discountPercent`, cargo `cargoDiscount /
+  cargoPrice`; tolerance 1 bp, spec 02 §2.1); customers always pay the publish tariff;
   TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
 - **Visual Contract:** `/tarif` tabs incl. `Kebijakan Diskon` per visual 07; request list for the Mengantar team (export).
 - **Done when:** rule above the ceiling rejected; every transition of the spec 02 §2.1 state table incl. `2000` vs
@@ -383,7 +384,8 @@ No task is in progress. TASK-101 starts when the owner says go.
   fixed-point `codFee`; frozen quote (`F`, `N`, `C`); cargo ≥ 5,000 g, Non-COD only; Kasir
   sees customer price only; quick check allocates no slug or draft.
 - **Visual Contract:** courier cards per visual 05; owner `👁` margin toggle; per-card loading/error.
-- **Done when:** five-mode fixture tests incl. unstable fee; quick-check non-allocation test.
+- **Done when:** five-mode fixture tests incl. unstable fee; quick-check non-allocation test; per-tenant quote
+  rate-limit test; `observed_bps` recorded per service class (regular and cargo fixtures).
 
 ### TASK-304: POS checkout, payment record, dispatch, cancellation
 - **Requirement:** PR-04, PR-05, PR-07, DEC-208, DEC-220, ADR-0004

@@ -28,3 +28,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   covers every task, no tenant-data task below R3, TASKS.md 43.5 KB (< 50 KB).
 - `docs/DIAGRAMS.md`: 14 Mermaid diagrams render with mermaid 12.3 (checkout and finance diagrams re-rendered after
   the plan review corrections).
+
+## 2026-11-15 — DEC-230..232 (discount control, per-gerai masking, Vultr egress)
+
+- Sandbox Partner API (4 seller routes) and Public API (24 endpoints) checked: no request field sets a seller
+  discount; discount appears only in estimate/order responses; no 30 % limit stated in the docs. Hence DEC-230:
+  configurable ceiling (`max_discount_bps` 3000), Mengantar-team application, verification by observed discount per
+  service class (cargo uses cargo fields).
+- DEC-231 adds `Pengaturan › Label & Privasi`; DEC-232 picks a Vultr Reserved IPv4 and replaces the Q23 blocker with
+  Public API hardening + alerts (spec 10 §4.4).
+- Evidence: GPT-6.1 Sol delta review round 1 REQUEST_CHANGES (6 findings), round 2 APPROVE; both P2 notes closed.
