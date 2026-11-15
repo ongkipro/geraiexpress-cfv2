@@ -2,6 +2,8 @@
 
 This document defines the production topology for **GeraiExpress v2** on **Cloudflare Serverless** (the only non-Cloudflare runtime is the stateless Partner-API egress relay on a VPS, DEC-219), its dual-domain isolation (`geraiexpress.com` + `*.gerai.cc`), per-outlet serialization with **Durable Objects**, precision financial synchronization with **Mengantar**, and **OpenAPI 3.1 + MCP** exposure.
 
+Rendered Mermaid views (context, containers, host routing, both ERDs, key sequences, state machines): [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md).
+
 ---
 
 ## 1. High-Level Topology

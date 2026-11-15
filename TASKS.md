@@ -6,7 +6,7 @@ Open and in-progress tasks only, newest milestone first. Finished contracts move
 and leave one index line. Hard limit 50 KB (`~/.config/ai/policies/planning-artifacts.md`).
 
 **Gate:** no `TASK-1xx` starts until `STATUS.md` records (a) the owner's M0 sign-off **and** (b) an APPROVE from the
-independent review of the current M0 documents (TASK-006). `TASK-0xx` are pre-code design tasks and may run now.
+independent review of the current M0 documents (TASK-006). Both are recorded (2026-11-15).
 
 Every task: one primary requirement (`PR-*` from `PRD.md`) or accepted decision (`DEC-*`), risk class, explicit
 paths, runnable `Done when`. Tenant-owned data always carries the tenant constraint: tenant resolved server-side
@@ -15,72 +15,18 @@ tenant B's record).
 
 ---
 
-## M0 — Design lock (pre-code)
+## Done
 
-### TASK-001: Prototype the app shell and key screens with mock data — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
-- **Requirement:** DEC-213 (compact 6/5-menu navigation), `docs/visual/07`
-- **Risk Level:** R1
-- **Job:** implementation (throwaway prototype, not production code)
-- **Capability:** `dotuiux` → `admin-product-ux` → `admin-dashboard` → `shadcn-ui`
-- **Allowed Paths:** `prototype/**`
-- **Protected Paths:** everything outside `prototype/`
-- **Depends On:** None
-- **Visual Contract:** admin surface, comfort size contract (`design/admin-contract.json`), tokens from `DESIGN.md`;
-  shell per `docs/visual/07` §1 at 390/768/1366; screens: Dashboard (owner + Kasir variant), `/kiriman/:slug` POS,
-  `/kiriman` list, `Kontak › Pengirim`, `Keuangan`, Super Admin `Ringkasan`; states: loading skeleton, first-run
-  empty, filtered empty, error (states owner-deferred to M3 acceptance at M0 sign-off 2026-11-14; not built in the
-  prototype). Rejected: 12–13 px text, icon tiles, gradients, two primaries per screen.
-- **Non-Scope:** real API calls, auth, D1.
-- **Done when:** `dotuiux check <url> --surface admin` has 0 FAIL and `admin-geometry.mjs <url> --contract
-  design/admin-contract.json --viewports 390,1366,1536` exits 0 on every listed screen.
+- M0 tasks TASK-001..006 (prototype, period filter, gates, visual pick, sign-off, independent review): all DONE by
+  2026-11-15 → `docs/archive/TASKS-M0-2026-11-15.md`.
 
-### TASK-004: Prototype the period filter and settings sub-navigation — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
-- **Requirement:** DEC-221, DEC-223 (`docs/visual/08`)
-- **Risk Level:** R1
-- **Job:** implementation (throwaway prototype)
-- **Allowed Paths:** `prototype/**`
-- **Depends On:** TASK-001
-- **Done when:** the prototype shows the period filter (presets + two-month range calendar, phone sheet) and
-  `/pengaturan` with the grouped sub-menu and three item pages; `dotuiux check --surface admin` 0 fail and
-  `admin-geometry.mjs` exit 0 at 390/1366/1536 on those routes.
+## In progress
 
-### TASK-005: Re-run dotuiux + admin-geometry after the DEC-222 palette change — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
-- **Requirement:** DEC-222
-- **Risk Level:** R0
-- **Allowed Paths:** `design/evidence/prototype-gates.md`
-- **Depends On:** working headless Chrome on the host
-- **Done when:** `bash` gate script rows show 0 fail and admin-geometry exit 0 on all prototype routes.
+No task is in progress. TASK-101 starts when the owner says go.
 
-### TASK-006: Independent review APPROVE of the M0 documents — DONE 2026-11-15 (Sol round 10 APPROVE on `702262f`)
-- **Requirement:** ROADMAP M0 exit gate, `docs/WORKFLOW.md` §6
-- **Risk Level:** R0
-- **Job:** review
-- **Allowed Paths:** `docs/review/**`, `STATUS.md`
-- **Depends On:** TASK-003
-- **Done when:** a reviewer of a different model family than the editor returns APPROVE on the current head, the
-  review is archived under `docs/review/`, and `STATUS.md` records reviewer, model and head. GPT-6.1 Sol rounds 1–2
-  were REQUEST_CHANGES; rounds 3–9 closed the remaining findings; round 10 APPROVE (2026-11-15).
+## Pending
 
-### TASK-002: Owner picks the visual direction — DONE 2026-11-14 (Direction A, `DESIGN.md`)
-- **Requirement:** `DESIGN.md` Direction
-- **Risk Level:** R0
-- **Job:** review
-- **Allowed Paths:** `DESIGN.md`
-- **Depends On:** TASK-001
-- **Done when:** 2–3 rendered directions (type and accent variants on the same shell) are shown; `DESIGN.md` records
-  `Picked-by: owner <date> (direction X of N)`; `dotuiux validate` passes without the Picked-by warning.
-
-### TASK-003: Owner signs off M0 — DONE 2026-11-14 (`STATUS.md`)
-- **Requirement:** ROADMAP M0 exit gate
-- **Risk Level:** R0
-- **Job:** review
-- **Allowed Paths:** `STATUS.md`
-- **Depends On:** TASK-002
-- **Done when:** `STATUS.md` records the sign-off date and any open M0 item the owner accepts as deferred.
-
----
-
-## M1 — Monorepo, multi-host Worker, D1, auth, `GeraiVaultDO`
+### M1 — Monorepo, multi-host Worker, D1 control plane, auth, `GeraiVaultDO` tenant store
 
 ### TASK-101: Scaffold the pnpm workspace and Worker
 - **Requirement:** ADR-0001 (Cloudflare serverless stack)
@@ -211,7 +157,7 @@ tenant B's record).
 
 ---
 
-## Later milestones (break down when the previous milestone closes)
+### Later milestones (break down when the previous milestone closes)
 
 - **M2:** `mengantar-sdk` with path-key redaction; Partner transport `direct`/`relay` (spec 10); seller
   provisioning and BYOK fallback (PR-02); discount matrix (PR-11).
