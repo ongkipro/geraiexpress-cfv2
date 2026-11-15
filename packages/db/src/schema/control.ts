@@ -102,3 +102,51 @@ export const alertState = sqliteTable("alert_state", {
   lastSentAt: integer("last_sent_at").notNull(),
   count: integer("count").notNull().default(1),
 })
+
+export const emailOutbox = sqliteTable(
+  "email_outbox",
+  {
+    id: text("id").primaryKey(),
+    templateId: text("template_id", { enum: ["signup_otp", "password_reset", "kasir_invite", "email_change_otp", "application_status", "security_alert"] }).notNull(),
+    toEmailHash: text("to_email_hash").notNull(),
+    toEmailEncrypted: text("to_email_encrypted"),
+    payloadEncrypted: text("payload_encrypted"),
+    expiresAt: integer("expires_at").notNull(),
+    state: text("state", { enum: ["queued", "sending", "sent", "failed", "expired", "suppressed"] }).notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at").notNull(),
+    leaseUntil: integer("lease_until"),
+    createdAt: integer("created_at").notNull(),
+    sentAt: integer("sent_at"),
+    providerMessageId: text("provider_message_id"),
+    lastErrorCode: text("last_error_code"),
+  },
+  (t) => [index("email_outbox_due").on(t.state, t.nextAttemptAt), index("email_outbox_to").on(t.toEmailHash, t.createdAt)],
+)
+
+export const emailSuppressions = sqliteTable("email_suppressions", {
+  toEmailHash: text("to_email_hash").primaryKey(),
+  reason: text("reason").notNull(),
+  createdAt: integer("created_at").notNull(),
+})
+
+export const platformLegalProfile = sqliteTable("platform_legal_profile", {
+  id: integer("id").primaryKey(),
+  legalName: text("legal_name"),
+  brandName: text("brand_name").notNull().default("GeraiExpress"),
+  entityType: text("entity_type").notNull().default("pt"),
+  nib: text("nib"),
+  encryptedNpwp: text("encrypted_npwp"),
+  aktaNumber: text("akta_number"),
+  aktaDate: text("akta_date"),
+  skKemenkumhamNumber: text("sk_kemenkumham_number"),
+  pseRegistrationNumber: text("pse_registration_number"),
+  registeredAddress: text("registered_address"),
+  correspondenceAddress: text("correspondence_address"),
+  supportEmail: text("support_email"),
+  supportWhatsapp: text("support_whatsapp"),
+  privacyContactEmail: text("privacy_contact_email"),
+  directorName: text("director_name"),
+  updatedBy: text("updated_by"),
+  updatedAt: integer("updated_at"),
+})

@@ -109,3 +109,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   printed the Indonesian alert and exited 1; mutation (URL-key rule removed) → 3 tests red. Carbon round 1 findings
   fixed; re-review in the final pass (owner directive).
 - Awaiting owner: staging `ALERT_WEBHOOK_URL` (chat incoming webhook) → `wrangler secret put --env staging`.
+
+## 2026-11-16 — TASK-104 email outbox and mailer (M1)
+
+- Shipped: control migration `0002_email_outbox` (`email_outbox`, `email_suppressions`, `platform_legal_profile`
+  singleton with NULL fields), `apps/worker/src/email` (`enqueueEmailStatement` for same-batch inserts,
+  `dispatchDue`/`sendOne` as the only `env.EMAIL.send` caller, six Indonesian templates), `crypto/aead.ts`
+  (AES-256-GCM, HKDF-derived per purpose from `KEK_SECRET`), `*/5` cron dispatch.
+- Evidence: 14 Workers tests (fake clock backoff 30 s/2 min/5 min, max 4, expiry, crash between claim and send,
+  suppression terminal + later mail skipped, permanent errors, template snapshots, link allowlist, HTML escaping);
+  mutation (expiry guard) red. Review deferred to the final Carbon pass.
+- Note: `send_email` error codes used as terminal vs retryable follow the Workers API page (2026-11-16); the page does
+  not label retryability, so only `E_INTERNAL_SERVER_ERROR`, rate/daily limits and unknown codes are retried.

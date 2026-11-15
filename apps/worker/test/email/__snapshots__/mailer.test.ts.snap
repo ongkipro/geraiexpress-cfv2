@@ -1,0 +1,87 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`six Indonesian templates (snapshot) > application_status 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Pengajuan disetujui</h1><p>Selamat, pengajuan gerai <strong>Berkah Jaya</strong> telah disetujui. Akun pengiriman Mengantar untuk gerai Anda sedang disiapkan.</p><p style="margin:24px 0"><a href="https://app.geraiexpress.com/masuk" style="display:inline-block;background:#2E47BA;color:#FFFFFF;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600">Masuk ke Ruang Kerja</a></p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini karena mengajukan pendaftaran gerai di GeraiExpress.</p></div></body></html>",
+  "subject": "Pengajuan Berkah Jaya disetujui",
+  "text": "Selamat, pengajuan gerai Berkah Jaya telah disetujui. Akun pengiriman Mengantar untuk gerai Anda sedang disiapkan.
+
+Masuk ke ruang kerja gerai:
+https://app.geraiexpress.com/masuk
+
+—
+Anda menerima email ini karena mengajukan pendaftaran gerai di GeraiExpress.",
+}
+`;
+
+exports[`six Indonesian templates (snapshot) > email_change_otp 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Kode ganti email</h1><p style="font-size:32px;font-weight:700;letter-spacing:4px;margin:16px 0">112233</p><p>Kode berlaku 10 menit. Jika Anda tidak meminta penggantian email, abaikan email ini.</p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini karena ada permintaan mengganti email akun GeraiExpress ke alamat ini.</p></div></body></html>",
+  "subject": "Kode ganti email GeraiExpress: 112233",
+  "text": "Kode untuk mengganti email akun Anda: 112233
+
+Kode berlaku 10 menit. Jika Anda tidak meminta penggantian email, abaikan email ini.
+
+—
+Anda menerima email ini karena ada permintaan mengganti email akun GeraiExpress ke alamat ini.",
+}
+`;
+
+exports[`six Indonesian templates (snapshot) > kasir_invite 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Undangan menjadi kasir</h1><p>Bu Ani mengundang Anda menjadi kasir di <strong>Berkah Jaya</strong> pada GeraiExpress.</p><p style="margin:24px 0"><a href="https://app.geraiexpress.com/undangan/tok" style="display:inline-block;background:#2E47BA;color:#FFFFFF;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600">Buat Akun Kasir</a></p><p>Undangan berlaku 7 hari dan hanya bisa dipakai sekali.</p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini karena pemilik gerai mengundang alamat ini sebagai kasir.</p></div></body></html>",
+  "subject": "Undangan menjadi kasir di Berkah Jaya",
+  "text": "Bu Ani mengundang Anda menjadi kasir di Berkah Jaya pada GeraiExpress.
+
+Buat akun melalui tautan ini:
+https://app.geraiexpress.com/undangan/tok
+
+Undangan berlaku 7 hari dan hanya bisa dipakai sekali.
+
+—
+Anda menerima email ini karena pemilik gerai mengundang alamat ini sebagai kasir.",
+}
+`;
+
+exports[`six Indonesian templates (snapshot) > password_reset 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Atur ulang kata sandi</h1><p>Tekan tombol di bawah untuk membuat kata sandi baru.</p><p style="margin:24px 0"><a href="https://app.geraiexpress.com/atur-sandi/tok" style="display:inline-block;background:#2E47BA;color:#FFFFFF;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600">Buat Kata Sandi Baru</a></p><p>Tautan berlaku 30 menit dan hanya bisa dipakai sekali. Setelah kata sandi diganti, perangkat lain akan dikeluarkan dari akun.</p><p>Jika Anda tidak meminta ini, abaikan email ini; kata sandi Anda tidak berubah.</p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini karena ada permintaan atur ulang kata sandi untuk akun GeraiExpress Anda.</p></div></body></html>",
+  "subject": "Atur ulang kata sandi GeraiExpress",
+  "text": "Buka tautan ini untuk membuat kata sandi baru:
+https://app.geraiexpress.com/atur-sandi/tok
+
+Tautan berlaku 30 menit dan hanya bisa dipakai sekali. Setelah kata sandi diganti, perangkat lain akan dikeluarkan dari akun.
+Jika Anda tidak meminta ini, abaikan email ini; kata sandi Anda tidak berubah.
+
+—
+Anda menerima email ini karena ada permintaan atur ulang kata sandi untuk akun GeraiExpress Anda.",
+}
+`;
+
+exports[`six Indonesian templates (snapshot) > security_alert 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Login baru ke akun Anda</h1><p>Ada login baru ke akun Anda pada <strong>16 Nov 2026 09.15 WIB</strong> dari <strong>Chrome di Windows</strong>.</p><p>Jika itu Anda, tidak perlu melakukan apa pun. Jika bukan, segera ganti kata sandi dan keluarkan perangkat lain.</p><p style="margin:24px 0"><a href="https://app.geraiexpress.com/akun" style="display:inline-block;background:#2E47BA;color:#FFFFFF;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600">Amankan Akun</a></p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini untuk menjaga keamanan akun GeraiExpress Anda.</p></div></body></html>",
+  "subject": "Login baru ke akun GeraiExpress Anda",
+  "text": "Ada login baru ke akun Anda pada 16 Nov 2026 09.15 WIB dari Chrome di Windows.
+
+Jika itu Anda, tidak perlu melakukan apa pun. Jika bukan, segera ganti kata sandi dan keluarkan perangkat lain:
+https://app.geraiexpress.com/akun
+
+—
+Anda menerima email ini untuk menjaga keamanan akun GeraiExpress Anda.",
+}
+`;
+
+exports[`six Indonesian templates (snapshot) > signup_otp 1`] = `
+{
+  "html": "<!doctype html><html lang="id"><body style="margin:0;padding:24px;background:#FFFFFF;color:#203551;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.5"><div style="max-width:520px;margin:0 auto"><h1 style="font-size:22px;margin:0 0 16px">Kode verifikasi Anda</h1><p style="font-size:32px;font-weight:700;letter-spacing:4px;margin:16px 0">482915</p><p>Kode berlaku 10 menit. Jangan bagikan kode ini kepada siapa pun, termasuk yang mengaku dari GeraiExpress.</p><p>Jika Anda tidak mendaftar, abaikan email ini.</p><hr style="border:0;border-top:1px solid #E3E8F0;margin:24px 0"><p style="font-size:14px;color:#55657D;margin:0">Anda menerima email ini karena alamat ini dipakai untuk mendaftar gerai di GeraiExpress.</p></div></body></html>",
+  "subject": "Kode verifikasi GeraiExpress: 482915",
+  "text": "Kode verifikasi Anda: 482915
+
+Kode berlaku 10 menit. Jangan bagikan kode ini kepada siapa pun, termasuk yang mengaku dari GeraiExpress.
+Jika Anda tidak mendaftar, abaikan email ini.
+
+—
+Anda menerima email ini karena alamat ini dipakai untuk mendaftar gerai di GeraiExpress.",
+}
+`;

@@ -3,6 +3,7 @@ import { classify, hostShape, normalizeHost, probeSignature } from "./host/class
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
 import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDoMigrate } from "./ops/do-migrate"
+import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -71,7 +72,10 @@ export default {
     batch.ackAll()
   },
   async scheduled(controller, env, ctx): Promise<void> {
-    // Every 5 min: operator checks with owner alerts (TASK-110). Feature crons are added by their tasks.
-    if (controller.cron === "*/5 * * * *") ctx.waitUntil(runChecks(env).then(() => undefined))
+    // Every 5 min: email outbox retries/expiry (TASK-104) and operator checks with owner alerts (TASK-110).
+    if (controller.cron === "*/5 * * * *") {
+      ctx.waitUntil(dispatchDue(env).then(() => undefined))
+      ctx.waitUntil(runChecks(env).then(() => undefined))
+    }
   },
 } satisfies ExportedHandler<Env>
