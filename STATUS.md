@@ -32,7 +32,7 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 
 - Before M2: Mengantar must confirm whether a partner can set a per-seller discount, through what channel and when it takes effect (DEC-226).
 
-None for M0. Open items that do not block design but must close before the stated milestone:
+None for M1. Open items, each owned by the milestone row in `TASKS.md` (coverage map), that must close before the stated milestone:
 - Mengantar Q23 (IP restriction on Public API writes / label generation for Partner-created sellers) — before M6.
 - Vultr Reserved IP conversion procedure and price — verify at M6.
 - Counsel: Permenkomdigi 8/2025 Art. 77 vs masked labels; UU PDP retention; cashback vs e-money — before M3

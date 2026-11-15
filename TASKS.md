@@ -48,6 +48,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Job:** implementation
 - **Allowed Paths:** `apps/worker/src/host/**`, `apps/worker/test/host/**`
 - **Protected Paths:** `apps/worker/src/auth/**`
+- **Capability:** `cloudflare-for-saas`, `application-security`, `workers-best-practices`
 - **Depends On:** TASK-101
 - **Accepted Invariants:** the five contexts in `ARCHITECTURE.md` §3; cross-context paths return 404; `relay.` is
   never served by the Worker (`docs/spec/10` §5).
@@ -91,6 +92,9 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Risk Level:** R3
 - **Job:** implementation
 - **Allowed Paths:** `apps/worker/src/auth/totp/**`, `apps/worker/test/auth/totp/**`
+- **Capability:** `application-security`
+- **Accepted Invariants:** TOTP secret encrypted with `KEK_SECRET`; `aal2` only on `owner.`; re-TOTP after 15 minutes
+  for sensitive actions; Super Admin never creates, pays or impersonates (DEC-209).
 - **Depends On:** TASK-104
 - **Done when:** worker tests prove `owner.` routes reject a session without `aal2`; a sensitive mutation more than
   15 minutes after the last TOTP demands re-TOTP (spec 05 §2); no route lets Super Admin create or pay a shipment.
@@ -100,6 +104,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Risk Level:** R3
 - **Job:** implementation
 - **Allowed Paths:** `packages/domain/src/slug/**`, `apps/worker/src/do/gerai-vault/**`, matching tests
+- **Capability:** `durable-objects`, `testing-engineering`
 - **Depends On:** TASK-103
 - **Accepted Invariants:** 7 chars, CSPRNG, Crockford alphabet without `0/O/1/I/L/U`, unique per tenant,
   case-insensitive match, regenerate on UNIQUE conflict.
@@ -111,6 +116,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Risk Level:** R3
 - **Job:** implementation
 - **Allowed Paths:** `packages/domain/src/money/**`, `packages/domain/src/weight/**`, matching tests
+- **Capability:** `testing-engineering` (property tests)
 - **Depends On:** TASK-101
 - **Accepted Invariants:** integers only; `billed_kg` rules incl. sub-kg and 1 kg-minimum couriers; COD gross-up
   applied once; insurance `NULL` stays `NULL`; unit-mistake guard thresholds (`< 10` gram, `>= 100` kg).
@@ -140,6 +146,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Job:** implementation
 - **Capability:** `cloudflare-for-saas`, `application-security`, `testing-engineering`
 - **Allowed Paths:** `apps/worker/test/isolation/**`, `apps/worker/src/host/**`
+- **Accepted Invariants:** tenant only from verified host + session; unknown/pending host → neutral 404 before any
+  tenant read; KV never used for host → tenant (ADR-0006, spec 11 §3).
 - **Depends On:** TASK-102, TASK-103, TASK-104
 - **Done when:** worker tests prove the spec 11 §8 matrix for two seeded tenants and the platform hosts (cookies, API
   key, webhook token, `/lacak`, media keys), DCV paths pass through, unknown/pending host → neutral 404, suspended →
@@ -150,6 +158,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Risk Level:** R2
 - **Job:** verification (needs owner approval for the sending-domain DNS change)
 - **Allowed Paths:** `BUILD-LOG.md`, `STATUS.md`
+- **Capability:** `cloudflare-email-service`
+- **Accepted Invariants:** one provider only (DEC-227); transactional mail only; no OTP in production logs.
 - **Depends On:** TASK-104
 - **Done when:** `BUILD-LOG.md` records, for `signup_otp` and `password_reset`, SPF/DKIM/DMARC `pass` and inbox
   placement at Gmail, Outlook.com and Yahoo (two sends each), delivery under 60 s and a tester score ≥ 9/10. Until
@@ -157,15 +167,25 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ---
 
-### Later milestones (break down when the previous milestone closes)
+### Later milestones (break down into TASK contracts when the previous milestone closes)
 
-- **M2:** `mengantar-sdk` with path-key redaction; Partner transport `direct`/`relay` (spec 10); seller
-  provisioning and BYOK fallback (PR-02); discount matrix (PR-11).
-- **M3:** POS, courier selector, masking with quota and WA verification, printing, contacts, shift (PR-05..PR-10,
-  PR-14, PR-15).
-- **M4:** finance sync, `pay-unpaid`, pickup manifest, Meja Retur, claims (PR-12, PR-13, PR-16, PR-17, PR-20).
+Coverage map: every accepted requirement and decision has exactly one delivering milestone. M1 items are the task
+contracts above; later rows become `TASK-2xx..6xx` contracts at the start of their milestone.
+
+| Milestone | PRD requirements | Decisions / ADRs implemented | Specs |
+|---|---|---|---|
+| **M1** | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0004, 0006 | 01 §0–2, 05, 07, 11 §3, 12 |
+| **M2** | PR-02, PR-02b, PR-11 | DEC-203, 204, 205, 219 (sandbox `direct` transport), 226; ADR-0003 | 02 §2, 06, 09 (connections), 10 (client side) |
+| **M3** | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (settings forms), 220, 221, 222, 223, 224, 225, 229; ADR-0005 (masking) | 02 §3, 03, visual 01–08 |
+| **M4** | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (return intake), 216; ADR-0005 (Meja Retur) | 01 §2.7 + §3, 04, 09 |
+| **M5** | PR-03, PR-19, PR-21 | DEC-207, 214, 218 (public footer), 228 (custom-domain flow on staging) | 08, 11 §5–8, visual 03 |
+| **M6** | — (production readiness) | DEC-219 (relay in production), 228 (SaaS zone in production); ADR-0003, 0006 §7 (backups) | 10 §6, 11 §2, OBSERVABILITY |
+| **Post-launch** | PR-22 (P1), PR-23 (P2), PR-24 (P2) | — | 03, visual 07 |
+
+Milestone notes carried forward:
 - **M3 additions (DEC-229):** Paket Massal Excel/CSV import + Riwayat Massal, Cek Resi, Cetak Resi Massal, Akun Saya;
   loading/empty/error states for every screen (deferred from TASK-001).
-- **M5:** mini-site, brand site, OpenAPI + MCP (PR-03, PR-19, PR-21); custom-hostname flow (spec 11 §5) on staging.
-- **M6:** relay on the VPS with Reserved IPv4, Cloudflare for SaaS zone setup (spec 11 §2), per-tenant DO backup and
-  restore drill (ADR-0006), live courier pilot (DEC-219, spec 10 §6).
+- **M2/M4 sandbox verifications:** weight echo, `POST /time` timezone, `/invoices` ordering, `pay-unpaid`
+  idempotency, item-value limits per courier (specs 02, 04, 09).
+- **Before M2:** Mengantar answer on per-seller discount control (DEC-226).
+- **Before M3 masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention).
