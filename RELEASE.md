@@ -29,5 +29,5 @@ Nothing has been deployed: M0 (documentation and a throwaway prototype) is locke
 
 | Milestone | Environment | Expected risk | Gate |
 |---|---|---|---|
-| M1 | staging only | R3 (auth, tenant isolation) | TASK-108 CI, TASK-109 isolation, TASK-110 email gate |
+| M1 | staging only | R4 (host/cookie boundary, storage foundation) | TASK-109 CI + security gates, TASK-111 isolation, TASK-112 email gate, TASK-199 close |
 | M6 | production pilot | R4 (relay, custom hostnames, live Mengantar) | spec 10 §6, spec 11 §2, backup + restore drill |

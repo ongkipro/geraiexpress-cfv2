@@ -26,288 +26,378 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ## Pending
 
-### M1 — Monorepo, multi-host Worker, D1 control plane, auth, `GeraiVaultDO` tenant store
+### Plan conventions
 
-### TASK-101: Scaffold the pnpm workspace and Worker
-- **Requirement:** ADR-0001 (Cloudflare serverless stack), DEC-201, DEC-217 (English code/docs, Indonesian UI strings)
+- **Vertical ownership:** each feature task owns its tables (tenant or control migrations in its own files under
+  `packages/db/migrations/{control,tenant}/<task-id>-*.sql`), backend, UI, tests and telemetry for its surface.
+- **Shared files** (`wrangler.jsonc`, `apps/*/src/router.*`, `packages/db/src/schema/index.ts`, root `package.json`)
+  are edited only by the task that owns the change and are merged by the integrating session (`docs/WORKFLOW.md` §7);
+  parallel writers never share a worktree.
+- **Every task's Done when** also includes: `pnpm check` green; for UI, `dotuiux check --surface admin` and
+  `admin-geometry.mjs` 0 fail at 390/1366, plus Playwright at the milestone matrix 390/768/1280 (ROADMAP);
+  for new signals, the `OBSERVABILITY.md` row emitted and redaction-tested (TASK-111 helpers).
+- **Milestone close tasks** (`TASK-x99`) run the integrated gate (`docs/WORKFLOW.md` §5) and are the only way the next
+  milestone's tasks start.
+
+### M1 — Monorepo, auth, D1 control plane, `GeraiVaultDO` store, CI, observability base (highest boundary R4)
+
+### TASK-101: Scaffold the full workspace
+- **Requirement:** ADR-0001, DEC-201, DEC-217
 - **Risk Level:** R2
 - **Job:** implementation
-- **Capability:** `wrangler`, `workers-best-practices`, `native-first`
-- **Allowed Paths:** `package.json`, `pnpm-workspace.yaml`, `tsconfig*.json`, `apps/worker/**`, `packages/domain/**`,
-  `packages/db/**`, `.gitignore`, `.dev.vars.example`
+- **Capability:** `wrangler`, `workers-best-practices`, `shadcn-ui`, `native-first`
+- **Allowed Paths:** `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig*.json`, `.gitignore`,
+  `.dev.vars.example`, `wrangler.jsonc` (all bindings of spec 07 §3, `env.staging` stub), `vitest.workspace.ts`,
+  `playwright.config.ts`, `eslint.config.*`, `apps/worker/**`, `apps/web-app/**` (Vite + React 19 + router + shadcn
+  init with the comfort primitives), `apps/web-owner/**` (same), `packages/{domain,db,mengantar-sdk,thermal-print}/**`
+  (empty packages)
 - **Protected Paths:** `docs/**`, root contract files
 - **Depends On:** TASK-003, TASK-006
-- **Accepted Invariants:** no Next.js/OpenNext; no source maps in production output (AGENTS.md); bindings named as
-  `docs/spec/07` §3.1.
-- **Done when:** `pnpm install && pnpm check` passes on a clean clone (typecheck, lint, empty unit and worker test
-  suites); `wrangler dev` answers `200` on `http://app.geraiexpress.localhost:8787/healthz`.
+- **Accepted Invariants:** layout of ARCHITECTURE §5; no Next.js/OpenNext; `sourcemap: false` for production builds;
+  Indonesian UI strings, English code.
+- **Visual Contract:** shells only (empty layout, comfort primitives, Direction A tokens from `DESIGN.md`); no screens.
+- **Done when:** `pnpm install --frozen-lockfile && pnpm check` passes on a clean clone; `wrangler dev` answers `200
+  {"ok":true}` on `/healthz` for all five `.localhost` hosts; both SPAs build and serve their shells via `ASSETS`.
 
-### TASK-102: Host classifier and host-locked cookies
-- **Requirement:** ADR-0002 (dual-domain white-label SaaS)
+### TASK-102: Host classifier
+- **Requirement:** ADR-0002, DEC-202, spec 11 §3
 - **Risk Level:** R4
 - **Job:** implementation
-- **Allowed Paths:** `apps/worker/src/host/**`, `apps/worker/test/host/**`
-- **Protected Paths:** `apps/worker/src/auth/**`
 - **Capability:** `cloudflare-for-saas`, `application-security`, `workers-best-practices`
+- **Allowed Paths:** `apps/worker/src/host/**`, `apps/worker/test/host/**`, `packages/db/migrations/control/102-*`
 - **Depends On:** TASK-101
-- **Accepted Invariants:** the five contexts in `ARCHITECTURE.md` §3; cross-context paths return 404; `relay.` is
-  never served by the Worker (`docs/spec/10` §5).
-- **Done when:** worker tests prove: each `.localhost` host maps to its context; `/api/owner/*` on `app.` → 404;
-  an `app.` cookie is not accepted on `owner.` and vice versa; unknown `*.gerai.cc` slug → 404 page; host
-  normalisation (case, port, trailing dot, IP literal, ignored `X-Forwarded-Host`); one mutation that weakens the
-  classifier makes a test fail; independent R4 review archived.
+- **Accepted Invariants:** five contexts (ARCHITECTURE §3); DCV paths pass through; normalised Host; D1
+  `tenant_hostnames` lookup (≤ 30 s isolate cache); unknown/pending → neutral 404, suspended → 403, recovery → 503;
+  `relay.` never served.
+- **Done when:** worker tests for every context, normalisation (case, port, trailing dot, IP literal, ignored
+  `X-Forwarded-Host`), state outcomes and cross-context 404s; a mutation that weakens the classifier fails a test;
+  independent R4 review archived.
 
-### TASK-103: Control-plane D1 schema and `GeraiVaultDO` tenant store (core tables)
-- **Requirement:** ADR-0006, `docs/spec/01` §0 and §2
-- **Risk Level:** R3
+### TASK-103: Storage foundation (D1 control plane + `GeraiVaultDO` store, migrations, outbox)
+- **Requirement:** ADR-0006, DEC-228, spec 01 §0
+- **Risk Level:** R4
 - **Job:** migration
-- **Capability:** `durable-objects` (SQLite storage, RPC, migrations), `postgres-drizzle` patterns adapted to SQLite
-- **Allowed Paths:** `packages/db/**`, `apps/worker/src/do/gerai-vault/**`, matching tests
+- **Capability:** `durable-objects`, `postgres-drizzle` (patterns for SQLite)
+- **Allowed Paths:** `packages/db/**` (framework + `000-*` baseline migrations), `apps/worker/src/do/gerai-vault/core/**`,
+  `apps/worker/src/outbox/**`, `scripts/do-migrate/**`, matching tests
 - **Depends On:** TASK-101
-- **Accepted Invariants:** money integer IDR, rates integer bps, weight integer gram; `NULL` ≠ `0`; composite
-  `(tenant_id, slug)` PK on `shipments`; control tables in D1 (users, sessions, email_otps, super_admins, tenants,
-  tenant_members, tenant_hostnames, platform_legal_profile, shipment_index, email_outbox, tenant_schema_versions);
-  tenant tables in the object (tenant_outlets, tenant_business_profiles, tenant_settings, mengantar_connections,
-  sender_contacts, recipient_contacts, shipments, audit). Tenant migrations via an explicit `migrate(version)` RPC.
-- **Done when:** `pnpm db:generate` produces forward-only SQL in both tracks; `pnpm db:migrate:local` applies the
-  control track; a worker test creates two tenant objects, migrates both, and proves tenant A's object never returns
-  tenant B's contact or shipment; a second test upgrades an object from version N−1 to N without data loss.
+- **Accepted Invariants:** two migration tracks; explicit `migrate(version)` RPC; baseline tables: `tenants`,
+  `tenant_members`, `tenant_schema_versions`, `audit_logs` (both scopes), `tenant_settings`, `tenant_outlets`,
+  `tenant_business_profiles`; generic DO→D1 outbox doing **versioned absolute upserts** with alarm retry;
+  `pnpm do:migrate --env` walks tenants in batches and stops on the first failure (`recovery`).
+- **Done when:** two tenant objects migrate and stay isolated; N−1 → N upgrade without data loss; a failing tenant
+  migration leaves the others serving and that tenant in `recovery`; outbox lost-ack retry leaves D1 unchanged;
+  `do:migrate` dry run on local.
 
-### TASK-104: Email OTP sign-up, sessions and Kasir invitations
-- **Requirement:** PR-01
+### TASK-104: Email outbox and mailer (all templates)
+- **Requirement:** DEC-227, spec 12
 - **Risk Level:** R3
 - **Job:** implementation
-- **Capability:** `application-security`
-- **Allowed Paths:** `apps/worker/src/auth/**`, `apps/worker/test/auth/**`, `packages/db/src/auth/**`
-- **Depends On:** TASK-102, TASK-103
-- **Accepted Invariants:** spec 05 §2 (PBKDF2-SHA256 100k + 16-byte salt + pepper; SameSite=Lax + Origin check;
-  Bearer-only on `/api/v1` and `/mcp`); Indonesian OTP mail through the `EMAIL` send binding (`docs/spec/12`; simulated by `wrangler dev`, outbox asserted in tests).
-- **Done when:** worker tests cover sign-up → OTP → password → session; OTP expiry, the 5-wrong/15-minute lock and the
-  send rate limits (spec 05 §2); the OTP email lands in `email_outbox` and in the simulated `EMAIL` binding output
-  with `text` and `html` parts; invitation link is single-use and expires in 7 days; PBKDF2 100k runs inside `workerd`
-  without hitting limits.
+- **Capability:** `cloudflare-email-service`, `application-security`
+- **Allowed Paths:** `apps/worker/src/email/**`, `packages/db/migrations/control/104-*`, matching tests
+- **Depends On:** TASK-103
+- **Accepted Invariants:** one `sendMail`; `email_outbox` with `payload_encrypted` nulled on sent/terminal/expiry;
+  retries 30 s / 2 min / 5 min, max 4, never after `expires_at`; suppression terminal; six templates with `text` +
+  `html` in Indonesian; no OTP in production logs.
+- **Done when:** fake-clock tests for backoff, max attempts, expiry suppression, crash between insert and send,
+  bounce/suppressed terminal; snapshot of all six templates; simulated binding output asserted.
 
-### TASK-105: Super Admin TOTP (`aal2`)
-- **Requirement:** DEC-209, spec 05 §2
+### TASK-105: Accounts — sign-up, login, sessions, password reset, invitations (backend + screens)
+- **Requirement:** PR-01, DEC-209, spec 05 §2
+- **Risk Level:** R4
+- **Job:** implementation
+- **Capability:** `application-security`, `shadcn-ui`, `ui-validation`
+- **Allowed Paths:** `apps/worker/src/auth/**`, `packages/db/migrations/control/105-*`,
+  `apps/web-app/src/routes/{masuk,daftar-akun,lupa-sandi,atur-sandi,undangan}/**`, matching tests
+- **Depends On:** TASK-102, TASK-104
+- **Accepted Invariants:** PBKDF2-SHA256 100k + salt + pepper; `__Host-` cookies per host, 7-day rolling (app);
+  Origin/CSRF on unsafe requests; OTP 10 min, 5 wrong → 15 min lock, send limits; invitation single-use 7 days;
+  password reset revokes other sessions; `security_alert` mail on new-device login.
+- **Visual Contract:** `/masuk`, `/lupa-sandi`, `/atur-sandi/:token`, `/undangan/:token` per visual 07 (centered 440 px
+  card, no sidebar); error, locked and expired states.
+- **Done when:** worker tests for each lifecycle incl. lock, expiry and replay; cookie set/send/delete test on both
+  hosts; Playwright: email OTP account creation, login, reset, invitation acceptance; independent R4 review.
+
+### TASK-106: Super Admin auth — TOTP, recency, admin access
+- **Requirement:** DEC-209, spec 05 §1–2
+- **Risk Level:** R4
+- **Job:** implementation
+- **Capability:** `application-security`, `admin-product-ux`
+- **Allowed Paths:** `apps/worker/src/auth/totp/**`, `apps/web-owner/src/routes/{masuk,totp}/**`, matching tests
+- **Depends On:** TASK-105
+- **Accepted Invariants:** TOTP secret encrypted; `aal2` only on `owner.`; 12 h session; re-TOTP after 15 min on
+  sensitive **reads and mutations**; admin enrolment/recovery by another Super Admin with audit; no route lets a
+  Super Admin create, pay or impersonate.
+- **Visual Contract:** owner login + TOTP challenge screens; enrolment QR shown once.
+- **Done when:** tests for `aal2` gating, recency on a sensitive read and a mutation, recovery audit, and the
+  non-impersonation route scan.
+
+### TASK-107: Pure money, weight and volumetric math
+- **Requirement:** PR-05, DEC-215, spec 02
 - **Risk Level:** R3
 - **Job:** implementation
-- **Allowed Paths:** `apps/worker/src/auth/totp/**`, `apps/worker/test/auth/totp/**`
-- **Capability:** `application-security`
-- **Accepted Invariants:** TOTP secret encrypted with `KEK_SECRET`; `aal2` only on `owner.`; re-TOTP after 15 minutes
-  for sensitive actions; Super Admin never creates, pays or impersonates (DEC-209).
-- **Depends On:** TASK-104
-- **Done when:** worker tests prove `owner.` routes reject a session without `aal2`; a sensitive mutation more than
-  15 minutes after the last TOTP demands re-TOTP (spec 05 §2); no route lets Super Admin create or pay a shipment.
+- **Capability:** `testing-engineering`
+- **Allowed Paths:** `packages/domain/src/{money,weight}/**`, matching tests
+- **Depends On:** TASK-101
+- **Accepted Invariants:** integers only; `billed_kg` rules; COD applied once; `NULL` insurance stays `NULL`;
+  unit-mistake guard (`< 10` gram, `>= 100` kg).
+- **Done when:** every worked example of spec 02 and visual 05 exact; property test (no non-integer `_idr`); five
+  `cod_fee_mode` rows incl. `seller credit − sender payable = P − N`; fallback `M = 10800`, `N = 9600`; insured
+  Non-COD `Laba Kas` (`I = 1000` → `5400`); fixed-point `COD_FEE_UNSTABLE`; all-in guard; `9599` regression.
 
-### TASK-106: `INV` slug allocator in `GeraiVaultDO`
+### TASK-108: `INV` slug allocator
 - **Requirement:** PR-04, DEC-211
 - **Risk Level:** R3
 - **Job:** implementation
-- **Allowed Paths:** `packages/domain/src/slug/**`, `apps/worker/src/do/gerai-vault/**`, matching tests
-- **Capability:** `durable-objects`, `testing-engineering`
+- **Capability:** `durable-objects`
+- **Allowed Paths:** `packages/domain/src/slug/**`, `apps/worker/src/do/gerai-vault/slug/**`, matching tests
 - **Depends On:** TASK-103
-- **Accepted Invariants:** 7 chars, CSPRNG, Crockford alphabet without `0/O/1/I/L/U`, unique per tenant,
-  case-insensitive match, regenerate on UNIQUE conflict.
-- **Done when:** unit tests reject excluded characters and wrong length; a DO test allocating 10,000 slugs for one
-  tenant has 0 duplicates; the same slug may exist for two different tenants.
+- **Accepted Invariants:** 7 chars CSPRNG, Crockford without `0/O/1/I/L/U`, unique per tenant, case-insensitive.
+- **Done when:** alphabet/length tests; 10,000 slugs in one tenant → 0 duplicates; same slug allowed in two tenants.
 
-### TASK-107: Pure money, weight and volumetric math
-- **Requirement:** PR-05, DEC-215 (integer grams), `docs/spec/02`
+### TASK-109: CI, security gates and staging deploy
+- **Requirement:** DEC-210, spec 05 §4, spec 07 §6
 - **Risk Level:** R3
 - **Job:** implementation
-- **Allowed Paths:** `packages/domain/src/money/**`, `packages/domain/src/weight/**`, matching tests
-- **Capability:** `testing-engineering` (property tests)
+- **Capability:** `github-actions`, `application-security`, `wrangler`
+- **Allowed Paths:** `.github/workflows/**`, `scripts/ci/**`, `wrangler.jsonc` (`env.staging` values)
 - **Depends On:** TASK-101
-- **Accepted Invariants:** integers only; `billed_kg` rules incl. sub-kg and 1 kg-minimum couriers; COD gross-up
-  applied once; insurance `NULL` stays `NULL`; unit-mistake guard thresholds (`< 10` gram, `>= 100` kg).
-- **Done when:** unit tests cover every worked example in spec 02 and visual 05 with exact Rupiah results,
-  plus property tests that no function returns a non-integer `_idr` value; the five `cod_fee_mode` rows of spec 02 §3.4
-  (incl. `seller credit − sender payable = P − N`, and the fallback fixture `M = 10800`, `N = 9600` leaving flows unchanged), the
-  insured Non-COD `Laba Kas` regression (`I = 1000` → `5400`), the quote-pass fixed point (`COD_FEE_UNSTABLE`), the all-in negative-payout guard, and the `P = 12000`, net `9599` → cost
-  `9599` (not `9600`) regression.
+- **Accepted Invariants:** actions pinned by SHA; `contents: read`; no secrets on fork PRs; fail closed on (1) any
+  `*.map` in `dist/`, (2) secret/key-shaped literals in bundles, (3) any `/api/app/*` or `/api/owner/*` route without
+  auth + projection middleware (route-table scan); staging deploy waits for the protected `staging` environment
+  approval every run; production deploy manual only.
+- **Done when:** hosted `ci.yml` run green (link in `STATUS.md`); four fixtures turn it red: a broken unit test, an
+  emitted `.map`, an injected secret literal, an unprotected route; first staging deploy approved by the owner.
 
-### TASK-108: CI pipeline and staging deploy
-- **Requirement:** `docs/spec/07` §6, `docs/WORKFLOW.md` §8
+### TASK-110: Observability base and staging probes
+- **Requirement:** `OBSERVABILITY.md`, `observability-engineering`
 - **Risk Level:** R2
 - **Job:** implementation
-- **Capability:** `github-actions`, `wrangler`
-- **Allowed Paths:** `.github/workflows/**`, `wrangler.jsonc` (`env.staging`), `scripts/ci/**`
+- **Capability:** `observability-engineering`, `workers-best-practices`
+- **Allowed Paths:** `packages/telemetry/**`, `apps/worker/src/telemetry/**`, `scripts/probes/**`, matching tests
 - **Depends On:** TASK-101
-- **Accepted Invariants:** actions pinned by SHA; `permissions: contents: read`; no secrets for fork PRs; production
-  deploy only through a manual, approval-protected workflow.
-- **Done when:** a pushed branch runs `ci.yml` green on GitHub (hosted run link in `STATUS.md`); a deliberately broken
-  unit test makes it red; `deploy-staging.yml` runs only after a reviewer approves the `staging` GitHub environment
-  for that run (no unattended deploy), and the first run additionally needs the owner's approval of the staging
-  Cloudflare resources.
+- **Accepted Invariants:** structured events with bounded labels; redaction of keys, cookies, OTPs, tokens, raw
+  bodies, phones; probes of `OBSERVABILITY.md` runnable as `pnpm probes --env`; alert delivery to the owner channel
+  (Cloudflare notifications or a scheduled checker) configured per environment.
+- **Done when:** redaction tests; `pnpm probes --env staging` green after the first staging deploy; a synthetic
+  failing probe produces an owner alert (evidence in `BUILD-LOG.md`).
 
-### TASK-109: Host isolation test suite
-- **Requirement:** `docs/spec/11` §3 and §8, ADR-0002
+### TASK-111: Host and tenant isolation suite (M1 surfaces)
+- **Requirement:** spec 11 §8, ADR-0002, ADR-0006
 - **Risk Level:** R4
 - **Job:** implementation
-- **Capability:** `cloudflare-for-saas`, `application-security`, `testing-engineering`
-- **Allowed Paths:** `apps/worker/test/isolation/**`, `apps/worker/src/host/**`
-- **Accepted Invariants:** tenant only from verified host + session; unknown/pending host → neutral 404 before any
-  tenant read; KV never used for host → tenant (ADR-0006, spec 11 §3).
-- **Depends On:** TASK-102, TASK-103, TASK-104
-- **Done when:** worker tests prove the spec 11 §8 matrix for two seeded tenants and the platform hosts (cookies, API
-  key, webhook token, `/lacak`, media keys), DCV paths pass through, unknown/pending host → neutral 404, suspended →
-  403 within 30 s; a mutation that drops the tenant check from one route makes the suite fail.
+- **Capability:** `application-security`, `testing-engineering`
+- **Allowed Paths:** `apps/worker/test/isolation/**`
+- **Depends On:** TASK-102, TASK-103, TASK-105, TASK-106
+- **Accepted Invariants:** tenant only from verified host + session; KV never used for host → tenant.
+- **Done when:** for two seeded tenants and the platform hosts: sessions/cookies, owner vs app, tenant object RPC,
+  D1 tenant rows, mini-site host lookup — refused across tenants; suspended → 403 within 30 s; a mutation dropping one
+  tenant check fails the suite. Later surfaces extend this suite in their own tasks (API keys 503, webhooks 204,
+  `/lacak` 501, media 302).
 
-### TASK-110: Email deliverability gate (Cloudflare Email Sending)
-- **Requirement:** DEC-227, `docs/spec/12` §6
+### TASK-112: Email deliverability gate
+- **Requirement:** DEC-227, spec 12 §6
 - **Risk Level:** R2
-- **Job:** verification (needs owner approval for the sending-domain DNS change)
-- **Allowed Paths:** `BUILD-LOG.md`, `STATUS.md`
+- **Job:** verification (owner approves the sending-domain DNS change)
 - **Capability:** `cloudflare-email-service`
-- **Accepted Invariants:** one provider only (DEC-227); transactional mail only; no OTP in production logs.
-- **Depends On:** TASK-104
-- **Done when:** `BUILD-LOG.md` records, for `signup_otp` and `password_reset`, SPF/DKIM/DMARC `pass` and inbox
-  placement at Gmail, Outlook.com and Yahoo (two sends each), delivery under 60 s and a tester score ≥ 9/10. Until
-  this passes, production signup stays closed.
+- **Allowed Paths:** `BUILD-LOG.md`, `STATUS.md`
+- **Depends On:** TASK-104, TASK-105, TASK-109
+- **Accepted Invariants:** one provider; transactional only.
+- **Done when:** `BUILD-LOG.md` records SPF/DKIM/DMARC pass, inbox at Gmail/Outlook.com/Yahoo (two sends each of
+  `signup_otp` and `password_reset`), delivery < 60 s, tester score ≥ 9/10. Production signup stays closed until then.
 
----
+### TASK-199: M1 close
+- **Requirement:** ROADMAP M1 exit gate
+- **Risk Level:** R4 (highest boundary in M1)
+- **Job:** release
+- **Capability:** `testing-engineering`
+- **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**` (via `delivery-ledger` only)
+- **Depends On:** TASK-101..112
+- **Accepted Invariants:** gates sequential and fail-fast; evidence immutable.
+- **Done when:** integrated run PASS (typecheck, unit, worker, migrations, isolation, e2e, security gates) recorded by
+  `delivery-ledger`; `delivery-ledger verify` exit 0.
 
-### Later milestones
+### M2 — Mengantar onboarding, webhooks, courier rules, discounts, Super Admin console
 
-Contracts below are ready to start once their dependencies are done; refine paths at milestone start if the M1
-scaffold changed the layout (record the change in the task, not silently).
-
-### M2 — Mengantar SDK, onboarding, courier rules, discount matrix
-
-### TASK-201: `mengantar-sdk` Public API client with key redaction
+### TASK-201: `mengantar-sdk` Public API client
 - **Requirement:** DEC-204, DEC-210, ARCHITECTURE §4.1
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `workers-best-practices`
-- **Allowed Paths:** `packages/mengantar-sdk/**`
-- **Depends On:** TASK-101
-- **Accepted Invariants:** the `{API_KEY}` path segment is masked in every error, log and trace; timeouts via
-  `AbortSignal.timeout`; responses parsed with Zod; unknown fields preserved raw; money from integer fields only.
-- **Done when:** unit tests against recorded sandbox fixtures (estimate, order create paid/unpaid/error, `GET /order`
-  history, `/invoices`, `pay-unpaid`) pass; a test proves a thrown 4xx/5xx message never contains the key.
+- **Allowed Paths:** `packages/mengantar-sdk/src/public/**`, matching tests
+- **Depends On:** TASK-199
+- **Accepted Invariants:** `{API_KEY}` masked everywhere; `AbortSignal.timeout`; Zod parsing; unknown fields kept raw.
+- **Done when:** recorded-fixture tests (estimate, create paid/unpaid/error, `GET /order` history, `/invoices`,
+  `pay-unpaid`, `DELETE /order`); a 4xx/5xx message never contains the key.
 
-### TASK-202: Partner transport `direct` and `relay` with `PartnerQuotaDO`
-- **Requirement:** DEC-204, DEC-219, ADR-0003, spec 10 §4.1 and §4.3
+### TASK-202: Partner transport (`direct`/`relay`) and `PartnerQuotaDO`
+- **Requirement:** DEC-204, DEC-219, ADR-0003, spec 10 §4.1, §4.3
 - **Risk Level:** R4
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `durable-objects`, `application-security`
-- **Allowed Paths:** `packages/mengantar-sdk/src/partner/**`, `apps/worker/src/do/partner-quota/**`, matching tests
+- **Allowed Paths:** `packages/mengantar-sdk/src/partner/**`, `apps/worker/src/do/partner-quota/**`, `infra/partner-relay/**`, matching tests
 - **Depends On:** TASK-201
-- **Accepted Invariants:** exact-byte signing `SHA256(METHOD:PATH:TYPE:BODY:TIMESTAMP:SECRET)`; 60/min and 1000/day
-  quota; relay HMAC + `X-Relay-Id`; `api-key/regenerate` never auto-retried; only the 4 Partner routes.
-- **Done when:** digest-parity test against the documented example; quota DO test at the limits; relay-mode request
-  signature verified by a local stub relay; `409 relay_duplicate` treated as `maybe_sent`; independent R4 review.
+- **Accepted Invariants:** exact-byte signing; 60/min and 1000/day; relay HMAC + `X-Relay-Id` + path allowlist;
+  `api-key/regenerate` never auto-retried.
+- **Done when:** digest parity with the documented example; quota tests at limits; relay program unit tests (HMAC,
+  allowlist, 120 s duplicate guard) and a local stub run; `409 relay_duplicate` → `maybe_sent`; R4 review.
 
-### TASK-203: Outlet application and Super Admin approval → seller provisioning
-- **Requirement:** PR-02, DEC-203, DEC-209, spec 05 §1
+### TASK-203: Super Admin console shell, Gerai directory and outlet approval
+- **Requirement:** PR-02, PR-03 (activation), DEC-203, DEC-209, spec 06 §Super Admin
 - **Risk Level:** R3
 - **Job:** implementation
-- **Capability:** `admin-product-ux`, `shadcn-ui`, `ui-validation`
-- **Allowed Paths:** `apps/worker/src/onboarding/**`, `apps/web-owner/src/routes/gerai/**`, `apps/web-app/src/routes/daftar/**`, matching tests
-- **Depends On:** TASK-202, TASK-105
-- **Accepted Invariants:** approval needs `aal2` + reason and activates `<slug>.gerai.cc` (a D1 `tenant_hostnames`
-  row, PR-03); `registration_unknown` is read back via list, never re-registered blindly; BYOK fallback for existing sellers; the seller key is stored encrypted in the tenant object.
-- **Visual Contract:** admin surface, comfort contract; `/daftar` steps 1/5 and `/gerai/pengajuan/:id` per visual 07;
-  states loading/empty/error/success.
-- **Done when:** sandbox end-to-end: apply → approve → seller created → key stored → `connected`; a timeout during
-  register ends in `registration_unknown` and resolves by read-back; UI evidence at 390/1366.
+- **Capability:** `admin-product-ux`, `admin-dashboard`, `shadcn-ui`
+- **Allowed Paths:** `apps/web-owner/src/{shell,routes/gerai}/**`, `apps/web-app/src/routes/daftar/**`,
+  `apps/worker/src/{onboarding,admin/gerai}/**`, `packages/db/migrations/{control,tenant}/203-*`, matching tests
+- **Depends On:** TASK-202, TASK-106
+- **Accepted Invariants:** 5 Super Admin menus; approval needs recent TOTP + reason and activates `<slug>.gerai.cc`;
+  `registration_unknown` resolved by read-back; BYOK fallback; seller key encrypted in the tenant object; suspend/
+  unsuspend bumps `routing_version`; masking kill-switch and `masking_daily_quota` editable with TOTP + reason.
+- **Visual Contract:** owner shell + `/gerai` tabs, `/gerai/pengajuan/:id`, `/gerai/:slug` per visual 07; `/daftar`
+  steps 1/5; states loading/empty/error/success.
+- **Done when:** sandbox apply → approve → seller → key stored → `connected`; register timeout → read-back; suspend →
+  403 on the mini-site within 30 s; audit rows for every mutation.
 
-### TASK-204: Webhook setup page, routes and polling floor
-- **Requirement:** PR-02b, spec 01 §2.7, spec 01 §3
+### TASK-204: Webhooks, inbox, status combine and polling floor
+- **Requirement:** PR-02b, spec 01 §2.7, §3
 - **Risk Level:** R4
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `durable-objects`, `testing-engineering`
-- **Allowed Paths:** `apps/worker/src/webhooks/**`, `apps/worker/src/do/gerai-vault/status/**`, `apps/web-app/src/routes/pengaturan/mengantar/**`, matching tests
-- **Depends On:** TASK-103, TASK-201
-- **Accepted Invariants:** token hash → tenant in D1; HMAC verified in the tenant object; inbox before ack; the
-  provider/custody combine rule of spec 01 §3; hourly polling while `webhook_state != active`.
-- **Visual Contract:** `/pengaturan/mengantar` per visual 08 §2 (copy URL, paste secret, status chip); states loading/empty/error/success. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** the spec 01 §2.7 and §3 test lists pass (restart, duplicate, enqueue failure, reverse order, poll↔webhook
-  minute ties, custody cases, permutation property test); independent R4 review.
+- **Allowed Paths:** `apps/worker/src/webhooks/**`, `apps/worker/src/do/gerai-vault/status/**`,
+  `apps/web-app/src/routes/pengaturan/mengantar/**`, `packages/db/migrations/{control,tenant}/204-*`, matching tests
+- **Depends On:** TASK-201, TASK-203
+- **Accepted Invariants:** token hash → tenant; verify in the object; inbox before ack; provider/custody combine;
+  hourly polling while not `active`; alarm re-enqueue; 30-day retention.
+- **Visual Contract:** `/pengaturan/mengantar` (copy URL, paste secret, status chip) per visual 08 §2.
+- **Done when:** spec 01 §2.7 and §3 test lists pass (incl. permutation property test); isolation suite extended
+  with cross-tenant webhook tokens; R4 review.
 
-### TASK-205: Courier catalog, `Ekspedisi Aktif` and area search cache
-- **Requirement:** DEC-213, DEC-223, spec 06, visual 08 §2
+### TASK-205: Seller key rotation
+- **Requirement:** ADR-0004 §5, spec 10 §4.3
+- **Risk Level:** R4
+- **Job:** implementation
+- **Capability:** `durable-objects`, `mengantar-api`
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/credentials/**`, matching tests
+- **Depends On:** TASK-202, TASK-204
+- **Accepted Invariants:** `key_version` fence incremented before `regenerate`; new key + callback secret stored
+  atomically; lost response → pause dispatch, read current key, never regenerate again; webhook route rotation 24 h.
+- **Done when:** crash/timeout tests at each step; in-flight dispatch with the old version is rejected; R4 review.
+
+### TASK-206: Courier catalog, `Ekspedisi Aktif`, area search
+- **Requirement:** DEC-213, DEC-223, spec 06
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `shadcn-ui`, `ui-validation`
-- **Allowed Paths:** `apps/worker/src/couriers/**`, `apps/web-app/src/routes/pengaturan/ekspedisi/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/couriers/**`, `apps/web-app/src/routes/pengaturan/ekspedisi/**`,
+  `packages/db/migrations/{control,tenant}/206-*`, matching tests
 - **Depends On:** TASK-201
-- **Accepted Invariants:** KV only caches area search; pickup mode per courier; switches save instantly with a toast.
-- **Visual Contract:** settings item page per visual 08 §2.3; full-row toggle targets (`touch-target-toggle`).
-- **Done when:** worker tests for catalog and prefs; area search cache hit/miss test; gates 0 fail at 390/1366.
+- **Accepted Invariants:** KV only caches area search; pickup mode per courier; instant save + toast.
+- **Visual Contract:** settings item page, full-row toggles (`touch-target-toggle`).
+- **Done when:** catalog/prefs tests; cache hit/miss test.
 
-### TASK-206: Super Admin discount and cashback matrix
+### TASK-207: Discount and cashback matrix (`Tarif & Kurir`)
 - **Requirement:** PR-11, DEC-205, DEC-226, spec 02 §2
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `admin-product-ux`, `shadcn-ui`
-- **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`,
+  `packages/db/migrations/{control,tenant}/207-*`, matching tests
 - **Depends On:** TASK-107, TASK-203
-- **Accepted Invariants:** `assigned_bps <= provider_observed_bps` (no subsidy at launch); TOTP + reason + audit per
-  change; effective timestamps; `Selisih tarif` shown as information only.
-- **Visual Contract:** `/tarif` per visual 07; observed vs assigned bps editor.
-- **Done when:** worker tests reject a rule above observed; audit row per change; UI evidence.
+- **Accepted Invariants:** `assigned <= observed`; TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
+- **Visual Contract:** `/tarif` tabs per visual 07.
+- **Done when:** rule above observed rejected; audit per change; cashback ledger states unit-tested.
 
-### M3 — Counter POS, printing, contacts, shift, dashboard
+### TASK-208: Super Admin `Ringkasan`, `Pengawasan`, `Sistem & Audit`
+- **Requirement:** DEC-209, DEC-218 (platform legal editor), spec 06 §Super Admin, spec 01 §2.6
+- **Risk Level:** R3
+- **Job:** implementation
+- **Capability:** `admin-dashboard`, `application-security`
+- **Allowed Paths:** `apps/web-owner/src/routes/{index,pengawasan,sistem}/**`, `apps/worker/src/admin/{overview,monitor,audit,legal}/**`,
+  `packages/db/migrations/control/208-*`, matching tests
+- **Depends On:** TASK-203, TASK-204
+- **Accepted Invariants:** read-only cross-tenant views; risk search by hashed phone with `risk_review` + recent TOTP
+  + audit on the **read**; audit log viewer; platform legal profile editor (NULL until filled); relay/sync health.
+- **Visual Contract:** per visual 07 Super Admin rows; no create/pay actions anywhere.
+- **Done when:** audited-read tests; non-impersonation scan; legal profile NULL vs filled rendering.
 
-### TASK-301: Web app shell, navigation and role projection
+### TASK-299: M2 close
+- **Requirement:** ROADMAP M2 exit gate
+- **Risk Level:** R4
+- **Job:** release
+- **Capability:** `testing-engineering`
+- **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**` (via `delivery-ledger`)
+- **Depends On:** TASK-201..208; Mengantar answer on DEC-226 recorded (or fallback accepted by the owner)
+- **Accepted Invariants:** sandbox only; no production Partner call.
+- **Done when:** integrated run PASS incl. sandbox onboarding end-to-end; zero raw key URLs in logs (test).
+
+### M3 — Counter POS, printing, contacts, shift, dashboard, settings
+
+### TASK-301: Web app shell, navigation, notifications, role projection
 - **Requirement:** DEC-213, DEC-222, DEC-225, DEC-209, visual 07 §1
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `shadcn-ui`, `admin-dashboard`, `ui-validation`
-- **Allowed Paths:** `apps/web-app/src/shell/**`, `apps/web-app/src/components/ui/**`, `apps/worker/src/dto/**`, matching tests
-- **Depends On:** TASK-104
-- **Accepted Invariants:** 6 menus (Keuangan owner only), bottom bar on phones, comfort sizes, light theme only, zoom
-  never locked; Kasir DTOs never contain cost, margin or balance fields.
-- **Visual Contract:** Direction A (`DESIGN.md`), C1–C6; loading/empty/error states for every screen.
-- **Done when:** DTO projection test per role; `dotuiux check` + `admin-geometry` 0 fail at 390/1366/1536.
+- **Allowed Paths:** `apps/web-app/src/{shell,components/ui,routes/notifikasi}/**`, `apps/worker/src/{dto,notifications}/**`,
+  `packages/db/migrations/tenant/301-*`, matching tests
+- **Depends On:** TASK-299
+- **Accepted Invariants:** 6 menus (Keuangan owner only); bottom bar on phones; comfort sizes; light only; zoom never
+  locked; Kasir DTOs never contain cost/margin/balance; notification read state per user.
+- **Visual Contract:** Direction A, C1–C6; loading/empty/error states for every screen; `/notifikasi` grouped by day.
+- **Done when:** DTO projection test per role; notification read-state test; gates 0 fail.
 
-### TASK-302: Contacts (`Pengirim`, `Penerima`) with WA verification and risk badge
+### TASK-302: Contacts, WA verification, risk badge, media uploads
 - **Requirement:** PR-14, PR-15 (verification), DEC-212
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `shadcn-ui`, `ui-validation`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/contacts/**`, `apps/web-app/src/routes/kontak/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/contacts/**`, `apps/worker/src/media/**`, `apps/web-app/src/routes/kontak/**`,
+  `packages/db/migrations/tenant/302-*`, matching tests
 - **Depends On:** TASK-301
-- **Accepted Invariants:** phone normalised `08…`; `wa_verified_at` set only by an interactive operator; changing the
-  phone clears it; recipient risk badge from this gerai's counts.
-- **Visual Contract:** list pages per visual 07 C3; deposit column owner only.
-- **Done when:** worker + e2e tests; UI evidence.
+- **Accepted Invariants:** phone `08…`; `wa_verified_at` only by an operator; R2 keys `t/<tenant_id>/…` with signed
+  short-lived URLs; risk badge from own counts, risk index pushed by outbox.
+- **Visual Contract:** list pages C3; deposit column owner only.
+- **Done when:** contact tests; media cross-tenant denial added to the isolation suite; risk upsert lost-ack test.
 
-### TASK-303: Quote engine (two-pass COD) and courier cards
-- **Requirement:** PR-06, DEC-225, spec 02 §3.3
+### TASK-303: Quote engine, courier cards and `Cek Ongkir Cepat`
+- **Requirement:** PR-06, PR-09 (quick check), DEC-225, spec 02 §3.3
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `testing-engineering`
-- **Allowed Paths:** `apps/worker/src/pricing/quote/**`, `apps/web-app/src/routes/kasir/**`, matching tests
-- **Depends On:** TASK-107, TASK-201, TASK-206
-- **Accepted Invariants:** fixed-point `codFee` rule with `COD_FEE_UNSTABLE`; frozen quote stores final `F`, `N`, `C`;
-  cargo recommended ≥ 5,000 g and Non-COD only; Kasir sees customer price only.
-- **Visual Contract:** courier cards per visual 05 (Kasir: customer price only; owner `👁` margin toggle); loading skeleton per card, provider error per card. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** fixture tests for all five `cod_fee_mode`s incl. unstable fee; e2e card render at 390/1366.
+- **Allowed Paths:** `apps/worker/src/pricing/quote/**`, `apps/web-app/src/routes/kasir/{baru,cek-cepat}/**`,
+  `packages/db/migrations/tenant/303-*`, matching tests
+- **Depends On:** TASK-107, TASK-201, TASK-207, TASK-301
+- **Accepted Invariants:** fixed-point `codFee`; frozen quote (`F`, `N`, `C`); cargo ≥ 5,000 g, Non-COD only; Kasir
+  sees customer price only; quick check allocates no slug or draft.
+- **Visual Contract:** courier cards per visual 05; owner `👁` margin toggle; per-card loading/error.
+- **Done when:** five-mode fixture tests incl. unstable fee; quick-check non-allocation test.
 
-### TASK-304: POS checkout, payment record and dispatch
+### TASK-304: POS checkout, payment record, dispatch, cancellation
 - **Requirement:** PR-04, PR-05, PR-07, DEC-208, DEC-220, ADR-0004
 - **Risk Level:** R4
 - **Job:** implementation
 - **Capability:** `durable-objects`, `mengantar-api`, `ui-validation`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/dispatch/**`, `apps/worker/src/do/gerai-vault/payment/**`, `apps/web-app/src/routes/kiriman/**`, matching tests
-- **Depends On:** TASK-106, TASK-303
-- **Accepted Invariants:** write-ahead journal then call then record; unknown outcome → `reconciliation_needed`, read
-  back, never replay; payment state machine spec 03 §1.1 with idempotency keys; shift attribution by receipt.
-- **Visual Contract:** POS 60/40 split (C4), sticky checkout bar on phones, one primary `Tandai Lunas & Cetak`.
-- **Done when:** DO tests: double submit → one order; timeout → reconciliation path; unpaid hold → pay-unpaid path;
-  e2e checkout under 45 s scripted; independent R4 review.
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/{dispatch,payment,cancel}/**`, `apps/web-app/src/routes/kiriman/[slug]/**`,
+  `packages/db/migrations/tenant/304-*`, matching tests
+- **Depends On:** TASK-108, TASK-204, TASK-303
+- **Accepted Invariants:** journal → call → record; unknown → `reconciliation_needed` read-back; unpaid → `provider_unpaid_hold`
+  with the shared `payUnpaid(batch_id)` primitive; label printable only with AWB; cancel before pickup = `DELETE /order`
+  then read-back, payment void first; counter payment state machine spec 03 §1.1.
+- **Visual Contract:** POS C4, sticky checkout bar on phones, one primary `Tandai Lunas & Cetak`; pending states.
+- **Done when:** double submit → one order; timeout → read-back; unpaid → `payUnpaid` after top-up (fixture);
+  cancel unknown outcome → read-back; scripted checkout < 45 s; R4 review.
 
-### TASK-305: Masking presets, quota and reveal audit
+### TASK-305: Masking presets, quota, reveal audit
 - **Requirement:** PR-15, DEC-206, ADR-0005, spec 05
 - **Risk Level:** R3
 - **Job:** implementation
-- **Capability:** `application-security`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/masking/**`, matching UI and tests
+- **Capability:** `application-security`, `ui-validation`
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/masking/**`, `apps/web-app/src/components/masking/**`,
+  `packages/db/migrations/tenant/305-*`, matching tests
 - **Depends On:** TASK-302, TASK-304
-- **Accepted Invariants:** pickup always the outlet; `masking_daily_quota` with `422 MASKING_QUOTA_EXCEEDED`, never a
-  silent fallback; reveal requires reason + audit. Not advertised before the counsel review (STATUS).
+- **Accepted Invariants:** pickup always the outlet; `422 MASKING_QUOTA_EXCEEDED`, never silent; reveal with reason +
+  audit; not advertised before counsel review.
+- **Visual Contract:** preset picker in POS step 3 (4 presets, preview of what prints); quota-exceeded and
+  kill-switch-off states; `Lihat Pengirim Asli` reason dialog.
 - **Done when:** quota and reveal tests; label snapshots per preset.
 
 ### TASK-306: Printing — 100 mm PDFs (PC-first), 58 mm ESC/POS, bulk print
@@ -315,132 +405,163 @@ scaffold changed the layout (record the change in the task, not silently).
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `native-first`, `ui-validation`
-- **Allowed Paths:** `packages/thermal-print/**`, `apps/worker/src/labels/**`, `apps/web-app/src/print/**`, matching tests
+- **Allowed Paths:** `packages/thermal-print/**`, `apps/worker/src/labels/**`, `apps/web-app/src/{print,routes/kiriman/cetak-massal}/**`, matching tests
 - **Depends On:** TASK-304
-- **Accepted Invariants:** exact-size PDFs (100×150, 100×100) with ≥ 3 mm barcode quiet zones; local barcode/QR
-  rendering (no third-party image service); 58 mm lines exactly 32 columns; `print_count` and reprint reason; bulk ≤ 50.
-- **Visual Contract:** print drawer and label/receipt previews per visual 04; 32-col preview; reprint reason dialog. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** PDF dimension tests; 32-column snapshot tests; barcode scan check on a printed sample (evidence photo).
+- **Accepted Invariants:** exact-size PDFs with ≥ 3 mm quiet zones; local barcode/QR; 58 mm = 32 columns;
+  `print_count` + reprint reason; bulk ≤ 50.
+- **Visual Contract:** print drawer, previews, `/kiriman/cetak-massal` per visual 07.
+- **Done when:** PDF dimension tests; 32-col snapshots; printed sample scanned (photo in `BUILD-LOG.md`).
 
 ### TASK-307: Shift drawer and sender COD payout
-- **Requirement:** PR-10, spec 03 §1.2 and §4
+- **Requirement:** PR-10, spec 03 §1.2, §4
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `durable-objects`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/shift/**`, `apps/web-app/src/routes/kasir/shift/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/shift/**`, `apps/web-app/src/routes/kasir/shift/**`,
+  `packages/db/migrations/tenant/307-*`, matching tests
 - **Depends On:** TASK-304
-- **Accepted Invariants:** `expected_cash = float + Σ tunai in − Σ tunai out`; every `tunai` payout needs an open
-  shift; variance needs a reason code.
-- **Visual Contract:** `/kasir/shift` per visual 07 (open → live totals → closing count → variance reason). Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** DO tests for cross-shift payment, payout, void and variance; e2e open/close shift.
+- **Accepted Invariants:** `expected_cash = float + Σ tunai in − Σ tunai out`; every `tunai` payout in an open shift;
+  variance reason code.
+- **Visual Contract:** `/kasir/shift` per visual 07.
+- **Done when:** cross-shift payment, payout, void and variance tests; e2e open/close.
 
-### TASK-308: Paket Massal (manual + CSV), Riwayat Massal, Cek Resi, Akun Saya, Bantuan
+### TASK-308: Paket Massal, Riwayat Massal, Cek Resi
 - **Requirement:** PR-09, DEC-229, spec 03 §1.3–1.4
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `native-first`, `testing-engineering`, `ui-validation`
-- **Allowed Paths:** `apps/worker/src/bulk/**`, `apps/web-app/src/routes/kasir/multi/**`, `apps/web-app/src/routes/kasir/cek-resi/**`, `apps/web-app/src/routes/akun/**`, `apps/web-app/src/routes/bantuan/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/bulk/**`, `apps/web-app/src/routes/{kasir/multi,kasir/cek-resi,kiriman/massal}/**`,
+  `packages/db/migrations/tenant/308-*`, matching tests
 - **Depends On:** TASK-304, TASK-306
 - **Accepted Invariants:** ≤ 200 rows; ambiguous area → `Perlu Diperbaiki`; queued serialized dispatch; atomic batch
-  payment with derived idempotency keys; `.xlsx` reader only after an ADR (spec 03 §1.3).
-- **Visual Contract:** `/kasir/multi` tabs `Siap`/`Perlu Diperbaiki` with inline edit, `/kasir/cek-resi`, `/akun`, `/bantuan` per visual 07; empty/error per row. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** CSV fixture with good and bad rows; batch payment atomicity test; e2e at 390/1366.
+  payment; `.xlsx` only after an ADR.
+- **Visual Contract:** tabs `Siap`/`Perlu Diperbaiki` with inline edit; batch detail; Cek Resi timeline.
+- **Done when:** CSV fixture with good and bad rows; batch payment atomicity; foreign AWB message.
 
-### TASK-309: Owner dashboard, Kasir home and period filter
+### TASK-309: Owner dashboard, Kasir home, period filter
 - **Requirement:** PR-18, DEC-221, visual 08 §1
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `admin-dashboard`, `ui-validation`
-- **Allowed Paths:** `apps/web-app/src/routes/index/**`, `apps/web-app/src/components/period-filter/**`, `apps/worker/src/analytics/**`, matching tests
+- **Allowed Paths:** `apps/web-app/src/{routes/index,components/period-filter}/**`, `apps/worker/src/analytics/**`, matching tests
 - **Depends On:** TASK-304
-- **Accepted Invariants:** WIB presets, default `7 hari terakhir`, max 180 days, URL state; Estimasi Laba and Laba Kas
-  separate; Kasir home has no money totals.
-- **Visual Contract:** dashboard per visual 07 C5 + period filter visual 08 §1 (phone bottom sheet); chart COD vs Non-COD with legend. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** period resolution unit tests (DST-free WIB, month edges); gates 0 fail.
+- **Accepted Invariants:** WIB presets, default 7 days, max 180, URL state; Estimasi Laba and Laba Kas separate; Kasir
+  home without money totals; daily stats pushed by outbox.
+- **Visual Contract:** C5 dashboard; phone bottom sheet.
+- **Done when:** period resolution tests; gates 0 fail.
 
-### TASK-310: Settings sub-navigation and remaining settings pages
-- **Requirement:** DEC-223, DEC-218 (forms), visual 08 §2
-- **Risk Level:** R2
+### TASK-310: Settings pages, account page, help
+- **Requirement:** DEC-223, DEC-218 (tenant forms), DEC-229 (Akun Saya, Bantuan)
+- **Risk Level:** R3
 - **Job:** implementation
-- **Capability:** `shadcn-ui`, `ui-validation`
-- **Allowed Paths:** `apps/web-app/src/routes/pengaturan/**`, matching tests
-- **Depends On:** TASK-301
-- **Accepted Invariants:** nine item routes; sticky save bar only when dirty; Kasir sees only `printer`; NPWP encrypted.
-- **Visual Contract:** settings sub-menu per visual 08 §2 (desktop left menu, phone grouped list), sticky save bar only when dirty. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** 403 tests for Kasir; gates 0 fail.
+- **Capability:** `shadcn-ui`, `application-security`, `ui-validation`
+- **Allowed Paths:** `apps/web-app/src/routes/pengaturan/{index,profil,data-usaha,printer,packing,anggota}/**`,
+  `apps/web-app/src/routes/{akun,bantuan}/**`, `apps/worker/src/do/gerai-vault/settings/**`,
+  `apps/worker/src/auth/account/**`, matching tests (excludes `ekspedisi` 206, `mengantar` 204, `mini-site` 505, `api-mcp` 503)
+- **Depends On:** TASK-301, TASK-105
+- **Accepted Invariants:** sub-menu, sticky save bar only when dirty; Kasir sees only `printer`; NPWP encrypted;
+  member invite/revoke; email change by OTP; session list with revoke.
+- **Visual Contract:** visual 08 §2 (desktop left menu, phone grouped list).
+- **Done when:** Kasir 403 tests; email-change OTP and session-revoke tests; NPWP never returned in plain text.
 
-### M4 — Finance sync, pickup manifest, returns, claims
+### TASK-399: M3 close
+- **Requirement:** ROADMAP M3 exit gate
+- **Risk Level:** R4
+- **Job:** release
+- **Capability:** `testing-engineering`, `ui-validation`
+- **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**`
+- **Depends On:** TASK-301..310; counsel answer before masking is advertised
+- **Accepted Invariants:** viewport matrix 390/768/1280 for Playwright.
+- **Done when:** integrated run PASS; DTO role-projection suite PASS; sub-45 s checkout evidence.
 
-### TASK-401: `/invoices` sync, dual book and Laba Kas
+### M4 — Finance sync, recovery, pickup, returns, claims
+
+### TASK-401: `/invoices` sync, dual book, Laba Kas
 - **Requirement:** PR-12, DEC-216, spec 09
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `durable-objects`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/finance/**`, `apps/web-app/src/routes/keuangan/**`, matching tests
-- **Depends On:** TASK-304
-- **Accepted Invariants:** idempotent mirror; unknown types kept verbatim → `Selisih Sync`; Laba Kas predicate of
-  spec 02 §3.5; `quote_drift` flagged, never auto-fixed.
-- **Visual Contract:** `/keuangan` tabs per spec 06 (owner only), `Estimasi Laba` and `Laba Kas` side by side. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** deterministic reconciliation tests over all observed types + unknown; running balance equals
-  `balanceAmount` on fixtures.
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/finance/**`, `apps/worker/src/cron/finance/**`,
+  `apps/web-app/src/routes/keuangan/**`, `packages/db/migrations/tenant/401-*`, matching tests
+- **Depends On:** TASK-399
+- **Accepted Invariants:** triggers: 15-min Cron, +60 s after mutations, manual (1 per 30 s); ≤ 5 pages per run;
+  daily pending rescan; unknown types → `Selisih Sync`; Laba Kas predicate spec 02 §3.5; `quote_drift` flagged.
+- **Visual Contract:** `/keuangan` tabs (owner only); Estimasi Laba and Laba Kas side by side.
+- **Done when:** fake-clock tests for each trigger and the rate limit; reconciliation fixtures over every observed
+  type + unknown; running balance equals `balanceAmount`.
 
-### TASK-402: `pay-unpaid` recovery and Saldo Aman reserve
+### TASK-402: Unpaid recovery and Saldo Aman
 - **Requirement:** PR-13, spec 02 §4, spec 09 §3
-- **Risk Level:** R3
+- **Risk Level:** R4
 - **Job:** implementation
 - **Capability:** `mengantar-api`, `durable-objects`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/finance/unpaid/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/finance/recovery/**`, matching tests
 - **Depends On:** TASK-401
-- **Accepted Invariants:** crash-safe `pay-unpaid` by `batch_id`; low-balance messages never reveal the balance to Kasir.
-- **Done when:** crash-between-call-and-record test; reserve math tests.
+- **Accepted Invariants:** finance-triggered `payUnpaid` (primitive from 304) after top-up sync; crash-safe; Kasir
+  never sees the balance.
+- **Done when:** crash between call and record; reserve math; R4 review.
 
 ### TASK-403: Pickup manifest and Surat Jalan
 - **Requirement:** PR-16, spec 04 §1, spec 01 §2.4
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `ui-validation`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/pickup/**`, `apps/web-app/src/routes/kiriman/pickup/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/pickup/**`, `apps/web-app/src/routes/kiriman/pickup/**`,
+  `packages/db/migrations/tenant/403-*`, matching tests
 - **Depends On:** TASK-306
-- **Accepted Invariants:** wrong courier, `cancelled` and `provider_unpaid_hold` block; counter-unpaid only warns;
-  driver fields required; handover records custody.
-- **Visual Contract:** `/kiriman/pickup/:batch` scan mode (red alert + sound on block, amber on unpaid), driver fields, signature. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** scan-guard tests; Surat Jalan PDF snapshot; e2e scan flow.
+- **Accepted Invariants:** wrong courier, `cancelled`, `provider_unpaid_hold` block; counter-unpaid warns; driver
+  fields required; handover records custody.
+- **Visual Contract:** scan mode (red + sound on block, amber on unpaid), driver form, signature.
+- **Done when:** scan-guard tests; Surat Jalan PDF snapshot; e2e scan.
 
 ### TASK-404: Meja Retur and verified handback
 - **Requirement:** PR-17, DEC-206, ADR-0005, spec 04 §2
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `application-security`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/returns/**`, `apps/web-app/src/routes/kiriman/retur/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/returns/**`, `apps/web-app/src/routes/kiriman/retur/**`,
+  `packages/db/migrations/tenant/404-*`, matching tests
 - **Depends On:** TASK-204, TASK-403
-- **Accepted Invariants:** intake and handback are custody stages (spec 01 §3); 4-digit code hashed; reveal audited.
-- **Visual Contract:** `/kiriman/retur/:awb` intake → photo → WA code → handback per visual 06/07. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** custody tests incl. provider contradictions → `Status Bertentangan`; e2e intake → handback.
+- **Accepted Invariants:** intake and handback are custody stages; code hashed; reveal audited.
+- **Visual Contract:** intake → photo → WA code → handback.
+- **Done when:** custody tests incl. contradictions → `Status Bertentangan`; e2e intake → handback.
 
-### TASK-405: Exceptions and claim assistant
+### TASK-405: Exceptions and claims
 - **Requirement:** PR-20, spec 04 §3
 - **Risk Level:** R2
 - **Job:** implementation
 - **Capability:** `testing-engineering`
-- **Allowed Paths:** `apps/worker/src/do/gerai-vault/exceptions/**`, `apps/web-app/src/routes/kiriman/kendala/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/do/gerai-vault/exceptions/**`, `apps/web-app/src/routes/kiriman/kendala/**`,
+  `packages/db/migrations/tenant/405-*`, matching tests
 - **Depends On:** TASK-204, TASK-401
-- **Accepted Invariants:** five sub-filters incl. `Status Bertentangan`; per-courier claim deadlines from the cited help pages.
-- **Visual Contract:** `Kendala & Klaim` five sub-filters incl. `Status Bertentangan` with countdown chips. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** bucket classification tests; deadline countdown tests.
+- **Accepted Invariants:** five sub-filters; per-courier claim deadlines; stuck flag sweep.
+- **Visual Contract:** `Kendala & Klaim` with countdown chips.
+- **Done when:** classification and deadline tests.
+
+### TASK-499: M4 close
+- **Requirement:** ROADMAP M4 exit gate
+- **Risk Level:** R4
+- **Job:** release
+- **Capability:** `testing-engineering`
+- **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**`
+- **Depends On:** TASK-401..405; M2/M4 sandbox verifications recorded (weight echo, `POST /time`, `/invoices` order, `pay-unpaid`)
+- **Accepted Invariants:** sandbox only.
+- **Done when:** integrated run PASS; deterministic reconciliation across all types.
 
 ### M5 — Mini-site, brand site, OpenAPI, MCP, custom domains (staging)
 
-### TASK-501: Gerai mini-site SSR, QR pre-booking and private tracking
+### TASK-501: Mini-site, QR pre-booking, private tracking
 - **Requirement:** PR-03, PR-19, DEC-207, spec 05 §3, visual 03
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `seo-website-builder`, `application-security`, `ui-validation`
 - **Allowed Paths:** `apps/worker/src/minisite/**`, matching tests
-- **Depends On:** TASK-109, TASK-303
-- **Accepted Invariants:** Turnstile on public quotes; 48 h drafts; `/lacak` shows initials + city until the 4-digit
-  phone gate; footer `Didukung jaringan resmi GeraiExpress` (DEC-218).
-- **Visual Contract:** public mini-site per visual 03 (mobile-first, 3 tabs); `design-taste` narrow + wide review. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** 0 PII on anonymous tracking (test); QR → counter opens the same INV (e2e); Lighthouse mobile ≥ 90.
+- **Depends On:** TASK-499
+- **Accepted Invariants:** Turnstile on public quotes; 48 h drafts; `/lacak` initials + city until the phone gate;
+  footer `Didukung jaringan resmi GeraiExpress` with NULL legal fields hidden.
+- **Visual Contract:** visual 03 (mobile-first, 3 tabs); `design-taste` narrow + wide review.
+- **Done when:** 0 PII on anonymous tracking; QR → counter opens the same INV; Lighthouse mobile ≥ 90 (performance,
+  SEO, accessibility) recorded; `/lacak` added to the isolation suite.
 
 ### TASK-502: Brand site and POS sandbox
 - **Requirement:** DEC-202, visual 03 §2
@@ -450,73 +571,88 @@ scaffold changed the layout (record the change in the task, not silently).
 - **Allowed Paths:** `apps/worker/src/brand/**`, matching tests
 - **Depends On:** TASK-501
 - **Accepted Invariants:** no session cookies on the apex; legal footer from `platform_legal_profile`.
-- **Visual Contract:** brand site per visual 03 §2; `design-taste` narrow + wide review. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** narrow and wide renders reviewed; SEO checks pass.
+- **Visual Contract:** visual 03 §2; narrow + wide review.
+- **Done when:** Lighthouse SEO ≥ 95 and valid `sitemap.xml`/`robots.txt`; legal footer renders NULL vs filled cases.
 
-### TASK-503: OpenAPI 3.1 `/api/v1` with scoped API keys
+### TASK-503: OpenAPI `/api/v1` and API keys
 - **Requirement:** PR-21, DEC-214, spec 08 §1–3
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `openapi-spec`, `application-security`
-- **Allowed Paths:** `apps/worker/src/api-v1/**`, `apps/web-app/src/routes/pengaturan/api-mcp/**`, matching tests
+- **Allowed Paths:** `apps/worker/src/api-v1/**`, `apps/web-app/src/routes/pengaturan/api-mcp/**`,
+  `packages/db/migrations/control/503-*`, matching tests
 - **Depends On:** TASK-304, TASK-308
-- **Accepted Invariants:** spec generated from Zod (single source); Bearer only; payment mutations not exposed.
-- **Visual Contract:** `/pengaturan/api-mcp` keys table, `Buat Kunci` dialog shown once, revoke confirm. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** generated `openapi.json` validates; scope-denial tests per endpoint.
+- **Accepted Invariants:** spec from Zod; Bearer only; payment mutations not exposed.
+- **Visual Contract:** keys table, `Buat Kunci` shown once, revoke confirm.
+- **Done when:** generated `openapi.json` validates; scope-denial tests; API keys added to the isolation suite.
 
-### TASK-504: MCP servers (authenticated and public)
+### TASK-504: MCP servers
 - **Requirement:** PR-21, DEC-214, spec 08 §4–5
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `application-security`
 - **Allowed Paths:** `apps/worker/src/mcp/**`, matching tests
 - **Depends On:** TASK-503
-- **Accepted Invariants:** tool hints as specified; prompt-injection defenses; daily cap on issuing tools.
-- **Done when:** MCP inspector run lists tools; scope and cap tests.
+- **Accepted Invariants:** tool hints; prompt-injection defenses; daily cap on issuing tools.
+- **Done when:** MCP inspector lists tools; scope and cap tests.
 
-### TASK-505: Custom-domain flow on staging
+### TASK-505: Custom domains (staging)
 - **Requirement:** DEC-228, spec 11 §5–8
 - **Risk Level:** R4
 - **Job:** implementation
 - **Capability:** `cloudflare-for-saas`
-- **Allowed Paths:** `apps/worker/src/hostnames/**`, `apps/web-app/src/routes/pengaturan/mini-site/**`, matching tests
-- **Depends On:** TASK-109, TASK-501
-- **Accepted Invariants:** create before CNAME; HMAC probe before activation; 7-day reaper; `cname`/`fallback`/`probe` reserved.
-- **Visual Contract:** `Pengaturan › Mini-Site › Domain Sendiri`: DNS record to copy, status steps, `Periksa Lagi`, remedies per spec 11 §5. Comfort size contract; gates 0 fail at 390/1366.
-- **Done when:** lifecycle tests with a mocked Cloudflare API; one real test domain onboarded on the team's staging
-  zone (owner approval); independent R4 review.
+- **Allowed Paths:** `apps/worker/src/hostnames/**`, `apps/worker/src/cron/hostnames/**`,
+  `apps/web-app/src/routes/pengaturan/mini-site/**`, matching tests
+- **Depends On:** TASK-111, TASK-501
+- **Accepted Invariants:** create before CNAME; HMAC probe; status poll every 10 min; daily quota check (alert at
+  80 %); issuance through a Queue (15/min); 7-day reaper; reserved labels.
+- **Visual Contract:** `Domain Sendiri` page with DNS record, steps, `Periksa Lagi`, remedies.
+- **Done when:** fake-clock tests for poll, reaper and quota alert; mocked Cloudflare API lifecycle; one real test
+  domain on the team's staging zone (owner approval); R4 review.
 
-### M6 — Production readiness and pilot (every step needs owner approval)
+### TASK-599: M5 close
+- **Requirement:** ROADMAP M5 exit gate
+- **Risk Level:** R4
+- **Job:** release
+- **Capability:** `testing-engineering`
+- **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**`
+- **Depends On:** TASK-501..505
+- **Accepted Invariants:** full isolation matrix (spec 11 §8) now covers every surface.
+- **Done when:** integrated run PASS; 0 `*.map`; full isolation suite PASS.
+
+### M6 — Production readiness and pilot (owner approves every production action)
 
 ### TASK-601: Partner relay in production
 - **Requirement:** DEC-219, spec 10 §5–6
 - **Risk Level:** R4
 - **Job:** release
 - **Capability:** `vps-deploy`, `vultr`
-- **Allowed Paths:** `infra/partner-relay/**`, `BUILD-LOG.md`, `STATUS.md`
-- **Depends On:** TASK-202
-- **Accepted Invariants:** only the 4 Partner routes; one HMAC secret (+ previous during rotation); no secrets in Coolify variables.
-- **Done when:** every spec 10 §6 check recorded with evidence; Mengantar allowlist confirmed.
+- **Allowed Paths:** `infra/partner-relay/**` (deploy files), `BUILD-LOG.md`, `STATUS.md`
+- **Depends On:** TASK-599
+- **Accepted Invariants:** 4 Partner routes only; secrets not in Coolify variables.
+- **Done when:** every spec 10 §6 check recorded; Mengantar allowlist confirmed.
 
-### TASK-602: Cloudflare for SaaS zone and production hosts
-- **Requirement:** DEC-228, spec 11 §2
+### TASK-602: Production zones, SaaS setup, monitoring
+- **Requirement:** DEC-228, spec 11 §2, `OBSERVABILITY.md`
 - **Risk Level:** R4
 - **Job:** release
-- **Capability:** `cloudflare-for-saas`, `wrangler`
-- **Allowed Paths:** `wrangler.jsonc`, `OBSERVABILITY.md`, `BUILD-LOG.md`
-- **Depends On:** TASK-505
-- **Accepted Invariants:** zone-scoped API token only; Worker route `*/*` + explicit `cname.gerai.cc/*`; staging route `*-stg.gerai.cc/*`.
-- **Done when:** zone steps 1–6 recorded; all `OBSERVABILITY.md` probes green.
+- **Capability:** `cloudflare-for-saas`, `wrangler`, `observability-engineering`
+- **Allowed Paths:** `wrangler.jsonc` (production), `OBSERVABILITY.md`, `BUILD-LOG.md`
+- **Depends On:** TASK-599
+- **Accepted Invariants:** zone-scoped token; routes `*/*` + `cname.gerai.cc/*`; staging `*-stg.gerai.cc/*`.
+- **Done when:** zone steps 1–6 recorded; all probes green in production; each alert of `OBSERVABILITY.md` fired once
+  by a synthetic breach and received by the owner.
 
 ### TASK-603: Backups and restore drill
 - **Requirement:** ADR-0006 §7
 - **Risk Level:** R3
 - **Job:** release
 - **Capability:** `durable-objects`, `wrangler`
-- **Allowed Paths:** `scripts/backup/**`, `BUILD-LOG.md`
+- **Allowed Paths:** `apps/worker/src/cron/backup/**`, `scripts/backup/**`, `BUILD-LOG.md`
 - **Depends On:** TASK-602
-- **Accepted Invariants:** backups never leave the owner's accounts; restore is tested before it is trusted.
-- **Done when:** D1 Time Travel bookmark and per-object R2 export restored into a scratch environment; RPO/RTO recorded.
+- **Accepted Invariants:** daily per-object export to R2; D1 Time Travel; restore tested before trusted.
+- **Done when:** fake-clock test of the daily export; restore of D1 + two objects into a scratch environment; RPO/RTO
+  recorded.
 
 ### TASK-604: Live courier pilot and open registration
 - **Requirement:** ROADMAP M6
@@ -524,10 +660,10 @@ scaffold changed the layout (record the change in the task, not silently).
 - **Job:** release
 - **Capability:** `mengantar-api`
 - **Allowed Paths:** `RELEASE.md`, `BUILD-LOG.md`, `STATUS.md`
-- **Depends On:** TASK-601, TASK-602, TASK-603, TASK-110
-- **Accepted Invariants:** every production action approved by the owner at the time; rollback ready (`RELEASE.md`).
-- **Done when:** one real parcel per active courier scanned at a hub (incl. masked labels); invoice/balance sync matches
-  on live orders; `production-gate` PASS; owner approval to open registration.
+- **Depends On:** TASK-199, TASK-299, TASK-399, TASK-499, TASK-599, TASK-601, TASK-602, TASK-603, TASK-112
+- **Accepted Invariants:** owner approval per production action; rollback ready.
+- **Done when:** one real parcel per active courier hub-scanned (incl. masked labels); live invoice/balance match;
+  `production-gate` PASS; owner opens registration.
 
 ### Post-launch (P1/P2)
 
@@ -540,11 +676,11 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 
 | Milestone | Tasks | PRD requirements | Decisions / ADRs |
 |---|---|---|---|
-| **M1** | TASK-101..110 | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0004, 0006 |
-| **M2** | TASK-201..206 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 219 (client side), 226; ADR-0003 |
-| **M3** | TASK-301..310 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (forms), 220, 221, 222, 223, 224, 225, 229; ADR-0005 |
-| **M4** | TASK-401..405 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
-| **M5** | TASK-501..505 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
+| **M1** | TASK-101..112, close 199 | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0006 |
+| **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226; ADR-0003, 0004 (§5 rotation) |
+| **M3** | TASK-301..310, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229; ADR-0004 (dispatch), 0005 |
+| **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
+| **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
 | **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production); ADR-0006 §7 |
 | **Post-launch** | TASK-701..703 | PR-22 (P1), PR-23 (P2), PR-24 (P2) | — |
 

@@ -377,8 +377,12 @@ sequenceDiagram
         V->>V: reconciliation_needed (read back, never replay)
     end
     V-->>W: result
-    W-->>POS: label PDF + receipt
-    POS->>K: Cetak 10×15 Paket + Bukti
+    alt AWB issued
+        W-->>POS: label PDF + receipt
+        POS->>K: Cetak 10×15 Paket + Bukti
+    else unpaid hold or reconciliation
+        W-->>POS: Menunggu Saldo / Sedang dicek (no label)
+    end
 ```
 
 ## 7. Webhook ingest and apply
@@ -423,7 +427,7 @@ sequenceDiagram
     V->>V: upsert mirror (book 2) idempotently
     V->>V: match by cnote_no · ORDER_ID · batch
     V->>V: set provider_reconciled_cost_idr / reconciled COD credit
-    V->>V: Laba Kas eligible when counter paid + reconciled
+    V->>V: Laba Kas eligible when counter paid or not_required, and provider side reconciled
     V->>V: flag Selisih Sync / quote_drift
 ```
 

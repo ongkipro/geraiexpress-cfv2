@@ -28,8 +28,10 @@ and model routing live in the device's local profile, never here. It does not re
 | 10. Merge | Fast-forward to `main` only from a green head; remove the worktree | — |
 
 Risk classes (`Risk Level` in each task): **R0** docs/design · **R1** UI-only or local tooling · **R2** new behavior
-without money/auth/tenant impact · **R3** money, provider dispatch, auth, tenant isolation, migrations · **R4**
-security boundary (host routing, cookies, key rotation, webhook verification). R3/R4 always get an independent review.
+without money/auth/tenant impact · **R3** money math, auth flows inside one host, tenant data, migrations · **R4**
+boundaries where a defect leaks or moves money/data across a trust line: host routing, cookies/sessions, key rotation,
+webhook verification, provider dispatch and `pay-unpaid`, storage foundation. A milestone's risk is its highest task.
+R3/R4 always get an independent review.
 
 ## 3. Change discipline
 
