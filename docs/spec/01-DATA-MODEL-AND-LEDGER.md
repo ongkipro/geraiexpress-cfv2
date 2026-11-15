@@ -70,7 +70,7 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
   `id`, `tenant_id`, `shipment_slug`, `outlet_id`, `destination_area_id`, `cod_mode` (`non_cod | cod_goods | cod_shipping`), `cod_fee_mode` (`none | buyer_bears_fee | sender_bears_fee | cod_all_in | dfod`, spec 02 §3.2), `actual_weight_gram` (*default `1000`*), `length_cm`, `width_cm`, `height_cm`, `volumetric_divisor` (`6000 | 4000`), `volumetric_weight_gram`, `billable_weight_gram`, `declared_item_value_idr`, `cod_goods_amount_idr`, `courier_code`, `service_code`, `service_class` (`regular | cargo`), `route_min_weight_gram`, `publish_shipping_idr`, `provider_special_shipping_idr`, `provider_net_shipping_idr` (*exact integer `estimatedSpecialPrice - codFee`*), `raw_discount_percent`, `provider_observed_discount_bps`, `assigned_gerai_discount_bps`, `effective_gerai_cost_idr`, `insurance_fee_idr` (*`NULL` when provider exposes no insurance fee*), `cod_fee_idr` (*integer `codFee` from seller estimate*), `cod_collection_total_idr`, `counter_due_idr`, `quoted_at`, `expires_at`.
 - **`shipments`:**
   - **Per-Tenant Identity:** **`PRIMARY KEY (tenant_id, slug)`** where `slug` is a **7-char lowercase CSPRNG Crockford Base32 string** (`crypto.getRandomValues`, no `0/O/1/I/L/U`, e.g., `8k4m2p7` — rendered as **`INV 8K4M2P7`** and sent to Mengantar as `destinationMark: "8K4M2P7"`, matched case-insensitively). Super Admin cross-tenant lookups return `(tenant.slug, shipment.slug)`. Includes `outlet_id`, `entry_channel` (`counter_pos | counter_multi | minisite_qr | api_mcp`), `draft_expires_at` (*`+48h` TTL for `minisite_qr` drafts, purged daily by Cron*), `quote_snapshot_id`, `sender_contact_id`, `recipient_contact_id`, `pickup_batch_id`, `cashier_shift_id`, `created_by_user_id`.
-  - **Provider & Sync Identifiers:** `status` (see §3), `payment_sync_state` (`unissued | provider_unpaid | provider_paid_estimated | provider_invoice_reconciled`), `mengantar_order_item_id` (`_id`), `mengantar_order_code` (`ORDER_ID`), `mengantar_batch_code` (`batch` human code), `mengantar_batch_object_id` (`batch_id` 24-hex for `pay-unpaid`), `awb_number` (`cnote_no`), `cod_fee_mode` (*copied from the quote*), `last_provider_event_at` (*UTC epoch ms of the latest provider event applied to `status`, from webhook or polling — §3 ordering rule*), `sorting_code` (*populated from `GET /order?order_id=` `DESTINATION_CODE` post-issue; `NULL` falls back to destination subdistrict/postcode on labels*), `provider_echoed_weight_kg_text`, `provider_cod_fee_raw_text` (*verbatim order `COD_FEE` string for audit*), `courier_code`, `service_code`, `is_cargo` (`1/0`), `cod_mode`.
+  - **Provider & Sync Identifiers:** `status` (see §3), `payment_sync_state` (`unissued | provider_unpaid | provider_paid_estimated | provider_invoice_reconciled`), `mengantar_order_item_id` (`_id`), `mengantar_order_code` (`ORDER_ID`), `mengantar_batch_code` (`batch` human code), `mengantar_batch_object_id` (`batch_id` 24-hex for `pay-unpaid`), `awb_number` (`cnote_no`), `cod_fee_mode` (*copied from the quote*), `last_provider_event_at` (*UTC epoch ms, start of the minute bucket of the observation that set `status`*), `last_provider_rank`, `stuck_attention_at` (*derived alert flag, §3 rule 7*), `sorting_code` (*populated from `GET /order?order_id=` `DESTINATION_CODE` post-issue; `NULL` falls back to destination subdistrict/postcode on labels*), `provider_echoed_weight_kg_text`, `provider_cod_fee_raw_text` (*verbatim order `COD_FEE` string for audit*), `courier_code`, `service_code`, `is_cargo` (`1/0`), `cod_mode`.
   - **Counter Payment Record (DEC-220, state machine in spec 03 §1.1):** `counter_payment_status` (`not_required | unpaid | paid | voided`, default `unpaid`; `not_required` when `counter_due_idr = 0`), `counter_payment_method` (`qris | tunai | transfer | deposit`, `NULL` while unpaid), `counter_paid_at`, `counter_paid_by` (user id), `counter_paid_shift_id` (*shift in which the money was received; may differ from `cashier_shift_id`, the shift that created the INV*), `counter_payment_note` (optional, e.g. transfer sender name). Every **monetary** mutation (`mark_paid`, `void_payment`, `sender_cod_payout`, `void_sender_payout`) appends a `counter_receipts` row in the same Durable Object transaction (`transactionSync`) as the projection update; creation and cancellation without money movement go to `shipment_events`/`audit_logs` only. The shipment columns are the current projection. No gateway reference: the money never passes through GeraiExpress.
   - **Immutable Three-Way Identity Snapshots:** `pickup_snapshot_json`, `true_sender_json`, `true_recipient_json`, `mask_snapshot_json`.
   - **Integer Money Columns (`_idr`, spec 02 §3):**
@@ -117,7 +117,7 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
                                               [handed_to_courier]
                                                        │
                                                        ▼
-                                                 [in_transit] ──(>48h no scan / exception)──► [stuck_attention]
+                                                 [in_transit] ··(>48h no scan: alert flag)··► (stuck_attention)
                                                        │                                             │
                                 ┌──────────────────────┼───────────────────────┐◄────────────────────┘
                                 ▼                      ▼                       ▼
@@ -130,15 +130,45 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
                                                                    [rts_returned_to_sender]
 ```
 
-- **Shared ordering rule (webhook and polling use the same function):** every provider status observation is
-  normalised to `event_at` in UTC epoch milliseconds before comparison or storage — webhook: `provider_event_at`
-  (§2.7); polling (`GET /order` `history[]`, `date` = `DD-MM-YYYY HH:mm` Asia/Jakarta, minute precision): parse as
-  Asia/Jakarta, convert to UTC ms. Then:
-  1. terminal states (`delivered`, `rts_returned_to_sender`, `lost`, `cancelled`) **never regress**, whatever the time;
-  2. if `event_at < last_provider_event_at` the observation is appended to history only;
-  3. if `event_at = last_provider_event_at` (common with minute-precision polling) the status changes only when the new
-     status is further along the state machine above; otherwise history only;
-  4. otherwise the status transitions and `last_provider_event_at = event_at`.
-  Tests: poll→webhook and webhook→poll in both orders, equal-minute ties, reverse order after restart, terminal
-  non-regression.
+- **Shared ordering rule (webhook and polling use the same function, spec 07 layer 2):**
+  1. Normalise every provider status observation to `event_at` (UTC epoch ms): webhook `provider_event_at` (§2.7);
+     polling `GET /order` `history[]` `date` (`DD-MM-YYYY HH:mm`, Asia/Jakarta) parsed as Asia/Jakarta → UTC ms. The
+     exact value is kept in history for audit.
+  2. Because polling has minute precision, ordering uses the **minute bucket** `bucket = floor(event_at / 60000)`.
+  3. Each observation gets the key `(is_terminal, bucket, rank)` with this explicit rank (a total order chosen on
+     purpose; the lifecycle itself is not a line):
+
+     | Rank | Provider status |
+     |---:|---|
+     | 10 | `ready_for_pickup` |
+     | 20 | `handed_to_courier` |
+     | 30 | `in_transit` |
+     | 40 | `undelivery_hold` |
+     | 50 | `rts_in_transit` (a return follows a failed delivery) |
+     | 60 | `rts_at_gerai` |
+     | 90 | `cancelled` (terminal) |
+     | 91 | `lost` (terminal) |
+     | 92 | `delivered` (terminal) |
+     | 93 | `rts_returned_to_sender` (terminal) |
+
+  4. Local actions also produce observations with `event_at` = the action time: manifest scan → `handed_to_courier`,
+     `Meja Retur` scan → `rts_at_gerai`, verified handback → `rts_returned_to_sender`, cancel before pickup →
+     `cancelled`. Provider and local observations go through the same key, so a late provider `in_transit` never
+     undoes a later local scan in a later minute, and a terminal local action is never undone.
+  5. The shipment's status is the observation with the **largest key** (lexicographic). The current key is
+     stored (`last_provider_event_at` = bucket start, plus `last_provider_rank`); a new observation changes the status
+     only when its key is larger, otherwise it goes to history only. This is a maximum over a total order, so the
+     result is the same in every arrival order (property test with all permutations).
+  6. Consequences: a terminal status is never replaced by a non-terminal one (`is_terminal` is the first key
+     element). Two **different** terminal statuses (provider anomaly, e.g. `delivered` and `rts_returned_to_sender`)
+     resolve deterministically to the larger key and raise a `provider_status_conflict` item in `Kendala & Klaim` for
+     the owner; nothing is hidden. Within one minute, a later event with a lower rank (e.g. a re-delivery attempt
+     after `undelivery_hold`) does not move the status back; the next minute's event corrects it — accepted trade-off.
+  7. `stuck_attention` is **not** a status: it is a derived alert flag set by the sweep (>48 h without an
+     observation; stored as `stuck_attention_at`) and cleared by any newer observation; it never takes part in
+     ordering. Pre-issue states (`draft`, `issuing_in_flight`, `reconciliation_needed`, `provider_unpaid_hold`) are
+     governed by ADR-0004 dispatch, not by this rule.
+  8. Required tests: webhook `in_transit` 10:15:40 vs poll `rts_in_transit` 10:15 → `rts_in_transit` in both orders;
+     terminal vs non-terminal in both orders; two conflicting terminals → same result in both orders + conflict item;
+     reverse order after restart; random permutation property test.
 - `provider_unpaid_hold` models Mengantar's verified behavior where `POST /order` succeeds with `isPaid: false, cnote_no: null` when seller balance is low, awaiting top-up + `POST /order/pay-unpaid` using the 24-hex `mengantar_batch_object_id`.
