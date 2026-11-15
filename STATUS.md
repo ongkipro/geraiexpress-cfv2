@@ -1,7 +1,7 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-16
-Status: M1 CLOSED 2026-11-16; M2 in progress — TASK-201 done; next TASK-202. Live owner steps pending, listed below → TASK-111/109/112 → TASK-199
+Status: M1 CLOSED 2026-11-16; M2 in progress — TASK-201, 202 done; next TASK-203. Live owner steps pending, listed below → TASK-111/109/112 → TASK-199
 State: IN_PROGRESS
 Review-Risk: R4
 Independent-Review: owner directive 2026-11-16 — per-task reviews deferred to one final reviewer-carbon pass after M1–M6 code; TASK-110 round 1 REQUEST_CHANGES (2 P1, 3 P2, 1 P3) fixed, pending final pass; TASK-107/108 PASS — reviewer-carbon round 1 REQUEST_CHANGES (1 P1, 5 P2, 1 P3, fixed), round 2 APPROVE (`docs/review/TASK-107-108/`); TASK-102/103 PASS — reviewer-carbon round 1 REQUEST_CHANGES (2 P1, 4 P2, 1 P3, all fixed), round 2 APPROVE (`docs/review/TASK-102-103/`); TASK-101 PASS (round 2 APPROVE, `docs/review/TASK-101/`)
@@ -15,6 +15,7 @@ M1 build on branch `dev` (worktree `~/Projects/.worktrees/geraiexpress-cfv2/dev`
 
 | Task | State | Evidence |
 |---|---|---|
+| TASK-202 Partner transport + quota + relay | DONE 2026-11-16 (production relay: TASK-601) | `packages/mengantar-sdk/src/partner`: exact-byte Partner signature (parity with the documented openssl form), `direct`/`relay` transports, relay HMAC envelope + `X-Relay-Id`, outcomes `ok`/`error`/`maybe_sent`/`relay_refused`, `regenerate` never retried; `PartnerQuotaDO` 60/min fixed window + 1,000 registrations per WIB day, reserve-before-call; `infra/partner-relay` (66-line core, closed 4-path allowlist, ±60 s, 120 s duplicate guard, `relay_*` codes, no body logging, Dockerfile + compose); tests 9 SDK + 7 relay + 3 quota; local stub run of the real server process; mutation (allowlist) red |
 | TASK-201 Mengantar Public API SDK | DONE 2026-11-16 | `packages/mengantar-sdk/src/public`: redacting transport (`{API_KEY}` templated path; key scrubbed from messages, bodies, paths; `AbortSignal.timeout` 15 s; `ambiguous` = timeout/network/5xx), Zod `.passthrough()` schemas; estimate (map/single), area search, create order with idempotencyKey (+ replay flag), `GET /order` read-back/list, `/invoices`, `pay-unpaid` (24-hex guard), `DELETE /order`; 5 fixture tests incl. key echoed by Mengantar never surfacing; mutation (unscrubbed message) red |
 | TASK-199 M1 close | DONE 2026-11-16 | `pnpm gate TASK-199`: typecheck, lint, unit, build, worker, migrations, isolation, security (bundle audit + red fixtures + security-check), e2e — all RECORDED PASS in `delivery-ledger`; hosted CI green https://github.com/ongkipro/geraiexpress-cfv2/actions/runs/43763855473; `docs/SYSTEM-MAP.md` refreshed |
 | TASK-112 Email deliverability | TOOLING DONE 2026-11-16; DNS onboarding + 12 inbox sends + mail-tester: AWAITING_OWNER_ACTION | `pnpm email:deliverability` (read-only DoH SPF/DKIM/DMARC check, header evaluator incl. delivery < 60 s, 12-send matrix); runbook `docs/runbooks/email-deliverability.md`. Current read: SPF FAIL, DKIM FAIL (not onboarded), DMARC `p=reject` present. Production sign-up stays closed until PASS |
@@ -34,7 +35,7 @@ Live owner actions so far: none required by TASK-101.
 
 ## Next
 
-1. M2: TASK-202 → 203 → 204 → 205 → 206 → 207 → 208 → TASK-299.
+1. M2: TASK-203 → 203 → 204 → 205 → 206 → 207 → 208 → TASK-299.
 3. Live steps awaiting the owner: staging alert webhook URL (TASK-110); first Super Admin bootstrap per deployed environment (`POST /internal/ops/bootstrap-admin` with the ops token, TASK-106); Cloudflare staging resources, secrets and protected environments + first staging deploy (TASK-109); Email Sending onboarding of `mail.geraiexpress.com`, DMARC decision and inbox tests (TASK-112, runbook).
 2. Every R3/R4 task: reviewer-carbon until APPROVE, archive under `docs/review/TASK-<id>/`.
 

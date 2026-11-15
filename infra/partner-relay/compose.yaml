@@ -1,0 +1,17 @@
+# Coolify / Docker Compose definition for the relay (spec 10 §5). Secrets come from the platform's env store
+# (RELAY_SECRET, RELAY_SECRET_PREVIOUS during rotation only); never committed. Behind Cloudflare (Full strict).
+services:
+  partner-relay:
+    build: .
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    environment:
+      PORT: "8080"
+      MENGANTAR_PARTNER_ORIGIN: ${MENGANTAR_PARTNER_ORIGIN:?set the Mengantar Partner origin}
+      RELAY_SECRET: ${RELAY_SECRET:?set RELAY_SECRET}
+      RELAY_SECRET_PREVIOUS: ${RELAY_SECRET_PREVIOUS:-}
+    ports:
+      - "127.0.0.1:8080:8080"

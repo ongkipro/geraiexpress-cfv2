@@ -196,3 +196,12 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   from the Mengantar docs (synthetic values). Evidence: 5 tests (paths, idempotency header, replay flag, unpaid shape,
   unknown invoice types, history read-back, 6 failure kinds never leaking the key even when Mengantar echoes it);
   mutation red. Review deferred to the final Carbon pass.
+
+## 2026-11-16 — TASK-202 Partner transport, PartnerQuotaDO, relay program (M2, R4)
+
+- Shipped: Partner client (signature over exact body bytes; direct/relay; `maybe_sent` on timeout, 5xx, relay
+  duplicate/timeout); `PartnerQuotaDO` (fixed-minute 60, 1,000/day by WIB date, reservation before the call, release on
+  refusal); `infra/partner-relay/{relay,server}.mjs` + Dockerfile + compose (read-only, cap-drop, 128 MB).
+- Evidence: signature parity with the documented `openssl dgst` form; relay HMAC/allowlist/window/duplicate/size
+  tests; quota limits incl. midnight-WIB reset; local run of `server.mjs` against a stub upstream (forward, header
+  allowlist, 409 duplicate); mutation (allowlist) red. The Partner contract stays device-local (never committed).
