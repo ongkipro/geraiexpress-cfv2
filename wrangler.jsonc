@@ -77,7 +77,7 @@
   },
   "secrets": {
     // spec 07 §3.2. Values live in .dev.vars locally and in `wrangler secret` remotely, never in this file.
-    "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN"]
+    "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
   },
   "env": {
     // Staging: separate Worker, D1, DO namespace and buckets (spec 07 §7). Values are filled by TASK-109 after the owner
@@ -98,7 +98,7 @@
         "MAIL_FROM": "noreply@mail.geraiexpress.com"
       },
       "secrets": {
-        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN"]
+        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
       },
       "d1_databases": [
         {

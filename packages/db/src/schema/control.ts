@@ -96,3 +96,9 @@ export const shipmentIndex = sqliteTable(
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipment_index_awb").on(t.awbNumber), index("shipment_index_slug").on(t.slug)],
 )
 
+
+export const alertState = sqliteTable("alert_state", {
+  alertKey: text("alert_key").primaryKey(),
+  lastSentAt: integer("last_sent_at").notNull(),
+  count: integer("count").notNull().default(1),
+})

@@ -8,3 +8,5 @@ PARTNER_RELAY_SECRET="local-dev-relay-secret"
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
 CF_SAAS_API_TOKEN="local-dev-cf-token"
 OPS_TOKEN="local-dev-ops-token"
+# Owner alert channel (incoming webhook URL of the owner chat). Empty locally = alerts are logged only.
+ALERT_WEBHOOK_URL=""

@@ -321,6 +321,9 @@ importers:
       '@gx/mengantar-sdk':
         specifier: workspace:*
         version: link:../../packages/mengantar-sdk
+      '@gx/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       '@gx/thermal-print':
         specifier: workspace:*
         version: link:../../packages/thermal-print
@@ -364,6 +367,12 @@ importers:
         version: 6.0.3
 
   packages/mengantar-sdk:
+    devDependencies:
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  packages/telemetry:
     devDependencies:
       typescript:
         specifier: ~6.0.3

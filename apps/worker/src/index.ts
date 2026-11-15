@@ -3,6 +3,7 @@ import { classify, hostShape, normalizeHost, probeSignature } from "./host/class
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
 import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDoMigrate } from "./ops/do-migrate"
+import { runChecks } from "./telemetry/checks"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
@@ -69,5 +70,8 @@ export default {
     // No consumer is wired yet: acknowledge so nothing is redelivered into a missing handler.
     batch.ackAll()
   },
-  async scheduled(): Promise<void> {},
+  async scheduled(controller, env, ctx): Promise<void> {
+    // Every 5 min: operator checks with owner alerts (TASK-110). Feature crons are added by their tasks.
+    if (controller.cron === "*/5 * * * *") ctx.waitUntil(runChecks(env).then(() => undefined))
+  },
 } satisfies ExportedHandler<Env>

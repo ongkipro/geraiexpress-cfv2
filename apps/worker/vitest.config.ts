@@ -20,6 +20,7 @@ export default defineConfig({
           PARTNER_RELAY_SECRET: "test-relay-secret",
           CF_SAAS_API_TOKEN: "test-cf-token",
           OPS_TOKEN: "test-ops-token",
+          ALERT_WEBHOOK_URL: "",
         },
       },
     })),

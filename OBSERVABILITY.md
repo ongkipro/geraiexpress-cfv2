@@ -20,6 +20,17 @@ Probe: minisite-probe|https://probe.gerai.cc/healthz|200|"ok":true|1000
 Probe: relay-health|https://relay.geraiexpress.com/healthz|200|"ok":true|1500
 ```
 
+Run: `pnpm probes --env <local|staging|production> [--port 8787]` (exit 1 on any failure). A failure posts one alert
+to `ALERT_WEBHOOK_URL` (the owner's chat incoming webhook) or prints it with `--alert-dry-run`; `--force-fail <name>`
+is the synthetic-breach drill.
+
+**Alert channel (TASK-110):** the Worker's `*/5` cron runs the operator checks in `apps/worker/src/telemetry/checks.ts`
+and sends each alert once per 30 min per key (`alert_state` in D1) to the `ALERT_WEBHOOK_URL` secret; without it the
+alert is only an `alert.fired` event in Workers Logs. Telemetry events are structured JSON with bounded labels and
+pass `@gx/telemetry` redaction (keys in URL paths, bearer/`gx_live_` keys, phones, emails, OTPs, cookie/token/body
+fields). Staging/production channel: owner provides the webhook URL and sets it with `wrangler secret put
+ALERT_WEBHOOK_URL --env <env>` (owner-approved action).
+
 `probe` is a platform-owned synthetic tenant (reserved slug, no real data) that exists only to prove tenant routing. Staging uses the same probes on the staging
 hosts of spec 07 §7.
 

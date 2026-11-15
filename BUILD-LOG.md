@@ -96,3 +96,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Gotchas: `sender_bears_fee` can go negative when `G < F` on long-haul routes — rejected (`COD_FEE_EXCEEDS_GOODS`);
   `Number("")` is `0`, so a blank `COD_FEE` must be parsed strictly or it silently matches `F = 0`; BigInt division
   truncates toward zero, so `mulDivFloor` only accepts non-negative operands.
+
+## 2026-11-16 — TASK-110 observability base (M1)
+
+- Shipped: `packages/telemetry` (bounded-label events, redaction of URL-path keys, reset/invite/webhook tokens,
+  sensitive query params, session cookies, Bearer/Basic/JWT/`gx_` keys, formatted Indonesian phones, OTPs incl.
+  TOTP and 4-digit codes; Public API anomaly evaluators for `IP_NOT_ALLOWED`, 401/403 spikes, 3× volume);
+  `apps/worker/src/telemetry` (`*/5` operator checks, owner alerts via `ALERT_WEBHOOK_URL`, D1 `alert_state` de-dup
+  with claim release on failed delivery); `scripts/probes` (`pnpm probes --env`, staging host mapping, relay only in
+  production, `--force-fail` drill, `--alert-dry-run`); `docs/SYSTEM-MAP.md` v1.
+- Evidence: `pnpm check` green; `pnpm probes --env local` 5/5 PASS against `wrangler dev`; forced-failure drill
+  printed the Indonesian alert and exited 1; mutation (URL-key rule removed) → 3 tests red. Carbon round 1 findings
+  fixed; re-review in the final pass (owner directive).
+- Awaiting owner: staging `ALERT_WEBHOOK_URL` (chat incoming webhook) → `wrangler secret put --env staging`.
