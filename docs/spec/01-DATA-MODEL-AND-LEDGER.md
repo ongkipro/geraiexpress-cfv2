@@ -112,23 +112,29 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
 [reconciliation_needed]                                ▼                                         [provider_unpaid_hold]
        │                                      [ready_for_pickup] ◄──(Top-up synced + `pay-unpaid`)────────────┘
        └──────(Verified via GET /order)────────────────┤
-                                                       ├──(Cancelled pre-pickup)──► [cancelled]
-                                                       ▼ (Scanned into Courier Manifest)
+                                                       ├──(Cancelled pre-pickup, read back)──► [cancelled]
+                                                       ▼ (Scanned into Courier Manifest = custody)
                                               [handed_to_courier]
                                                        │
                                                        ▼
                                                  [in_transit] ··(>48h no scan: alert flag)··► (stuck_attention)
-                                                       │                                             │
-                                ┌──────────────────────┼───────────────────────┐◄────────────────────┘
-                                ▼                      ▼                       ▼
-                           [delivered]         [undelivery_hold]        [rts_in_transit]
+                                                       │
+                     ┌─────────────────┬───────────────┼───────────────────────┐
+                     ▼                 ▼               ▼                       ▼
+                  [lost]          [delivered]  [undelivery_hold]        [rts_in_transit]
                                                        │                       │
-                                                       └──(Failed delivery)───►▼ (Arrives at Outlet & scanned)
+                                                       └──(Failed delivery)───►▼
+                                                                     [provider_returned]   (provider says: back at
+                                                                               │            outlet — NOT custody proof)
+                                                                               ▼ (Meja Retur scan = custody)
                                                                         [rts_at_gerai]
-                                                                               │ (4-digit WA OTP verified)
+                                                                               │ (4-digit WA OTP verified = custody)
                                                                                ▼
                                                                    [rts_returned_to_sender]
 ```
+States are the effective `status` values; `(stuck_attention)` is a flag, not a state. `[rts_at_gerai]` can also be
+reached directly from `[rts_in_transit]` or `[undelivery_hold]` when the parcel is scanned at Meja Retur before the
+provider reports it (custody wins, combine table below).
 
 - **Status = two order-independent projections + one combine function (webhook, polling and local actions):**
   1. **Provider projection** (`provider_status`). Every provider observation is normalised to `event_at` (UTC epoch
@@ -157,7 +163,7 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
 
      | `custody_stage` | Effective status | `provider_status_conflict` raised when |
      |---|---|---|
-     | `rts_returned_to_sender` / `cancelled_local` | that custody stage | provider is `delivered` or `lost`; for `cancelled_local` also any provider rank ≥ 30 |
+     | `rts_returned_to_sender` / `cancelled_local` | `rts_returned_to_sender` / **`cancelled`** (the custody value `cancelled_local` is never shown as a status; every `cancelled` guard applies, e.g. the spec 04 manifest block) | provider is `delivered` or `lost`; for `cancelled_local` also any provider rank ≥ 30 |
      | `rts_at_gerai` | `rts_at_gerai` | provider is `delivered` or `lost` |
      | `handed_to_courier` | `provider_status` when its rank ≥ 30, else `handed_to_courier` | — |
      | `none` | `provider_status` | — |
@@ -175,5 +181,6 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
   6. Required tests (both arrival orders and after restart): webhook `in_transit` 10:15:40 vs poll `rts_in_transit`
      10:15 → `rts_in_transit`; local handover then later provider `ready_for_pickup` → `handed_to_courier`; local
      Meja Retur intake then later provider `in_transit` → `rts_at_gerai`; verified handback then later provider
-     `delivered` → `rts_returned_to_sender` + conflict; random permutation property test over mixed observations.
+     `delivered` → `rts_returned_to_sender` + conflict; read-back-confirmed local cancel → effective `cancelled`, still blocked
+     from manifest handover after restart; random permutation property test over mixed observations.
 - `provider_unpaid_hold` models Mengantar's verified behavior where `POST /order` succeeds with `isPaid: false, cnote_no: null` when seller balance is low, awaiting top-up + `POST /order/pay-unpaid` using the 24-hex `mengantar_batch_object_id`.

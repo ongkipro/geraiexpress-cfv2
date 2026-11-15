@@ -4,10 +4,10 @@ Updated: 2026-11-15
 Status: M0 signed off by owner 2026-11-14 (Direction A, DEC-226 accepted); M1 may start after an independent review APPROVE (TASK-006)
 State: PLANNED
 Review-Risk: R0
-Independent-Review: PENDING (TASK-006) — GPT-6.1 Sol rounds 1–4 = REQUEST_CHANGES (round 4: all 15 round-3 findings resolved; N1 webhook inbox and N2 idempotent risk upsert fixed 2026-11-15); rounds 5–8: N1–N6 resolved; N7 (local custody undone) fixed with provider + custody projections and a pure combine; round 9 reviews N7; earlier docs PASS (Fable 1–3, Carbon 1–3)
+Independent-Review: PENDING (TASK-006) — GPT-6.1 Sol rounds 1–4 = REQUEST_CHANGES (round 4: all 15 round-3 findings resolved; N1 webhook inbox and N2 idempotent risk upsert fixed 2026-11-15); rounds 5–9: N1–N7 resolved; N8 (cancelled_local → effective cancelled), N9, N10 fixed; round 10 reviews N8–N10; earlier docs PASS (Fable 1–3, Carbon 1–3)
 Primary-Worker: pi session (Claude), 2026-11-12/13
 Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high), reviewer (gpt-6.1-sol)
-Independent-Review-Head: 872698f (Sol round 8)
+Independent-Review-Head: 652476f (Sol round 9)
 
 ## Now
 
@@ -26,7 +26,7 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 4. 2026-11-15: owner accepted DEC-227 (Cloudflare Email Sending only), DEC-228 (D1 control plane + per-gerai SQLite
    Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 tasks TASK-108..110 added.
-5. Next: GPT-6.1 Sol round 9 (TASK-006); TASK-101 starts only after APPROVE.
+5. Next: GPT-6.1 Sol round 10 (TASK-006); TASK-101 starts only after APPROVE.
 
 ## Blockers
 

@@ -29,7 +29,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 
 ### Key Sub-Tabs Inside `Kiriman`:
 - **Tab `Pickup & Manifest`:** groups the 18 ready parcels by courier (`J&T: 11`, `SiCepat: 5`, `JNE: 2` + `🚐 Mobil` hint), opens barcode scan-into-sack mode (loud red alert on wrong courier), captures courier finger signature, or records `Diantar Mandiri ke Cabang`.
-- **Tab `Kendala & Klaim`:** filters `Tidak Bergerak (48 jam–4 hari | 5–14 hari | 15–30 hari | >30 hari)`, `Gagal Antar`, `Selisih Berat / Cordest` (side-by-side counter scale photo vs Mengantar `penyesuaian` invoice), and `Bisa Klaim` with live filing countdowns.
+- **Tab `Kendala & Klaim`:** filters `Tidak Bergerak (48 jam–4 hari | 5–14 hari | 15–30 hari | >30 hari)`, `Gagal Antar`, `Selisih Berat / Cordest` (side-by-side counter scale photo vs Mengantar `penyesuaian` invoice), `Bisa Klaim` with live filing countdowns, and `Status Bertentangan` (owner: Mengantar status contradicts verified outlet custody, spec 01 §3 / spec 04 §3).
 - **Tab `Meja Retur`:** scans arriving RTS AWBs, reveals `true_sender_json`, logs box condition + R2 photo, sends 1-click WhatsApp **4-digit `Kode Ambil`**, and verifies handover back to the true sender.
 
 ---

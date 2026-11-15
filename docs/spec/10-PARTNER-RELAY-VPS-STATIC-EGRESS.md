@@ -33,23 +33,23 @@ Cloudflare. A small VPS is the cheapest fixed egress identity we control.
           │
           ▼
  ┌───────────────────────────┐   HTTPS (Cloudflare-proxied)    ┌──────────────────────────────────┐
- │ Cloudflare Worker         │ ─────────────────────────────► │ relay.geraiexpress.com            │
- │ PARTNER_TRANSPORT=relay   │  + X-Relay-* HMAC headers       │ (Cloudflare proxy, WAF rate rule) │
+ │ Cloudflare Worker         │ ──────────────────────────────► │ relay.geraiexpress.com           │
+ │ PARTNER_TRANSPORT=relay   │  + X-Relay-* HMAC headers       │ (Cloudflare proxy, WAF rate rule)│
  │ signs Partner request     │                                 └───────────────┬──────────────────┘
  │ (Partner Secret stays     │                                                 │ origin TLS (Origin CA)
  │  in the Worker only)      │                                                 ▼
  └───────────────────────────┘                                 ┌──────────────────────────────────┐
-                                                               │ VPS (Vultr sgp) · Coolify/Traefik │
-                                                               │ container `partner-relay`         │
-                                                               │ verifies HMAC + path allowlist    │
-                                                               │ forwards exact bytes, no redirects│
+                                                               │ VPS (Vultr sgp) · Coolify/Traefik│
+                                                               │ container `partner-relay`        │
+                                                               │ verifies HMAC + path allowlist   │
+                                                               │ forwards exact bytes, no redirect│
                                                                └───────────────┬──────────────────┘
                                                                                │ egress from the VPS
                                                                                │ public IPv4 (IPv6 off)
                                                                                ▼
                                                                ┌──────────────────────────────────┐
-                                                               │ Mengantar Partner API (prod)      │
-                                                               │ allowlist = [our IPv4]            │
+                                                               │ Mengantar Partner API (prod)     │
+                                                               │ allowlist = [our IPv4]           │
                                                                └──────────────────────────────────┘
 ```
 
