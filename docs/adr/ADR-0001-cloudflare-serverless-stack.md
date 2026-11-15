@@ -1,6 +1,6 @@
 # ADR-0001: Lightweight Cloudflare Serverless Stack (Hono + Vite SPA + D1 + DO + R2)
 
-- **Status:** Accepted (2026-11-12)
+- **Status:** Accepted (2026-11-12); storage split amended by ADR-0006 (2026-11-15)
 - **Related:** DEC-201, DEC-214, DEC-217
 
 ## Context

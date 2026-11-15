@@ -18,7 +18,7 @@
     { "id": "gradient", "selector": "body *", "prop": "gradient", "forbid": true, "viewports": "all" },
     { "id": "icon-tile", "selector": "body *", "prop": "iconTile", "forbid": true, "viewports": "all" },
     { "id": "accent-surfaces", "selector": "body *", "prop": "accentSurface", "distinctMax": 5, "viewports": "desktop" },
-    { "id": "touch-target", "selector": "[data-slot=button], [data-slot=input], [data-slot=select-trigger], [role=checkbox]:not(label *), [role=switch]:not(label *)", "prop": "minSide", "min": 44, "viewports": "mobile" },
-    { "id": "touch-target-label", "selector": "label:has([role=switch]), label:has([role=checkbox])", "prop": "height", "min": 44, "viewports": "mobile" }
+    { "id": "touch-target", "selector": "[data-slot=button], [data-slot=input], [data-slot=select-trigger]", "prop": "minSide", "min": 44, "viewports": "mobile" },
+    { "id": "touch-target-toggle", "selector": "[role=checkbox], [role=switch], input[type=checkbox], input[type=radio]", "prop": "labelTarget", "min": 44, "viewports": "mobile" }
   ]
 }

@@ -26,12 +26,12 @@ This specification defines exact integer arithmetic for weights, customer tariff
 
 | Instrument | Owner | Beneficiary | Integer Formula |
 |---|---|---|---|
-| **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `effective_bps = allow_subsidy ? assigned_bps : min(assigned_bps, provider_observed_bps)`. `discount_idr = floor(publish_shipping_idr * effective_bps / 10000)`. `gerai_shipping_cost_idr = publish_shipping_idr - discount_idr`. |
+| **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `effective_bps = min(assigned_bps, provider_observed_bps)` (no subsidy at launch: a rate above what Mengantar gives would need a settlement ledger, which DEC-226 rejects for launch). `gerai_shipping_cost_idr` (the **commercial estimate** `M`) = `provider_net_shipping_idr` when `assigned_bps >= provider_observed_bps`, else `publish_shipping_idr - floor(publish_shipping_idr * assigned_bps / 10000)`. |
 | **2. Counter Packing Add-On (`packing_addon_idr`)** | **Gerai Admin** (shop cardboard/bubble catalog) | **Outlet 100%** (stays in shop cash drawer) | Added as an explicit receipt line item; never sent to Mengantar. |
-| **3. Counter Promo / Voucher (`promo_discount_idr`)** | **Gerai Admin** (outlet-funded) or **Super Admin** (capped campaign) | **Walk-in Sender / Reseller** | Subtracted on receipt; clamped so total due >= `0`. |
+| **3. Counter Promo / Voucher (`promo_discount_idr`)** | **Gerai Admin** (outlet-funded only at launch; platform-funded campaigns are deferred until a settlement ledger exists) | **Walk-in Sender / Reseller** | Subtracted from the counter part only; capped so `counter_due_idr >= 0` **before** it is stored (`V <= P + I0 + K + S` for `none`, `V <= K + S` otherwise). |
 | **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | Recorded `PENDING` at dispatch; transitions to `RELEASED` 24h after `delivered` if no dispute exists; `CLAWBACK` on `RTS` or `cancelled`. |
 
-> **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
+> **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. **All money flows and margins in §3 use the provider amount `N = provider_net_shipping_idr`**, because that is what Mengantar actually debits; `M` is shown only as the Super Admin's commercial reference and the gap `M - N` as `Selisih tarif` (§2.1). Once DEC-226's provider-enforced target is active, Mengantar bills the assigned rate, so `N = M` by construction. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
 
 ### 2.1 What the Super Admin assigned rate controls under Scheme 1 (DEC-226)
 
@@ -55,12 +55,13 @@ profit always uses `provider_reconciled_cost_idr`. Any gap (`assigned < observed
 | Symbol | Column | Meaning |
 |---|---|---|
 | `P` | `publish_shipping_idr` | Mengantar publish tariff charged to the customer for shipping |
-| `M` | `gerai_shipping_cost_idr` | Expected outlet cost (§2) |
+| `N` | `provider_net_shipping_idr` | Exact provider shipping charge for this seller (`estimatedSpecialPrice - codFee` of the **final** estimate, §3.3) — used in every flow and margin |
+| `M` | `gerai_shipping_cost_idr` | Super Admin commercial estimate (§2); display/guard only, never used in money flows |
 | `I` | `insurance_fee_idr` | `NULL` until a verified provider field exists; formulas use `I0 = I ?? 0` and receipts print `—` when `NULL` |
-| `F` | `cod_service_fee_idr` | Integer `codFee` from the seller estimate (pass 2) |
+| `F` | `cod_service_fee_idr` | Integer `codFee` from the **final** seller estimate whose `COD_AMOUNT` equals the create-order `COD` (§3.3 quote passes) |
 | `K` | `packing_addon_idr` | Outlet packing add-ons, paid at the counter, outlet-kept |
 | `S` | `counter_service_fee_idr` | Optional outlet service fee (`Biaya Layanan Loket`), a **separate disclosed line**, never added to `P` (DEC-205 stays intact: `P` is always the publish tariff) |
-| `V` | `promo_discount_idr` | Counter promo (outlet- or platform-funded) |
+| `V` | `promo_discount_idr` | Counter promo, outlet-funded at launch, capped so `counter_due_idr >= 0` |
 | `G` | `cod_goods_amount_idr` | Goods amount the courier collects on COD Barang (`0` for Non-COD and DFOD) |
 | `D` | `declared_item_value_idr` | Declared goods value for insurance/claims (independent of `G`) |
 
@@ -73,12 +74,15 @@ in the POS, OpenAPI (`POST /api/v1/quotes`, `/shipments`) and MCP tools.
 
 | Mode | Counter due now (`counter_due_idr`) | Courier collects (`cod_collection_total_idr`) | Mengantar seller COD credit (`expected_provider_cod_credit_idr`) | Sender payable (`sender_cod_payable_idr`) | Outlet margin (accrued) |
 |---|---|---|---|---|---|
-| `none` | `P + I0 + K + S - V` | `0` | `0` (debit `M + I0` instead) | `0` | `(P - M) + K + S - V_outlet` |
-| `buyer_bears_fee` | `K + S - V` | `G + P + I0 + F` | `G + P + I0` − provider net (`= G + P - M` when `I0 = 0`) | `G` | `(P - M) + K + S - V_outlet` |
-| `sender_bears_fee` | `K + S - V` | `G + P + I0` | `G + P + I0 - F` − provider net | `G - F` | `(P - M) + K + S - V_outlet` |
-| `cod_all_in` | `K + S - V` | `G` | `G - F` − provider net | `G - P - I0 - F` | `(P - M) + K + S - V_outlet` |
-| `dfod` | `K + S - V` | `P + I0 + F` | `P + I0` − provider net | `0` | `(P - M) + K + S - V_outlet` |
+| `none` | `P + I0 + K + S - V` | `0` | `0` (debit `N + I0` instead) | `0` | `(P - N) + K + S - V` |
+| `buyer_bears_fee` | `K + S - V` | `G + P + I0 + F` | `G + P - N` | `G` | `(P - N) + K + S - V` |
+| `sender_bears_fee` | `K + S - V` | `G + P + I0` | `G + P - F - N` | `G - F` | `(P - N) + K + S - V` |
+| `cod_all_in` | `K + S - V` | `G` | `G - F - N - I0` | `G - P - I0 - F` | `(P - N) + K + S - V` |
+| `dfod` | `K + S - V` | `P + I0 + F` | `P - N` | `0` | `(P - N) + K + S - V` |
 
+- **Seller credit rule (all COD modes):** `expected_provider_cod_credit_idr = cod_collection_total_idr - (N + F + I0)`, i.e.
+  Mengantar's `COD_AMOUNT − estimatedSpecialPrice` (which already contains `F`) minus insurance. Identity for every COD
+  mode: `seller credit − sender payable = P − N` (the outlet's shipping spread); with `N = M` this equals `P − M`.
 - **Seller credit vs sender payable are different numbers.** Mengantar credits the outlet's seller balance
   (`expected_provider_cod_credit_idr`, later `reconciled_provider_cod_credit_idr` from `typeReconciliation`
   `subItem.amount`). The outlet then owes the walk-in sender `sender_cod_payable_idr` and keeps the rest (its shipping
@@ -93,10 +97,20 @@ in the POS, OpenAPI (`POST /api/v1/quotes`, `/shipments`) and MCP tools.
   (paid at the counter), not on COD Barang modes. Printed as its own line `Biaya Layanan Loket`.
 - **DFOD:** `G = 0`; the counter shows `Ongkir dibayar penerima saat paket tiba`; uninsured DFOD carries minimal loss
   coverage (`1x ongkir`) — shown as a notice.
-- **Pass mapping (Mengantar two-pass quote):** pass 1 estimate with `COD_AMOUNT = G + P` (or `P` for DFOD) to obtain
-  `codFee = F`; pass 2/create-order `COD` = the `cod_collection_total_idr` of the selected mode.
+- **Quote passes (`codFee` depends on `COD_AMOUNT`):**
+  1. Pass 1 — Non-COD estimate (no `COD_AMOUNT`) gives `P` and `N` for every courier card.
+  2. Fixed collection modes (`sender_bears_fee`: `C = G + P + I0`; `cod_all_in`: `C = G`): one COD estimate with
+     `COD_AMOUNT = C`; its `codFee` is `F`.
+  3. Fee-inclusive modes (`buyer_bears_fee`: base `B = G + P + I0`; `dfod`: `B = P + I0`; `C = B + F`): estimate at
+     `COD_AMOUNT = B` to get `F0`, re-estimate at `COD_AMOUNT = B + F0` to get `F1`; accept when `F1 = F0`, otherwise
+     re-estimate at `B + F1` (at most 3 estimates). If it is still changing, the quote fails with `COD_FEE_UNSTABLE` (`Biaya COD berubah, ulangi
+     cek ongkir`) — never guess.
+  4. The **frozen** quote stores `F`, `N` and `C` from the **final** estimate, whose `COD_AMOUNT` equals the create-order
+     `COD`. Create-order always sends that frozen `C`; it never re-derives it.
+  5. After create, the order's raw `COD_FEE` text is compared with `F`; a difference of 1 Rupiah or more marks the INV
+     `quote_drift` for reconciliation (spec 09), without cancelling or re-sending the order.
 
-### 3.4 Worked examples (P = 12.000, provider net = 9.600, M = 9.600, I = NULL, F = 5.560, K = 3.000, S = 0, V = 0, G = 150.000)
+### 3.4 Worked examples (P = 12.000, N = 9.600, I = NULL, F = 5.560 for every mode for readability, K = 3.000, S = 0, V = 0, G = 150.000)
 
 | Mode | Counter due | Courier collects | Seller credit (expected) | Sender payable | Outlet margin |
 |---|---:|---:|---:|---:|---:|
@@ -106,15 +120,22 @@ in the POS, OpenAPI (`POST /api/v1/quotes`, `/shipments`) and MCP tools.
 | `cod_all_in` | 3.000 | 150.000 | 134.840 | 132.440 | 5.400 |
 | `dfod` | 3.000 | 17.560 | 2.400 | 0 | 5.400 |
 
-Reconciliation check for every COD row: `seller credit − sender payable = P − M = 2.400` (outlet shipping spread).
+Reconciliation check for every COD row: `seller credit − sender payable = P − N = 2.400` (outlet shipping spread).
+In production `F` differs per mode because `COD_AMOUNT` differs; unit tests (TASK-107) cover both this fixture and a
+per-mode fee fixture. Second fixture for the fallback case (DEC-226 not yet provider-enforced): assigned `1000 bps` →
+`M = 10.800` while Mengantar still debits `N = 9.600`; every flow above is unchanged (it uses `N`), `Estimasi Laba` shows
+`5.400`, and `Selisih tarif` shows `M − N = 1.200` as information only.
 
 ### 3.5 Profit labels (spec 09)
 
 - **`Estimasi Laba` (accrued):** the outlet-margin column above, available from issue time, regardless of whether the
   counter part is paid.
-- **`Laba Kas` (cash-realized):** accrued margin counted only when (a) `counter_payment_status = 'paid'` for any
-  counter-due amount and (b) for COD modes, `reconciled_provider_cod_credit_idr` is synced. Provider reconciliation
-  alone never implies that an unpaid counter customer has paid.
+- **`Laba Kas` (cash-realized):** one predicate for every mode (spec 09 uses the same): counted only when
+  (a) `counter_payment_status IN ('paid','not_required')` **and** (b) the provider side is reconciled —
+  `provider_reconciled_cost_idr IS NOT NULL` for `none`, `reconciled_provider_cod_credit_idr IS NOT NULL` for COD modes.
+  Value: `none` → `(P − provider_reconciled_cost_idr − I0) + K + S − V`; COD → `(reconciled_provider_cod_credit_idr −
+  sender_cod_payable_idr) + K + S − V`. Provider reconciliation alone never implies that an unpaid counter customer has
+  paid. Dashboards show `Estimasi Laba` and `Laba Kas` as **two separate numbers**, never summed.
 
 ## 4. Non-Freezing Return Risk Reserve (`Saldo Aman`)
 

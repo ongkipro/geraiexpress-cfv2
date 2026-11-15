@@ -114,14 +114,26 @@ Kembali              Rp   23.000
   ████████████████████████████████
   *Dilarang buka sblm bayar kurir*
   ```
-- **Bottom Stub (for Sender/Reseller):** replaces cash lines with:
+- **Receipt (for Sender/Reseller):** the whole charge and payment block between the two dividers after `Berat`
+  is replaced (not only the cash lines). Complete COD specimen, spec 02 §3.4 fixture (`P = 12.000`, `F = 5.560`,
+  `G = 150.000`, `K = 3.000`), each line exactly 32 columns:
   ```text
-  Harga Barang         Rp  150.000
-  Ongkir + Fee COD     Rp   17.560
-  Ditagih ke Penerima  Rp  167.560
-  --------------------------------
-  ESTIMASI CAIR BERSIH Rp  150.000
+--------------------------------
+COD · Fee dibayar penerima      
+Harga Barang         Rp  150.000
+Ongkir + Fee COD     Rp   17.560
+Ditagih ke Penerima  Rp  167.560
+--------------------------------
+Kardus M             Rp    3.000
+Dibayar di Loket     Rp    3.000
+LUNAS · QRIS GERAI   Rp    3.000
+--------------------------------
+Hak COD Pengirim     Rp  150.000
+Cair setelah paket diterima     
+--------------------------------
   ```
+  The counter part (`Dibayar di Loket`) follows the DEC-220 payment-line variants above (`LUNAS · …` or inverted
+  `BELUM DIBAYAR`); `Hak COD Pengirim` is `sender_cod_payable_idr` (`G`, `G − F` or `G − P − I0 − F` per mode).
 
 *(Note: On **80mm thermal rolls (`48 columns / 576 dots`)**, the exact same hierarchy expands horizontally with side-by-side key-value columns and a wider barcode, cutting paper length by ~28%.)*
 

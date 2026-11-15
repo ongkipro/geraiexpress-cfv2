@@ -1,18 +1,18 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Updated: 2026-11-14
-Status: M0 signed off by owner 2026-11-14 (Direction A, DEC-226 accepted); M1 may start after the GPT-6.1 Sol round 2 review passes
+Updated: 2026-11-15
+Status: M0 signed off by owner 2026-11-14 (Direction A, DEC-226 accepted); M1 may start after an independent review APPROVE (TASK-006)
 State: PLANNED
 Review-Risk: R0
-Independent-Review: PENDING for 2026-11-14 additions (DEC-220..226, visual 08, research 02–03; GPT-6.1 Sol round 1 = REQUEST_CHANGES, fixes applied); earlier docs PASS (Fable 1–3, Carbon 1–3)
+Independent-Review: PENDING (TASK-006) — GPT-6.1 Sol round 1 and round 2 = REQUEST_CHANGES (all 13 round-2 findings fixed 2026-11-15); round 3 to cover those fixes plus DEC-227..229, ADR-0006, specs 11–12, docs/WORKFLOW.md; earlier docs PASS (Fable 1–3, Carbon 1–3)
 Primary-Worker: pi session (Claude), 2026-11-12/13
-Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high)
-Independent-Review-Head: 16d0d60
+Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high), reviewer (gpt-6.1-sol)
+Independent-Review-Head: 7fbad94 (Sol round 2)
 
 ## Now
 
-M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-226,
-ADR-0001..0005, specs 01–10, visual 01–08, research 01–03, `DESIGN.md` (Direction A picked), `design/` brief, refs and
+M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-229,
+ADR-0001..0006, specs 01–12, visual 01–08, research 01–03, `docs/WORKFLOW.md`, `DESIGN.md` (Direction A picked), `design/` brief, refs and
 comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
 
 ## Next
@@ -22,7 +22,11 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
    `http://100.127.67.86:55180/` while the preview task runs.
 2. TASK-002 done (Direction A) and TASK-005 done (gates re-run).
 3. TASK-003 done: owner signed off M0 on 2026-11-14. Accepted as deferred: Mengantar's answer on per-seller discount
-   control (DEC-226) — required before M2 pricing, not before M1. Next: GPT-6.1 Sol round 2 review, then TASK-101.
+   control (DEC-226) — required before M2 pricing, not before M1.
+4. 2026-11-15: owner accepted DEC-227 (Cloudflare Email Sending only), DEC-228 (D1 control plane + per-gerai SQLite
+   Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
+   Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 tasks TASK-108..110 added.
+5. Next: GPT-6.1 Sol round 3 (TASK-006); TASK-101 starts only after APPROVE.
 
 ## Blockers
 

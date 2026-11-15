@@ -10,11 +10,11 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ KIRIMAN                                                             [+ Multi-Paket]  [⬇ Ekspor CSV]│
-│ Tabs: [● Semua (412)] [Belum Dibayar (1)] [Draf QR (5)] [Menunggu Saldo (1)] [Pickup (18)]         │
+│ KIRIMAN                                                             [+ Paket Massal] [⬇ Ekspor CSV]│
+│ Tabs: [● Semua (412)] [Belum Dibayar (1)] [Draf QR (5)] [Menunggu Saldo (1)] [Pickup (18)] [Massal]│
 │       [Kendala & Klaim (3)] [↩️ Meja Retur (2)]                                                    │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Cari INV / AWB / Nama / HP: [ 8k4m2p7 atau JX88... ]  Kurir: [Semua ▾]  Cetak: [Semua / Blm Cetak ▾]│
+│ Cari INV / AWB / Nama / HP: [ 8k4m2p7 atau JX88... ] Kurir: [Semua ▾]  Cetak: [Semua / Blm Cetak ▾]│
 ├──────────┬────────────────────┬───────────────────────┬───────────────┬───────────────┬────────────┤
 │ INV ID   │ Kurir & AWB        │ Pengirim → Penerima   │ Tagihan / COD │ Status & Sync │ Aksi Cepat │
 ├──────────┼────────────────────┼───────────────────────┼───────────────┼───────────────┼────────────┤
@@ -71,7 +71,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 │ Rp 915.000             │ Rp 840.000             │ Rp 4.850.000 (31 INV)   │ Tunai Laci : Rp 762.000│
 │ [Cara Top-Up Saldo ↗]  │ (Cadangan Retur 75rb*) │ Est. Bersih Rp 4,41 jt  │ QRIS Toko  : Rp 340.000│
 ├────────────────────────┴────────────────────────┴─────────────────────────┴────────────────────────┤
-│ ⚠️ 1 Kiriman (`INV #5N7R3V4` · Rp15.200) menunggu pembayaran saldo Mengantar → [💳 Bayar Batch Skrg]│
+│ ⚠️ 1 Kiriman (`INV #5N7R3V4` · Rp15.200) menunggu saldo Mengantar → [💳 Bayar Batch Sekarang]      │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ Tabs: [Ringkasan] [● Mutasi Sync] [Laba per INV] [Kas & Shift] [Cadangan Retur*] [Selisih Sync]    │
 ├──────────────────┬────────────────────────┬──────────────────────┬────────────────┬────────────────┤

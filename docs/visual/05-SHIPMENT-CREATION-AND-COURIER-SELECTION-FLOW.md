@@ -55,7 +55,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 │ ┌────────────────────────────────────────────────────────────────────────────────────────────────┐ │
 │ │ (●) [J&T]  J&T Express · EZ (Reguler)            Estimasi 2–3 hari            Rp 12.000        │ │
 │ │            ✓ Dijemput ke gerai (cut-off 16:00) · Sukses antar kec. tujuan 98%                  │ │
-│ │            [🔒 Info Owner (👁): Modal Rp 9.600 (Diskon 20%) · Margin Ongkir +Rp 2.400]         │ │
+│ │            [🔒 Info Owner (👁): Modal Rp 9.600 (Diskon 20%) · Margin Ongkir +Rp 2.400]          │ │
 │ ├────────────────────────────────────────────────────────────────────────────────────────────────┤ │
 │ │ ( ) [LION] Lion Parcel · REGPACK  [🥇 TERMURAH]  Estimasi 2–3 hari            Rp 11.500        │ │
 │ │            ✓ Dijemput ke gerai · Catatan: Wajib pilih jenis komoditas & kode pos               │ │
@@ -96,7 +96,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 
 ```text
 ┌──────────────────────────────────────┐          ┌──────────────────────────────────────┐
-│ ← INV #8K4M2P7         [🟢 BT: POS-58]│          │ ✅ RESI TERBIT — INV #8K4M2P7         │
+│ ← INV #8K4M2P7     [🟢 Printer 100mm]│          │ ✅ RESI TERBIT — INV #8K4M2P7        │
 ├──────────────────────────────────────┤          │ J&T EZ · AWB: JX88 2910 4412         │
 │ [📷 Scan QR dari Rumah]              │          │ Kode Sortir : BDO-CBL02              │
 │                                      │          │ LUNAS · QRIS gerai · Rp 27.000       │
@@ -116,7 +116,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 │    Isi: [Pakaian] [✓] Kardus (+3rb)  │
 ├──────────────────────────────────────┤
 │ TOTAL BAYAR: Rp 27.000   [Rincian ▴] │
-│ [  Tandai Lunas & Cetak · INV 8K4M2P7]│
+│ [Tandai Lunas & Cetak · INV 8K4M2P7] │
 └──────────────────────────────────────┘
 ```
 

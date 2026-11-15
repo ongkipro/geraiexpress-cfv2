@@ -44,14 +44,15 @@
 | Method & Path | Required Scope | Summary |
 |---|---|---|
 | `GET /api/v1/areas?q=coblong` | `rates:read` | Search Mengantar subdistricts & postcodes (KV-cached). |
-| `POST /api/v1/quotes` | `rates:read` | Input `destination_area_id`, `weight_gram` *(default `1000`)*, optional `length_cm/width_cm/height_cm`, `cod_fee_mode` (`none | buyer_bears_fee | sender_bears_fee | cod_all_in | dfod`), `cod_goods_amount_idr`, `declared_item_value_idr` → returns active couriers, `billable_weight_gram`, customer tariffs, dynamic courier requirements, and (if `finance:read`) net cost & margin. |
+| `POST /api/v1/quotes` | `rates:read` | Input `destination_area_id`, `weight_gram` *(default `1000`)*, optional `length_cm/width_cm/height_cm`, `cod_fee_mode` (`none`, `buyer_bears_fee`, `sender_bears_fee`, `cod_all_in`, `dfod`), `cod_goods_amount_idr`, `declared_item_value_idr` → returns active couriers, `billable_weight_gram`, customer tariffs, dynamic courier requirements, and (if `finance:read`) net cost & margin. |
 | `POST /api/v1/shipments` | `shipments:draft` | Allocates a new `INV` slug (e.g., `"8k4m2p7"`), stores draft/pre-booking, and returns QR URL. |
 | `GET /api/v1/shipments` & `GET /api/v1/shipments/:slug` | `tracking:read` | List or fetch shipment details by `INV` slug or `?awb=`. |
 | `POST /api/v1/shipments/:slug/issue` | `shipments:issue` | Atomically dispatches order to Mengantar via `GeraiVaultDO` (`Idempotency-Key` required). |
 | `POST /api/v1/shipments/:slug/pay-unpaid` | `shipments:issue` | Completes payment via Mengantar `POST /order/pay-unpaid` after balance top-up. |
 | `POST /api/v1/shipments/:slug/labels` | `shipments:issue` | Body `{ format: label_10x15_with_stub \| label_10x10 \| label_10x15 \| roll_58mm, part?: all \| stub_only }` → PDF URL (100 mm formats) or ESC/POS bytes reference (58 mm). Increments `print_count` when the **parcel label** is generated (stub-only/receipt-only reprints do not). Second label print requires `reprint_reason`. |
+| `POST /api/v1/bulk-imports` | `shipments:issue` | Body: CSV text or rows JSON (≤ 200) + sender id → batch id; `GET /api/v1/bulk-imports/:id` returns per-row `ready`/`errors`; `POST /api/v1/bulk-imports/:id/commit` creates INVs for ready rows (queued dispatch). Same validation as POS (spec 03 §1.3). |
 | `POST /api/v1/labels/bulk` | `shipments:issue` | Body `{ slugs: [...] (1–50), format }` → one merged PDF; rejects > 50 with `422 BULK_LIMIT_EXCEEDED`. |
-| *(not exposed)* | — | Counter payment mutation (`mark_paid`, `void_payment`) is **POS-only** (session + device), never via API keys or MCP, so integrations cannot mark customer money as received. |
+| *(not exposed)* | — | Counter payment and sender-payout mutations (`mark_paid`, `void_payment`, `sender_cod_payout`, `void_sender_payout`) are **POS-only** (session + device), never via API keys or MCP, so integrations cannot mark customer money as received. |
 | `GET / POST /api/v1/contacts/senders` | `contacts:*` | Manage `Kontak > Pengirim` (walk-in & reseller masking profiles). `wa_verified_*` is read-only over the API; changing `true_phone` clears it. |
 | `GET / POST /api/v1/contacts/recipients` | `contacts:*` | Manage `Kontak > Penerima` + COD delivery/return stats. |
 | `GET /api/v1/finance/summary` | `finance:read` | Read Dual-Book financial summary and synced Mengantar balance. |

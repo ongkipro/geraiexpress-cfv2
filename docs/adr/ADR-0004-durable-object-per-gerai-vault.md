@@ -18,7 +18,7 @@ Instantiate one **Durable Object (`GeraiVaultDO`) per `tenant_id`** as the singl
 4. **Mengantar Financial Sync Cursor:** serializes incremental `GET /invoices` ingestion per outlet so no invoice is double-applied to the local mirror book.
 5. **Seller Key Rotation Fence:** increments expected `key_version` before calling Partner `api-key/regenerate` and atomically persists both the new `apiKey` and rotated `callbackSecret` (when non-null).
 
-Read-heavy workloads (rate quotes, shipment lists, dashboard analytics, `<slug>.gerai.cc` mini-sites, and anonymous tracking) read directly from D1 / KV without waking the Durable Object.
+*(Amended by ADR-0006, 2026-11-15:)* the object also **stores** all of the tenant's tables in its SQLite storage, so lists and dashboards for one gerai are RPC reads on the object. Only cross-tenant views (Super Admin search, `/lacak` lookup by AWB) use the D1 `shipment_index`; mini-site pages are edge-cached SSR; rate quotes call Mengantar and cache areas in KV.
 
 ## Consequences
 - **Positive:** rock-solid per-outlet serializability with zero cross-tenant lock contention and automatic hibernation when the counter closes at night.

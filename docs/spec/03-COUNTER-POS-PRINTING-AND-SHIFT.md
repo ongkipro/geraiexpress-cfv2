@@ -34,9 +34,9 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 |---|---|---|---|---|
 | (new INV, `counter_due_idr > 0`) | create | `unpaid` | O K | — |
 | (new INV, `counter_due_idr = 0`) | create | `not_required` | O K | — |
-| `unpaid` | `mark_paid` | `paid` | O K | `mark_paid` (+amount, method) |
-| `paid` | `void_payment` (reason) | `unpaid` | O; K only in the same open shift | `void_payment` (−amount) |
-| `unpaid` / `not_required` | INV cancelled | `voided` | O K | — |
+| `unpaid` | `mark_paid` | `paid` | O K | `mark_paid` (`direction = in`, method) |
+| `paid` | `void_payment` (reason) | `unpaid` | O; K only in the same open shift | `void_payment` (`direction = out`) |
+| `unpaid` / `not_required` | INV cancelled | `voided` | O K | — (event in `shipment_events`) |
 | `paid` | INV cancelled | `voided` | O (void payment first, reason required) | `void_payment` then cancel |
 
 - `mark_paid` requires method and, for `tunai`, `cash_received_idr >= counter_due_idr`; an `Idempotency-Key` makes a
@@ -47,13 +47,67 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
   that created the INV.
 - `not_required`: COD Barang modes with `K + S - V = 0` (nothing collected at the counter).
 
+### 1.2 Sender COD payout (outlet pays the walk-in sender — POS only)
+
+- **Eligible:** COD Barang INV whose `reconciled_provider_cod_credit_idr IS NOT NULL` (the money reached the outlet's
+  Mengantar balance). Owner may override with a reason (`Bayar sebelum cair`), audit-logged; Kasir never can.
+- **Who:** owner always; Kasir only when the owner enabled `Kasir boleh bayar COD` and only inside an open shift.
+- **Amount:** `amount <= sender_cod_payable_idr − COALESCE(sender_cod_paid_idr, 0)`; partial payouts allowed; each one
+  is a `sender_cod_payout` receipt (`direction = out`, method `tunai`/`transfer`) with an `Idempotency-Key`.
+  `sender_cod_paid_idr` is the sum of non-voided payouts and is updated in the same Durable Object transaction.
+- **Reversal:** `void_sender_payout` (owner only, reason required) appends an `in` receipt referencing the payout.
+- **Drawer:** a `tunai` payout reduces expected drawer cash in the shift where it happened (§4).
+- **Never** via API key or MCP (spec 08); the receipt prints `Bukti Pencairan COD` with INV, amount and remaining.
+
 ---
+
+### 1.3 `Paket Massal` — manual rows and Excel/CSV import (`/kasir/multi`, DEC-229)
+
+For resellers who bring many parcels at once. One sender, one set of parcels, one counter payment.
+
+1. **Setup:** pick the sender (`Kontak › Pengirim`) and masking preset; optional default courier/service and COD mode
+   for all rows (a row may override).
+2. **Rows:** add rows manually (destination search, recipient name/phone/address, weight in gram, item, COD amount),
+   **or** `Unggah Excel/CSV`:
+   - Template download `template-paket-massal.xlsx` (and `.csv`) with Indonesian headers: `Nama Penerima`, `No HP`,
+     `Alamat`, `Kecamatan/Kota`, `Kode Pos`, `Isi Paket`, `Berat (gram)`, `Panjang`, `Lebar`, `Tinggi`, `COD (Rp)`,
+     `Nilai Barang (Rp)`, `Catatan`.
+   - Max **200 rows** and 1 MB per file; parsed in the browser and validated again on the server. `.csv` needs no
+     library. The `.xlsx` reader is an M3 choice recorded as an ADR after a `native-first` review (bundle size, license,
+     maintenance); until then only `.csv` and the downloadable `.xlsx` template exist.
+   - Destination text is matched to a Mengantar `area_id` per row; ambiguous matches become `Perlu Diperbaiki` with a
+     picker, never a guess.
+3. **Check:** the server quotes rows in batches through a Queue (respecting `PartnerQuotaDO`/provider limits), and the
+   screen splits rows into tabs `Siap (n)` and `Perlu Diperbaiki (n)` with the reason per row (`Kecamatan tidak
+   ditemukan`, `Berat kosong`, `COD di luar batas`, `Kurir tidak melayani rute`). Rows are editable or removable inline.
+   Totals show ongkir, COD collected, fee COD, sender payable, and (owner only) margin.
+4. **Create:** `Buat n Kiriman` creates one `INV` per ready row inside `GeraiVaultDO` (each with its own slug and quote
+   snapshot) and one `bulk_import_batches` record. Dispatch to Mengantar is **queued and serialized per seller** (spec
+   04/ADR-0004: J&T Premium and SiCepat generate AWBs sequentially per account); the screen shows progress and never
+   blocks the counter. Rows that fail dispatch stay `Perlu Tindakan` with the provider error; no blind retry.
+5. **Pay & print:** one counter payment record for the batch total (`counter_receipts` row per INV, sharing a
+   `bulk_batch_id`), then `Cetak Semua` (merged 100 mm PDF, ≤ 50 per file; larger batches split automatically).
+6. **History:** `Kiriman › Riwayat Massal` lists batches (date, sender, rows, ready/failed, total, status) with
+   `Lihat`, `Cetak Semua` and `Batalkan yang Belum Terbit` (cancels only INVs without AWB; issued ones follow the normal
+   cancel rules with read-back).
+
+Data: `bulk_import_batches` (`id`, `tenant_id`, `sender_contact_id`, `source` (`manual | csv | xlsx`), `file_name`,
+`row_count`, `ready_count`, `failed_count`, `state` (`draft | checking | ready | dispatching | done | partially_failed |
+cancelled`), `created_by`, timestamps) and `bulk_import_rows` (`batch_id`, `row_no`, raw values JSON, normalised
+fields, `area_id`, `errors_json`, `shipment_slug`).
+
+### 1.4 `Cek Resi` (`/kasir/cek-resi`, DEC-229)
+
+One search box: `INV`, AWB, or recipient phone. INV/AWB of **this gerai** opens the shipment timeline (provider
+`history[]` read through `GET /order?tracking_id=`, cached 5 min). An AWB not created through this gerai shows
+`Resi ini bukan kiriman gerai Anda` and a link to the courier's public tracking page; the Mengantar API only returns
+history for the seller's own orders. Multi-koli shows each koli.
 
 ## 2. Document Separation: Parcel Label vs `Struk Jujur`
 
 1. **Parcel Label (`Label Paket`):** affixed to the box for courier sorting and delivery; obeys the selected **Masking Preset** (`ADR-0005`).
 2. **Customer Receipt (`Struk Jujur`):** handed to the walk-in sender as proof of handover and payment.
-   - Carries the unified **`INV ID`** (`INV 8K4M2P7`), frozen outlet name & WhatsApp at payment time, AWB number, agreed actual & volumetric weights, line-by-line charges (`Ongkir`, `Asuransi`, `Packing`, `Potongan`, `Total Dibayar`, payment method, cash received & change — or COD collection & net payout estimate), plus QR link to `<slug>.gerai.cc/lacak/8k4m2p7`.
+   - Carries the unified **`INV ID`** (`INV 8K4M2P7`), frozen **preset-resolved presentation identity** at payment time (outlet name & WhatsApp by default; the reseller brand & WhatsApp under `Dropship Toko`, where outlet identity never appears — visual 04 §3 Dropship rule), AWB number, agreed actual & volumetric weights, line-by-line charges (`Ongkir`, `Asuransi`, `Packing`, `Potongan`, `Total Dibayar`, payment method, cash received & change — or COD collection & net payout estimate), plus QR link to `<slug>.gerai.cc/lacak/8k4m2p7`.
    - **Never prints cashier staff names** on customer-facing paper/WA shares; staff attribution stays in internal audit logs.
    - **Immutable:** corrections use `Void Pembayaran` (creating a reversal record with a mandatory reason), never silent edits.
 
@@ -89,5 +143,5 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 ## 4. Per-Shift Cash Drawer Reconciliation (`/kasir/shift`)
 
 1. **Open Shift:** cashier enters opening cash float (`Modal Awal Laci`, e.g., `Rp150.000`).
-2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` from `counter_receipts` whose `shift_id` is this shift (so an INV created unpaid in shift A and paid in shift B counts in B).
+2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `Pencairan COD Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` from `counter_receipts` whose `shift_id` is this shift (so an INV created unpaid in shift A and paid in shift B counts in B). `expected_cash_idr = opening_float + Σ tunai(direction=in) − Σ tunai(direction=out)` (voids of payments are `out`, sender payouts are `out`, voids of payouts are `in`).
 3. **Close Shift:** cashier counts physical bills in the drawer (`Uang Tunai Fisik Dihitung`). Any non-zero variance (`counted_cash_idr - expected_cash_idr != 0`) requires a structured reason code + note before closing and triggers an alert card on the Owner's Dashboard.

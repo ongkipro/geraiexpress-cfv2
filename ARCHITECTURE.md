@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — System Architecture (`geraiexpress-cfv2`)
 
-This document defines the production topology for **GeraiExpress v2** on **100% Cloudflare Serverless**, its dual-domain isolation (`geraiexpress.com` + `*.gerai.cc`), per-outlet serialization with **Durable Objects**, precision financial synchronization with **Mengantar**, and **OpenAPI 3.1 + MCP** exposure.
+This document defines the production topology for **GeraiExpress v2** on **Cloudflare Serverless** (the only non-Cloudflare runtime is the stateless Partner-API egress relay on a VPS, DEC-219), its dual-domain isolation (`geraiexpress.com` + `*.gerai.cc`), per-outlet serialization with **Durable Objects**, precision financial synchronization with **Mengantar**, and **OpenAPI 3.1 + MCP** exposure.
 
 ---
 
@@ -32,11 +32,11 @@ Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queu
         ▼                      ▼                      ▼                         ▼
 ┌───────────────┐    ┌──────────────────┐   ┌──────────────────┐      ┌────────────────────────────────┐
 │ Cloudflare D1 │    │ Durable Objects  │   │  Cloudflare R2   │      │ Cloudflare Queues + Cron       │
-│ (Drizzle SQL) │    │ `GeraiVaultDO`   │   │  Media Storage   │      │ • `mengantar-webhooks` Queue   │
-│ • Outlets     │    │ (1 DO / Outlet)  │   │ • Outlet Logos   │      │ • `mengantar-finance-sync` Q   │
-│ • Shipments   │    │ • Atomic Dispatch│   │ • Scale Photos   │      │ • 15-min Invoice & Unpaid Sync │
-│ • Dual Ledgers│    │ • `INV` Slug Gen │   │ • Return Photos  │      │ • Hourly Order Status Sweep    │
-│ • Contacts    │    │ • Shift & Sync   │   │ • Signed Manifest│      └────────────────────────────────┘
+│ Control plane │    │ `GeraiVaultDO`   │   │  Media Storage   │      │ • `mengantar-webhooks` Queue   │
+│ • Users/Auth  │    │ (1 DO / Gerai)   │   │ • Outlet Logos   │      │ • `mengantar-finance-sync` Q   │
+│ • Tenants     │    │ • SQLite: ALL    │   │ • Scale Photos   │      │ • 15-min Invoice & Unpaid Sync │
+│ • Hostnames   │    │   tenant tables  │   │ • Return Photos  │      │ • Hourly Order Status Sweep    │
+│ • Ship. index │    │ • Atomic Dispatch│   │ • Signed Manifest│      └────────────────────────────────┘
 └───────────────┘    └─────────┬────────┘   └──────────────────┘
                                │ (ONLY for the 4 Mengantar Partner API routes in Production)
                                ▼
@@ -57,11 +57,11 @@ Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queu
 |---|---|---|
 | **Cloudflare Workers + `@hono/zod-openapi`** | Unified HTTP entry handling SSR pages, JSON APIs, OpenAPI 3.1 docs, and Streamable HTTP MCP tools. | Sub-millisecond cold starts in Indonesian/SG PoPs; single Zod schema powers validation, OpenAPI, and MCP. |
 | **Workers Static Assets + Vite React 19** | Serves `app.geraiexpress.com` (POS + Owner Workspace) and `owner.geraiexpress.com` (Super Admin) as fast PWAs. | Zero server CPU burned on tab switches; native browser access to Web-Bluetooth 58mm printers and camera barcode scanners. |
-| **Cloudflare D1 (SQLite)** | Relational store for tenants, outlets, contacts (`sender_contacts`, `recipient_contacts`), quotes, `shipments` (keyed by short `INV` slug), counter receipts, shifts, Dual-Book ledgers (`counter_ledger_entries`, `mengantar_invoice_mirror`), returns, claims, and audit logs. | Strict SQL migrations, composite `(tenant_id, ...)` indexing, and low fixed cost ($5 Workers plan baseline). |
-| **Durable Objects (`GeraiVaultDO` & `PartnerQuotaDO`)** | `GeraiVaultDO` (1 per `tenant_id`) serializes: (1) Mengantar order creation & `pay-unpaid` calls, (2) collision-free `INV` slug confirmation & receipt voiding, (3) shift open/close, (4) Mengantar `/invoices` cursor sync & balance reconciliation, and (5) seller key rotation. `PartnerQuotaDO` enforces global Partner API rate limits (60/min, 1000 reg/day). | Provides strict per-outlet single-writer atomicity that replaces PostgreSQL `SELECT ... FOR UPDATE` without cross-tenant contention; hibernates at Rp0 when idle. |
+| **Cloudflare D1 (SQLite)** | **Control plane only** (ADR-0006): users, sessions, OTPs, Super Admins, tenants, members, hostnames, API keys, discount rules, courier catalog, platform audit, the thin cross-tenant `shipment_index`, pushed daily stats and the email outbox. | Strict SQL migrations, composite `(tenant_id, ...)` indexing, and low fixed cost ($5 Workers plan baseline). |
+| **Durable Objects (`GeraiVaultDO` & `PartnerQuotaDO`)** | `GeraiVaultDO` (1 per `tenant_id`, **SQLite storage holding all of that tenant's data**, ADR-0006) serializes: (1) Mengantar order creation & `pay-unpaid` calls, (2) collision-free `INV` slug confirmation & receipt voiding, (3) shift open/close, (4) Mengantar `/invoices` cursor sync & balance reconciliation, and (5) seller key rotation. `PartnerQuotaDO` enforces global Partner API rate limits (60/min, 1000 reg/day). | Provides strict per-outlet single-writer atomicity that replaces PostgreSQL `SELECT ... FOR UPDATE` without cross-tenant contention; hibernates at Rp0 when idle. |
 | **Cloudflare R2** | Stores outlet logos, scale/dimension evidence photos, return-intake photos, claim attachments, and courier manifest signatures. | Zero egress bandwidth fees when rendering logos on `*.gerai.cc` or viewing evidence photos. |
 | **Cloudflare Queues + Cron Triggers** | Decouples webhook ingestion (< 5s Mengantar timeout rule) and runs scheduled 15-min `/invoices` financial reconciliation, hourly `GET /order` status polling floor (authoritative whenever `webhook_state != 'active'`), stuck-dispatch sweeps, and daily expired QR draft purges. | Guarantees Mengantar never pauses a seller's webhook due to downstream latency (20-failure pause rule). |
-| **Cloudflare for SaaS + KV** | Wildcard `*.gerai.cc` routing + automated TLS issuance for Pro custom domains; KV caches Mengantar subdistrict searches and host-to-tenant mappings. | Instant white-label mini-sites and automated custom-domain TLS (verify current Cloudflare plan quota at M6 provisioning). |
+| **Cloudflare for SaaS + KV** | Wildcard `*.gerai.cc` routing + custom hostnames for Pro domains (lifecycle in spec 11). KV caches Mengantar subdistrict searches only; **host → tenant is resolved from D1 `tenant_hostnames`**, never KV (eventually consistent). | Instant white-label mini-sites and automated custom-domain TLS (verify current Cloudflare plan quota at M6 provisioning). |
 
 ---
 
@@ -73,7 +73,7 @@ Every request enters `hostClassifierMiddleware` first:
 2. **`app.geraiexpress.com` (`GERAI_WORKSPACE`)** — serves Outlet Owner & Cashier PWA, `/api/app/*`, `/api/v1/*` (Bearer API key), and `/mcp`. Uses host-only `__Host-ge_app` cookie.
 3. **`owner.geraiexpress.com` (`PLATFORM_OWNER`)** — serves Super Admin SPA and `/api/owner/*`. Uses isolated `__Host-ge_owner` cookie (12h max) + mandatory `aal2` TOTP verification.
 4. **`hooks.geraiexpress.com` (`WEBHOOK_INGEST`)** — accepts `POST /webhooks/mengantar/:webhookToken` only. Verifies `x-signature = HMAC_SHA256("{x-timestamp}.{rawBody}")` within ±5 minutes and enqueues to `mengantar-webhooks`.
-5. **`<slug>.gerai.cc` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from KV/D1, serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and a restricted public `/mcp` (read tools plus `create_public_prebooking_inv` draft creation). Physically isolated from `geraiexpress.com` cookies.
+5. **`<slug>.gerai.cc` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from D1 `tenant_hostnames` (authoritative; unknown/pending → neutral 404, suspended → 403, spec 11), serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and a restricted public `/mcp` (read tools plus `create_public_prebooking_inv` draft creation). Physically isolated from `geraiexpress.com` cookies.
 
 ---
 
@@ -96,11 +96,11 @@ geraiexpress-cfv2/
 │   ├── web-app/                # Vite + React 19 PWA (`app.geraiexpress.com` — Indonesian UI)
 │   └── web-owner/              # Vite + React 19 SPA (`owner.geraiexpress.com` — Indonesian UI)
 ├── packages/
-│   ├── db/                     # Drizzle D1 schema, SQL migrations, tenant-scoped repositories
+│   ├── db/                     # Drizzle sqlite schemas: control-plane (D1) + tenant (DO) migrations
 │   ├── domain/                 # `INV` Crockford slug, integer IDR/bps/gram math, masking, ledger rules
 │   ├── mengantar-sdk/          # Redacting Public API + Partner API (`direct`/`relay`) typed client
 │   └── thermal-print/          # 58mm/80mm ESC/POS encoder (`Potong Disini`) + 32-col HTML previewer
 ├── infra/
 │   └── partner-relay/          # ≤ 80 LOC stateless HMAC-verified static-IPv4 forwarder + Compose
-└── docs/                       # ADRs, research (01..03), technical specs (01..10), visual/flow specs (01..08)
+└── docs/                       # ADRs, research (01..03), technical specs (01..12), visual/flow specs (01..08)
 ```

@@ -17,7 +17,7 @@ Split hosts across two separate registrable domains (`eTLD+1`) served by the sam
    - `hooks.geraiexpress.com` — cookie-less HMAC webhook endpoint for Mengantar.
 2. **Outlet White-Label Network (`gerai.cc` + *Cloudflare for SaaS*):**
    - `<slug>.gerai.cc` — wildcard DNS routed automatically upon outlet approval.
-   - `<custom.merchantdomain.id>` — optional Pro tier CNAMEd to `custom.gerai.cc` via **Cloudflare for SaaS** (automated TLS issuance; verify current Cloudflare custom-hostname free quota at M6 provisioning).
+   - `<custom.merchantdomain.id>` — optional Pro tier CNAMEd to `cname.gerai.cc` via **Cloudflare for SaaS** (automated TLS issuance). Lifecycle, root domains, quota and routing rules: `docs/spec/11` (DEC-228).
 
 The Worker's entry middleware classifies `Host` strictly and returns an Indonesian HTTP 404 for cross-context paths.
 

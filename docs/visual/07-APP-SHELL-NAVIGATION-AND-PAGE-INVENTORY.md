@@ -16,8 +16,8 @@
 
 ```text
 ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
-│ [G] Berkah Jaya  ▾ │ Dashboard                        [🔍 Cari INV / AWB / HP  Ctrl+K]  [🔔 3] [Ani ▾]│ ← header 64 px
-│ berkahjaya.gerai.cc│                                          [📷 Scan QR]  [+ Kiriman Baru]       │
+│ [G] Berkah Jaya  ▾ │ Dashboard          [🔍 Cari INV / AWB / HP  Ctrl+K]  [🔔 3] [Ani ▾]          │ ← header 64 px
+│ berkahjaya.gerai.cc│                                          [📷 Scan QR]  [+ Kiriman Baru]      │
 ├────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
 │ ● Dashboard        │                                                                              │
 │ ○ Buat Pengiriman  │   PAGE BODY (max width 1440, padding 24 × 16)                                │
@@ -67,7 +67,7 @@ that opens a full-width search sheet. `+ Kiriman Baru` stays visible.
 │  tabs scroll horizontally            │
 │                                      │
 ├──────────────────────────────────────┤
-│ [🏠 Beranda] [📦 Buat]  [ ＋ ] [📋 Kiriman] [☰ Lainnya] │ ← bottom bar 64 px, labels 14 px
+│ Beranda  Buat  [ + ]  Kiriman Lainnya│ ← bottom bar 64 px: 5 icon+label items, labels 14 px
 └──────────────────────────────────────┘
 ```
 
@@ -117,13 +117,16 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 |---|---|---|---|---|---|
 | `/` | O | Dashboard | `+ Kiriman Baru` | period filter (WIB presets + calendar range, default `7 hari terakhir`, DEC-221, visual 08 §1) → 4 KPI (kiriman, tercatat dibayar, belum dibayar, saldo Mengantar aman) → `Grafik pengiriman` (stacked Non-COD/COD bars) → `Riwayat pengiriman` (INV, ekspedisi, penerima, tagihan, pembayaran, status) → courier performance + `Perlu tindakan` | — |
 | `/` | K | Tugas Loket Hari Ini | `+ Kiriman Baru` | shift card → `Siap Pickup` per courier → `Meja Retur` waiting → recent INV list | No money totals, no Mengantar balance |
-| `/kasir` | O K | Buat Pengiriman | `+ Kiriman Baru` | tabs `Paket Reguler · Paket Massal · Cek Ongkir Cepat · Shift Loket`; default tab = recent drafts + scan QR box | Margin toggle owner only |
+| `/kasir` | O K | Buat Pengiriman | `+ Kiriman Baru` | tabs `Paket Reguler · Paket Massal · Cek Ongkir Cepat · Cek Resi · Shift Loket`; default tab = recent drafts + scan QR box | Margin toggle owner only |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Tandai Lunas & Cetak` (or `Simpan & Cetak` when `Bayar nanti`) | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
 | `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`); masked INV: `Lihat Pengirim Asli` (reason + audit) | Cost/margin rows owner only |
-| `/kasir/multi` | O K | Buat Pengiriman › Multi-Paket | `Tandai Lunas & Cetak Semua` | sender picker → parcel rows (destination, weight, courier per row) → batch total → print queue | Kasir sees customer price only |
+| `/kasir/multi` | O K | Buat Pengiriman › Paket Massal | `Buat n Kiriman` then `Tandai Lunas & Cetak Semua` | sender picker → `Tambah Baris` or `Unggah Excel/CSV` (+ `Unduh Template`) → tabs `Siap (n) · Perlu Diperbaiki (n)` with inline edit → batch totals → dispatch progress → print queue (spec 03 §1.3) | Kasir sees customer price only; max 200 rows |
+| `/kasir/cek-resi` | O K | Buat Pengiriman › Cek Resi | — | one search (INV / AWB / HP) → timeline per koli; foreign AWB → courier link (spec 03 §1.4) | read-only |
 | `/kasir/cek-cepat` | O K | Buat Pengiriman › Cek Cepat | `Buat Kiriman dari Hasil Ini` | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
 | `/kasir/shift` | O K | Buat Pengiriman › Shift Loket | `Buka Shift` / `Tutup Shift` | opening cash → live totals (Tunai/QRIS/Transfer) → closing count → variance | Kasir: own shift; owner: all shifts |
-| `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Belum Dibayar · Draf QR · Menunggu Saldo · Pickup & Manifest · Kendala & Klaim · Meja Retur` → search + period filter (visual 08 §1) → table with `Pembayaran` column and `Tandai Lunas` row action | Cost/margin columns + CSV owner only |
+| `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Belum Dibayar · Draf QR · Menunggu Saldo · Pickup & Manifest · Riwayat Massal · Kendala & Klaim · Meja Retur` → search + period filter (visual 08 §1) → table with `Pembayaran` column and `Tandai Lunas` row action | Cost/margin columns + CSV owner only |
+| `/kiriman/massal/:batch` | O K | Kiriman › Riwayat Massal › 15 Nov 10:12 | `Cetak Semua` | batch header (sender, rows, ready/failed, total) → rows with INV, status, error → `Batalkan yang Belum Terbit` | — |
+| `/kiriman/cetak-massal` | O K | Kiriman › Cetak Resi Massal | `Cetak (n)` | filters: period, courier, `Status Cetak` (`Belum Cetak`/`Sudah Cetak`) → checkbox table with live counter, max 50 → format picker → merged PDF (spec 03 §3.2) | reprints require reason |
 | `/kiriman/pickup/:batch` | O K | Kiriman › Manifest J&T 16:00 | `Selesai & Tanda Tangan` | scan box (wrong courier = red alert + sound) → scanned list → missing list → signature | — |
 | `/kiriman/retur/:awb` | O K | Kiriman › Meja Retur › JT77… | `Kirim Kode Ambil` | true sender → condition + photo → WA OTP → handover verify | — |
 | `/kontak/pengirim` | O K | Kontak › Pengirim | `+ Tambah Pengirim` | search → table (nama, HP, mask brand, jumlah kiriman, deposit) | Deposit column owner only |
@@ -134,6 +137,8 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/pengaturan` | O (K: printer only) | Pengaturan | — | settings sub-menu (desktop: left menu + content; phone: grouped list of rows) per `docs/visual/08` §2; nine item routes `/pengaturan/<item>` | Kasir sees only `Printer & Struk` (device part, saved locally) |
 | `/kasir/layar-pelanggan` | O K (paired device) | Layar Pelanggan | — | outlet logo → locked line items → total (40 px) → outlet QRIS → `Terima kasih` | P1 (PR-22); no navigation, no cost fields |
 | `/pengaturan/<item>` | O (K: `printer`) | Pengaturan › <item> | `Simpan` in sticky save bar, only when dirty | one short form of `Card` sections (visual 08 §2.3) | 403 for Kasir except `printer` |
+| `/akun` | O K | Akun Saya | `Simpan` | profile (name, phone) → `Ganti Kata Sandi` → `Ganti Email` (OTP to new email, spec 12) → active sessions with `Keluar dari perangkat ini/lainnya` → text-size preference | opened from the account menu, not the sidebar |
+| `/bantuan` | O K | Bantuan & Panduan | `Hubungi Bantuan` (WhatsApp) | searchable guides: first setup, printer on PC (100 mm driver, paper size, 100 % scale), custom domain DNS, COD flow, returns | opened from the account menu |
 | `/notifikasi` | O K | Notifikasi | `Tandai Semua Dibaca` | grouped by day; each item deep-links | — |
 | `*` 403 / 404 / offline | O K | — | `Kembali ke Dashboard` | plain explanation + who can grant access (403) | Offline: POS queues nothing silently; shows `Koneksi terputus` banner |
 

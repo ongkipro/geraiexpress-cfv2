@@ -14,11 +14,14 @@ Under Scheme 1 (`DEC-203`), each outlet owns its Mengantar seller balance (top-u
 2. **Book 2 — Mengantar Seller Mirror Book (`mengantar_invoice_mirror` & `mengantar_invoice_subitems`):** an idempotent mirror of Mengantar's `GET /api/public/{API_KEY}/invoices` stream, reconciled 1:1 to local `shipments` (`(tenant_id, slug)`) via `cnote_no` (AWB), `ORDER_ID`, and `batch` code.
 
 **Realized vs Estimated Profit:**
-- **`Estimasi Laba` (accrued):** per mode, `(P - M) + K + S - V_outlet` (spec 02 §3.3) from issue time; for COD modes the
+- **`Estimasi Laba` (accrued):** per mode, `(P - N) + K + S - V` (spec 02 §3.3) from issue time; for COD modes the
   counter-due may be only `K + S - V`, so profit is **never** computed as `counter_total_paid_idr - gerai_shipping_cost_idr`.
-- **`Laba Kas` (cash-realized, `Sync Mengantar ✓`):** the same margin recomputed with `provider_reconciled_cost_idr` (Non-COD)
-  or `reconciled_provider_cod_credit_idr - sender_cod_payable_idr` (COD), counted only when the counter part is `paid`
-  (or `not_required`). Provider reconciliation alone never marks an unpaid counter customer as paid (DEC-220).
+- **`Laba Kas` (cash-realized, `Sync Mengantar ✓`):** exactly the predicate and value in spec 02 §3.5 — counter part
+  `paid`/`not_required` **and** provider side reconciled (`provider_reconciled_cost_idr` for Non-COD,
+  `reconciled_provider_cod_credit_idr` for COD). Provider reconciliation alone never marks an unpaid counter customer
+  as paid (DEC-220). Dashboard and `Keuangan` show both labels side by side, never summed.
+- **`quote_drift`:** an order whose raw `COD_FEE` or reconciled debit differs from the frozen quote (spec 02 §3.3) is
+  listed under `Selisih Sync` with both numbers; nothing is re-sent or cancelled automatically.
 - **Sender COD payable** is a liability of the outlet to the walk-in sender, distinct from Mengantar's seller credit;
   `Keuangan` shows `Hutang COD ke Pengirim` until the outlet records `sender_cod_payout`.
 

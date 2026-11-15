@@ -25,4 +25,4 @@ Host choice, relay contract, deployment shape, M6 checks and IP-change procedure
 - **Crash-Safe Onboarding:** Relay timeouts after forwarding are recorded as `maybe_sent`. Registration reconciles via `POST /sellers/list { externalUserId }` before any retry; `api-key/regenerate` is never retried automatically (it rotates the key and callback secret on every call) — see `docs/spec/10` §4.3.
 
 ## Consequences
-- **Positive:** 100% of user traffic, POS checkouts, mini-sites, D1 data, and financial sync stay on Cloudflare Serverless, while Production Partner IP allowlisting is satisfied for a reserved-IP fee (plus a micro-VPS fee only under Option C) with zero database and zero Mengantar secrets on the relay host.
+- **Positive:** all user traffic, POS checkouts, mini-sites, D1/Durable Object data, and financial sync stay on Cloudflare Serverless, while Production Partner IP allowlisting is satisfied for a reserved-IP fee (plus a micro-VPS fee only under Option C) with zero database and zero Mengantar secrets on the relay host.

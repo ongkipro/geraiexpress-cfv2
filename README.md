@@ -48,7 +48,7 @@ To keep daily operations effortless for 35–55+ shop owners and counter staff, 
 geraiexpress-cfv2/
 ├── README.md                          # Project overview, language policy, host map, and doc index
 ├── AGENTS.md                          # Non-negotiable engineering, money, role, and security invariants
-├── DECISIONS.md                       # Canonical owner & architecture decision register (DEC-201..DEC-226)
+├── DECISIONS.md                       # Canonical owner & architecture decision register (DEC-201..DEC-229)
 ├── PRD.md                             # Evidence-backed Product Requirements Document (PR-01..PR-24)
 ├── ARCHITECTURE.md                    # Cloudflare Serverless topology, DO locking, and Mengantar relay
 ├── ROADMAP.md                         # Milestones M0..M6 and verification exit gates
@@ -57,6 +57,7 @@ geraiexpress-cfv2/
 ├── DESIGN.md                          # UI direction, composition contract and tokens (dotuiux)
 ├── design/                            # brief.md, refs/ teardowns, admin-contract.json (comfort size contract)
 └── docs/
+    ├── WORKFLOW.md                    # Working agreement: task lifecycle, verification ladder, review, release
     ├── research/
     │   ├── 01-COMPETITOR-RESEARCH-AND-FEATURE-TRACEABILITY.md
     │   ├── 02-AUTOKIRIM-AUTHENTICATED-REA-TEARDOWN.md
@@ -66,7 +67,8 @@ geraiexpress-cfv2/
     │   ├── ADR-0002-dual-domain-whitelabel-saas.md
     │   ├── ADR-0003-mengantar-partner-and-egress-relay.md
     │   ├── ADR-0004-durable-object-per-gerai-vault.md
-    │   └── ADR-0005-three-way-masking-and-return-intake.md
+    │   ├── ADR-0005-three-way-masking-and-return-intake.md
+    │   └── ADR-0006-storage-split-d1-control-plane-do-tenant-data.md
     ├── spec/
     │   ├── 01-DATA-MODEL-AND-LEDGER.md
     │   ├── 02-PRICING-DISCOUNT-AND-CASHBACK.md
@@ -77,7 +79,9 @@ geraiexpress-cfv2/
     │   ├── 07-DEVELOPMENT-GUIDE-AND-WORKFLOW.md
     │   ├── 08-OPENAPI-AND-MCP-CONTRACT.md
     │   ├── 09-MENGANTAR-FINANCIAL-SYNC-AND-RECONCILIATION.md
-    │   └── 10-PARTNER-RELAY-VPS-STATIC-EGRESS.md
+    │   ├── 10-PARTNER-RELAY-VPS-STATIC-EGRESS.md
+    │   ├── 11-CLOUDFLARE-SAAS-HOSTNAMES-AND-TENANT-ROUTING.md
+    │   └── 12-TRANSACTIONAL-EMAIL-CLOUDFLARE.md
     └── visual/
         ├── 01-DESIGN-SYSTEM-AND-ERGONOMICS.md
         ├── 02-WIREFRAMES-COUNTER-AND-ADMIN.md

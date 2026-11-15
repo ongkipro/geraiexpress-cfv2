@@ -28,12 +28,12 @@ One component, one behaviour everywhere.
 ```text
 ┌──────────────────────┬─────────────────────────────────────────────────────────────────────┐
 │ PERIODE (WIB)        │  ‹  Oktober 2026                         November 2026          ›   │
-│                      │  Sen Sel Rab Kam Jum Sab Min      Sen Sel Rab Kam Jum Sab Min        │
+│                      │  Sen Sel Rab Kam Jum Sab Min      Sen Sel Rab Kam Jum Sab Min       │
 │   Hari ini           │                1   2   3   4                          1             │
 │   Kemarin            │   5   6   7   8   9  10  11       2   3   4   5   6   7  [8]        │
 │ ● 7 hari terakhir    │  12  13  14  15  16  17  18      [9 ][10][11][12][13][14] 15 ░      │
-│   30 hari terakhir   │  19  20  21  22  23  24  25      16░ 17░ 18░ 19░ 20░ 21░ 22░       │
-│   Bulan ini          │  26  27  28  29  30  31          23░ 24░ 25░ 26░ 27░ 28░ 29░       │
+│   30 hari terakhir   │  19  20  21  22  23  24  25      16░ 17░ 18░ 19░ 20░ 21░ 22░        │
+│   Bulan ini          │  26  27  28  29  30  31          23░ 24░ 25░ 26░ 27░ 28░ 29░        │
 │   Bulan lalu         │                                  30░                                │
 │   90 hari terakhir   ├─────────────────────────────────────────────────────────────────────┤
 │                      │  Dari [ 08/11/2026 ]   Sampai [ 14/11/2026 ]   7 hari               │
@@ -54,7 +54,7 @@ One component, one behaviour everywhere.
 │ ‹      November 2026      ›          │ ← one month on phones
 │ Sen Sel Rab Kam Jum Sab Min          │
 │ …                                    │
-│ Dari [08/11/2026]  Sampai [14/11/2026]│
+│ Dari [08/11/2026] Sampai [14/11/2026]│
 │ ──────────────────────────────────── │
 │ [ Batal ]          [ Terapkan ]      │ ← sticky footer
 └──────────────────────────────────────┘
@@ -100,18 +100,18 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │                     │   Profil Gerai        │ Atur printer kasir dan isi struk pelanggan.       │
 │                     │   Mini-Site           │                                                   │
 │                     │   Data Usaha          │ ┌ Printer di perangkat ini ─────────────────────┐ │
-│                     │ OPERASIONAL           │ │ POS-58 · Bluetooth · terhubung 🟢              │ │
-│                     │   Ekspedisi Aktif     │ │ [Tes Cetak]  [Ganti Printer]                   │ │
-│                     │ ● Printer & Struk     │ └────────────────────────────────────────────────┘ │
+│                     │ OPERASIONAL           │ │ POS-58 · Bluetooth · terhubung 🟢             │ │
+│                     │   Ekspedisi Aktif     │ │ [Tes Cetak]  [Ganti Printer]                  │ │
+│                     │ ● Printer & Struk     │ └───────────────────────────────────────────────┘ │
 │                     │   Packing & Biaya     │ ┌ Format cetak ─────────────────────────────────┐ │
-│                     │ AKUN & AKSES          │ │ Format label (●) 10×15 + Bukti ( ) 10×10       │ │
-│                     │                       │ │              ( ) 10×15 Paket saja              │ │
-│                     │   Anggota             │ │ Ketebalan      (●) Normal ( ) Tebal            │ │
-│                     │   Mengantar      ⚠    │ └────────────────────────────────────────────────┘ │
+│                     │ AKUN & AKSES          │ │ Format label (●) 10×15 + Bukti ( ) 10×10      │ │
+│                     │                       │ │              ( ) 10×15 Paket saja             │ │
+│                     │   Anggota             │ │ Ketebalan      (●) Normal ( ) Tebal           │ │
+│                     │   Mengantar      ⚠    │ └───────────────────────────────────────────────┘ │
 │                     │   API & MCP           │ ┌ Isi struk ────────────────────────────────────┐ │
-│                     │                       │ │ Tampilkan WA gerai           [● on ]           │ │
+│                     │                       │ │ Tampilkan WA gerai           [● on ]          │ │
 │                     │                       │ │ Catatan kaki  [Terima kasih sudah ...     ]   │ │
-│                     │                       │ └────────────────────────────────────────────────┘ │
+│                     │                       │ └───────────────────────────────────────────────┘ │
 │                     │                       ├───────────────────────────────────────────────────┤
 │                     │                       │ Ada perubahan belum disimpan   [Batal] [Simpan]   │ ← only when dirty
 └─────────────────────┴───────────────────────┴───────────────────────────────────────────────────┘
@@ -129,8 +129,8 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 ├──────────────────────────────────────┤  │ Printer & Struk                      │
 │ Gerai                                │  ├──────────────────────────────────────┤
 │ ┌──────────────────────────────────┐ │  │ ┌ Printer di perangkat ini ────────┐ │
-│ │ Profil Gerai          Berkah J. ›│ │  │ │ POS-58 · terhubung 🟢             │ │
-│ │ Mini-Site   berkahjaya.gerai.cc ›│ │  │ │ [Tes Cetak]  [Ganti Printer]      │ │
+│ │ Profil Gerai          Berkah J. ›│ │  │ │ POS-58 · terhubung 🟢            │ │
+│ │ Mini-Site   berkahjaya.gerai.cc ›│ │  │ │ [Tes Cetak]  [Ganti Printer]     │ │
 │ │ Data Usaha        Belum diisi   ›│ │  │ └──────────────────────────────────┘ │
 │ └──────────────────────────────────┘ │  │ …                                    │
 │ Operasional                          │  ├──────────────────────────────────────┤
@@ -142,7 +142,7 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │ Akun & Akses                         │
 │ ┌──────────────────────────────────┐ │
 │ │ Anggota              3 orang    ›│ │
-│ │ Mengantar   ⚠ Webhook belum aktif›│ │
+│ │ Mengantar  ⚠ Webhook belum aktif›│ │
 │ │ API & MCP            1 kunci    ›│ │
 │ └──────────────────────────────────┘ │
 └──────────────────────────────────────┘
@@ -159,7 +159,7 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 | `/pengaturan/ekspedisi` | Operasional | O | List of couriers with `Switch` per row (instant save + toast `J&T dinonaktifkan`), pickup mode, assigned discount (read-only, set by Super Admin) | Instant |
 | `/pengaturan/printer` | Operasional | O K | This device's printer (local, Kasir allowed) and density; outlet default label format: `10×15 · Paket + Bukti` / `10×10 · Paket saja` / `10×15 · Paket saja` / 58 mm roll (DEC-224, owner); receipt/stub content incl. `Catatan video unboxing` (0–50 chars, empty hides it) and `Tampilkan komisi di Cek Ongkir Cepat` (owner-only switch, default off) — fields in spec 01 §2.4 (owner) | Device part instant; receipt part Save bar |
 | `/pengaturan/packing` | Operasional | O | Packing add-on catalogue (Plastik, Bubble, Kardus S/M/L) with price; optional `Biaya Layanan Loket` (`Aktifkan` switch + default amount `Rp1.000–Rp200.000`, Non-COD and COD Ongkir only, printed as its own line — DEC-225) | Save bar |
-| `/pengaturan/anggota` | Akun & Akses | O | Members table, invite Kasir (email), revoke, last activity | Row actions with confirm |
+| `/pengaturan/anggota` | Akun & Akses | O | Members table, invite Kasir (email), revoke, last activity; switch `Kasir boleh bayar COD` (spec 03 §1.2) | Row actions with confirm |
 | `/pengaturan/mengantar` | Akun & Akses | O | Connection status, webhook status + copy URL + paste secret (PR-02b), pickup `area_id`, last sync | Save bar (secret only) |
 | `/pengaturan/api-mcp` | Akun & Akses | O | Keys table (name, scopes, last used), `Buat Kunci` dialog (shown once), revoke, links to `/api/v1/docs` and `/mcp` | Dialog per action |
 

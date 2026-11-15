@@ -11,9 +11,9 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │ [G] BERKAH JAYA  │ DASHBOARD GERAI              [Periode ▾ 7 hari terakhir · 8–14 Nov]               │
 │ berkahjaya       │                                                      [📷 Scan QR] [+ Kiriman Baru]│
 │ .gerai.cc ↗      ├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
-│ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA BERSIH GERAI  │ SALDO MENGANTAR SYNC │
-│ ● Dashboard      │ 412 Paket (+18%▲) │ Rp 9.840.000      │ Rp 2.190.500       │ Aman : Rp 840.000*   │
-│ ○ Buat Pengiriman│ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Sync Rp1,98jt+Est  │ COD  : Rp 4.850.000  │
+│ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA (OWNER)       │ SALDO MENGANTAR SYNC │
+│ ● Dashboard      │ 412 Paket (+18%▲) │ Rp 9.840.000      │ Estimasi Rp 2,19jt │ Aman : Rp 840.000*   │
+│ ○ Buat Pengiriman│ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Laba Kas Rp 1,98jt │ COD  : Rp 4.850.000  │
 │ ○ Kiriman   (22) ├───────────────────┴───────────────────┴────────────────────┴──────────────────────┤
 │ ○ Kontak ▾       │ *Saldo Mengantar Rp915.000 (Sync 3 mnt lalu ✓) − Cadangan 3 Paket Retur Rp75.000  │
 │   ├─ Pengirim    │                                                                                   │
@@ -47,7 +47,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 ┌────────────────────────────────────────────────────────────┬─────────────────────────────────────────┐
 │ [● Paket Reguler] [Paket Massal] [Cek Ongkir] [Shift]      │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
 ├────────────────────────────────────────────────────────────┼─────────────────────────────────────────┤
-│ KIRIMAN BARU — INV #8K4M2P7        [📷 Scan QR dari Rumah]  │ RINGKASAN KUNCI (INV #8K4M2P7)           │
+│ KIRIMAN BARU — INV #8K4M2P7        [📷 Scan QR dari Rumah]  │ RINGKASAN KUNCI (INV #8K4M2P7)         │
 │ ────────────────────────────────────────────────────────── │ ─────────────────────────────────────── │
 │ 1. TUJUAN & BERAT PAKET                                    │ Mode       : NON-COD (Bayar di Loket)   │
 │ Mode : (●) Non-COD   ( ) COD Barang   ( ) COD Ongkir       │ Tujuan     : Coblong, Kota Bandung      │
