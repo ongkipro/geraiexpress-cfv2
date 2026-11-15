@@ -13,7 +13,8 @@ import { register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
-import { partnerClient, publicClient } from "../mengantar/factory"
+import { searchAreas } from "../couriers/areas"
+import { listCouriers, updateCourier } from "../couriers/catalog"
 import { vaultFor } from "../do/gerai-vault/stub"
 
 export interface Membership {
@@ -178,15 +179,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
 
   // Outlet application (PR-01): pickup area search, submit, status.
-  r("GET", "/onboarding/areas", "app_session", "none", async (c) => {
-    const q = (c.req.query("q") ?? "").trim()
-    if (q.length < 3) return ok({ items: [] })
-    void partnerClient
-    // Area search needs no seller key (Mengantar does not validate it on this route, docs §3.1); a platform placeholder
-    // keeps the path well-formed. KV caching of area search arrives with TASK-206.
-    const items = await publicClient(c.env, "platform-area-search").searchArea(q.slice(0, 60))
-    return ok({ items: items.slice(0, 20).map((a) => ({ id: a._id, label: [a.SUBDISTRICT_NAME, a.DISTRICT_NAME, a.CITY_NAME, a.PROVINCE_NAME].filter(Boolean).join(", "), postalCode: a.ZIP_CODE ? String(a.ZIP_CODE) : null })) })
-  })
+  r("GET", "/onboarding/areas", "app_session", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
   r("POST", "/onboarding/application", "app_session", "self", async (c) => {
     const b = await body(c)
     const res = await submitApplication(c.env, c.get("session").user.id, b as never, now())
@@ -212,6 +205,14 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     }
     return ok(await connectByok(c.env, m.tenantId, typeof b.apiKey === "string" ? b.apiKey : "", now()))
   })
+
+  // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223): instant-save toggles and pickup mode.
+  r("GET", "/settings/couriers", "app_owner", "role", async (c) => ok({ items: await listCouriers(c.env, c.get("membership")!.tenantId) }))
+  r("POST", "/settings/couriers/:code", "app_owner", "role", async (c) => {
+    const b = await body(c)
+    return ok(await updateCourier(c.env, c.get("membership")!.tenantId, c.get("session").user.id, c.req.param("code") ?? "", { enabled: b.enabled, pickupMode: b.pickupMode }))
+  })
+  r("GET", "/areas", "app_member", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
 
   // Pengaturan › Mengantar (PR-02b): webhook URL, secret, status chip, polling floor.
   r("GET", "/settings/mengantar", "app_owner", "role", async (c) => ok(await mengantarSettings(c.env, c.get("membership")!.tenantId, c.req.url, now())))

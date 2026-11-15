@@ -146,6 +146,42 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
   }
 
+  // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------
+
+  async courierPrefs(tenantId: string): Promise<VaultResult<Array<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: this.ctx.storage.sql.exec<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>("SELECT courier_code, enabled, pickup_mode, updated_at FROM tenant_courier_prefs").toArray() }
+  }
+
+  /** Upserts one courier preference (validated by the caller against the catalog) with a tenant audit row. */
+  async setCourierPref(
+    tenantId: string,
+    p: { courierCode: string; enabled?: boolean; pickupMode?: "scheduled_pickup" | "drop_off_only"; defaultMode: "scheduled_pickup" | "drop_off_only"; actorId: string },
+  ): Promise<VaultResult<Array<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const now = Date.now()
+    this.ctx.storage.transactionSync(() => {
+      const sql = this.ctx.storage.sql
+      const cur = sql.exec<{ enabled: number; pickup_mode: string }>("SELECT enabled, pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", p.courierCode).toArray()[0]
+      const enabled = p.enabled === undefined ? (cur?.enabled ?? 1) : p.enabled ? 1 : 0
+      const mode = p.pickupMode ?? cur?.pickup_mode ?? p.defaultMode
+      sql.exec(
+        `INSERT INTO tenant_courier_prefs (tenant_id, courier_code, enabled, pickup_mode, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, courier_code) DO UPDATE SET enabled = excluded.enabled, pickup_mode = excluded.pickup_mode, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+        tenantId,
+        p.courierCode,
+        enabled,
+        mode,
+        now,
+        p.actorId,
+      )
+      this.audit(tenantId, now, "user", p.actorId, "courier.preference_changed", { courierCode: p.courierCode, enabled: enabled === 1, pickupMode: mode })
+    })
+    return this.courierPrefs(tenantId)
+  }
+
   // ---- Seller key rotation fence (TASK-205, ADR-0004 §5) ----------------------------------------------------------
 
   /** Step 1: bump `key_version` and fence BEFORE Partner `regenerate`. Refuses while a rotation is unresolved. */
@@ -300,13 +336,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   private audit(tenantId: string, at: number, actorType: "user" | "system", actorId: string | null, action: string, meta: Record<string, unknown>): void {
     this.ctx.storage.sql.exec(
-      "INSERT INTO audit_logs (id, tenant_id, at, actor_type, actor_id, action, target_type, metadata_json) VALUES (?, ?, ?, ?, ?, ?, 'mengantar_connection', ?)",
+      "INSERT INTO audit_logs (id, tenant_id, at, actor_type, actor_id, action, target_type, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       crypto.randomUUID(),
       tenantId,
       at,
       actorType,
       actorId,
       action,
+      action.startsWith("courier.") ? "courier_pref" : "mengantar_connection",
       JSON.stringify(meta),
     )
   }

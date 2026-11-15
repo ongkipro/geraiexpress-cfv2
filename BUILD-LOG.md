@@ -248,3 +248,12 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   bumped), stale completion refused, held old version rejected, 24 h route rotation; mutation red.
 - Gotcha: `setAlarm()` refuses times <= 0, so overdue timers are armed at `Date.now()`.
 - Note: the test folder is `test/key-rotation/` because the local safety guard blocks paths named `credentials`.
+
+## 2026-11-16 — TASK-206 Courier catalog, Ekspedisi Aktif, area search cache (M2)
+
+- Shipped: D1 `courier_service_catalog` (data, not code), tenant `tenant_courier_prefs`, `couriers/{catalog,areas}.ts`,
+  owner routes, `/pengaturan/ekspedisi`, KV-cached area search shared by onboarding and the counter.
+- Evidence: Workers tests (seed rules, pickup options, catalog change without code, defaults, instant save + audit,
+  unsupported mode in Indonesian, unknown/inactive courier, cashier 403, cache miss → hit → skip); e2e; UI gates.
+- Fixed before commit: catalog notes are user-facing, so they are plain Indonesian (no spec references or field names).
+- No toast dependency: a fixed `aria-live` region shows the confirmation (DEC-223 "instant save + toast").

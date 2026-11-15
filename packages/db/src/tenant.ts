@@ -5,6 +5,7 @@ import m0002 from "../migrations/tenant/0002_inv_slugs.sql"
 import m0003 from "../migrations/tenant/0003_mengantar_connection.sql"
 import m0004 from "../migrations/tenant/0004_webhooks_status.sql"
 import m0005 from "../migrations/tenant/0005_key_rotation.sql"
+import m0006 from "../migrations/tenant/0006_courier_prefs.sql"
 
 export interface TenantMigration {
   version: number
@@ -18,6 +19,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 3, name: "mengantar_connection", sql: m0003 },
   { version: 4, name: "webhooks_status", sql: m0004 },
   { version: 5, name: "key_rotation", sql: m0005 },
+  { version: 6, name: "courier_prefs", sql: m0006 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length

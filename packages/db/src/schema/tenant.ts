@@ -177,3 +177,16 @@ export const vaultTimers = sqliteTable("vault_timers", {
   name: text("name").primaryKey(),
   dueAt: integer("due_at").notNull(),
 })
+
+export const tenantCourierPrefs = sqliteTable(
+  "tenant_courier_prefs",
+  {
+    tenantId: text("tenant_id").notNull(),
+    courierCode: text("courier_code").notNull(),
+    enabled: integer("enabled").notNull(),
+    pickupMode: text("pickup_mode", { enum: ["scheduled_pickup", "drop_off_only"] }).notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    updatedBy: text("updated_by"),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.courierCode] })],
+)

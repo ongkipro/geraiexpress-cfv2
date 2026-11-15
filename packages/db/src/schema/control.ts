@@ -308,3 +308,24 @@ export const webhookRoutes = sqliteTable(
   },
   (t) => [index("webhook_routes_tenant").on(t.tenantId, t.state)],
 )
+
+export const courierServiceCatalog = sqliteTable(
+  "courier_service_catalog",
+  {
+    serviceCode: text("service_code").primaryKey(),
+    courierCode: text("courier_code").notNull(),
+    courierName: text("courier_name").notNull(),
+    displayName: text("display_name").notNull(),
+    serviceClass: text("service_class", { enum: ["regular", "cargo"] }).notNull(),
+    pickupCapability: text("pickup_capability", { enum: ["pickup_and_drop_off", "pickup_only", "drop_off_only"] }).notNull(),
+    codSupported: integer("cod_supported").notNull(),
+    minWeightGram: integer("min_weight_gram"),
+    maxWeightGram: integer("max_weight_gram"),
+    roundingToleranceGram: integer("rounding_tolerance_gram").notNull().default(300),
+    isActive: integer("is_active").notNull().default(1),
+    sortOrder: integer("sort_order").notNull(),
+    note: text("note"),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("courier_service_catalog_courier").on(t.courierCode, t.sortOrder)],
+)
