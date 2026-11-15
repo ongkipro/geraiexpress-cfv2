@@ -33,18 +33,23 @@ This specification defines exact integer arithmetic for weights, customer tariff
 
 > **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. **All money flows and margins in §3 use the provider amount `N = provider_net_shipping_idr`**, because that is what Mengantar actually debits; `M` is shown only as the Super Admin's commercial reference and the gap `M - N` as `Selisih tarif` (§2.1). Once DEC-226's provider-enforced target is active, Mengantar bills the assigned rate, so `N = M` by construction. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
 
-### 2.1 What the Super Admin assigned rate controls under Scheme 1 (DEC-226)
+### 2.1 Discount control and verification (DEC-226, DEC-230)
 
-Each outlet owns its Mengantar seller account (ADR-0003), so the **actual debit is whatever Mengantar charges that
-seller**; GeraiExpress cannot reduce or raise it by calculation, and the documented Partner API has no discount endpoint.
-
-- **Target:** after Mengantar confirms that a partner can set a per-seller discount, the Super Admin rate is applied on
-  Mengantar's side and becomes the billed rate; activation is recorded with date, channel and the observed
-  `discountPercent` from `/order/estimate`.
-- **Until then (fallback):** `assigned_gerai_discount_bps`
-is an **internal commercial reference** used for the Super Admin's `Selisih tarif` view and the `assigned <= observed` guard only (`Estimasi Laba` always uses `N`, §3); reconciled
-profit always uses `provider_reconciled_cost_idr`. Any gap (`assigned < observed`) is shown to the owner as
-`Selisih tarif` and is never booked as platform revenue (a platform-fee settlement of the gap is rejected for launch).
+- **Who decides:** Super Admin sets `assigned_bps` per gerai × courier/service. Mengantar permits GeraiExpress to
+  determine it up to the platform ceiling `platform_pricing_policy.max_discount_bps` (default `3000` = 30 %); the
+  ceiling scope (`per_seller` | `per_courier` | `per_service`) is configuration, set once Mengantar confirms it.
+- **How it reaches Mengantar:** no API exists today (sandbox docs checked 2026-11-15), so each rule change creates a
+  request for the Mengantar team (`apply_channel = mengantar_team`, `requested_at`); when an endpoint appears,
+  `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
+- **Verification:** a daily job (and the next quote after a change) compares `assigned_bps` with the
+  `discountPercent` observed on that seller's `/order/estimate`: `Belum diterapkan` (requested, not observed),
+  `Sesuai` (within 1 bp, sets `verified_at`), `Selisih` (different; owner and Super Admin see both values).
+- **Money:** every flow and margin uses the provider net `N` that Mengantar actually charges (§3), so a rule not yet
+  applied never inflates profit; `M − N` is shown as `Selisih tarif` for information only, never booked.
+- **Customers:** walk-in senders always pay the normal publish tariff `P`; the discount is GeraiExpress's selling
+  value to the gerai and is never shown on customer screens, receipts or the mini-site (DEC-205, DEC-230).
+- **Guards:** `assigned_bps <= max_discount_bps` always; `assigned_bps > observed` is allowed only while the rule is
+  `Belum diterapkan` (waiting for Mengantar) and is flagged; no subsidy is ever booked.
 
 ---
 

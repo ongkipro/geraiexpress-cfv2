@@ -152,6 +152,17 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 
 ---
 
+### 4.4 Public API hardening without an IP allowlist (DEC-232)
+
+- Seller keys live only encrypted in the tenant's `GeraiVaultDO` (spec 05 §2 item 3); they never reach a browser, log or
+  response; the URL path key is redacted in every error (ARCHITECTURE §4.1).
+- Per-tenant rate limits on quote, issue and cancel; issuing tools in MCP capped per day (spec 08).
+- Key rotation fence (TASK-205) and immediate rotation on suspected exposure (`Sistem & Audit` action, TOTP).
+- Anomaly alerts (`OBSERVABILITY.md`): any `403 IP_NOT_ALLOWED`, spikes of `401/403` per tenant, unusual issue volume
+  per tenant versus its 7-day baseline.
+- Egress for the Partner API only: a Vultr Reserved IPv4 on a new small instance or the existing Vultr server
+  (§3 options A or C, owner's choice at M6).
+
 ## 5. Deployment shape (Option A/B)
 
 - Coolify application `partner-relay`, image pinned by digest, no published host ports (Traefik routes
@@ -177,8 +188,9 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 3. Sandbox `POST /sellers/list` through the relay → `200`.
 4. Production `POST /sellers/list` through the relay → `200`. The same call sent directly from a Worker →
    `403 IP_NOT_ALLOWED` (proves the allowlist is enforced and the relay is the reason it works).
-5. Ask Mengantar (Q23) whether Public API writes or label generation for Partner-created sellers are IP-restricted.
-   If yes, add those exact routes to the relay allowlist by decision record — never a wildcard.
+5. Q23 is not a blocker (DEC-232): Public API calls stay direct from the Worker with the hardening of §4.4. If a
+   `403 IP_NOT_ALLOWED` is ever seen on a Public API route, an alert fires and that exact route is added to the relay
+   allowlist by a DEC entry — never a wildcard.
 6. Relay logs for steps 3–4 contain no request or response bodies.
 
 ---

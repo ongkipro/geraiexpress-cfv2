@@ -177,7 +177,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `observability-engineering`, `workers-best-practices`
 - **Allowed Paths:** `packages/telemetry/**`, `apps/worker/src/telemetry/**`, `scripts/probes/**`, matching tests
 - **Depends On:** TASK-101
-- **Accepted Invariants:** structured events with bounded labels; redaction of keys, cookies, OTPs, tokens, raw
+- **Accepted Invariants:** structured events with bounded labels; Public API anomaly signals of spec 10 §4.4; redaction of keys, cookies, OTPs, tokens, raw
   bodies, phones; probes of `OBSERVABILITY.md` runnable as `pnpm probes --env`; alert delivery to the owner channel
   (Cloudflare notifications or a scheduled checker) configured per environment.
 - **Done when:** redaction tests; `pnpm probes --env local` green against `wrangler dev`; the alert channel configured
@@ -300,17 +300,21 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Done when:** catalog/prefs tests; cache hit/miss test.
 
 ### TASK-207: Discount and cashback matrix (`Tarif & Kurir`)
-- **Requirement:** PR-11, DEC-205, DEC-226, spec 02 §2
+- **Requirement:** PR-11, DEC-205, DEC-226, DEC-230, spec 02 §2.1
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `admin-product-ux`, `shadcn-ui`
 - **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`,
   `packages/db/migrations/{control,tenant}/207-*`, matching tests
-- **Depends On:** TASK-107, TASK-203; DEC-226 commercial mode recorded in `DECISIONS.md` before start (Mengantar
-  answer, or the owner's written go-ahead on the internal-estimate fallback)
-- **Accepted Invariants:** `assigned <= observed`; TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
-- **Visual Contract:** `/tarif` tabs per visual 07.
-- **Done when:** rule above observed rejected; audit per change; cashback ledger states unit-tested.
+- **Depends On:** TASK-107, TASK-201 (estimate client returns `discountPercent`), TASK-203
+- **Accepted Invariants:** `assigned_bps <= platform_pricing_policy.max_discount_bps` (default 3000, scope configurable);
+  `apply_channel` `mengantar_team` (request list) with `partner_api` adapter slot; verification state `Belum diterapkan /
+  Sesuai / Selisih` from observed `discountPercent` (tolerance 1 bp); customers always pay the publish tariff;
+  TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
+- **Visual Contract:** `/tarif` tabs incl. `Kebijakan Diskon` per visual 07; request list for the Mengantar team (export).
+- **Done when:** rule above the ceiling rejected; changing `max_discount_bps` or its scope needs no code change (test);
+  verification state transitions on fixture estimates; no customer-facing DTO contains discount fields (test); audit
+  per change; cashback ledger states unit-tested.
 
 ### TASK-208: Super Admin `Ringkasan`, `Pengawasan`, `Sistem & Audit`
 - **Requirement:** DEC-209, DEC-218 (platform legal editor), spec 06 §Super Admin, spec 01 §2.6
@@ -371,7 +375,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Allowed Paths:** `apps/worker/src/pricing/quote/**`, `apps/web-app/src/routes/kasir/{baru,cek-cepat}/**`,
   `packages/db/migrations/tenant/303-*`, matching tests
 - **Depends On:** TASK-107, TASK-201, TASK-207, TASK-301
-- **Accepted Invariants:** fixed-point `codFee`; frozen quote (`F`, `N`, `C`); cargo ≥ 5,000 g, Non-COD only; Kasir
+- **Accepted Invariants:** each quote records the observed `discountPercent` for the TASK-207 verifier;
+  fixed-point `codFee`; frozen quote (`F`, `N`, `C`); cargo ≥ 5,000 g, Non-COD only; Kasir
   sees customer price only; quick check allocates no slug or draft.
 - **Visual Contract:** courier cards per visual 05; owner `👁` margin toggle; per-card loading/error.
 - **Done when:** five-mode fixture tests incl. unstable fee; quick-check non-allocation test.
@@ -394,18 +399,21 @@ No task is in progress. TASK-101 starts when the owner says go.
   tests against the real projection; scripted checkout < 45 s; R4 review.
 
 ### TASK-305: Masking presets, quota, reveal audit
-- **Requirement:** PR-15, DEC-206, ADR-0005, spec 05
+- **Requirement:** PR-15, DEC-206, DEC-231, ADR-0005, spec 05
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `application-security`, `ui-validation`
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/masking/**`, `apps/web-app/src/components/masking/**`,
+  `apps/web-app/src/routes/pengaturan/label-privasi/**`,
   `packages/db/migrations/tenant/305-*`, matching tests
 - **Depends On:** TASK-302, TASK-304
-- **Accepted Invariants:** pickup always the outlet; `422 MASKING_QUOTA_EXCEEDED`, never silent; reveal with reason +
+- **Accepted Invariants:** masking offered only when the gerai enabled it in `Label & Privasi` and the Super Admin
+  kill-switch is on; only enabled presets selectable, `Standar Gerai` always; pickup always the outlet; `422 MASKING_QUOTA_EXCEEDED`, never silent; reveal with reason +
   audit; not advertised before counsel review.
 - **Visual Contract:** preset picker in POS step 3 (4 presets, preview of what prints); quota-exceeded and
   kill-switch-off states; `Lihat Pengirim Asli` reason dialog.
-- **Done when:** quota and reveal tests; label snapshots per preset.
+- **Done when:** settings tests (off → only `Standar Gerai`; enabled subset; default preset); quota and reveal tests;
+  label snapshots per preset.
 
 ### TASK-306: Printing — 100 mm PDFs (PC-first), 58 mm ESC/POS, bulk print
 - **Requirement:** PR-08, DEC-224, DEC-229, visual 04
@@ -464,7 +472,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `shadcn-ui`, `application-security`, `ui-validation`
 - **Allowed Paths:** `apps/web-app/src/routes/pengaturan/{index,profil,data-usaha,printer,packing,anggota}/**`,
   `apps/web-app/src/routes/{akun,bantuan}/**`, `apps/worker/src/do/gerai-vault/settings/**`,
-  `apps/worker/src/auth/account/**`, matching tests (excludes `ekspedisi` 206, `mengantar` 204, `mini-site` 505, `api-mcp` 503)
+  `apps/worker/src/auth/account/**`, matching tests (excludes `ekspedisi` 206, `mengantar` 204, `label-privasi` 305, `mini-site` 505, `api-mcp` 503)
 - **Depends On:** TASK-301, TASK-105
 - **Accepted Invariants:** sub-menu, sticky save bar only when dirty; Kasir sees only `printer`; NPWP encrypted;
   member invite/revoke; email change by OTP; session list with revoke.
@@ -644,7 +652,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 ### M6 — Production readiness and pilot (owner approves every production action)
 
 ### TASK-601: Partner relay in production
-- **Requirement:** DEC-219, spec 10 §5–6
+- **Requirement:** DEC-219, DEC-232, spec 10 §3–6
 - **Risk Level:** R4
 - **Job:** release
 - **Capability:** `vps-deploy`, `vultr`
@@ -652,7 +660,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Depends On:** TASK-599
 - **Accepted Invariants:** 4 Partner routes only; no Mengantar credential on the VPS; relay HMAC secrets
   (`RELAY_SECRET`, `RELAY_SECRET_PREVIOUS` during rotation) provisioned exactly as spec 10 §5.
-- **Done when:** every spec 10 §6 check recorded; Mengantar allowlist confirmed.
+- **Done when:** Vultr Reserved IPv4 attached (new small instance or existing server, owner approval); every spec 10
+  §6 check recorded; Mengantar allowlist confirmed with that IP.
 
 ### TASK-602: Production zones, SaaS setup, monitoring
 - **Requirement:** DEC-228, spec 11 §2, `OBSERVABILITY.md`
@@ -699,11 +708,11 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 | Milestone | Tasks | PRD requirements | Decisions / ADRs |
 |---|---|---|---|
 | **M1** | TASK-101..112, close 199 | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0006 |
-| **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226; ADR-0003, 0004 (§5 rotation) |
-| **M3** | TASK-301..311, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229; ADR-0004 (dispatch), 0005 |
+| **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226, 230; ADR-0003, 0004 (§5 rotation) |
+| **M3** | TASK-301..311, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229, 231; ADR-0004 (dispatch), 0005 |
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
-| **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production); ADR-0006 §7 |
+| **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production), 232; ADR-0006 §7 |
 | **Post-launch** | TASK-701..703 | PR-22 (P1), PR-23 (P2), PR-24 (P2) | — |
 
 Milestone notes carried forward:
@@ -711,6 +720,7 @@ Milestone notes carried forward:
   loading/empty/error states for every screen (deferred from TASK-001).
 - **M2/M4 sandbox verifications:** weight echo, `POST /time` timezone, `/invoices` ordering, `pay-unpaid`
   idempotency, item-value limits per courier (specs 02, 04, 09).
-- **Before TASK-207:** Mengantar answer on per-seller discount control, or the owner's recorded go-ahead on the
-  fallback (DEC-226).
-- **Before M3 masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention).
+- **Mengantar questions (owner, DEC-230):** channel/lead time for discount changes; 30 % ceiling scope — both become
+  configuration in `platform_pricing_policy`, not blockers.
+- **Before masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention); building and
+  per-gerai switching are not blocked (DEC-231).

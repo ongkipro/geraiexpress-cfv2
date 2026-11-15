@@ -94,7 +94,7 @@ and leaked recipient data. v2 prioritises those four.
    hub scan per courier before masking is advertised (ADR-0005).
 2. UU PDP implementing rules for recipient data retention — counsel (spec 05).
 3. Cashback/points vs Bank Indonesia e-money rules — keep cashback as shipping credit; counsel before cash-out.
-4. Mengantar Q23: IP restriction on Public API writes / label generation for Partner-created sellers (spec 10).
+4. Mengantar Q23: IP restriction on Public API writes — not a blocker; handled by hardening and alerting (DEC-232, spec 10 §4.4).
 5. Real discounts received by new accounts at competitors — not published; do not use in marketing.
 
 ---

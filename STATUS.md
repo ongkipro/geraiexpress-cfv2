@@ -11,7 +11,7 @@ Independent-Review-Head: 702262f (Sol round 10 APPROVE)
 
 ## Now
 
-M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-229,
+M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-232,
 ADR-0001..0006, specs 01–12, visual 01–08, research 01–03, `docs/WORKFLOW.md`, `docs/DIAGRAMS.md` (14 Mermaid diagrams), `RELEASE.md` (NOT_RELEASED), `OBSERVABILITY.md`, `BUILD-LOG.md`, `.delivery/` ledger (verified), `DESIGN.md` (Direction A picked), `design/` brief, refs and
 comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
 
@@ -34,13 +34,13 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 
 ## Blockers
 
-- Before TASK-207 (M2 pricing): Mengantar must confirm whether a partner can set a per-seller discount, through what channel and when it takes effect (DEC-226).
+- Owner asks Mengantar (DEC-230): the channel and lead time for per-seller discount changes, and whether the 30 % ceiling is
+  per seller, per courier or per service. The system is built configurable, so the answer is configuration, not a blocker.
 
 None for M1. Open items, each owned by the milestone row in `TASKS.md` (coverage map), that must close before the stated milestone:
-- Mengantar Q23 (IP restriction on Public API writes / label generation for Partner-created sellers) — before M6.
-- Vultr Reserved IP conversion procedure and price — verify at M6.
-- Counsel: Permenkomdigi 8/2025 Art. 77 vs masked labels; UU PDP retention; cashback vs e-money — before M3
-  masking is advertised and before any cash-out feature.
+- Vultr Reserved IPv4 (new small instance or existing server, DEC-232) — buy/attach at M6 with owner approval.
+- Counsel: Permenkomdigi 8/2025 Art. 77 vs masked labels; UU PDP retention; cashback vs e-money — before masking is
+  advertised (it is built and switchable per gerai, DEC-231) and before any cash-out feature.
 - Mengantar sandbox checks listed in specs 02, 04, 09 (weight echo, `POST /time` timezone, `/invoices` ordering,
   `pay-unpaid` idempotency) — during M2/M4.
 

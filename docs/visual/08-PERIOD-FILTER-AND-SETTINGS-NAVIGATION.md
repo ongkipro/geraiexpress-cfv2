@@ -103,9 +103,9 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │                     │ OPERASIONAL           │ │ POS-58 · Bluetooth · terhubung 🟢             │ │
 │                     │   Ekspedisi Aktif     │ │ [Tes Cetak]  [Ganti Printer]                  │ │
 │                     │ ● Printer & Struk     │ └───────────────────────────────────────────────┘ │
-│                     │   Packing & Biaya     │ ┌ Format cetak ─────────────────────────────────┐ │
-│                     │ AKUN & AKSES          │ │ Format label (●) 10×15 + Bukti ( ) 10×10      │ │
-│                     │                       │ │              ( ) 10×15 Paket saja             │ │
+│                     │   Label & Privasi     │ ┌ Format cetak ─────────────────────────────────┐ │
+│                     │   Packing & Biaya     │ │ Format label (●) 10×15 + Bukti ( ) 10×10      │ │
+│                     │ AKUN & AKSES          │ │              ( ) 10×15 Paket saja             │ │
 │                     │   Anggota             │ │ Ketebalan      (●) Normal ( ) Tebal           │ │
 │                     │   Mengantar      ⚠    │ └───────────────────────────────────────────────┘ │
 │                     │   API & MCP           │ ┌ Isi struk ────────────────────────────────────┐ │
@@ -137,6 +137,7 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │ ┌──────────────────────────────────┐ │  │ [ Batal ]           [ Simpan ]       │ ← sticky, only when dirty
 │ │ Ekspedisi Aktif       8 aktif   ›│ │  └──────────────────────────────────────┘
 │ │ Printer & Struk     POS-58 🟢   ›│ │
+│ │ Label & Privasi  Masking aktif  ›│ │
 │ │ Packing & Biaya      4 item     ›│ │
 │ └──────────────────────────────────┘ │
 │ Akun & Akses                         │
@@ -156,8 +157,9 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 | `/pengaturan/profil` | Gerai | O | Nama gerai, logo, WhatsApp, jam buka, alamat & titik peta | Save bar |
 | `/pengaturan/mini-site` | Gerai | O | Preview `<slug>.gerai.cc`, teks sambutan, layanan yang tampil, QR poster A4/A5, domain sendiri (Pro) | Save bar |
 | `/pengaturan/data-usaha` | Gerai | O | Bentuk usaha, nama resmi, NIB, NPWP (encrypted), penanggung jawab — all optional (`DEC-218`) | Save bar |
-| `/pengaturan/ekspedisi` | Operasional | O | List of couriers with `Switch` per row (instant save + toast `J&T dinonaktifkan`), pickup mode, assigned discount (read-only, set by Super Admin) | Instant |
+| `/pengaturan/ekspedisi` | Operasional | O | List of couriers with `Switch` per row (instant save + toast `J&T dinonaktifkan`), pickup mode, assigned discount with its status `Belum diterapkan / Sesuai / Selisih` (read-only, set by Super Admin) | Instant |
 | `/pengaturan/printer` | Operasional | O K | This device's printer (local, Kasir allowed) and density; outlet default label format: `10×15 · Paket + Bukti` / `10×10 · Paket saja` / `10×15 · Paket saja` / 58 mm roll (DEC-224, owner); receipt/stub content incl. `Catatan video unboxing` (0–50 chars, empty hides it) and `Tampilkan komisi di Cek Ongkir Cepat` (owner-only switch, default off) — fields in spec 01 §2.4 (owner) | Device part instant; receipt part Save bar |
+| `/pengaturan/label-privasi` | Operasional | O | `Aktifkan masking label` switch; presets the counter may offer (`Standar Gerai` always; `Dropship Toko`, `Privasi Penerima COD`, `Full Nama Gerai` optional); default preset; mask recipient phone on COD by default (DEC-231). Disabled with an explanation when the Super Admin kill-switch is off | Save bar |
 | `/pengaturan/packing` | Operasional | O | Packing add-on catalogue (Plastik, Bubble, Kardus S/M/L) with price; optional `Biaya Layanan Loket` (`Aktifkan` switch + default amount `Rp1.000–Rp200.000`, Non-COD and COD Ongkir only, printed as its own line — DEC-225) | Save bar |
 | `/pengaturan/anggota` | Akun & Akses | O | Members table, invite Kasir (email), revoke, last activity; switch `Kasir boleh bayar COD` (spec 03 §1.2) | Row actions with confirm |
 | `/pengaturan/mengantar` | Akun & Akses | O | Connection status, webhook status + copy URL + paste secret (PR-02b), pickup `area_id`, last sync | Save bar (secret only) |

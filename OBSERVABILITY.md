@@ -30,7 +30,9 @@ hosts of spec 07 §7.
 | Are counters able to issue shipments? | `shipment.issue` outcome rate (`issued`, `unpaid_hold`, `reconciliation_needed`, `failed`) and p95 latency, per courier | `reconciliation_needed` > 2 % of issues over 30 min, or any `failed` streak ≥ 5 → owner on-call |
 | Are provider statuses fresh? | webhook inbox age (oldest `received` row), applied events per minute, polling floor lag per tenant bucket | oldest `received` > 15 min → alert |
 | Is money in sync? | finance sync last success age, `Selisih Sync` and `quote_drift` counts, `provider_status_conflict` count | last sync > 60 min for any active tenant |
+| Is a seller key being misused? | `401/403` per tenant on Public API, issue volume vs 7-day baseline, any `403 IP_NOT_ALLOWED` on Public API (DEC-232) | any Public API `IP_NOT_ALLOWED`; issue volume > 3× baseline in 1 h |
 | Is the Partner relay usable? | relay `/healthz`, Partner call outcome by route, `409 relay_duplicate`, `403 IP_NOT_ALLOWED` | any `IP_NOT_ALLOWED`, or relay down 5 min |
+| Are discounts applied at Mengantar? | rules by `verification_state` (`belum_diterapkan`, `sesuai`, `selisih`) and age (DEC-230) | `belum_diterapkan` older than 7 days or any `selisih` → Super Admin |
 | Can people sign up and log in? | `email_outbox` sent/failed/expired counts, delivery latency, OTP verify success rate | failed or expired > 5 % per hour; bounce > 5 % per day (spec 12 §7) |
 | Are custom domains healthy? | hostnames by state, quota `used/allocated`, probe failures | quota ≥ 80 %; a previously active host fails its probe |
 | Is a tenant object unhealthy? | DO RPC error rate and `overloaded` errors, tenants in `recovery` | any tenant in `recovery` |

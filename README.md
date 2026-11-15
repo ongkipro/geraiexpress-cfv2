@@ -48,7 +48,7 @@ To keep daily operations effortless for 35–55+ shop owners and counter staff, 
 geraiexpress-cfv2/
 ├── README.md                          # Project overview, language policy, host map, and doc index
 ├── AGENTS.md                          # Non-negotiable engineering, money, role, and security invariants
-├── DECISIONS.md                       # Canonical owner & architecture decision register (DEC-201..DEC-229)
+├── DECISIONS.md                       # Canonical owner & architecture decision register (DEC-201..DEC-232)
 ├── PRD.md                             # Evidence-backed Product Requirements Document (PR-01..PR-24)
 ├── ARCHITECTURE.md                    # Cloudflare Serverless topology, DO locking, and Mengantar relay
 ├── ROADMAP.md                         # Milestones M0..M6 and verification exit gates
