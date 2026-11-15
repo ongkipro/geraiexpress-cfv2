@@ -185,7 +185,7 @@ export function pollCandidates(sql: SqlStorage, limit: number): ShipmentRow[] {
 
 // ---- named timers (one DO alarm serves the outbox and these) ----------------------------------------------------
 
-export type TimerName = "status_poll" | "inbox_sweep"
+export type TimerName = "status_poll" | "inbox_sweep" | "key_rotation_check"
 
 /** Sets a timer to `at`, or earlier only when `earliest` (keeps an already sooner timer). */
 export function setTimer(sql: SqlStorage, name: TimerName, at: number, mode: "replace" | "earliest" = "replace"): void {

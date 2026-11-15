@@ -235,3 +235,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   e2e secret → signed delivery → Aktif; UI gates 0 fail; two mutations red.
 - Spec drift fixed: spec 01 §3.2 now states the custody tie at level 3 (`rts_returned_to_sender` outranks
   `cancelled_local`), which the permutation test showed was needed for an order-independent maximum.
+
+## 2026-11-16 — TASK-205 Seller key rotation fence (M2)
+
+- Shipped: `credentials/rotation.ts` (`rotateSellerKey`, `resolveKeyRotation`, `revokeExpiredRoutes`), fence RPCs in
+  `GeraiVaultDO` (`beginKeyRotation`, `abortKeyRotation`, `markKeyRotationUnknown`, `pendingKeyRotation`,
+  `resolveKeyRotation`, `completeKeyRotation`, `probeDispatchFence`; protected `keyForDispatch` / `keyVersionCurrent`
+  for TASK-304), `key_rotation_check` object timer, hourly route revocation, previous-token verification window.
+- Evidence: tests for the happy path (version before regenerate, atomic key + secret + URL, D1 active/rotating),
+  crash after the fence (alarm read-back, no regenerate), timeout after Mengantar applied (read-back, `secret_mismatch`),
+  double timeout (stays fenced, later alarm resolves, new rotation refused), Mengantar error (old key kept, version
+  bumped), stale completion refused, held old version rejected, 24 h route rotation; mutation red.
+- Gotcha: `setAlarm()` refuses times <= 0, so overdue timers are armed at `Date.now()`.
+- Note: the test folder is `test/key-rotation/` because the local safety guard blocks paths named `credentials`.

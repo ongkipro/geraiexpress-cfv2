@@ -5,7 +5,10 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 /** Order read-back fixtures keyed by AWB or ORDER_ID (`history[].date` is Asia/Jakarta `DD-MM-YYYY HH:mm`). */
 export const mockOrders = new Map<string, { cnote_no: string; ORDER_ID: string; statusCategory: string; history: Array<{ date: string; statusCategory: string }> }>()
 
-const sellers = new Map<string, { sellerId: string; email: string; apiKey: string }>()
+/** Fault injection for tests: the next call to a route throws a timeout (after or before Mengantar applied it). */
+export const mockFaults: { regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"; apiKey?: "timeout" } = {}
+
+const sellers = new Map<string, { sellerId: string; email: string; apiKey: string; callbackSecret?: string }>()
 const takenEmails = new Set(["sudahada@contoh.test"])
 
 export const mockFetch: typeof fetch = async (input, init) => {
@@ -24,13 +27,27 @@ export const mockFetch: typeof fetch = async (input, init) => {
   if (p === "/api/partner/v1/sellers/list") {
     const s = body.externalUserId ? sellers.get(body.externalUserId) : null
     const list = body.externalUserId ? (s ? [{ ...s, externalUserId: body.externalUserId, active: true }] : []) : [...sellers.entries()].map(([k, v]) => ({ ...v, externalUserId: k, active: true }))
-    return json(200, { success: true, data: { sellers: list.map(({ apiKey: _k, ...r }) => r), page: 1, size: 50, total: list.length, totalPages: 1 } })
+    return json(200, { success: true, data: { sellers: list.map(({ apiKey: _k, callbackSecret: _c, ...r }) => r), page: 1, size: 50, total: list.length, totalPages: 1 } })
   }
   if (p === "/api/partner/v1/sellers/api-key" || p === "/api/partner/v1/sellers/api-key/regenerate") {
     const entry = [...sellers.values()].find((s) => s.sellerId === body.sellerId)
     if (!entry) return json(404, { success: false, code: "SELLER_NOT_FOUND" })
-    if (p.endsWith("regenerate")) entry.apiKey = `MOCK-${crypto.randomUUID().slice(0, 8)}`
-    return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey, ...(p.endsWith("regenerate") ? { callbackSecret: null } : {}) } })
+    const timeout = () => Object.assign(new Error("timeout"), { name: "TimeoutError" })
+    if (p.endsWith("regenerate")) {
+      const fault = mockFaults.regenerate
+      delete mockFaults.regenerate
+      if (fault === "error") return json(400, { success: false, code: "SELLER_INACTIVE", message: "inactive" })
+      if (fault === "timeout_before_apply") throw timeout()
+      entry.apiKey = `MOCK-${crypto.randomUUID().slice(0, 8)}`
+      entry.callbackSecret = `cb-${crypto.randomUUID().slice(0, 12)}`
+      if (fault === "timeout_after_apply") throw timeout()
+      return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey, callbackSecret: entry.callbackSecret } })
+    }
+    if (mockFaults.apiKey === "timeout") {
+      delete mockFaults.apiKey
+      throw timeout()
+    }
+    return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey } })
   }
   if (/^\/api\/public\/[^/]+\/order$/.test(p) && (init?.method ?? "GET") === "GET") {
     const id = url.searchParams.get("tracking_id") ?? url.searchParams.get("order_id") ?? ""
@@ -52,4 +69,5 @@ export const mockFetch: typeof fetch = async (input, init) => {
 export function resetMock() {
   sellers.clear()
   mockOrders.clear()
+  for (const k of Object.keys(mockFaults)) delete mockFaults[k as keyof typeof mockFaults]
 }

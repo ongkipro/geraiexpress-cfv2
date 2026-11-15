@@ -112,6 +112,11 @@ export const mengantarConnections = sqliteTable("mengantar_connections", {
   webhookLastEventAt: integer("webhook_last_event_at"),
   webhookLastFailureAt: integer("webhook_last_failure_at"),
   lastPolledAt: integer("last_polled_at"),
+  rotationState: text("rotation_state", { enum: ["idle", "in_flight", "unknown"] }).notNull().default("idle"),
+  rotationStartedAt: integer("rotation_started_at"),
+  previousWebhookPathToken: text("previous_webhook_path_token"),
+  encryptedPreviousWebhookSecret: text("encrypted_previous_webhook_secret"),
+  previousTokenExpiresAt: integer("previous_token_expires_at"),
 })
 
 export const shipments = sqliteTable(

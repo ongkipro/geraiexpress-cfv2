@@ -8,7 +8,7 @@ import { decryptString, encryptString } from "../../crypto/aead"
 import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, type OutboxTopic } from "./core/outbox"
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
-import { publicClient } from "../../mengantar/factory"
+import { partnerClient, publicClient } from "../../mengantar/factory"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, recordProviderObservation, setTimer, findShipment, type TimerName } from "./status"
 
@@ -32,6 +32,7 @@ const POLL_INTERVAL_ACTIVE_MS = 24 * HOUR // daily reconcile: Mengantar never re
 const INBOX_RESEND_AFTER_MS = 10 * 60_000
 const INBOX_RETENTION_MS = 30 * 24 * HOUR
 const POLL_BATCH = 50
+const ROTATION_STALE_MS = 5 * 60_000
 export type VaultResult<T> = { ok: true; value: T } | { ok: false; refused: VaultRefusal }
 
 const IDENTITY_DDL = "CREATE TABLE IF NOT EXISTS vault_identity (id INTEGER PRIMARY KEY CHECK (id = 1), tenant_id TEXT NOT NULL CHECK (length(tenant_id) > 0), created_at INTEGER NOT NULL)"
@@ -140,8 +141,174 @@ export class GeraiVaultDO extends DurableObject<Env> {
   /** Decrypts the seller key for a server-side Mengantar call; never returned through a public API. */
   protected async sellerKey(tenantId: string): Promise<{ key: string; version: number } | null> {
     const row = readConnection(this.ctx.storage.sql)
-    if (!row?.encrypted_api_key) return null
+    // Rotation fence (ADR-0004 §5): no Mengantar call with a key that may be replaced right now.
+    if (!row?.encrypted_api_key || row.rotation_state !== "idle") return null
     return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
+  }
+
+  // ---- Seller key rotation fence (TASK-205, ADR-0004 §5) ----------------------------------------------------------
+
+  /** Step 1: bump `key_version` and fence BEFORE Partner `regenerate`. Refuses while a rotation is unresolved. */
+  async beginKeyRotation(tenantId: string, meta: { actorId: string; reason: string; now: number }): Promise<{ ok: true; value: { sellerId: string; keyVersion: number } } | { ok: false; refused: VaultRefusal | "ROTATION_IN_PROGRESS" | "NO_SELLER" }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row?.seller_id || !row.encrypted_api_key) return { ok: false, refused: "NO_SELLER" }
+    if (row.rotation_state !== "idle") return { ok: false, refused: "ROTATION_IN_PROGRESS" }
+    const keyVersion = row.key_version + 1
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("UPDATE mengantar_connections SET key_version = ?, rotation_state = 'in_flight', rotation_started_at = ?, updated_at = ?", keyVersion, meta.now, meta.now)
+      this.audit(tenantId, meta.now, "user", meta.actorId, "mengantar.key_rotation_started", { keyVersion, reason: meta.reason })
+      // If the Worker dies before recording the outcome, the object reads the key back by itself.
+      setTimer(this.ctx.storage.sql, "key_rotation_check", meta.now + ROTATION_STALE_MS + 1000, "earliest")
+    })
+    await this.armOutbox()
+    return { ok: true, value: { sellerId: row.seller_id, keyVersion } }
+  }
+
+  /** Mengantar answered with an error: the old key is still valid; lift the fence (the version stays bumped). */
+  async abortKeyRotation(tenantId: string, keyVersion: number, code: string): Promise<VaultResult<boolean>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const now = Date.now()
+    let changed = false
+    this.ctx.storage.transactionSync(() => {
+      changed = this.ctx.storage.sql.exec("UPDATE mengantar_connections SET rotation_state = 'idle', rotation_started_at = NULL, updated_at = ? WHERE key_version = ? AND rotation_state = 'in_flight' RETURNING tenant_id", now, keyVersion).toArray().length > 0
+      if (changed) this.ctx.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'key_rotation_check'")
+      if (changed) this.audit(tenantId, now, "system", null, "mengantar.key_rotation_failed", { keyVersion, code })
+    })
+    return { ok: true, value: changed }
+  }
+
+  /** Lost response: stay fenced; only a key read-back (never another regenerate) can resolve it. */
+  async markKeyRotationUnknown(tenantId: string, keyVersion: number, reason: string): Promise<VaultResult<boolean>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const now = Date.now()
+    let changed = false
+    this.ctx.storage.transactionSync(() => {
+      changed = this.ctx.storage.sql.exec("UPDATE mengantar_connections SET rotation_state = 'unknown', updated_at = ? WHERE key_version = ? AND rotation_state = 'in_flight' RETURNING tenant_id", now, keyVersion).toArray().length > 0
+      if (changed) this.audit(tenantId, now, "system", null, "mengantar.key_rotation_unknown", { keyVersion, reason })
+      if (changed) setTimer(this.ctx.storage.sql, "key_rotation_check", now + 60_000, "earliest")
+    })
+    await this.armOutbox()
+    return { ok: true, value: changed }
+  }
+
+  /** A rotation that needs a read-back: `unknown`, or `in_flight` for over 5 minutes (the Worker died mid-call). */
+  async pendingKeyRotation(tenantId: string, now: number = Date.now()): Promise<VaultResult<{ sellerId: string; keyVersion: number; state: "in_flight" | "unknown" } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row?.seller_id || row.rotation_state === "idle") return { ok: true, value: null }
+    if (row.rotation_state === "in_flight" && now - (row.rotation_started_at ?? now) < ROTATION_STALE_MS) return { ok: true, value: null }
+    return { ok: true, value: { sellerId: row.seller_id, keyVersion: row.key_version, state: row.rotation_state } }
+  }
+
+  /**
+   * Step 2: store the new key and (when Mengantar returned one) the new callback secret and a new webhook path token,
+   * atomically, only for the fenced `keyVersion`. The previous token keeps verifying for 24 h.
+   */
+  async completeKeyRotation(
+    tenantId: string,
+    keyVersion: number,
+    next: { apiKey: string; callbackSecret: string | null; readBack?: boolean },
+    now: number = Date.now(),
+  ): Promise<{ ok: true; value: { routes: { token: string; keyVersion: number; previous: string | null } } } | { ok: false; refused: VaultRefusal | "STALE_KEY_VERSION" }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row || row.key_version !== keyVersion || row.rotation_state === "idle") return { ok: false, refused: "STALE_KEY_VERSION" }
+    const encKey = await encryptString(this.env.KEK_SECRET, next.apiKey, `seller-key:${tenantId}`)
+    const encSecret = next.callbackSecret ? await encryptString(this.env.KEK_SECRET, next.callbackSecret, `webhook-secret:${tenantId}`) : null
+    const oldKey = row.encrypted_api_key ? await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`) : null
+    const keyChanged = oldKey !== next.apiKey
+    let token = row.webhook_path_token
+    let previous: string | null = null
+    this.ctx.storage.transactionSync(() => {
+      const sql = this.ctx.storage.sql
+      // Re-check inside the transaction (the awaits above could interleave with another call).
+      const cur = readConnection(sql)
+      if (!cur || cur.key_version !== keyVersion || cur.rotation_state === "idle") throw new Error("STALE_KEY_VERSION")
+      if (encSecret && row.webhook_path_token) {
+        previous = row.webhook_path_token
+        token = newPathToken()
+        sql.exec(
+          `UPDATE mengantar_connections SET previous_webhook_path_token = webhook_path_token, encrypted_previous_webhook_secret = encrypted_webhook_secret,
+             previous_token_expires_at = ?, webhook_path_token = ?, encrypted_webhook_secret = ?, webhook_state = 'awaiting_seller_setup'`,
+          now + 24 * HOUR,
+          token,
+          encSecret,
+        )
+        setTimer(sql, "inbox_sweep", now + 24 * HOUR, "earliest")
+      } else if (keyChanged && cur.webhook_state === "active") {
+        // The callback secret rotated with the key but its value is unknown here (read-back path).
+        sql.exec("UPDATE mengantar_connections SET webhook_state = 'secret_mismatch'")
+      }
+      sql.exec("UPDATE mengantar_connections SET encrypted_api_key = ?, rotation_state = 'idle', rotation_started_at = NULL, updated_at = ?", encKey, now)
+      sql.exec("DELETE FROM vault_timers WHERE name = 'key_rotation_check'")
+      this.audit(tenantId, now, "system", null, "mengantar.key_rotated", { keyVersion, readBack: !!next.readBack, keyChanged, webhookUrlRotated: previous !== null, secretKnown: !!encSecret })
+    })
+    return { ok: true, value: { routes: { token: token ?? "", keyVersion, previous } } }
+  }
+
+  /**
+   * Read-back after an unknown outcome or a crash mid-rotation: `POST /sellers/api-key`, never `regenerate`.
+   * Stores whatever key Mengantar reports as current under the fenced version. Safe to repeat.
+   */
+  async resolveKeyRotation(tenantId: string, now: number = Date.now()): Promise<VaultResult<{ state: "rotated" | "unknown" | "none"; keyVersion: number | null; code: string | null }>> {
+    const pending = await this.pendingKeyRotation(tenantId, now)
+    if (!pending.ok) return pending
+    if (!pending.value) return { ok: true, value: { state: "none", keyVersion: null, code: null } }
+    const { sellerId, keyVersion } = pending.value
+    const key = await partnerClient(this.env).apiKey(sellerId)
+    if (key.kind !== "ok") {
+      setTimer(this.ctx.storage.sql, "key_rotation_check", now + 15 * 60_000)
+      await this.armOutbox()
+      return { ok: true, value: { state: "unknown", keyVersion, code: key.kind === "error" || key.kind === "relay_refused" ? key.code : key.reason } }
+    }
+    const done = await this.completeKeyRotation(tenantId, keyVersion, { apiKey: key.data.apiKey, callbackSecret: null, readBack: true }, now)
+    if (!done.ok) return { ok: true, value: { state: "unknown", keyVersion, code: done.refused } }
+    return { ok: true, value: { state: "rotated", keyVersion, code: null } }
+  }
+
+  /**
+   * Dispatch fence for feature code (TASK-304): the key and version to use for one Mengantar call, or a refusal while
+   * a rotation is unresolved. Callers re-check with `keyVersionCurrent` before recording the outcome.
+   */
+  protected async keyForDispatch(tenantId: string): Promise<{ ok: true; key: string; version: number } | { ok: false; refused: "KEY_ROTATING" | "NO_KEY" }> {
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row?.encrypted_api_key) return { ok: false, refused: "NO_KEY" }
+    if (row.rotation_state !== "idle") return { ok: false, refused: "KEY_ROTATING" }
+    const k = await this.sellerKey(tenantId)
+    return k ? { ok: true, key: k.key, version: k.version } : { ok: false, refused: "KEY_ROTATING" }
+  }
+
+  protected keyVersionCurrent(version: number): boolean {
+    const row = readConnection(this.ctx.storage.sql)
+    return !!row && row.rotation_state === "idle" && row.key_version === version
+  }
+
+  /** Test/ops probe of the fence (no key material leaves the object). */
+  async probeDispatchFence(tenantId: string, heldVersion?: number): Promise<VaultResult<{ allowed: boolean; version: number | null; reason: string | null }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (heldVersion !== undefined) return { ok: true, value: { allowed: this.keyVersionCurrent(heldVersion), version: heldVersion, reason: this.keyVersionCurrent(heldVersion) ? null : "STALE_KEY_VERSION" } }
+    const k = await this.keyForDispatch(tenantId)
+    return { ok: true, value: k.ok ? { allowed: true, version: k.version, reason: null } : { allowed: false, version: null, reason: k.refused } }
+  }
+
+  private audit(tenantId: string, at: number, actorType: "user" | "system", actorId: string | null, action: string, meta: Record<string, unknown>): void {
+    this.ctx.storage.sql.exec(
+      "INSERT INTO audit_logs (id, tenant_id, at, actor_type, actor_id, action, target_type, metadata_json) VALUES (?, ?, ?, ?, ?, ?, 'mengantar_connection', ?)",
+      crypto.randomUUID(),
+      tenantId,
+      at,
+      actorType,
+      actorId,
+      action,
+      JSON.stringify(meta),
+    )
   }
 
   /**
@@ -157,8 +324,10 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!tableExists(this.ctx.storage, "outbox")) return
     const o = nextOutboxAt(this.ctx.storage.sql)
     const t = tableExists(this.ctx.storage, "vault_timers") ? nextTimerAt(this.ctx.storage.sql) : null
-    const at = o === null ? t : t === null ? o : Math.min(o, t)
-    if (at === null) return
+    const due = o === null ? t : t === null ? o : Math.min(o, t)
+    if (due === null) return
+    // Overdue work runs on the next tick; setAlarm refuses times <= 0.
+    const at = Math.max(due, Date.now())
     const current = await this.ctx.storage.getAlarm()
     if (current === null || current > at) await this.ctx.storage.setAlarm(at)
   }
@@ -216,6 +385,15 @@ export class GeraiVaultDO extends DurableObject<Env> {
     for (const name of due) {
       if (name === "status_poll") await this.pollStatus(tenantId, now)
       if (name === "inbox_sweep") await this.sweepInbox(tenantId, now)
+      if (name === "key_rotation_check") {
+        const r = await this.resolveKeyRotation(tenantId, now)
+        if (r.ok && r.value.state === "none") {
+          // Still in flight but not yet stale: check again when it would be.
+          const row = readConnection(this.ctx.storage.sql)
+          if (row?.rotation_state === "in_flight") setTimer(this.ctx.storage.sql, "key_rotation_check", (row.rotation_started_at ?? now) + ROTATION_STALE_MS + 1000)
+          else this.ctx.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'key_rotation_check'")
+        }
+      }
     }
     await this.armOutbox()
     return due
@@ -304,10 +482,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (refused) return { ok: false, refused }
     const row = readConnection(this.ctx.storage.sql)
     // The object checks the token itself, so a wrong D1 route can never deliver into this tenant.
-    if (!row?.webhook_path_token || !(await timingSafeEqualStr(row.webhook_path_token, input.token))) return { ok: false, refused: "UNKNOWN_TOKEN" }
+    if (!row?.webhook_path_token) return { ok: false, refused: "UNKNOWN_TOKEN" }
+    const current = await timingSafeEqualStr(row.webhook_path_token, input.token)
+    // After a key rotation the previous URL keeps working for 24 h (spec 01 §2.7 Rotation). Mengantar keeps posting
+    // to the URL configured in Seller Settings, signed with the new secret, so it accepts both secret versions.
+    const previous = !current && !!row.previous_webhook_path_token && (row.previous_token_expires_at ?? 0) > now && (await timingSafeEqualStr(row.previous_webhook_path_token, input.token))
+    if (!current && !previous) return { ok: false, refused: "UNKNOWN_TOKEN" }
     if (!row.encrypted_webhook_secret) return { ok: false, refused: "NOT_CONFIGURED" }
-    const secret = await decryptString(this.env.KEK_SECRET, row.encrypted_webhook_secret, `webhook-secret:${tenantId}`)
-    const v = await verifySignature(secret, { ...input, expect: row.environment }, now)
+    const secrets = [await decryptString(this.env.KEK_SECRET, row.encrypted_webhook_secret, `webhook-secret:${tenantId}`)]
+    if (previous && row.encrypted_previous_webhook_secret) secrets.push(await decryptString(this.env.KEK_SECRET, row.encrypted_previous_webhook_secret, `webhook-secret:${tenantId}`))
+    let v = await verifySignature(secrets[0]!, { ...input, expect: row.environment }, now)
+    if (!v.ok && v.reason === "BAD_SIGNATURE" && secrets[1]) v = await verifySignature(secrets[1], { ...input, expect: row.environment }, now)
     if (!v.ok) {
       if (v.reason === "BAD_SIGNATURE") {
         this.ctx.storage.sql.exec(
@@ -331,7 +516,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
             input.rawBody,
           )
           .toArray().length === 0
-      this.ctx.storage.sql.exec("UPDATE mengantar_connections SET webhook_state = 'active', webhook_last_event_at = ?", now)
+      // Only a delivery on the current URL proves the seller's setup; the previous URL just keeps statuses flowing.
+      if (current) this.ctx.storage.sql.exec("UPDATE mengantar_connections SET webhook_state = 'active', webhook_last_event_at = ?", now)
+      else this.ctx.storage.sql.exec("UPDATE mengantar_connections SET webhook_last_event_at = ?", now)
       // Safety net for a lost Queue message or a failed enqueue after this commit.
       setTimer(this.ctx.storage.sql, "inbox_sweep", now + INBOX_RESEND_AFTER_MS, "earliest")
     })
@@ -386,6 +573,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
     }
     const deleted = sql.exec("DELETE FROM webhook_inbox WHERE state IN ('applied','rejected') AND COALESCE(applied_at, received_at) < ? RETURNING event_key", now - INBOX_RETENTION_MS).toArray().length
+    sql.exec("UPDATE mengantar_connections SET previous_webhook_path_token = NULL, encrypted_previous_webhook_secret = NULL, previous_token_expires_at = NULL WHERE previous_token_expires_at IS NOT NULL AND previous_token_expires_at <= ?", now)
     const pending = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM webhook_inbox WHERE state = 'received'").one().n
     const any = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM webhook_inbox").one().n
     if (pending > 0) setTimer(sql, "inbox_sweep", now + INBOX_RESEND_AFTER_MS)

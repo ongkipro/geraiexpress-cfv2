@@ -23,6 +23,11 @@ export type ConnectionRow = {
   encrypted_webhook_secret: string | null
   synced_balance_idr: number | null
   updated_at: number
+  rotation_state: "idle" | "in_flight" | "unknown"
+  rotation_started_at: number | null
+  previous_webhook_path_token: string | null
+  encrypted_previous_webhook_secret: string | null
+  previous_token_expires_at: number | null
 }
 
 /** Non-secret projection for owner/Super Admin screens (never the key or secret). */
@@ -33,6 +38,7 @@ export interface ConnectionView {
   sellerId: string | null
   hasKey: boolean
   keyVersion: number
+  rotationState: ConnectionRow["rotation_state"]
 }
 
 export function readConnection(sql: SqlStorage): ConnectionRow | null {
@@ -48,10 +54,11 @@ export function viewOf(row: ConnectionRow | null): ConnectionView | null {
     sellerId: row.seller_id,
     hasKey: !!row.encrypted_api_key,
     keyVersion: row.key_version,
+    rotationState: row.rotation_state ?? "idle",
   }
 }
 
-export function upsertConnection(sql: SqlStorage, tenantId: string, patch: Partial<Omit<ConnectionRow, "tenant_id">> & { environment: "sandbox" | "production" }, now: number): void {
+export function upsertConnection(sql: SqlStorage, tenantId: string, patch: Partial<Omit<ConnectionRow, "tenant_id" | "rotation_state" | "rotation_started_at" | "previous_webhook_path_token" | "encrypted_previous_webhook_secret" | "previous_token_expires_at">> & { environment: "sandbox" | "production" }, now: number): void {
   const cur = readConnection(sql)
   const next = { ...(cur ?? { onboarding_state: "not_connected", webhook_state: "unconfigured", key_version: 0 }), ...patch }
   sql.exec(

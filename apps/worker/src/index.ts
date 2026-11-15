@@ -10,6 +10,7 @@ import { handleDoMigrate } from "./ops/do-migrate"
 import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
+import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -92,6 +93,7 @@ export default {
   },
   async scheduled(controller, env, ctx): Promise<void> {
     // Every 5 min: email outbox retries/expiry (TASK-104) and operator checks with owner alerts (TASK-110).
+    if (controller.cron === "0 * * * *") ctx.waitUntil(revokeExpiredRoutes(env, Date.now()).then(() => undefined))
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil(dispatchDue(env).then(() => undefined))
       ctx.waitUntil(runChecks(env).then(() => undefined))
