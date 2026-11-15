@@ -27,6 +27,8 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
    Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 tasks TASK-108..110 added.
 5. TASK-006 done: GPT-6.1 Sol round 10 APPROVE (2026-11-15). Next: TASK-101 (M1 scaffold) when the owner says go.
+6. 2026-11-15: TASKS.md now holds executable contracts for every milestone (TASK-101..110, 201..206, 301..310,
+   401..405, 501..505, 601..604; post-launch 701..703); every P0 PR, DEC and ADR is owned by a task.
 
 ## Blockers
 
