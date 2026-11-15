@@ -6,6 +6,7 @@ import { MasukPage } from "./routes/masuk/page"
 import { UndanganPage } from "./routes/undangan/page"
 import { DaftarPage } from "./routes/daftar/page"
 import { DaftarStatusPage } from "./routes/daftar/status"
+import { PengaturanMengantarPage } from "./routes/pengaturan/mengantar/page"
 import { api, ApiError } from "./lib/api"
 import { Button } from "./components/ui/button"
 
@@ -72,9 +73,10 @@ const lupaSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/lu
 const aturSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/atur-sandi/$token", component: AturSandiPage })
 const daftarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar", component: DaftarPage })
 const daftarStatusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar/status", component: DaftarStatusPage })
+const pengaturanMengantarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pengaturan/mengantar", component: PengaturanMengantarPage })
 const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/undangan/$token", component: UndanganPage })
 
-export const routeTree = rootRoute.addChildren([indexRoute, masukRoute, daftarAkunRoute, lupaSandiRoute, aturSandiRoute, undanganRoute, daftarRoute, daftarStatusRoute])
+export const routeTree = rootRoute.addChildren([indexRoute, masukRoute, daftarAkunRoute, lupaSandiRoute, aturSandiRoute, undanganRoute, daftarRoute, daftarStatusRoute, pengaturanMengantarRoute])
 
 export const router = createRouter({ routeTree, defaultPreload: "intent" })
 

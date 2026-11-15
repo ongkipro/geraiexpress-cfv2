@@ -76,4 +76,21 @@ test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) →
   expect(site.status()).toBe(200)
   await page.reload()
   await expect(page.getByText("Akun Mengantar")).toBeVisible()
+
+  // TASK-204 (PR-02b): the owner copies the webhook URL, saves the Webhook Secret, and the first signed delivery
+  // turns the status chip to Aktif.
+  await page.goto(`${APP}/pengaturan/mengantar`)
+  await expect(page.getByText("Menunggu pengaturan")).toBeVisible()
+  const hookUrl = (await page.locator("code").textContent())!.trim()
+  expect(hookUrl).toMatch(/\/webhooks\/mengantar\/[A-Za-z0-9_-]{43}$/)
+  await page.getByLabel("Webhook Secret").fill("contoh-webhook-e2e")
+  await page.getByRole("button", { name: "Simpan secret" }).click()
+  await expect(page.getByText("Webhook Secret tersimpan.", { exact: false })).toBeVisible()
+  const body = JSON.stringify({ cnote_no: "BELUM-ADA", order_id: "ORD-0", courier: "JNE", status_category: "ON DELIVERY" })
+  const ts = String(Date.now())
+  const sig = createHmac("sha256", "contoh-webhook-e2e").update(`${ts}.${body}`).digest("hex")
+  const hook = await request.post(hookUrl, { headers: { "content-type": "application/json", "x-timestamp": ts, "x-signature": sig, "x-environment": "sandbox" }, data: body })
+  expect(hook.status()).toBe(200)
+  await page.reload()
+  await expect(page.getByText("Aktif", { exact: true })).toBeVisible()
 })

@@ -158,7 +158,8 @@ provider reports it (custody wins, combine table below).
   2. **Custody projection** (`custody_stage`), from verified local actions only, monotone (never decreases):
      `none` 0 → `handed_to_courier` 1 (manifest handover, spec 04) → `rts_at_gerai` 2 (Meja Retur intake) →
      `rts_returned_to_sender` 3 (OTP-verified handback) or `cancelled_local` 3 (cancel before pickup, provider cancel
-     read back). `custody_stage` = the maximum stage recorded; provider observations never change it.
+     read back). `custody_stage` = the maximum stage recorded (tie at level 3: `rts_returned_to_sender` outranks
+     `cancelled_local`, so the maximum is order-independent); provider observations never change it.
   3. **Effective `status`** (stored on `shipments`, shown everywhere) = `combine(provider_status, custody_stage)`:
 
      | `custody_stage` | Effective status | `provider_status_conflict` raised when |

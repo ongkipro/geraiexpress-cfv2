@@ -295,3 +295,16 @@ export const tenantOnboarding = sqliteTable("tenant_onboarding", {
   lastErrorCode: text("last_error_code"),
   updatedAt: integer("updated_at").notNull(),
 })
+
+export const webhookRoutes = sqliteTable(
+  "webhook_routes",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    keyVersion: integer("key_version").notNull(),
+    state: text("state", { enum: ["active", "rotating", "revoked"] }).notNull(),
+    createdAt: integer("created_at").notNull(),
+    revokedAt: integer("revoked_at"),
+  },
+  (t) => [index("webhook_routes_tenant").on(t.tenantId, t.state)],
+)

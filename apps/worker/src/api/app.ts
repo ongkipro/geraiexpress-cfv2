@@ -12,6 +12,7 @@ import { clientIp, hostOrigin, ipHash } from "../http/request"
 import { register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
+import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { partnerClient, publicClient } from "../mengantar/factory"
 import { vaultFor } from "../do/gerai-vault/stub"
 
@@ -210,6 +211,13 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       throw new AppError(409, "BYOK_NOT_AVAILABLE", "Hubungkan akun sendiri hanya tersedia bila email Anda sudah terdaftar di Mengantar.")
     }
     return ok(await connectByok(c.env, m.tenantId, typeof b.apiKey === "string" ? b.apiKey : "", now()))
+  })
+
+  // Pengaturan › Mengantar (PR-02b): webhook URL, secret, status chip, polling floor.
+  r("GET", "/settings/mengantar", "app_owner", "role", async (c) => ok(await mengantarSettings(c.env, c.get("membership")!.tenantId, c.req.url, now())))
+  r("POST", "/settings/mengantar/webhook-secret", "app_owner", "role", async (c) => {
+    const b = await body(c)
+    return ok(await saveWebhookSecret(c.env, c.get("membership")!.tenantId, c.get("session").user.id, b.secret, c.req.url, now()))
   })
 
   // Local development only: give the signed-in user an active synthetic tenant so flows that need a gerai can be

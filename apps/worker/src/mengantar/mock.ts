@@ -2,6 +2,9 @@
 // explicit sandbox keys). Shapes follow the recorded fixtures of TASK-201/202; values are synthetic.
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
+/** Order read-back fixtures keyed by AWB or ORDER_ID (`history[].date` is Asia/Jakarta `DD-MM-YYYY HH:mm`). */
+export const mockOrders = new Map<string, { cnote_no: string; ORDER_ID: string; statusCategory: string; history: Array<{ date: string; statusCategory: string }> }>()
+
 const sellers = new Map<string, { sellerId: string; email: string; apiKey: string }>()
 const takenEmails = new Set(["sudahada@contoh.test"])
 
@@ -29,6 +32,11 @@ export const mockFetch: typeof fetch = async (input, init) => {
     if (p.endsWith("regenerate")) entry.apiKey = `MOCK-${crypto.randomUUID().slice(0, 8)}`
     return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey, ...(p.endsWith("regenerate") ? { callbackSecret: null } : {}) } })
   }
+  if (/^\/api\/public\/[^/]+\/order$/.test(p) && (init?.method ?? "GET") === "GET") {
+    const id = url.searchParams.get("tracking_id") ?? url.searchParams.get("order_id") ?? ""
+    const o = mockOrders.get(id)
+    return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })
+  }
   if (p.endsWith("/address/search")) {
     const kw = (url.searchParams.get("keyword") ?? "").toLowerCase()
     const areas = [
@@ -43,4 +51,5 @@ export const mockFetch: typeof fetch = async (input, init) => {
 
 export function resetMock() {
   sellers.clear()
+  mockOrders.clear()
 }

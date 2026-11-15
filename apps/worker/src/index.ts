@@ -10,6 +10,7 @@ import { handleDoMigrate } from "./ops/do-migrate"
 import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
+import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
@@ -76,13 +77,17 @@ export default {
         if (path.startsWith("/api/owner/")) return OWNER_API.fetch(request, env, exec)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "owner")
+      case "WEBHOOK_INGEST": {
+        const m = /^\/webhooks\/mengantar\/([^/]+)$/.exec(path)
+        return m ? handleMengantarWebhook(request, env, m[1]!) : new Response(null, { status: 404 })
+      }
       case "MARKETING_APEX":
-      case "WEBHOOK_INGEST":
         return notFoundHtml()
     }
   },
-  async queue(batch): Promise<void> {
-    // No consumer is wired yet: acknowledge so nothing is redelivered into a missing handler.
+  async queue(batch, env): Promise<void> {
+    if (batch.queue.startsWith("gx-mengantar-webhooks")) return consumeWebhookBatch(batch as MessageBatch<WebhookMessage>, env)
+    // Other consumers arrive with their tasks: acknowledge so nothing is redelivered into a missing handler.
     batch.ackAll()
   },
   async scheduled(controller, env, ctx): Promise<void> {

@@ -219,3 +219,19 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   parameters after the base bindings; per-IP auth limits throttle a whole e2e suite on one loopback address (each test
   now presents its own `cf-connecting-ip`); a persisted local D1 created before a column was added to an
   already-applied migration keeps the old shape (move the stale state aside).
+
+## 2026-11-16 — TASK-204 Webhooks, inbox, status combine and polling floor (M2)
+
+- Shipped: `@gx/domain/status` (ordering key, custody reducer, combine table, Mengantar category map incl. both
+  cancel spellings, Asia/Jakarta minute parser); tenant `shipments` status core + `shipment_events` + `webhook_inbox` +
+  `vault_timers` (one DO alarm serves the outbox and the timers); D1 `webhook_routes`; `hooks.` ingest; Queue consumer;
+  inbox sweep and 30-day retention; polling floor (hourly until `active`, daily after; a change older than 2 h that
+  never arrived by webhook marks the connection `paused`); `/pengaturan/mengantar`.
+- Evidence: Mengantar docs HMAC test vector; Workers tests for setup → active, unknown/revoked/malformed token 404 with
+  no body, bad signature → `secret_mismatch`, stale window, sandbox on production, duplicate delivery, restart between
+  ingest and consumption, enqueue failure after commit → sweep, reverse-order consumption after restart, every spec
+  01 §3.6 case in both orders and after restart, in-object permutation property; isolation: A's token with B's secret
+  and a D1 route re-pointed at B are both refused with nothing stored; webhook paths 404 on app./owner./tenant hosts;
+  e2e secret → signed delivery → Aktif; UI gates 0 fail; two mutations red.
+- Spec drift fixed: spec 01 §3.2 now states the custody tie at level 3 (`rts_returned_to_sender` outranks
+  `cancelled_local`), which the permutation test showed was needed for an order-independent maximum.

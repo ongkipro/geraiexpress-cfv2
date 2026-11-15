@@ -1,5 +1,5 @@
 // GeraiVaultDO tenant tables (ADR-0006 §2). Mirrors packages/db/migrations/tenant/*.sql (drift test).
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
 export const tenantSettings = sqliteTable("tenant_settings", {
   tenantId: text("tenant_id").primaryKey(),
@@ -109,4 +109,66 @@ export const mengantarConnections = sqliteTable("mengantar_connections", {
   lastInvoiceSyncedAt: integer("last_invoice_synced_at"),
   lastSyncStatus: text("last_sync_status"),
   updatedAt: integer("updated_at").notNull(),
+  webhookLastEventAt: integer("webhook_last_event_at"),
+  webhookLastFailureAt: integer("webhook_last_failure_at"),
+  lastPolledAt: integer("last_polled_at"),
+})
+
+export const shipments = sqliteTable(
+  "shipments",
+  {
+    tenantId: text("tenant_id").notNull(),
+    slug: text("slug").notNull(),
+    courierCode: text("courier_code"),
+    mengantarOrderCode: text("mengantar_order_code"),
+    awbNumber: text("awb_number"),
+    status: text("status").notNull(),
+    providerStatus: text("provider_status"),
+    lastProviderEventAt: integer("last_provider_event_at"),
+    lastProviderRank: integer("last_provider_rank"),
+    custodyStage: text("custody_stage", { enum: ["none", "handed_to_courier", "rts_at_gerai", "rts_returned_to_sender", "cancelled_local"] }).notNull().default("none"),
+    custodyAt: integer("custody_at"),
+    providerStatusConflictAt: integer("provider_status_conflict_at"),
+    stuckAttentionAt: integer("stuck_attention_at"),
+    lastPolledAt: integer("last_polled_at"),
+    indexVersion: integer("index_version").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
+)
+
+export const shipmentEvents = sqliteTable(
+  "shipment_events",
+  {
+    eventKey: text("event_key").primaryKey(),
+    slug: text("slug").notNull(),
+    source: text("source", { enum: ["webhook", "poll", "local"] }).notNull(),
+    rawCategory: text("raw_category"),
+    mappedStatus: text("mapped_status"),
+    eventAt: integer("event_at").notNull(),
+    eventAtText: text("event_at_text"),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (t) => [index("shipment_events_slug").on(t.slug, t.eventAt)],
+)
+
+export const webhookInbox = sqliteTable(
+  "webhook_inbox",
+  {
+    eventKey: text("event_key").primaryKey(),
+    providerTimestampRaw: text("provider_timestamp_raw").notNull(),
+    providerEventAt: integer("provider_event_at").notNull(),
+    receivedAt: integer("received_at").notNull(),
+    rawBody: text("raw_body").notNull(),
+    state: text("state", { enum: ["received", "applied", "rejected"] }).notNull().default("received"),
+    appliedAt: integer("applied_at"),
+    error: text("error"),
+  },
+  (t) => [index("webhook_inbox_state").on(t.state, t.receivedAt)],
+)
+
+export const vaultTimers = sqliteTable("vault_timers", {
+  name: text("name").primaryKey(),
+  dueAt: integer("due_at").notNull(),
 })
