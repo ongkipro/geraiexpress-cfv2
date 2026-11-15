@@ -370,6 +370,10 @@ importers:
         version: 6.0.3
 
   packages/mengantar-sdk:
+    dependencies:
+      zod:
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       typescript:
         specifier: ~6.0.3

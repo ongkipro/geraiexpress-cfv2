@@ -189,3 +189,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   staging alert webhook (TASK-110), Email Sending onboarding + inbox tests (TASK-112), first Super Admin bootstrap
   per environment (TASK-106). Independent review: one final reviewer-carbon pass after M6 code (owner directive);
   TASK-101..103 and 107/108 already APPROVED per task.
+
+## 2026-11-16 — TASK-201 Mengantar Public API client (M2)
+
+- Shipped: `packages/mengantar-sdk` public client (transport + Zod schemas + 8 operations), recorded-shape fixtures
+  from the Mengantar docs (synthetic values). Evidence: 5 tests (paths, idempotency header, replay flag, unpaid shape,
+  unknown invoice types, history read-back, 6 failure kinds never leaking the key even when Mengantar echoes it);
+  mutation red. Review deferred to the final Carbon pass.
