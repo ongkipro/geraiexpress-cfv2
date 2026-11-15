@@ -263,3 +263,35 @@ export const superAdmins = sqliteTable("super_admins", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 })
+
+export const tenantApplications = sqliteTable(
+  "tenant_applications",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().unique(),
+    applicantUserId: text("applicant_user_id").notNull(),
+    state: text("state", { enum: ["draft", "submitted", "approved", "rejected"] }).notNull(),
+    businessName: text("business_name").notNull(),
+    contactWhatsapp: text("contact_whatsapp").notNull(),
+    sellerEmail: text("seller_email").notNull(),
+    outletJson: text("outlet_json").notNull(),
+    consentMengantarAt: integer("consent_mengantar_at"),
+    submittedAt: integer("submitted_at"),
+    decidedAt: integer("decided_at"),
+    decidedBy: text("decided_by"),
+    decisionReason: text("decision_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("tenant_applications_state").on(t.state, t.submittedAt)],
+)
+
+export const tenantOnboarding = sqliteTable("tenant_onboarding", {
+  tenantId: text("tenant_id").primaryKey(),
+  environment: text("environment", { enum: ["sandbox", "production"] }).notNull(),
+  onboardingState: text("onboarding_state").notNull(),
+  sellerId: text("seller_id"),
+  externalUserId: text("external_user_id").notNull(),
+  lastErrorCode: text("last_error_code"),
+  updatedAt: integer("updated_at").notNull(),
+})

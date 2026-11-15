@@ -11,6 +11,9 @@ import { AppError, fail, fromError, ok } from "../http/envelope"
 import { clientIp, hostOrigin, ipHash } from "../http/request"
 import { register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
+import { connectByok, submitApplication } from "../onboarding/service"
+import { partnerClient, publicClient } from "../mengantar/factory"
+import { vaultFor } from "../do/gerai-vault/stub"
 
 export interface Membership {
   tenantId: string
@@ -88,7 +91,10 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       c.res = res
     }
   })
-  app.onError((err) => fromError(err))
+  app.onError((err) => {
+    if (!(err instanceof AppError)) console.error("APP_API_ERROR", err instanceof Error ? err.message : String(err))
+    return fromError(err)
+  })
   app.notFound(() => fail(404, "NOT_FOUND", "Alamat tidak ditemukan."))
   const r = (method: "GET" | "POST", path: string, auth: AuthLevel, projection: "none" | "self" | "role", handler: (c: AppCtx) => Promise<Response>) =>
     register(app, { context: "app", method, path, auth, projection }, guard, (c) => handler(c as AppCtx))
@@ -168,6 +174,42 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const b = await body(c)
     const res = await acceptInvitation(c.env, { token: c.req.param("token"), name: b.name, password: b.password, deviceHash: await deviceHash(c), userAgent: c.req.header("user-agent") ?? null, now: now() })
     return ok({ userId: res.userId }, 201, { "set-cookie": setSessionCookie("app", isSecureRequest(c.req.raw, c.env.GX_ENV), res.sessionToken, res.maxAgeSeconds) })
+  })
+
+  // Outlet application (PR-01): pickup area search, submit, status.
+  r("GET", "/onboarding/areas", "app_session", "none", async (c) => {
+    const q = (c.req.query("q") ?? "").trim()
+    if (q.length < 3) return ok({ items: [] })
+    void partnerClient
+    // Area search needs no seller key (Mengantar does not validate it on this route, docs §3.1); a platform placeholder
+    // keeps the path well-formed. KV caching of area search arrives with TASK-206.
+    const items = await publicClient(c.env, "platform-area-search").searchArea(q.slice(0, 60))
+    return ok({ items: items.slice(0, 20).map((a) => ({ id: a._id, label: [a.SUBDISTRICT_NAME, a.DISTRICT_NAME, a.CITY_NAME, a.PROVINCE_NAME].filter(Boolean).join(", "), postalCode: a.ZIP_CODE ? String(a.ZIP_CODE) : null })) })
+  })
+  r("POST", "/onboarding/application", "app_session", "self", async (c) => {
+    const b = await body(c)
+    const res = await submitApplication(c.env, c.get("session").user.id, b as never, now())
+    return ok(res, 201)
+  })
+  r("GET", "/onboarding/status", "app_session", "self", async (c) => {
+    const a = await c.env.DB.prepare(
+      `SELECT a.state, a.business_name, a.submitted_at, a.decided_at, a.decision_reason, t.slug, t.status AS tenant_status, o.onboarding_state
+       FROM tenant_applications a JOIN tenants t ON t.id = a.tenant_id LEFT JOIN tenant_onboarding o ON o.tenant_id = t.id
+       WHERE a.applicant_user_id = ? ORDER BY a.created_at DESC LIMIT 1`,
+    )
+      .bind(c.get("session").user.id)
+      .first()
+    return ok({ application: a ?? null })
+  })
+  // BYOK (PR-02): owner of an approved gerai whose email already had a Mengantar account pastes their own key.
+  r("POST", "/onboarding/byok", "app_owner", "self", async (c) => {
+    const b = await body(c)
+    const m = c.get("membership")!
+    const conn = await vaultFor(c.env, m.tenantId).connectionView(m.tenantId)
+    if (!conn.ok || !conn.value || !["existing_account_required", "byok_connected", "registration_pending"].includes(conn.value.onboardingState)) {
+      throw new AppError(409, "BYOK_NOT_AVAILABLE", "Hubungkan akun sendiri hanya tersedia bila email Anda sudah terdaftar di Mengantar.")
+    }
+    return ok(await connectByok(c.env, m.tenantId, typeof b.apiKey === "string" ? b.apiKey : "", now()))
   })
 
   // Local development only: give the signed-in user an active synthetic tenant so flows that need a gerai can be

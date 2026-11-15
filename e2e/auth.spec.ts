@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { APP, lastMail, uniqueEmail } from "./helpers"
 
 test.describe("TASK-105 accounts", () => {
@@ -15,6 +15,9 @@ test.describe("TASK-105 accounts", () => {
     await page.getByLabel("Nama lengkap").fill("Ani Lestari")
     await page.getByLabel("Kata sandi").fill("sandi-e2e-kuat-1")
     await page.getByRole("button", { name: "Buat Akun" }).click()
+    // The account step continues into the outlet application (TASK-203).
+    await expect(page.getByText("Langkah 3/5 · Data gerai")).toBeVisible()
+    await page.goto(`${APP}/`)
     await expect(page.getByRole("heading", { name: "Halo, Ani Lestari" })).toBeVisible()
 
     await page.getByRole("button", { name: "Keluar" }).click()

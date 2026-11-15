@@ -10,9 +10,12 @@ export async function handleBootstrapAdmin(request: Request, env: Env): Promise<
   const b = (await request.json().catch(() => ({}))) as { email?: unknown }
   const email = typeof b.email === "string" ? b.email.trim().toLowerCase() : ""
   const existing = await env.DB.prepare("SELECT COUNT(*) AS n FROM super_admins").first<{ n: number }>()
-  if ((existing?.n ?? 0) > 0) return fail(409, "ALREADY_BOOTSTRAPPED", "Super Admin pertama sudah ada. Tambahkan admin lain dari konsol.")
+  // Local development may add further admins (e2e runs several independent admin flows); everywhere else the first
+  // admin is the only one this endpoint can create.
+  if ((existing?.n ?? 0) > 0 && env.GX_ENV !== "local") return fail(409, "ALREADY_BOOTSTRAPPED", "Super Admin pertama sudah ada. Tambahkan admin lain dari konsol.")
   const user = await env.DB.prepare("SELECT id FROM users WHERE email = ? AND status = 'active'").bind(email).first<{ id: string }>()
   if (!user) return fail(404, "USER_NOT_FOUND", "Akun dengan email ini belum ada.")
+  if (await env.DB.prepare("SELECT 1 FROM super_admins WHERE user_id = ?").bind(user.id).first()) return fail(409, "ALREADY_ADMIN", "Akun ini sudah Super Admin.")
   const now = Date.now()
   await env.DB.batch([
     env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, enrolled_by, enrolled_at, status, created_at, updated_at) VALUES (?1, 'pending', 'bootstrap', ?2, 'active', ?2, ?2)").bind(user.id, now),

@@ -22,7 +22,7 @@ tenant B's record).
 
 ## In progress
 
-M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tooling done (live steps awaiting owner) — see STATUS.md. In progress: M2 — TASK-201, 202 DONE; TASK-203 next.
+M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tooling done (live steps awaiting owner) — see STATUS.md. In progress: M2 — TASK-201..203 DONE; TASK-204 next.
 
 ## Pending
 

@@ -205,3 +205,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Evidence: signature parity with the documented `openssl dgst` form; relay HMAC/allowlist/window/duplicate/size
   tests; quota limits incl. midnight-WIB reset; local run of `server.mjs` against a stub upstream (forward, header
   allowlist, 409 duplicate); mutation (allowlist) red. The Partner contract stays device-local (never committed).
+
+## 2026-11-16 — TASK-203 Super Admin console, outlet application and seller onboarding (M2)
+
+- Shipped: applications + onboarding mirror (D1), `mengantar_connections` (tenant object, encrypted key), onboarding
+  service (submit / approve / reject / provision / reconcile / BYOK), Super Admin `Gerai` routes and screens, applicant
+  `/daftar` + `/daftar/status`, offline Mengantar mock (`MENGANTAR_*_ORIGIN = "mock"`), local preview login for gating
+  authenticated screens (`/internal/dev/preview`, refused outside `GX_ENV=local`), `scripts/dev/seed-preview.mjs`.
+- Evidence: 8 Workers tests (validation, area search, approve → connected with encrypted key and exactly one email,
+  double approve 409, reject + re-submit, timeout → read-back → retry, 409 → BYOK, suspend → 403 → unsuspend, masking
+  controls, audits); Playwright apply → approve → connected; UI gates 0 fail; mutation red.
+- Gotchas: D1 positional placeholders are shared across a statement, so a guard appended to an INSERT must number its
+  parameters after the base bindings; per-IP auth limits throttle a whole e2e suite on one loopback address (each test
+  now presents its own `cf-connecting-ip`); a persisted local D1 created before a column was added to an
+  already-applied migration keeps the old shape (move the stale state aside).

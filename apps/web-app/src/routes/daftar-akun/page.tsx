@@ -58,7 +58,7 @@ export function DaftarAkunPage() {
     e.preventDefault()
     return run(async () => {
       await api("/auth/signup/complete", { body: { ticket, name, password } })
-      await navigate({ to: "/" })
+      await navigate({ to: "/daftar" })
     })
   }
 

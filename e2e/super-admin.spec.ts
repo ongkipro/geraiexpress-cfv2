@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./fixtures"
 import { createHmac } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { APP, OWNER, lastMail, uniqueEmail } from "./helpers"
@@ -30,7 +30,7 @@ test("TASK-106 Super Admin: password → enrol TOTP (QR once) → console; wrong
   const { ticket } = ((await (await request.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code } })).json()) as { data: { ticket: string } }).data
   await request.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Admin Satu", password: "admin-e2e-kuat-1" } })
   const boot = await request.post(`${OWNER}/internal/ops/bootstrap-admin`, { headers: { authorization: `Bearer ${opsToken()}`, "content-type": "application/json" }, data: { email } })
-  // First-admin bootstrap succeeds once per fresh local state; this flow runs in the desktop project only.
+  // First-admin bootstrap succeeds once per fresh local state (whichever desktop spec runs first).
   expect(boot.status()).toBe(201)
 
   await page.goto(`${OWNER}/masuk`)
@@ -45,7 +45,7 @@ test("TASK-106 Super Admin: password → enrol TOTP (QR once) → console; wrong
   await expect(page.getByRole("alert")).toHaveText("Kode TOTP salah atau sudah dipakai.")
   await page.getByLabel("Kode TOTP").fill(totp(secret))
   await page.getByRole("button", { name: "Verifikasi" }).click()
-  await expect(page.getByRole("heading", { name: "Halo, Admin Satu" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Ringkasan" }).first()).toBeVisible()
   // The app cookie never opens the owner console and vice versa.
   const r = await page.request.get(`${APP}/api/app/auth/me`)
   expect(r.status()).toBe(401)

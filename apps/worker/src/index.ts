@@ -5,6 +5,7 @@ import { classify, hostShape, normalizeHost, probeSignature } from "./host/class
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
 import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDevLastMail } from "./ops/dev-mail"
+import { handleDevPreview } from "./ops/dev-preview"
 import { handleDoMigrate } from "./ops/do-migrate"
 import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
 import { dispatchDue } from "./email/mailer"
@@ -63,6 +64,7 @@ export default {
     switch (ctx.context) {
       case "GERAI_WORKSPACE":
         if (path.startsWith("/api/app/")) return APP_API.fetch(request, env, exec)
+        if (path === "/internal/dev/preview") return handleDevPreview(request, env, "app")
         // `/api/v1/*` and `/mcp` are added by their tasks; every other API family is foreign here.
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "app")
@@ -70,6 +72,7 @@ export default {
         if (path === "/internal/ops/do-migrate" && request.method === "POST") return handleDoMigrate(request, env)
         if (path === "/internal/dev/last-mail" && request.method === "GET") return handleDevLastMail(request, env)
         if (path === "/internal/ops/bootstrap-admin" && request.method === "POST") return handleBootstrapAdmin(request, env)
+        if (path === "/internal/dev/preview") return handleDevPreview(request, env, "owner")
         if (path.startsWith("/api/owner/")) return OWNER_API.fetch(request, env, exec)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "owner")

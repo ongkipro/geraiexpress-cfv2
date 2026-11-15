@@ -14,6 +14,7 @@ import { sha256Hex } from "../crypto"
 import { AppError, fail, fromError, ok } from "../http/envelope"
 import { hostOrigin, ipHash } from "../http/request"
 import { register, type AuthLevel } from "./registry"
+import { registerGeraiAdmin } from "../admin/gerai/routes"
 
 export const RECENT_TOTP_MS = 15 * 60_000
 const TOTP_MAX_WRONG = 5
@@ -102,7 +103,10 @@ async function checkTotp(env: Env, session: Session, code: unknown, now: number)
 
 export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   const app = new Hono<{ Bindings: Env; Variables: Vars }>().basePath("/api/owner")
-  app.onError((err) => fromError(err))
+  app.onError((err) => {
+    if (!(err instanceof AppError)) console.error("OWNER_API_ERROR", err instanceof Error ? err.stack : err)
+    return fromError(err)
+  })
   app.notFound(() => fail(404, "NOT_FOUND", "Alamat tidak ditemukan."))
   const r = (method: "GET" | "POST", path: string, auth: AuthLevel, projection: "none" | "self" | "role", handler: (c: OwnerCtx) => Promise<Response>) =>
     register(app, { context: "owner", method, path, auth, projection }, ownerGuard, (c) => handler(c as OwnerCtx))
@@ -201,6 +205,8 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(404, "ADMIN_NOT_FOUND", "Super Admin tidak ditemukan.")
     return ok({ reset: true })
   })
+
+  registerGeraiAdmin(app)
 
   return app
 }

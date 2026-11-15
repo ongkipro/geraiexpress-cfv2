@@ -4,6 +4,7 @@ import { hashPassword } from "../../src/auth/password"
 import { hotp, stepAt } from "../../src/auth/totp"
 import { IMPERSONATION_PATTERNS } from "../../src/api/owner"
 import { ROUTES } from "../../src/api/registry"
+import { handleBootstrapAdmin } from "../../src/ops/bootstrap-admin"
 
 const OWNER = "http://owner.geraiexpress.localhost:8787"
 const APP = "http://app.geraiexpress.localhost:8787"
@@ -45,7 +46,12 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
     const boot = (email: string) =>
       exports.default.fetch(`${OWNER}/internal/ops/bootstrap-admin`, { method: "POST", headers: { authorization: "Bearer test-ops-token", "content-type": "application/json" }, body: JSON.stringify({ email }) })
     expect((await boot("pertama@contoh.test")).status).toBe(201)
-    expect((await boot("pertama@contoh.test")).status).toBe(409)
+    expect((await boot("pertama@contoh.test")).status).toBe(409) // same account twice
+    // Outside local development only the very first admin can be bootstrapped.
+    await makeUser("kedua@contoh.test")
+    const staging = { ...env, GX_ENV: "staging" } as unknown as Env
+    const req = new Request(`${OWNER}/internal/ops/bootstrap-admin`, { method: "POST", headers: { authorization: "Bearer test-ops-token" }, body: JSON.stringify({ email: "kedua@contoh.test" }) })
+    expect((await handleBootstrapAdmin(req, staging)).status).toBe(409)
     await makeUser("biasa@contoh.test")
     expect((await post("/auth/login", { email: "biasa@contoh.test", password: "admin-kuat-123" })).status).toBe(401)
   })

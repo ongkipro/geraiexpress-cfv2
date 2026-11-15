@@ -4,6 +4,8 @@ import { DaftarAkunPage } from "./routes/daftar-akun/page"
 import { LupaSandiPage } from "./routes/lupa-sandi/page"
 import { MasukPage } from "./routes/masuk/page"
 import { UndanganPage } from "./routes/undangan/page"
+import { DaftarPage } from "./routes/daftar/page"
+import { DaftarStatusPage } from "./routes/daftar/status"
 import { api, ApiError } from "./lib/api"
 import { Button } from "./components/ui/button"
 
@@ -68,9 +70,11 @@ const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk"
 const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })
 const lupaSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/lupa-sandi", component: LupaSandiPage })
 const aturSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/atur-sandi/$token", component: AturSandiPage })
+const daftarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar", component: DaftarPage })
+const daftarStatusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar/status", component: DaftarStatusPage })
 const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/undangan/$token", component: UndanganPage })
 
-export const routeTree = rootRoute.addChildren([indexRoute, masukRoute, daftarAkunRoute, lupaSandiRoute, aturSandiRoute, undanganRoute])
+export const routeTree = rootRoute.addChildren([indexRoute, masukRoute, daftarAkunRoute, lupaSandiRoute, aturSandiRoute, undanganRoute, daftarRoute, daftarStatusRoute])
 
 export const router = createRouter({ routeTree, defaultPreload: "intent" })
 

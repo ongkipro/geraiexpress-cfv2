@@ -91,8 +91,10 @@
         "GX_ENV": "staging",
         "PLATFORM_APEX": "geraiexpress.com",
         "TENANT_ZONE": "gerai.cc",
-        "MENGANTAR_PUBLIC_ORIGIN": "https://sandbox-api-public.mengantar.com",
-        "MENGANTAR_PARTNER_ORIGIN": "https://sandbox-api.mengantar.com",
+        // Sandbox origins per the Mengantar docs host (sandbox.mengantar.com) — [verify] with the Mengantar contact
+        // before the first staging call (TASK-299 sandbox checks).
+        "MENGANTAR_PUBLIC_ORIGIN": "https://sandbox.mengantar.com",
+        "MENGANTAR_PARTNER_ORIGIN": "https://sandbox.mengantar.com",
         "PARTNER_TRANSPORT": "direct",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@mail.geraiexpress.com"
@@ -148,7 +150,8 @@
         "PLATFORM_APEX": "geraiexpress.com",
         "TENANT_ZONE": "gerai.cc",
         "MENGANTAR_PUBLIC_ORIGIN": "https://api-public.mengantar.com",
-        "MENGANTAR_PARTNER_ORIGIN": "https://api.mengantar.com",
+        // [verify] production Partner origin with the Mengantar contact (TASK-601).
+        "MENGANTAR_PARTNER_ORIGIN": "https://app.mengantar.com",
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@mail.geraiexpress.com"

@@ -93,3 +93,20 @@ export const invSlugs = sqliteTable("inv_slugs", {
   purpose: text("purpose", { enum: ["draft", "minisite_qr", "bulk", "api"] }).notNull(),
   createdAt: integer("created_at").notNull(),
 })
+
+export const mengantarConnections = sqliteTable("mengantar_connections", {
+  tenantId: text("tenant_id").primaryKey(),
+  environment: text("environment", { enum: ["sandbox", "production"] }).notNull(),
+  onboardingState: text("onboarding_state").notNull().default("not_connected"),
+  webhookState: text("webhook_state").notNull().default("unconfigured"),
+  sellerId: text("seller_id"),
+  externalUserId: text("external_user_id"),
+  encryptedApiKey: text("encrypted_api_key"),
+  keyVersion: integer("key_version").notNull().default(0),
+  webhookPathToken: text("webhook_path_token"),
+  encryptedWebhookSecret: text("encrypted_webhook_secret"),
+  syncedBalanceIdr: integer("synced_balance_idr"),
+  lastInvoiceSyncedAt: integer("last_invoice_synced_at"),
+  lastSyncStatus: text("last_sync_status"),
+  updatedAt: integer("updated_at").notNull(),
+})

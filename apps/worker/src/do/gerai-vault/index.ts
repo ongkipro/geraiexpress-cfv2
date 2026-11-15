@@ -3,6 +3,8 @@ import { TENANT_MIGRATIONS, TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { applyTenantMigrations, readSchemaState, tableExists, type MigrateResult, type SchemaState } from "./core/migrate"
 import { normalizeSlug } from "@gx/domain/slug"
 import { allocateSlug, slugTaken, type SlugPurpose } from "./slug"
+import { readConnection, upsertConnection, viewOf, type ConnectionView, type OnboardingState } from "./connection"
+import { decryptString, encryptString } from "../../crypto/aead"
 import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, type OutboxTopic } from "./core/outbox"
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
@@ -69,6 +71,53 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (refused) return { ok: false, refused }
     const slug = normalizeSlug(input)
     return { ok: true, value: slug !== null && slugTaken(this.ctx.storage, slug) }
+  }
+
+  // ---- Mengantar connection (TASK-203) --------------------------------------------------------------------------
+
+  async connectionView(tenantId: string): Promise<VaultResult<ConnectionView | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: viewOf(readConnection(this.ctx.storage.sql)) }
+  }
+
+  /** Records an onboarding step; a key, when given, is encrypted before it touches storage. */
+  async recordOnboarding(
+    tenantId: string,
+    step: { environment: "sandbox" | "production"; state: OnboardingState; sellerId?: string | null; externalUserId?: string; apiKey?: string | null },
+  ): Promise<VaultResult<ConnectionView | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const now = Date.now()
+    const cur = readConnection(this.ctx.storage.sql)
+    const encrypted = step.apiKey ? await encryptString(this.env.KEK_SECRET, step.apiKey, `seller-key:${tenantId}`) : undefined
+    upsertConnection(
+      this.ctx.storage.sql,
+      tenantId,
+      {
+        environment: step.environment,
+        onboarding_state: step.state,
+        ...(step.sellerId !== undefined ? { seller_id: step.sellerId } : {}),
+        ...(step.externalUserId !== undefined ? { external_user_id: step.externalUserId } : {}),
+        ...(encrypted ? { encrypted_api_key: encrypted, key_version: (cur?.key_version ?? 0) + 1, webhook_state: cur?.webhook_state === "active" ? "active" : "awaiting_seller_setup" } : {}),
+      },
+      now,
+    )
+    this.ctx.storage.sql.exec(
+      "INSERT INTO audit_logs (id, tenant_id, at, actor_type, action, target_type, metadata_json) VALUES (?, ?, ?, 'system', 'mengantar.onboarding', 'mengantar_connection', ?)",
+      crypto.randomUUID(),
+      tenantId,
+      now,
+      JSON.stringify({ state: step.state, sellerId: step.sellerId ?? null, keyStored: !!encrypted }),
+    )
+    return { ok: true, value: viewOf(readConnection(this.ctx.storage.sql)) }
+  }
+
+  /** Decrypts the seller key for a server-side Mengantar call; never returned through a public API. */
+  protected async sellerKey(tenantId: string): Promise<{ key: string; version: number } | null> {
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row?.encrypted_api_key) return null
+    return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
   }
 
   /**

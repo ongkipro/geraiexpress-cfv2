@@ -6,6 +6,12 @@ import type { TemplateId, TemplateVars } from "./templates"
 
 export interface EnqueueInput<T extends TemplateId> {
   id?: string
+  /**
+   * Optional SQL condition (with its bindings) evaluated inside the same batch: the row is inserted only when it holds.
+   * Used to enqueue exactly one email per state transition (e.g. only if this call decided the application).
+   * The base insert binds ?1..?7, so guard placeholders start at ?8.
+   */
+  onlyIf?: { sql: string; params: unknown[] }
   templateId: T
   toEmail: string
   vars: TemplateVars[T]
@@ -28,9 +34,10 @@ export async function enqueueEmailStatement<T extends TemplateId>(
 ): Promise<{ id: string; statement: D1PreparedStatement }> {
   const id = input.id ?? crypto.randomUUID()
   const to = normalizeEmail(input.toEmail)
+  const guard = input.onlyIf ? ` WHERE ${input.onlyIf.sql}` : ""
   const statement = env.DB.prepare(
     `INSERT INTO email_outbox (id, template_id, to_email_hash, to_email_encrypted, payload_encrypted, expires_at, state, attempts, next_attempt_at, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'queued', 0, ?7, ?7)`,
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, 'queued', 0, ?7, ?7${guard}`,
   ).bind(
     id,
     input.templateId,
@@ -39,6 +46,7 @@ export async function enqueueEmailStatement<T extends TemplateId>(
     await encryptString(env.KEK_SECRET, JSON.stringify(input.vars), "email"),
     input.expiresAt,
     input.now,
+    ...(input.onlyIf?.params ?? []),
   )
   return { id, statement }
 }
