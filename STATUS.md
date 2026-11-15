@@ -34,8 +34,9 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 
 ## Blockers
 
-- Owner asks Mengantar (DEC-230): the channel and lead time for per-seller discount changes, and whether the 30 % ceiling is
-  per seller, per courier or per service. The system is built configurable, so the answer is configuration, not a blocker.
+- Mengantar discount channel answered (owner, 2026-11-15): applied from Mengantar's system to the seller account, ~1 hour
+  (`apply_sla_minutes = 60`). Still open: whether the 30 % ceiling is per seller, per courier or per service —
+  configuration, not a blocker.
 
 None for M1. Open items, each owned by the milestone row in `TASKS.md` (coverage map), that must close before the stated milestone:
 - Vultr Reserved IPv4 (new small instance or existing server, DEC-232) — buy/attach at M6 with owner approval.

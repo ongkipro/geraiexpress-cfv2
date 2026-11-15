@@ -314,7 +314,8 @@ No task is in progress. TASK-101 starts when the owner says go.
   cargoPrice`; tolerance 1 bp, spec 02 §2.1); customers always pay the publish tariff;
   TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
 - **Visual Contract:** `/tarif` tabs incl. `Kebijakan Diskon` per visual 07; request list for the Mengantar team (export).
-- **Done when:** rule below 20 % or above the ceiling rejected; a newly approved gerai has 20 % rules for every active
+- **Done when:** rule below 20 % or above the ceiling rejected; fake-clock test of the checks at +15/+60/+120 min
+  (`Belum diterapkan` → `Sesuai`, or → `Selisih` + alert after 2 × `apply_sla_minutes`); a newly approved gerai has 20 % rules for every active
   courier/service in state `Belum diterapkan`; every transition of the spec 02 §2.1 state table incl. `2000` vs
   `1999` → `Sesuai` and a verified rule drifting to `1000` → `Selisih`; a cargo fixture whose regular and cargo discounts
   differ verifies against the cargo value; changing `max_discount_bps` or its scope needs no code change (test);
@@ -728,7 +729,7 @@ Milestone notes carried forward:
   loading/empty/error states for every screen (deferred from TASK-001).
 - **M2/M4 sandbox verifications:** weight echo, `POST /time` timezone, `/invoices` ordering, `pay-unpaid`
   idempotency, item-value limits per courier (specs 02, 04, 09).
-- **Mengantar questions (owner, DEC-230):** channel/lead time for discount changes; 30 % ceiling scope — both become
-  configuration in `platform_pricing_policy`, not blockers.
+- **Mengantar (DEC-230):** channel answered — Mengantar's system, ~1 hour (`apply_sla_minutes = 60`); open: 30 % ceiling
+  scope — configuration in `platform_pricing_policy`, not a blocker.
 - **Before masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention); building and
   per-gerai switching are not blocked (DEC-231).

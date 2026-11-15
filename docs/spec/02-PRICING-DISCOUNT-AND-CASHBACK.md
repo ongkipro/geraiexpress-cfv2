@@ -40,19 +40,22 @@ This specification defines exact integer arithmetic for weights, customer tariff
   Every new gerai starts at `default_discount_bps` (`2000` = 20 %) for every courier/service on approval; Super Admin
   raises it per gerai later, and each change is applied on the Mengantar account by the Mengantar team. The ceiling
   scope (`per_seller` | `per_courier` | `per_service`) is configuration, set once Mengantar confirms it.
-- **How it reaches Mengantar:** no API exists today (sandbox docs checked 2026-11-15), so each rule change creates a
-  request for the Mengantar team (`apply_channel = mengantar_team`, `requested_at`); when an endpoint appears,
-  `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
+- **How it reaches Mengantar:** no public API exists (sandbox docs checked 2026-11-15). Mengantar applies the change
+  from its own system to the seller account, normally within **1 hour** (owner, 2026-11-15). Each rule change records
+  `requested_at` and appears in the Super Admin request list (`apply_channel = mengantar_team`); when an endpoint
+  appears, `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
+- **Expected lead time:** `platform_pricing_policy.apply_sla_minutes` (default `60`). Until it passes, a mismatch is
+  normal (`Belum diterapkan`); the verifier checks at `requested_at + 15 min`, `+ 60 min` and `+ 120 min`, then daily.
 - **Observed discount, per service class:** regular services use `discountPercent` (or `discount / price`); cargo
   services use the cargo fields only (`cargoDiscount / cargoPrice`, §1 item 4). Both are normalised to
   `observed_bps = floor(discount × 10000 / price)` and stored per quote with the service class.
-- **Verification states** (a daily job and the next quote after a change; tolerance `|assigned − observed| ≤ 1` bp):
+- **Verification states** (scheduled checks above plus every quote; tolerance `|assigned − observed| ≤ 1` bp):
 
   | From | Condition | To |
   |---|---|---|
   | (rule saved, `requested_at` set) | — | `Belum diterapkan` |
   | `Belum diterapkan` | within tolerance | `Sesuai` (`verified_at`) |
-  | `Belum diterapkan` | different, and older than 7 days | `Selisih` |
+  | `Belum diterapkan` | different after `2 × apply_sla_minutes` (default 120 min) | `Selisih` (alert) |
   | `Sesuai` | outside tolerance (drift either way) | `Selisih` |
   | `Selisih` | within tolerance again | `Sesuai` |
   | any | Super Admin edits the rule | `Belum diterapkan` (new `requested_at`) |
