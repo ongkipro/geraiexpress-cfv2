@@ -155,3 +155,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Shipped: `apps/worker/test/isolation/m1-isolation.test.ts` (8 cases over two seeded tenants and the platform hosts).
 - Evidence: suite green; mutation (membership lookup without the user check) → 4 failures. Later surfaces add
   their cases here (API keys TASK-503, webhooks TASK-204, `/lacak` TASK-501, media TASK-302).
+
+## 2026-11-16 — TASK-109 CI, security gates and deploy workflows (M1, code complete)
+
+- Shipped: `.github/workflows/{ci,deploy-staging,deploy-production}.yml` (actions pinned by full SHA: checkout
+  v7.0.1, setup-node v7.1.0, pnpm/action-setup v6.1.1 → commit `73e4699…` behind its annotated tag, upload-artifact
+  v7.0.2); route-table scan (`scripts/ci/route-scan-lib.mjs` + Workers test); `scripts/ci/red-fixtures.sh` (scratch copy,
+  each fixture must fail with its own marker); `wrangler.jsonc` `env.production` placeholders (deploy fails instead of
+  provisioning).
+- Evidence: `pnpm check` green; red fixtures 4/4; actionlint exit 0; `wrangler deploy --dry-run --env production` builds.
+- Awaiting owner (live): Cloudflare staging resources and ids, repository secrets, protected `staging`/`production`
+  environments with reviewers, first approved staging deploy + `pnpm probes --env staging` + synthetic failing probe
+  alert. The hosted `ci.yml` run starts with the push of this commit.
+- Gotchas: pnpm refuses a symlinked `node_modules` (scratch copies call tool binaries directly); a red fixture must
+  check WHY it failed — the first run "passed" because the new test file was not in the copy.

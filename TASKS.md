@@ -22,7 +22,7 @@ tenant B's record).
 
 ## In progress
 
-TASK-101..108, 110, 111 DONE 2026-11-16 (see STATUS.md). In progress: M1 (TASK-109 next).
+TASK-101..108, 110, 111 DONE, TASK-109 code done (live steps awaiting owner) 2026-11-16 (see STATUS.md). In progress: M1 (TASK-112 next).
 
 ## Pending
 

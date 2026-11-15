@@ -135,6 +135,62 @@
         { "name": "RATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 60, "period": 60 } }
       ],
       "triggers": { "crons": ["*/5 * * * *", "0 * * * *", "0 19 * * *"] }
+    },
+    // Production: filled with real resource ids, routes and secrets by TASK-602 (owner-approved). Until then every id is
+    // a placeholder, so `wrangler deploy --env production` fails instead of provisioning anything.
+    "production": {
+      "name": "geraiexpress-cfv2-production",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [],
+      "vars": {
+        "GX_ENV": "production",
+        "PLATFORM_APEX": "geraiexpress.com",
+        "TENANT_ZONE": "gerai.cc",
+        "MENGANTAR_PUBLIC_ORIGIN": "https://api-public.mengantar.com",
+        "MENGANTAR_PARTNER_ORIGIN": "https://api.mengantar.com",
+        "PARTNER_TRANSPORT": "relay",
+        "MENGANTAR_PARTNER_ID": "ongkirich",
+        "MAIL_FROM": "noreply@mail.geraiexpress.com"
+      },
+      "secrets": {
+        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "geraiexpress-control-production",
+          "database_id": "00000000-0000-4000-8000-000000000003",
+          "migrations_dir": "packages/db/migrations/control"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "GERAI_VAULT", "class_name": "GeraiVaultDO" },
+          { "name": "PARTNER_QUOTA", "class_name": "PartnerQuotaDO" }
+        ]
+      },
+      "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media-production" }],
+      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "00000000000000000000000000000003" }],
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
+      "queues": {
+        "producers": [
+          { "binding": "WEBHOOK_QUEUE", "queue": "gx-mengantar-webhooks-production" },
+          { "binding": "FINANCE_SYNC_QUEUE", "queue": "gx-mengantar-finance-sync-production" },
+          { "binding": "BULK_QUEUE", "queue": "gx-bulk-production" },
+          { "binding": "HOSTNAME_QUEUE", "queue": "gx-hostnames-production" }
+        ],
+        "consumers": [
+          { "queue": "gx-mengantar-webhooks-production", "max_batch_size": 10, "max_retries": 5 },
+          { "queue": "gx-mengantar-finance-sync-production", "max_batch_size": 5, "max_retries": 3 },
+          { "queue": "gx-bulk-production", "max_batch_size": 1, "max_retries": 3 },
+          { "queue": "gx-hostnames-production", "max_batch_size": 15, "max_retries": 5 }
+        ]
+      },
+      "ratelimits": [
+        { "name": "RATE_LIMITER", "namespace_id": "3001", "simple": { "limit": 60, "period": 60 } }
+      ],
+      "triggers": { "crons": ["*/5 * * * *", "0 * * * *", "0 19 * * *"] }
     }
   }
 }
