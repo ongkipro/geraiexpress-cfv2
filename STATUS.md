@@ -11,7 +11,7 @@ Independent-Review-Head: 702262f (Sol round 10 APPROVE)
 
 ## Now
 
-M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-232,
+M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-233,
 ADR-0001..0006, specs 01–12, visual 01–08, research 01–03, `docs/WORKFLOW.md`, `docs/DIAGRAMS.md` (14 Mermaid diagrams), `RELEASE.md` (NOT_RELEASED), `OBSERVABILITY.md`, `BUILD-LOG.md`, `.delivery/` ledger (verified), `DESIGN.md` (Direction A picked), `design/` brief, refs and
 comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
 

@@ -142,7 +142,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Accepted Invariants:** integers only; `billed_kg` rules; COD applied once; `NULL` insurance stays `NULL`;
   unit-mistake guard (`< 10` gram, `>= 100` kg).
 - **Done when:** every worked example of spec 02 and visual 05 exact; property test (no non-integer `_idr`); five
-  `cod_fee_mode` rows incl. `seller credit − sender payable = P − N`; fallback `M = 10800`, `N = 9600`; insured
+  `cod_fee_mode` rows incl. `seller credit − sender payable = P − N`; not-yet-applied fixture `assigned 2500 bps` → `M = 9000`, effective `2000`, `N = 9600`; insured
   Non-COD `Laba Kas` (`I = 1000` → `5400`); fixed-point `COD_FEE_UNSTABLE`; all-in guard; `9599` regression.
 
 ### TASK-108: `INV` slug allocator
@@ -300,20 +300,22 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Done when:** catalog/prefs tests; cache hit/miss test.
 
 ### TASK-207: Discount and cashback matrix (`Tarif & Kurir`)
-- **Requirement:** PR-11, DEC-205, DEC-226, DEC-230, spec 02 §2.1
+- **Requirement:** PR-11, DEC-205, DEC-226, DEC-230, DEC-233, spec 02 §2.1
 - **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `admin-product-ux`, `shadcn-ui`
 - **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`,
   `packages/db/migrations/{control,tenant}/207-*`, matching tests
 - **Depends On:** TASK-107, TASK-201 (estimate client returns `discountPercent`), TASK-203
-- **Accepted Invariants:** `assigned_bps <= platform_pricing_policy.max_discount_bps` (default 3000, scope configurable);
+- **Accepted Invariants:** `min_discount_bps <= assigned_bps <= max_discount_bps` (defaults 2000 … 3000, scope configurable);
+  approval seeds every courier/service at `default_discount_bps` (2000) with `Belum diterapkan`;
   `apply_channel` `mengantar_team` (request list) with `partner_api` adapter slot; verification state `Belum diterapkan /
   Sesuai / Selisih` from `observed_bps` per service class (regular `discountPercent`, cargo `cargoDiscount /
   cargoPrice`; tolerance 1 bp, spec 02 §2.1); customers always pay the publish tariff;
   TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
 - **Visual Contract:** `/tarif` tabs incl. `Kebijakan Diskon` per visual 07; request list for the Mengantar team (export).
-- **Done when:** rule above the ceiling rejected; every transition of the spec 02 §2.1 state table incl. `2000` vs
+- **Done when:** rule below 20 % or above the ceiling rejected; a newly approved gerai has 20 % rules for every active
+  courier/service in state `Belum diterapkan`; every transition of the spec 02 §2.1 state table incl. `2000` vs
   `1999` → `Sesuai` and a verified rule drifting to `1000` → `Selisih`; a cargo fixture whose regular and cargo discounts
   differ verifies against the cargo value; changing `max_discount_bps` or its scope needs no code change (test);
   verification state transitions on fixture estimates; no customer-facing DTO contains discount fields (test); audit
@@ -714,7 +716,7 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 | Milestone | Tasks | PRD requirements | Decisions / ADRs |
 |---|---|---|---|
 | **M1** | TASK-101..112, close 199 | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0006 |
-| **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226, 230; ADR-0003, 0004 (§5 rotation) |
+| **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226, 230, 233; ADR-0003, 0004 (§5 rotation) |
 | **M3** | TASK-301..311, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229, 231; ADR-0004 (dispatch), 0005 |
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |

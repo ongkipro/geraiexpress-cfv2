@@ -38,3 +38,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - DEC-231 adds `Pengaturan › Label & Privasi`; DEC-232 picks a Vultr Reserved IPv4 and replaces the Q23 blocker with
   Public API hardening + alerts (spec 10 §4.4).
 - Evidence: GPT-6.1 Sol delta review round 1 REQUEST_CHANGES (6 findings), round 2 APPROVE; both P2 notes closed.
+
+## 2026-11-15 — DEC-233 and final documentation audit
+
+- DEC-233: every gerai starts at 20 % discount (also the minimum); Super Admin may raise it up to 30 %; changes are
+  applied on the Mengantar account by the Mengantar team and verified automatically. Spec 02 fixture updated to a
+  valid not-yet-applied case (requested 25 %, Mengantar 20 %).
+- Final audit (scripted): 0 broken links, 0 missing section references, 0 broken tables, 0 misaligned wireframes,
+  14/14 Mermaid diagrams render, no secrets or real phone numbers, no stale superseded terms; TASKS.md: 50 contracts,
+  all fields present, acyclic, no forward-milestone dependency, every M2–M6 task gated, every P0 PR, DEC-201..233 and
+  ADR-0001..0006 owned, every UI task has a Visual Contract, no tenant-data task below R3; TASKS.md 45.8 KB, STATUS.md
+  4.0 KB.

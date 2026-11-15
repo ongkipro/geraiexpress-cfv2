@@ -35,9 +35,11 @@ This specification defines exact integer arithmetic for weights, customer tariff
 
 ### 2.1 Discount control and verification (DEC-226, DEC-230)
 
-- **Who decides:** Super Admin sets `assigned_bps` per gerai × courier/service. Mengantar permits GeraiExpress to
-  determine it up to the platform ceiling `platform_pricing_policy.max_discount_bps` (default `3000` = 30 %); the
-  ceiling scope (`per_seller` | `per_courier` | `per_service`) is configuration, set once Mengantar confirms it.
+- **Who decides:** Super Admin sets `assigned_bps` per gerai × courier/service within the platform band
+  `platform_pricing_policy.min_discount_bps` … `max_discount_bps` (defaults `2000` … `3000` = 20 % … 30 %, DEC-233).
+  Every new gerai starts at `default_discount_bps` (`2000` = 20 %) for every courier/service on approval; Super Admin
+  raises it per gerai later, and each change is applied on the Mengantar account by the Mengantar team. The ceiling
+  scope (`per_seller` | `per_courier` | `per_service`) is configuration, set once Mengantar confirms it.
 - **How it reaches Mengantar:** no API exists today (sandbox docs checked 2026-11-15), so each rule change creates a
   request for the Mengantar team (`apply_channel = mengantar_team`, `requested_at`); when an endpoint appears,
   `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
@@ -60,7 +62,7 @@ This specification defines exact integer arithmetic for weights, customer tariff
   applied never inflates profit; `M − N` is shown as `Selisih tarif` for information only, never booked.
 - **Customers:** walk-in senders always pay the normal publish tariff `P`; the discount is GeraiExpress's selling
   value to the gerai and is never shown on customer screens, receipts or the mini-site (DEC-205, DEC-230).
-- **Guards:** `assigned_bps <= max_discount_bps` is the only validation on saving a rule. The requested value may differ
+- **Guards:** `min_discount_bps <= assigned_bps <= max_discount_bps` is the only validation on saving a rule. The requested value may differ
   from what Mengantar currently gives in any state; cost always uses `effective_bps` (§2 table) and flows use `N`
   (§3), so no subsidy is ever booked.
 
@@ -140,9 +142,10 @@ in the POS, OpenAPI (`POST /api/v1/quotes`, `/shipments`) and MCP tools.
 
 Reconciliation check for every COD row: `seller credit − sender payable = P − N = 2.400` (outlet shipping spread).
 In production `F` differs per mode because `COD_AMOUNT` differs; unit tests (TASK-107) cover both this fixture and a
-per-mode fee fixture. Second fixture for the fallback case (DEC-226 not yet provider-enforced): assigned `1000 bps` →
-`M = 10.800` while Mengantar still debits `N = 9.600`; every flow above is unchanged (it uses `N`), `Estimasi Laba` shows
-`5.400`, and `Selisih tarif` shows `M − N = 1.200` as information only.
+per-mode fee fixture. Second fixture for a rule not yet applied at Mengantar (DEC-230): assigned `2500 bps` (requested 25 %) while
+Mengantar still gives `2000 bps` → `M = 9.000`, `effective_bps = 2000`, cost and flows still use `N = 9.600`;
+`Estimasi Laba` shows `5.400`, the rule shows `Belum diterapkan`, and `Selisih tarif` shows `M − N = −600` as
+information only (never booked).
 
 ### 3.5 Profit labels (spec 09)
 
