@@ -1,7 +1,7 @@
 // D1 control plane (ADR-0006 §1). Columns, nullability and defaults mirror packages/db/migrations/control/*.sql
 // (bidirectional drift test: apps/worker/test/migrations/schema-drift.test.ts).
 
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 export const tenants = sqliteTable("tenants", {
   id: text("id").primaryKey(),
@@ -150,3 +150,104 @@ export const platformLegalProfile = sqliteTable("platform_legal_profile", {
   updatedBy: text("updated_by"),
   updatedAt: integer("updated_at"),
 })
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  passwordHash: text("password_hash").notNull(),
+  status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+  emailVerifiedAt: integer("email_verified_at").notNull(),
+  passwordChangedAt: integer("password_changed_at").notNull(),
+  lastLoginAt: integer("last_login_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+})
+
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    hostContext: text("host_context", { enum: ["app", "owner"] }).notNull(),
+    activeTenantId: text("active_tenant_id"),
+    aal: text("aal", { enum: ["aal1", "aal2"] }).notNull().default("aal1"),
+    totpVerifiedAt: integer("totp_verified_at"),
+    deviceHash: text("device_hash"),
+    userAgent: text("user_agent"),
+    createdAt: integer("created_at").notNull(),
+    lastSeenAt: integer("last_seen_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    absoluteExpiresAt: integer("absolute_expires_at").notNull(),
+    revokedAt: integer("revoked_at"),
+  },
+  (t) => [index("sessions_user").on(t.userId, t.revokedAt)],
+)
+
+export const emailOtps = sqliteTable(
+  "email_otps",
+  {
+    id: text("id").primaryKey(),
+    purpose: text("purpose", { enum: ["signup", "email_change"] }).notNull(),
+    emailHash: text("email_hash").notNull(),
+    userId: text("user_id"),
+    emailEncrypted: text("email_encrypted").notNull(),
+    codeHash: text("code_hash").notNull(),
+    ipHash: text("ip_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: integer("expires_at").notNull(),
+    consumedAt: integer("consumed_at"),
+    ticketHash: text("ticket_hash"),
+    ticketExpiresAt: integer("ticket_expires_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("email_otps_email").on(t.emailHash, t.purpose, t.createdAt), index("email_otps_ip").on(t.ipHash, t.createdAt), uniqueIndex("email_otps_ticket").on(t.ticketHash)],
+)
+
+export const passwordResets = sqliteTable(
+  "password_resets",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    consumedAt: integer("consumed_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("password_resets_user").on(t.userId, t.createdAt)],
+)
+
+export const invitations = sqliteTable(
+  "invitations",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    emailHash: text("email_hash").notNull(),
+    email: text("email").notNull(),
+    role: text("role", { enum: ["cashier", "gerai_admin"] }).notNull(),
+    invitedBy: text("invited_by").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    consumedAt: integer("consumed_at"),
+    consumedBy: text("consumed_by"),
+    revokedAt: integer("revoked_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("invitations_tenant").on(t.tenantId, t.createdAt)],
+)
+
+export const authThrottle = sqliteTable("auth_throttle", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  windowStartedAt: integer("window_started_at").notNull(),
+  lockedUntil: integer("locked_until"),
+})
+
+export const knownDevices = sqliteTable(
+  "known_devices",
+  {
+    userId: text("user_id").notNull(),
+    deviceHash: text("device_hash").notNull(),
+    firstSeenAt: integer("first_seen_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.deviceHash] })],
+)

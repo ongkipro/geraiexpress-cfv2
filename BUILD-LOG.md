@@ -121,3 +121,20 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   mutation (expiry guard) red. Review deferred to the final Carbon pass.
 - Note: `send_email` error codes used as terminal vs retryable follow the Workers API page (2026-11-16); the page does
   not label retryability, so only `E_INTERNAL_SERVER_ERROR`, rate/daily limits and unknown codes are retried.
+
+## 2026-11-16 — TASK-105 accounts (M1, R4)
+
+- Shipped: control migration `0003_auth`; `apps/worker/src/auth` (password, tokens, cookies, CSRF, throttle,
+  Turnstile, sessions, flows); `/api/app` Hono sub-app with a declarative route registry (auth level + projection
+  per route, input for TASK-109's route scan); five auth screens in `apps/web-app`; local-only dev helpers
+  (`/api/app/dev/seed-tenant`, `/internal/dev/last-mail`, both refused unless `GX_ENV=local`).
+- Evidence: 17 Workers tests (sign-up replay/expiry/lock/send limits, enumeration-safe responses, login lock, cookie
+  attributes and host-only scope, rolling refresh, CSRF, reset single use + global revocation, invitation single use +
+  expiry + Kasir 403, new-device alert, PBKDF2 100k in workerd); Playwright 6/6 at 390/768/1280; dotuiux 0 fail and
+  admin-geometry exit 0 on 5 routes; mutations red. Review deferred to the final Carbon pass.
+- Gotchas:
+  - A Hono `basePath` plus a full path in a route helper doubles the prefix — every route answers 404.
+  - Handlers that return their own `Response` drop headers set with `c.header()`; carry them in middleware.
+  - The admin size contract's `header` selector matches any `<header>` element; card headings use `div`.
+  - Playwright 1.65 needs Chromium 1255; locally use `channel: "chrome"` (system Chrome 157) instead of downloading.
+  - e2e must start from fresh local state: persisted auth throttles from a previous run turn later runs red.

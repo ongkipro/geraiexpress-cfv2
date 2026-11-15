@@ -1,7 +1,9 @@
+import { appApi } from "./api/app"
 import { serveSpa } from "./assets/spa"
 import { classify, hostShape, normalizeHost, probeSignature } from "./host/classify"
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
 import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
+import { handleDevLastMail } from "./ops/dev-mail"
 import { handleDoMigrate } from "./ops/do-migrate"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
@@ -9,12 +11,14 @@ import { runChecks } from "./telemetry/checks"
 export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
 
+const APP_API = appApi()
+
 // Path families that belong to exactly one context; on any other context they are a neutral 404 (ADR-0002).
 const API_FAMILIES = [/^\/api\//, /^\/webhooks\//, /^\/internal\//, /^\/mcp(\/|$)/]
 const isApiFamily = (path: string) => API_FAMILIES.some((re) => re.test(path))
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, exec): Promise<Response> {
     const url = new URL(request.url)
     const names = hostNames(env)
 
@@ -55,11 +59,13 @@ export default {
     }
     switch (ctx.context) {
       case "GERAI_WORKSPACE":
-        // `/api/app/*`, `/api/v1/*` and `/mcp` are added by their tasks; every other API family is foreign here.
+        if (path.startsWith("/api/app/")) return APP_API.fetch(request, env, exec)
+        // `/api/v1/*` and `/mcp` are added by their tasks; every other API family is foreign here.
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "app")
       case "PLATFORM_OWNER":
         if (path === "/internal/ops/do-migrate" && request.method === "POST") return handleDoMigrate(request, env)
+        if (path === "/internal/dev/last-mail" && request.method === "GET") return handleDevLastMail(request, env)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "owner")
       case "MARKETING_APEX":

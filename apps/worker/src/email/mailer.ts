@@ -25,6 +25,10 @@ export const USER_MESSAGE_SUPPRESSED = "Email tidak dapat menerima pesan. Periks
 
 export type MailEnv = Pick<Env, "DB" | "EMAIL" | "KEK_SECRET" | "MAIL_FROM" | "GX_ENV">
 
+// Local development only (spec 12 §5: mail is simulated locally): the last variables per (address hash, template) so
+// e2e tests can read an OTP or link. Never populated outside GX_ENV=local.
+export const localMailbox = new Map<string, unknown>()
+
 interface Row {
   id: string
   template_id: TemplateId
@@ -73,6 +77,7 @@ export async function sendOne(env: MailEnv, row: Row, now: number): Promise<Disp
   const to = await decryptString(env.KEK_SECRET, row.to_email_encrypted, "email")
   const vars = JSON.parse(await decryptString(env.KEK_SECRET, row.payload_encrypted, "email")) as TemplateVars[TemplateId]
   const msg = renderTemplate(row.template_id, vars, await legalFooter(env.DB))
+  if (env.GX_ENV === "local") localMailbox.set(`${row.to_email_hash}:${row.template_id}`, vars)
   const attempts = row.attempts + 1
   try {
     const res = await env.EMAIL.send({
