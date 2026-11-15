@@ -67,3 +67,21 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - Wrangler 4.162: declaring `secrets.required` turns `.dev.vars` into an allowlist (`vars ∪ secrets.required`); list
     every secret there or it silently disappears from `env` and generated types.
   - `.sql` files import as Text modules both in `wrangler deploy --dry-run` bundles and in the Workers Vitest pool.
+
+## 2026-11-16 — TASK-103 storage foundation + TASK-102 host classifier (M1, R4)
+
+- Scope: D1 control baseline (`tenants`, `tenant_members`, `tenant_schema_versions`, `tenant_hostnames`,
+  `audit_logs`, `shipment_index`); tenant baseline in every `GeraiVaultDO` (`tenant_settings`,
+  `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`); Drizzle schemas for both tracks;
+  `migrate(version)` RPC, `vault_identity` binding, versioned absolute-upsert outbox; `POST /internal/ops/do-migrate`
+  + `pnpm do:migrate`; host classifier with D1 lookup, neutral 404/403/503, DCV and HMAC probe; cross-context guards.
+- Evidence: `pnpm check` exit 0 (73 Workers tests); local `do:migrate` dry run → run → re-run; mutations caught
+  (suspended → 403, multi-label tenant names, outbox version guard, foreign tenant id, app-host API guard);
+  reviewer-carbon round 1 REQUEST_CHANGES (7 findings fixed), round 2 APPROVE.
+- Decisions recorded in code/spec: tenant `recovery` lives in D1 `tenant_schema_versions.state` (tenants.status keeps
+  the business lifecycle); probe HMAC is over `host ":" nonce` (spec 11 updated).
+- Gotchas:
+  - A DO state probe that runs `CREATE TABLE IF NOT EXISTS` writes storage (and pins placement) even in a dry run;
+    probe `sqlite_master` read-only and create tables only inside `migrate`.
+  - Concurrency tests on two DO RPCs flake under `nice`; assert the end state, not the overlap.
+  - Numeric/hex/shorthand IPv4 (`0x7f.0.0.1`, `127.1`) pass a label regex; require the last label to start with a letter.

@@ -24,3 +24,6 @@ export const recoveryHtml = () =>
   })
 
 export const healthz = () => Response.json({ ok: true }, { headers: { "cache-control": "no-store" } })
+
+export const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)

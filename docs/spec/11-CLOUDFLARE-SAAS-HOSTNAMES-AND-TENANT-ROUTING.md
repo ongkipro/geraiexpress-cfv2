@@ -38,10 +38,13 @@ Plans, prices and limits change: re-read the linked Cloudflare page at M6 provis
 Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
 
 1. Pass through `/.well-known/acme-challenge/*` and `/.well-known/pki-validation/*` untouched (HTTP DCV).
-   `GET /.well-known/geraiexpress-probe/<nonce>` is answered **for pending hosts too** with
-   `HMAC(probe_secret, host + nonce)` only (no tenant name or data); it is the activation probe of §5 step 5.
-2. Normalise `Host` (lowercase, strip port and trailing dot); ignore `X-Forwarded-Host`; reject IP literals and hosts
-   over 253 chars.
+   `GET /.well-known/geraiexpress-probe/<nonce>` is answered **for pending hosts too** (not for suspended tenants or
+   moved/purged hosts; `GET` only) with `HMAC(probe_secret, host ":" nonce)` only (no tenant name or data); the `:`
+   separator prevents cross-TLD collisions (`toko.co` + `m…` vs `toko.com` + `…`). It is the activation probe of §5 step 5.
+   DCV pass-through applies only to candidate tenant hosts (`GET`/`HEAD`); platform hosts and `relay.` never pass it.
+2. Normalise `Host` (lowercase, strip port and trailing dot); ignore `X-Forwarded-Host`; reject IP literals (any form:
+   the last label must start with a letter) and hosts over 253 chars. `/healthz` answers only on hosts that pass this
+   step and are not `relay.`/other platform subdomains.
 3. Exact match on platform hosts → platform context (ARCHITECTURE §3), no tenant.
 4. `*.gerai.cc` (one label) or any other host → **authoritative D1 lookup** in `tenant_hostnames` (in-isolate cache
    of at most 30 s, keyed by host and the tenant's `routing_version`):
@@ -68,7 +71,7 @@ tenant; `tenants.routing_version` increments on any change.
 | 2 | Worker | `POST /zones/{gerai.cc}/custom_hostnames` with `ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } }`; GET again after a short delay for `ownership_verification` and `ssl.validation_records`. Create **before** the owner saves a proxied CNAME (O2O Error 1014). |
 | 3 | Owner | Adds the DNS record shown in the app (§6). |
 | 4 | Worker (Cron every 10 min + `Periksa Lagi` button) | `GET` status; the button sends `PATCH` with the same `ssl` method to restart validation. |
-| 5 | Worker | When `status = active` **and** `ssl.status = active`, the Worker requests `https://<host>/.well-known/geraiexpress-probe/<random nonce>` and compares the response with its own `HMAC(probe_secret, host + nonce)`; only a match proves the host reaches this deployment, then it sets `state = active` and bumps `routing_version`. Every other path on a pending host stays a neutral 404 (lifecycle test). |
+| 5 | Worker | When `status = active` **and** `ssl.status = active`, the Worker requests `https://<host>/.well-known/geraiexpress-probe/<random nonce>` and compares the response with its own `HMAC(probe_secret, host ":" nonce)`; only a match proves the host reaches this deployment, then it sets `state = active` and bumps `routing_version`. Every other path on a pending host stays a neutral 404 (lifecycle test). |
 | 6 | Worker | Canonical URLs, QR posters and receipts switch to the custom host only after step 5. A failed probe keeps `<slug>.gerai.cc` primary. |
 | 7 | Worker (daily reaper) | Delete hostnames `pending`/`failed` for 7 days, `moved`, or of churned/purged tenants: `DELETE` the custom hostname (stops billing), set `purged`. Never rely on Cloudflare's own deletion. |
 

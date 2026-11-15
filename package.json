@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm --filter @gx/web-app --filter @gx/web-owner build",
-    "dev": "pnpm build && wrangler dev --local",
+    "dev": "pnpm build && wrangler dev --local --persist-to .wrangler/state-dev",
     "typecheck": "pnpm cf-typegen >/dev/null && pnpm -r --workspace-concurrency=2 typecheck",
     "lint": "eslint . --max-warnings=0",
     "test:unit": "vitest run --project unit",
@@ -16,7 +16,9 @@
     "security:bundle-audit": "node scripts/ci/bundle-audit.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && pnpm test:worker && pnpm security:bundle-audit",
     "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts --env-interface Env",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env= --persist-to .wrangler/state-dev",
+    "do:migrate": "node scripts/do-migrate/do-migrate.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

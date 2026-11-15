@@ -11,13 +11,14 @@
     "@gx/domain": "workspace:*",
     "@gx/mengantar-sdk": "workspace:*",
     "@gx/thermal-print": "workspace:*",
+    "drizzle-orm": "0.45.4",
     "hono": "4.13.18",
     "zod": "4.6.6"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.8.2",
+    "typescript": "~6.0.3",
     "vitest": "4.1.12",
-    "wrangler": "4.162.0",
-    "typescript": "~6.0.3"
+    "wrangler": "4.162.0"
   }
 }

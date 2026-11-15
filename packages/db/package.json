@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./tenant": "./src/tenant.ts",
+    "./schema/control": "./src/schema/control.ts",
+    "./schema/tenant": "./src/schema/tenant.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
