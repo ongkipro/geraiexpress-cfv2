@@ -1,6 +1,6 @@
 # Copy to .dev.vars (device-local, never committed). Local values only; staging/production use `wrangler secret put`.
 AUTH_SESSION_PEPPER="local-dev-pepper-change-me-0123456789abcdef"
-KEK_SECRET="bG9jYWwtZGV2LWtlay0zMi1ieXRlcy1wYWQtcGFkLXA="
+KEK_SECRET="local-dev-kek-change-me"
 PROBE_SECRET="local-dev-probe-secret"
 MENGANTAR_PARTNER_SECRET="local-dev-partner-secret"
 PARTNER_RELAY_URL="http://127.0.0.1:55193"
