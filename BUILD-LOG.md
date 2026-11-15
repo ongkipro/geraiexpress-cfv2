@@ -169,3 +169,11 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   alert. The hosted `ci.yml` run starts with the push of this commit.
 - Gotchas: pnpm refuses a symlinked `node_modules` (scratch copies call tool binaries directly); a red fixture must
   check WHY it failed — the first run "passed" because the new test file was not in the copy.
+
+## 2026-11-16 — TASK-112 email deliverability gate (tooling)
+
+- Shipped: `scripts/email/deliverability{,-lib}.mjs` (`pnpm email:deliverability`: read-only DNS over HTTPS + pasted
+  header evaluation + 12-send matrix), tests, runbook `docs/runbooks/email-deliverability.md`.
+- Read-only check today: `mail.geraiexpress.com` SPF/DKIM absent (not onboarded); `_dmarc.geraiexpress.com` is
+  `p=reject` without `rua` — onboarding must publish aligned DKIM before any send.
+- Awaiting owner: Email Sending onboarding, DMARC decision, 12 inbox sends from staging, mail-tester ≥ 9/10.

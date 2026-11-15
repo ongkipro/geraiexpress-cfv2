@@ -20,7 +20,8 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local --env= --persist-to .wrangler/state-dev",
     "do:migrate": "node scripts/do-migrate/do-migrate.mjs",
     "probes": "node scripts/probes/probes.mjs",
-    "ci:red-fixtures": "bash scripts/ci/red-fixtures.sh"
+    "ci:red-fixtures": "bash scripts/ci/red-fixtures.sh",
+    "email:deliverability": "node scripts/email/deliverability.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
