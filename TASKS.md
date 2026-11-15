@@ -43,14 +43,14 @@ tenant B's record).
   `/pengaturan` with the grouped sub-menu and three item pages; `dotuiux check --surface admin` 0 fail and
   `admin-geometry.mjs` exit 0 at 390/1366/1536 on those routes.
 
-### TASK-005: Re-run dotuiux + admin-geometry after the DEC-222 palette change
+### TASK-005: Re-run dotuiux + admin-geometry after the DEC-222 palette change — DONE 2026-11-14 (`design/evidence/prototype-gates.md`)
 - **Requirement:** DEC-222
 - **Risk Level:** R0
 - **Allowed Paths:** `design/evidence/prototype-gates.md`
 - **Depends On:** working headless Chrome on the host
 - **Done when:** `bash` gate script rows show 0 fail and admin-geometry exit 0 on all prototype routes.
 
-### TASK-002: Owner picks the visual direction
+### TASK-002: Owner picks the visual direction — DONE 2026-11-14 (Direction A, `DESIGN.md`)
 - **Requirement:** `DESIGN.md` Direction
 - **Risk Level:** R0
 - **Job:** review
@@ -59,7 +59,7 @@ tenant B's record).
 - **Done when:** 2–3 rendered directions (type and accent variants on the same shell) are shown; `DESIGN.md` records
   `Picked-by: owner <date> (direction X of N)`; `dotuiux validate` passes without the Picked-by warning.
 
-### TASK-003: Owner signs off M0
+### TASK-003: Owner signs off M0 — DONE 2026-11-14 (`STATUS.md`)
 - **Requirement:** ROADMAP M0 exit gate
 - **Risk Level:** R0
 - **Job:** review

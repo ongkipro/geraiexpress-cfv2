@@ -33,13 +33,18 @@ This specification defines exact integer arithmetic for weights, customer tariff
 
 > **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
 
-### 2.1 What the Super Admin assigned rate controls under Scheme 1 (DEC-226 — pending owner choice)
+### 2.1 What the Super Admin assigned rate controls under Scheme 1 (DEC-226)
 
 Each outlet owns its Mengantar seller account (ADR-0003), so the **actual debit is whatever Mengantar charges that
-seller**; GeraiExpress cannot reduce or raise it by calculation. Until DEC-226 is decided, `assigned_gerai_discount_bps`
+seller**; GeraiExpress cannot reduce or raise it by calculation, and the documented Partner API has no discount endpoint.
+
+- **Target:** after Mengantar confirms that a partner can set a per-seller discount, the Super Admin rate is applied on
+  Mengantar's side and becomes the billed rate; activation is recorded with date, channel and the observed
+  `discountPercent` from `/order/estimate`.
+- **Until then (fallback):** `assigned_gerai_discount_bps`
 is an **internal commercial estimate** used for margin preview and the `assigned <= observed` guard only; reconciled
 profit always uses `provider_reconciled_cost_idr`. Any gap (`assigned < observed`) is shown to the owner as
-`Selisih tarif` and is never booked as platform revenue without the settlement mechanism DEC-226 selects.
+`Selisih tarif` and is never booked as platform revenue (a platform-fee settlement of the gap is rejected for launch).
 
 ---
 

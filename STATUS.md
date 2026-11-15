@@ -1,7 +1,7 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-14
-Status: M0 specification complete; prototype built and gated; awaiting owner visual pick and sign-off
+Status: M0 signed off by owner 2026-11-14 (Direction A, DEC-226 accepted); M1 may start after the GPT-6.1 Sol round 2 review passes
 State: PLANNED
 Review-Risk: R0
 Independent-Review: PENDING for 2026-11-14 additions (DEC-220..226, visual 08, research 02–03; GPT-6.1 Sol round 1 = REQUEST_CHANGES, fixes applied); earlier docs PASS (Fable 1–3, Carbon 1–3)
@@ -11,21 +11,22 @@ Independent-Review-Head: 16d0d60
 
 ## Now
 
-M0 documentation is complete and committed locally (no remote): PRD PR-01..PR-24, DECISIONS DEC-201..DEC-226 (DEC-226 proposed),
-ADR-0001..0005, specs 01–10, visual 01–08, research 01–03, `DESIGN.md` (direction pending), `design/` brief, refs and
+M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-226,
+ADR-0001..0005, specs 01–10, visual 01–08, research 01–03, `DESIGN.md` (Direction A picked), `design/` brief, refs and
 comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
 
 ## Next
 
 1. TASK-001 done: `prototype/` (shadcn base-nova, comfort primitives, 3 directions). Gates: `design/evidence/
-   prototype-gates.md` (0 fail / 0 warn on 10 routes; admin-geometry exit 0 at 390/1366/1536). Preview:
+   prototype-gates.md` (TASK-005 re-run 2026-11-14: 0 fail on 12 routes; admin-geometry exit 0 at 390/1366/1536). Preview:
    `http://100.127.67.86:55180/` while the preview task runs.
-2. TASK-002: owner picks one of 2–3 rendered visual directions; record `Picked-by` in `DESIGN.md`.
-3. TASK-003: owner signs off M0; then TASK-101 starts M1.
+2. TASK-002 done (Direction A) and TASK-005 done (gates re-run).
+3. TASK-003 done: owner signed off M0 on 2026-11-14. Accepted as deferred: Mengantar's answer on per-seller discount
+   control (DEC-226) — required before M2 pricing, not before M1. Next: GPT-6.1 Sol round 2 review, then TASK-101.
 
 ## Blockers
 
-- DEC-226 (meaning of the Super Admin assigned discount under Scheme 1) needs the owner's choice before M2 pricing work.
+- Before M2: Mengantar must confirm whether a partner can set a per-seller discount, through what channel and when it takes effect (DEC-226).
 
 None for M0. Open items that do not block design but must close before the stated milestone:
 - Mengantar Q23 (IP restriction on Public API writes / label generation for Partner-created sellers) — before M6.

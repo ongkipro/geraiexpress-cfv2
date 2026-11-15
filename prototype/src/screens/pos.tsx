@@ -135,7 +135,7 @@ export function Pos({ role }: { role: "owner" | "kasir" }) {
         </section>
         <div className="sticky bottom-0 -mx-4 border-t bg-card p-4 lg:static lg:mx-0 lg:rounded-lg lg:border">
           <Button size="lg" className="w-full">{pay === "nanti" ? "Simpan & Cetak (belum dibayar)" : `Tandai Lunas & Cetak · ${rupiah(total)}`}</Button>
-          <p className="mt-2 text-center text-sm text-muted-foreground">Cetak 58 mm label + struk · Ctrl+Enter</p>
+          <p className="mt-2 text-center text-sm text-muted-foreground">Cetak 10×15 · Paket + Bukti · Ctrl+Enter</p>
         </div>
       </aside>
     </div>

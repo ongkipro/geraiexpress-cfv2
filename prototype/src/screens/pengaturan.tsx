@@ -21,7 +21,7 @@ const groups = [
     label: "Operasional",
     items: [
       { id: "ekspedisi", label: "Ekspedisi Aktif", hint: "6 aktif" },
-      { id: "printer", label: "Printer & Struk", hint: "POS-58 terhubung" },
+      { id: "printer", label: "Printer & Struk", hint: "Thermal 100 mm (PC)" },
       { id: "packing", label: "Packing & Biaya Tambahan", hint: "4 item" },
     ],
   },
@@ -164,7 +164,7 @@ function PrinterPage({ role }: { role: "owner" | "kasir" }) {
         <p className="text-muted-foreground">Atur printer kasir dan isi struk pelanggan.</p>
       </div>
       <Card title="Printer di perangkat ini" desc="Tersimpan di perangkat ini saja.">
-        <p>POS-58 · Bluetooth · terhubung</p>
+        <p>Thermal 100 mm · USB di PC · siap</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="outline">Tes Cetak</Button>
           <Button variant="outline">Ganti Printer</Button>

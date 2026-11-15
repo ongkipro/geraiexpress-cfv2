@@ -6,8 +6,9 @@ Brief: `design/brief.md`. Size contract: `design/admin-contract.json` (**comfort
 
 ## Direction
 
-Picked-by: pending — the owner picks one of 2–3 rendered directions at the prototype step (todo #5); until then
-this file holds the accepted constraints only and the build is visually UNVERIFIED.
+Picked-by: owner (Ongki), 2026-11-14 — **Direction A**: system UI font stack, Mengantar blue `#2E47BA` on clean white,
+8 px radius (prototype `?dir=a`). Rejected: B (Inter webfont, same blue — near-identical look for an extra font
+download) and C (Geist + teal — loses the Mengantar-network identity). Gate evidence: `design/evidence/prototype-gates.md`.
 
 - Surface/job: shop owners 35–55+ and counter staff serving a waiting customer; they decide price, courier and
   payment in under 45 s and must trust money numbers.

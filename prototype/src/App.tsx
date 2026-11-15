@@ -74,7 +74,7 @@ function useHashRoute() {
 
 const gerai = [
   { path: "/", label: "Dashboard", icon: HomeIcon },
-  { path: "/kasir", label: "Kasir", icon: ReceiptIcon },
+  { path: "/kasir", label: "Buat Pengiriman", icon: ReceiptIcon },
   { path: "/kiriman", label: "Kiriman", icon: BoxIcon, badge: 22 },
   { path: "/kontak/pengirim", label: "Kontak", icon: UsersIcon, sub: [{ path: "/kontak/pengirim", label: "Pengirim" }, { path: "/kontak/penerima", label: "Penerima" }] },
   { path: "/keuangan", label: "Keuangan", icon: BanknoteIcon, ownerOnly: true },
@@ -83,7 +83,7 @@ const gerai = [
 
 const titles: Record<string, string> = {
   "/": "Dashboard",
-  "/kasir": "Kasir",
+  "/kasir": "Buat Pengiriman",
   "/kiriman": "Kiriman",
   "/kontak/pengirim": "Kontak › Pengirim",
   "/kontak/penerima": "Kontak › Penerima",
@@ -174,7 +174,7 @@ export default function App() {
             <div className="flex flex-col gap-1 px-2 py-1 text-sm group-data-[collapsible=icon]:hidden">
               <span className="flex items-center gap-2">
                 <PrinterIcon className="size-5 text-safe" aria-hidden />
-                <span>Printer POS-58 siap</span>
+                <span>Printer 100 mm siap</span>
               </span>
               <span className="text-muted-foreground">Shift Pagi · Ani</span>
             </div>
@@ -185,7 +185,7 @@ export default function App() {
           <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b bg-card px-4">
             <SidebarTrigger className="hidden md:inline-flex" aria-label="Ciutkan menu" />
             <MobileMenu href={href} items={items} />
-            <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em]">{onPos ? "Kiriman › INV 8K4M2P7" : titleFor(path) ?? "Kasir"}</h1>
+            <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.02em]">{onPos ? "Kiriman › INV 8K4M2P7" : titleFor(path) ?? "Buat Pengiriman"}</h1>
             <div className="ml-auto flex items-center gap-2">
               <Button variant="outline" className="hidden w-72 justify-start text-muted-foreground lg:inline-flex" aria-label="Cari INV, AWB, atau nomor HP">
                 <SearchIcon data-icon="inline-start" />
@@ -323,7 +323,7 @@ function BottomBar({ href, path, primary }: { href: (p: string) => string; path:
   return (
     <nav aria-label="Navigasi bawah" className="fixed inset-x-0 bottom-0 z-20 flex h-16 items-center border-t bg-card px-1 md:hidden">
       {item("/", "Beranda", HomeIcon)}
-      {item("/kasir", "Kasir", ReceiptIcon)}
+      {item("/kasir", "Buat", ReceiptIcon)}
       <a href={href("/kasir/baru")} aria-label="Kiriman Baru" className={`mx-1 flex size-14 shrink-0 items-center justify-center rounded-full ${primary ? "bg-primary text-primary-foreground" : "border-2 border-primary bg-card text-primary"}`}>
         <PlusIcon className="size-7" aria-hidden />
       </a>
