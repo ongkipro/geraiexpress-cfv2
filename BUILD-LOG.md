@@ -17,3 +17,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - Mengantar polling dates have minute precision and webhook headers second precision → minute-bucket ordering.
   - GitHub tables split on `|` inside backticks → escape as `\|`.
 - Not done: no application code, no deploy, no Cloudflare resources, no Mengantar call.
+
+## 2026-11-15 — Execution plan approved
+
+- `TASKS.md` holds 50 contracts for M1–M6 (incl. milestone-close tasks `x99`) plus post-launch `701..703`, with a
+  coverage map: every P0 PR, DEC-201..229 and ADR-0001..0006 is owned by a task.
+- Evidence: GPT-6.1 Sol plan review rounds 1–2 REQUEST_CHANGES, round 3 APPROVE
+  (`docs/review/2026-11-15-sol-plan-round{1,2,3}-review.md`); scripted checks: all fields present, dependency graph
+  acyclic, no forward-milestone dependency, every M2–M6 task gated by the previous milestone close, TASK-604 closure
+  covers every task, no tenant-data task below R3, TASKS.md 43.5 KB (< 50 KB).
+- `docs/DIAGRAMS.md`: 14 Mermaid diagrams render with mermaid 12.3 (checkout and finance diagrams re-rendered after
+  the plan review corrections).

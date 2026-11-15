@@ -28,7 +28,9 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 plan revised later (see item 6).
 5. TASK-006 done: GPT-6.1 Sol round 10 APPROVE (2026-11-15). Next: TASK-101 (M1 scaffold) when the owner says go.
 6. 2026-11-15: TASKS.md holds the execution plan for M1–M6 (50 contracts incl. milestone-close tasks x99; post-launch
-   701..703), revised after GPT-6.1 Sol plan reviews 1–2; plan review round 3 pending.
+   701..703). Plan review: GPT-6.1 Sol plan rounds 1–2 REQUEST_CHANGES, **round 3 APPROVE** (2026-11-15,
+   `docs/review/2026-11-15-sol-plan-round3-review.md`) — ready for development A–Z, subject to the recorded
+   prerequisites, milestone gates and per-action owner approvals.
 
 ## Blockers
 
