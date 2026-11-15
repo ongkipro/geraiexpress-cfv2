@@ -312,7 +312,9 @@ No task is in progress. TASK-101 starts when the owner says go.
   Sesuai / Selisih` from observed `discountPercent` (tolerance 1 bp); customers always pay the publish tariff;
   TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
 - **Visual Contract:** `/tarif` tabs incl. `Kebijakan Diskon` per visual 07; request list for the Mengantar team (export).
-- **Done when:** rule above the ceiling rejected; changing `max_discount_bps` or its scope needs no code change (test);
+- **Done when:** rule above the ceiling rejected; every transition of the spec 02 §2.1 state table incl. `2000` vs
+  `1999` → `Sesuai` and a verified rule drifting to `1000` → `Selisih`; a cargo fixture whose regular and cargo discounts
+  differ verifies against the cargo value; changing `max_discount_bps` or its scope needs no code change (test);
   verification state transitions on fixture estimates; no customer-facing DTO contains discount fields (test); audit
   per change; cashback ledger states unit-tested.
 
@@ -324,10 +326,11 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Allowed Paths:** `apps/web-owner/src/routes/{index,pengawasan,sistem}/**`, `apps/worker/src/admin/{overview,monitor,audit,legal}/**`,
   `packages/db/migrations/control/208-*`, matching tests
 - **Depends On:** TASK-203, TASK-204
-- **Accepted Invariants:** read-only cross-tenant views; risk search by hashed phone with `risk_review` + recent TOTP
+- **Accepted Invariants:** read-only cross-tenant views except the `Rotasi Kunci Seller` action (TOTP + reason,
+  calls the TASK-205 primitive, spec 10 §4.4); risk search by hashed phone with `risk_review` + recent TOTP
   + audit on the **read**; audit log viewer; platform legal profile editor (NULL until filled); relay/sync health.
 - **Visual Contract:** per visual 07 Super Admin rows; no create/pay actions anywhere.
-- **Done when:** audited-read tests; non-impersonation scan; legal profile NULL vs filled rendering.
+- **Done when:** rotation action test (TOTP + audit, uses the fence); audited-read tests; non-impersonation scan; legal profile NULL vs filled rendering.
 
 ### TASK-299: M2 close
 - **Requirement:** ROADMAP M2 exit gate
@@ -375,7 +378,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Allowed Paths:** `apps/worker/src/pricing/quote/**`, `apps/web-app/src/routes/kasir/{baru,cek-cepat}/**`,
   `packages/db/migrations/tenant/303-*`, matching tests
 - **Depends On:** TASK-107, TASK-201, TASK-207, TASK-301
-- **Accepted Invariants:** each quote records the observed `discountPercent` for the TASK-207 verifier;
+- **Accepted Invariants:** each quote records `observed_bps` per service class (regular `discountPercent`, cargo
+  `cargoDiscount / cargoPrice`) for the TASK-207 verifier; per-tenant quote rate limit (spec 10 §4.4);
   fixed-point `codFee`; frozen quote (`F`, `N`, `C`); cargo ≥ 5,000 g, Non-COD only; Kasir
   sees customer price only; quick check allocates no slug or draft.
 - **Visual Contract:** courier cards per visual 05; owner `👁` margin toggle; per-card loading/error.
@@ -389,14 +393,14 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/{dispatch,payment,cancel}/**`, `apps/web-app/src/routes/kiriman/[slug]/**`,
   `packages/db/migrations/tenant/304-*`, matching tests
 - **Depends On:** TASK-108, TASK-204, TASK-303
-- **Accepted Invariants:** journal → call → record; unknown → `reconciliation_needed` read-back; unpaid → `provider_unpaid_hold`
+- **Accepted Invariants:** per-tenant issue and cancel rate limits (spec 10 §4.4); journal → call → record; unknown → `reconciliation_needed` read-back; unpaid → `provider_unpaid_hold`
   with the shared `payUnpaid(batch_id)` primitive; label printable only with AWB; cancel before pickup = `DELETE /order`
   then read-back, payment void first; counter payment state machine spec 03 §1.1; every shipment create and status change publishes the
   D1 `shipment_index` row through the outbox (versioned absolute upsert).
 - **Visual Contract:** POS C4, sticky checkout bar on phones, one primary `Tandai Lunas & Cetak`; pending states.
 - **Done when:** double submit → one order; timeout → read-back; unpaid → `payUnpaid` after top-up (fixture);
   cancel unknown outcome → read-back; `shipment_index` lost-ack, restart and stale-version
-  tests against the real projection; scripted checkout < 45 s; R4 review.
+  tests against the real projection; scripted checkout < 45 s; rate-limit tests for issue and cancel; R4 review.
 
 ### TASK-305: Masking presets, quota, reveal audit
 - **Requirement:** PR-15, DEC-206, DEC-231, ADR-0005, spec 05

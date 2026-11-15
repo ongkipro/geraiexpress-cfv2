@@ -1,7 +1,7 @@
 # 10 — Partner Relay on a VPS: Static IPv4 Egress for Mengantar (`geraiexpress-cfv2`)
 
 - **Related:** `DEC-204`, `DEC-219`, `ADR-0003`, `ROADMAP.md` M6
-- **Decision:** Option A host (existing VPS + Vultr Reserved IPv4) with the **simple push relay** (one HMAC secret).
+- **Decision:** a Vultr Reserved IPv4 on either the existing VPS (Option A) or a new small dedicated instance (Option C), chosen by the owner at M6 (DEC-219 as amended by DEC-232); the **simple push relay** (one HMAC secret).
 - **Status:** Design. Nothing in this document is deployed. Any action on a live server, DNS record, or
   Mengantar production allowlist needs explicit owner approval at the time it is run.
 - **Scope boundary:** this spec does not change the running GeraiExpress v1 repository or its application.
@@ -66,7 +66,7 @@ Cloudflare. A small VPS is the cheapest fixed egress identity we control.
 | Option | What | Egress IP | Extra cost | Isolation | Recommendation |
 |---|---|---|---|---|---|
 | **A. Shared host + reserved IPv4** | Run `partner-relay` as one Coolify app on the existing `geraiexpress` VPS (Vultr `sgp`, IPv6 off, Cloudflare-only firewall). Attach a Vultr **Reserved IP** so the address survives a rebuild or migration. | Reserved IPv4 | Reserved IP fee only (check current Vultr price) | Shares the host with the v1 app; relay is stateless, ~64 MB RAM | **Recommended.** Same pattern the `99ribu-prod` host already uses for the AutoLaris IP allowlist. |
-| **B. Shared host, current IPv4** | As A, but allowlist the instance's current address. | Instance IPv4 | None | As A | Acceptable for the pilot. A rebuild or re-provision changes the IP → onboarding stops until Mengantar updates the list. |
+| B. Shared host, current IPv4 *(historical — not chosen, DEC-232)* | As A, but allowlist the instance's current address. | Instance IPv4 | None | As A | Rejected: a rebuild changes the IP and stops onboarding. |
 | **C. Dedicated micro VPS** | Smallest Vultr instance only for the relay, own firewall group, plus a reserved IPv4. | Reserved IPv4 | Smallest-plan fee + reserved IP | Full: no shared blast radius | Choose when the v1 host is retired or must not carry v2 traffic. |
 | D. Cloudflare dedicated egress | Workers VPC → Gateway egress policy → dedicated IPs. | Cloudflare-assigned (2 cities) | Zero Trust Enterprise add-on | Full | Rejected for now: plan cost; revisit only if the Enterprise plan is bought for other reasons. |
 

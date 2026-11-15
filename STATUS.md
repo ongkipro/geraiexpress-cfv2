@@ -22,7 +22,7 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
    `http://100.127.67.86:55180/` while the preview task runs.
 2. TASK-002 done (Direction A) and TASK-005 done (gates re-run).
 3. TASK-003 done: owner signed off M0 on 2026-11-14. Accepted as deferred: Mengantar's answer on per-seller discount
-   control (DEC-226) — required before M2 pricing, not before M1.
+   control (DEC-226) — superseded 2026-11-15 by DEC-230 (configurable, not a blocker).
 4. 2026-11-15: owner accepted DEC-227 (Cloudflare Email Sending only), DEC-228 (D1 control plane + per-gerai SQLite
    Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 plan revised later (see item 6).

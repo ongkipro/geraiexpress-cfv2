@@ -26,7 +26,7 @@ This specification defines exact integer arithmetic for weights, customer tariff
 
 | Instrument | Owner | Beneficiary | Integer Formula |
 |---|---|---|---|
-| **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `effective_bps = min(assigned_bps, provider_observed_bps)` (no subsidy at launch: a rate above what Mengantar gives would need a settlement ledger, which DEC-226 rejects for launch). `gerai_shipping_cost_idr` (the **commercial estimate** `M`) = `provider_net_shipping_idr` when `assigned_bps >= provider_observed_bps`, else `publish_shipping_idr - floor(publish_shipping_idr * assigned_bps / 10000)`. |
+| **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `assigned_bps` is the **requested** discount (≤ `max_discount_bps`, §2.1); the **effective** discount for cost is always `effective_bps = min(assigned_bps, provider_observed_bps)`, so a requested rate Mengantar has not applied yet never lowers cost (no subsidy, DEC-226/230). `gerai_shipping_cost_idr` (the **commercial estimate** `M`) = `provider_net_shipping_idr` when `assigned_bps >= provider_observed_bps`, else `publish_shipping_idr - floor(publish_shipping_idr * assigned_bps / 10000)`. |
 | **2. Counter Packing Add-On (`packing_addon_idr`)** | **Gerai Admin** (shop cardboard/bubble catalog) | **Outlet 100%** (stays in shop cash drawer) | Added as an explicit receipt line item; never sent to Mengantar. |
 | **3. Counter Promo / Voucher (`promo_discount_idr`)** | **Gerai Admin** (outlet-funded only at launch; platform-funded campaigns are deferred until a settlement ledger exists) | **Walk-in Sender / Reseller** | Subtracted from the counter part only; capped so `counter_due_idr >= 0` **before** it is stored (`V <= P + I0 + K + S` for `none`, `V <= K + S` otherwise). |
 | **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | Recorded `PENDING` at dispatch; transitions to `RELEASED` 24h after `delivered` if no dispute exists; `CLAWBACK` on `RTS` or `cancelled`. |
@@ -41,15 +41,28 @@ This specification defines exact integer arithmetic for weights, customer tariff
 - **How it reaches Mengantar:** no API exists today (sandbox docs checked 2026-11-15), so each rule change creates a
   request for the Mengantar team (`apply_channel = mengantar_team`, `requested_at`); when an endpoint appears,
   `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
-- **Verification:** a daily job (and the next quote after a change) compares `assigned_bps` with the
-  `discountPercent` observed on that seller's `/order/estimate`: `Belum diterapkan` (requested, not observed),
-  `Sesuai` (within 1 bp, sets `verified_at`), `Selisih` (different; owner and Super Admin see both values).
+- **Observed discount, per service class:** regular services use `discountPercent` (or `discount / price`); cargo
+  services use the cargo fields only (`cargoDiscount / cargoPrice`, §1 item 4). Both are normalised to
+  `observed_bps = floor(discount × 10000 / price)` and stored per quote with the service class.
+- **Verification states** (a daily job and the next quote after a change; tolerance `|assigned − observed| ≤ 1` bp):
+
+  | From | Condition | To |
+  |---|---|---|
+  | (rule saved, `requested_at` set) | — | `Belum diterapkan` |
+  | `Belum diterapkan` | within tolerance | `Sesuai` (`verified_at`) |
+  | `Belum diterapkan` | different, and older than 7 days | `Selisih` |
+  | `Sesuai` | outside tolerance (drift either way) | `Selisih` |
+  | `Selisih` | within tolerance again | `Sesuai` |
+  | any | Super Admin edits the rule | `Belum diterapkan` (new `requested_at`) |
+
+  Observations are always recorded as-is; a state never rewrites provider data.
 - **Money:** every flow and margin uses the provider net `N` that Mengantar actually charges (§3), so a rule not yet
   applied never inflates profit; `M − N` is shown as `Selisih tarif` for information only, never booked.
 - **Customers:** walk-in senders always pay the normal publish tariff `P`; the discount is GeraiExpress's selling
   value to the gerai and is never shown on customer screens, receipts or the mini-site (DEC-205, DEC-230).
-- **Guards:** `assigned_bps <= max_discount_bps` always; `assigned_bps > observed` is allowed only while the rule is
-  `Belum diterapkan` (waiting for Mengantar) and is flagged; no subsidy is ever booked.
+- **Guards:** `assigned_bps <= max_discount_bps` is the only validation on saving a rule. The requested value may differ
+  from what Mengantar currently gives in any state; cost always uses `effective_bps` (§2 table) and flows use `N`
+  (§3), so no subsidy is ever booked.
 
 ---
 

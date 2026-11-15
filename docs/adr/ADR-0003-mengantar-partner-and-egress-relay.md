@@ -5,7 +5,7 @@
 
 ## Context
 GeraiExpress operates as an official Mengantar partner (`Partner ID: ongkirich`). Mengantar exposes two distinct API surfaces:
-1. **Public API (`api-public.mengantar.com/api/public/{API_KEY}/...`):** handles 99.9% of daily operations — area search, shipping estimates, order creation, `pay-unpaid`, pickup time slots, order/batch reads, cancellations, and `/invoices` financial ledger reads. Production read calls succeeded without an IP allowlist; whether Partner-created seller keys ever enforce per-key IP restrictions on writes or label generation remains an explicit M6 verification item with Mengantar (Operations Contract Q23).
+1. **Public API (`api-public.mengantar.com/api/public/{API_KEY}/...`):** handles 99.9% of daily operations — area search, shipping estimates, order creation, `pay-unpaid`, pickup time slots, order/batch reads, cancellations, and `/invoices` financial ledger reads. Production read calls succeeded without an IP allowlist. Calls stay direct from the Worker; if Mengantar ever enforces an IP for a Public API route, that route moves to the relay by a DEC entry, otherwise the risk is handled by the hardening of `docs/spec/10` §4.4 (DEC-232; Q23 is not a blocker).
 2. **Partner API (`/api/partner/v1/sellers/*` — 4 POST routes):** provisions new seller accounts, lists sellers, retrieves keys, and rotates keys. Sandbox relaxes IP checks, but **Production strictly enforces an allowlisted static public IPv4 (`403 IP_NOT_ALLOWED` otherwise)**. Non-Enterprise Cloudflare Workers egress from rotating shared IPs.
 
 ## Decision
