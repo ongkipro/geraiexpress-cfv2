@@ -38,8 +38,10 @@ This specification defines exact integer arithmetic for weights, customer tariff
 - **Who decides:** Super Admin sets `assigned_bps` per gerai × courier/service within the platform band
   `platform_pricing_policy.min_discount_bps` … `max_discount_bps` (defaults `2000` … `3000` = 20 % … 30 %, DEC-233).
   Every new gerai starts at `default_discount_bps` (`2000` = 20 %) for every courier/service on approval; Super Admin
-  raises it per gerai later, and each change is applied on the Mengantar account by the Mengantar team. The ceiling
-  scope (`per_seller` | `per_courier` | `per_service`) is configuration, set once Mengantar confirms it.
+  raises it per gerai later, and each change is applied on the Mengantar account by the Mengantar team. Discounts
+  differ **per courier** (owner, 2026-11-15): the band, default and ceiling are kept per courier in
+  `courier_discount_policy` (falls back to the platform values when a courier has no row); all start at 20 % and are
+  edited later in `Kebijakan Diskon`.
 - **How it reaches Mengantar:** no public API exists (sandbox docs checked 2026-11-15). Mengantar applies the change
   from its own system to the seller account, normally within **1 hour** (owner, 2026-11-15). Each rule change records
   `requested_at` and appears in the Super Admin request list (`apply_channel = mengantar_team`); when an endpoint

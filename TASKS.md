@@ -307,7 +307,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`,
   `packages/db/migrations/{control,tenant}/207-*`, matching tests
 - **Depends On:** TASK-107, TASK-201 (estimate client returns `discountPercent`), TASK-203
-- **Accepted Invariants:** `min_discount_bps <= assigned_bps <= max_discount_bps` (defaults 2000 … 3000, scope configurable);
+- **Accepted Invariants:** `min_discount_bps <= assigned_bps <= max_discount_bps` per courier (`courier_discount_policy`,
+  platform fallback; defaults 2000 … 3000);
   approval seeds every courier/service at `default_discount_bps` (2000) with `Belum diterapkan`;
   `apply_channel` `mengantar_team` (request list) with `partner_api` adapter slot; verification state `Belum diterapkan /
   Sesuai / Selisih` from `observed_bps` per service class (regular `discountPercent`, cargo `cargoDiscount /
@@ -318,7 +319,7 @@ No task is in progress. TASK-101 starts when the owner says go.
   (`Belum diterapkan` → `Sesuai`, or → `Selisih` + alert after 2 × `apply_sla_minutes`); a newly approved gerai has 20 % rules for every active
   courier/service in state `Belum diterapkan`; every transition of the spec 02 §2.1 state table incl. `2000` vs
   `1999` → `Sesuai` and a verified rule drifting to `1000` → `Selisih`; a cargo fixture whose regular and cargo discounts
-  differ verifies against the cargo value; changing `max_discount_bps` or its scope needs no code change (test);
+  differ verifies against the cargo value; changing a courier's default/min/max needs no code change (test); two couriers with different bands (test);
   verification state transitions on fixture estimates; no customer-facing DTO contains discount fields (test); audit
   per change; cashback ledger states unit-tested.
 
@@ -729,7 +730,7 @@ Milestone notes carried forward:
   loading/empty/error states for every screen (deferred from TASK-001).
 - **M2/M4 sandbox verifications:** weight echo, `POST /time` timezone, `/invoices` ordering, `pay-unpaid`
   idempotency, item-value limits per courier (specs 02, 04, 09).
-- **Mengantar (DEC-230):** channel answered — Mengantar's system, ~1 hour (`apply_sla_minutes = 60`); open: 30 % ceiling
-  scope — configuration in `platform_pricing_policy`, not a blocker.
+- **Mengantar (DEC-230):** answered — applied from Mengantar's system, ~1 hour (`apply_sla_minutes = 60`); discounts
+  differ per courier (`courier_discount_policy`, default 20 % each, editable).
 - **Before masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention); building and
   per-gerai switching are not blocked (DEC-231).

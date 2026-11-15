@@ -35,8 +35,8 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
 ## Blockers
 
 - Mengantar discount channel answered (owner, 2026-11-15): applied from Mengantar's system to the seller account, ~1 hour
-  (`apply_sla_minutes = 60`). Still open: whether the 30 % ceiling is per seller, per courier or per service —
-  configuration, not a blocker.
+  (`apply_sla_minutes = 60`). Discounts differ per courier: default 20 % each, changed later per courier
+  (`courier_discount_policy`).
 
 None for M1. Open items, each owned by the milestone row in `TASKS.md` (coverage map), that must close before the stated milestone:
 - Vultr Reserved IPv4 (new small instance or existing server, DEC-232) — buy/attach at M6 with owner approval.
