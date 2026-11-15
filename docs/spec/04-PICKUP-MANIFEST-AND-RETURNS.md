@@ -36,11 +36,13 @@ Under `ADR-0005`, 100% of failed deliveries (`RTS`) return to the outlet's addre
 
 ## 3. Proactive Exception Buckets & Claim Countdown Assistant (`/kiriman?tab=kendala`)
 
-1. **Four Live Operational Sub-Filters:**
+1. **Five Live Operational Sub-Filters:**
    - `Tidak Bergerak` (`48 jam–4 hari`, `5–14 hari`, `15–30 hari`, `>30 hari` without a tracking scan),
    - `Gagal Antar / Butuh Instruksi` (`DELIVERY PROBLEM` / `undelivery_hold`),
    - `Selisih Berat / Cordest` (compares counter `actual_weight_gram` + R2 scale photo against Mengantar adjustment invoices),
    - `Bisa Klaim` (eligible lost/damaged shipments).
+   - `Status Bertentangan` (`provider_status_conflict`, spec 01 §3: e.g. Mengantar reports `delivered` after the outlet
+     verified a handback; the outlet's custody status stays, the owner checks with the courier and records a note).
 2. **Per-Courier Claim Deadlines (Grounded in Mengantar Help `5207011 / 8140017`):**
    - Tracks exact filing windows per courier (e.g., lost claim `3×24h` for IDX/J&T; `14d` for SiCepat/IDX/Anteraja/Pos/SPX; `30d` J&T/Lion; damage within `2×24h–3×24h` of receipt with unboxing video).
    - Displays color-coded countdown badges (`Bisa Klaim — sisa 18 jam` / `Kedaluwarsa`) and bundles the counter's initial R2 scale/packing photo + receipt into a ready-to-submit claim packet for Mengantar Live Chat / ticket escalation.
