@@ -27,12 +27,12 @@ comfort size contract. No application code exists. The v1 repository `~/Projects
    Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
    Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 plan revised later (see item 6).
 5. TASK-006 done: GPT-6.1 Sol round 10 APPROVE (2026-11-15). Next: TASK-101 (M1 scaffold) when the owner says go.
-6. 2026-11-15: TASKS.md holds the execution plan for M1–M6 (49 contracts incl. milestone-close tasks x99; post-launch
-   701..703), revised after GPT-6.1 Sol plan review round 1; plan review round 2 pending.
+6. 2026-11-15: TASKS.md holds the execution plan for M1–M6 (50 contracts incl. milestone-close tasks x99; post-launch
+   701..703), revised after GPT-6.1 Sol plan reviews 1–2; plan review round 3 pending.
 
 ## Blockers
 
-- Before M2: Mengantar must confirm whether a partner can set a per-seller discount, through what channel and when it takes effect (DEC-226).
+- Before TASK-207 (M2 pricing): Mengantar must confirm whether a partner can set a per-seller discount, through what channel and when it takes effect (DEC-226).
 
 None for M1. Open items, each owned by the milestone row in `TASKS.md` (coverage map), that must close before the stated milestone:
 - Mengantar Q23 (IP restriction on Public API writes / label generation for Partner-created sellers) — before M6.

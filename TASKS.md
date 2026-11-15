@@ -35,7 +35,7 @@ No task is in progress. TASK-101 starts when the owner says go.
   parallel writers never share a worktree.
 - **Every task's Done when** also includes: `pnpm check` green; for UI, `dotuiux check --surface admin` and
   `admin-geometry.mjs` 0 fail at 390/1366, plus Playwright at the milestone matrix 390/768/1280 (ROADMAP);
-  for new signals, the `OBSERVABILITY.md` row emitted and redaction-tested (TASK-111 helpers).
+  for new signals, the `OBSERVABILITY.md` row emitted and redaction-tested (TASK-110 helpers).
 - **Milestone close tasks** (`TASK-x99`) run the integrated gate (`docs/WORKFLOW.md` §5) and are the only way the next
   milestone's tasks start.
 
@@ -83,7 +83,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Depends On:** TASK-101
 - **Accepted Invariants:** two migration tracks; explicit `migrate(version)` RPC; baseline tables: `tenants`,
   `tenant_members`, `tenant_schema_versions`, `audit_logs` (both scopes), `tenant_settings`, `tenant_outlets`,
-  `tenant_business_profiles`; generic DO→D1 outbox doing **versioned absolute upserts** with alarm retry;
+  `tenant_business_profiles`, D1 `shipment_index` (schema only); generic DO→D1 outbox doing **versioned absolute upserts** with alarm retry;
   `pnpm do:migrate --env` walks tenants in batches and stops on the first failure (`recovery`).
 - **Done when:** two tenant objects migrate and stay isolated; N−1 → N upgrade without data loss; a failing tenant
   migration leaves the others serving and that tenant in `recovery`; outbox lost-ack retry leaves D1 unchanged;
@@ -161,15 +161,16 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Job:** implementation
 - **Capability:** `github-actions`, `application-security`, `wrangler`
 - **Allowed Paths:** `.github/workflows/**`, `scripts/ci/**`, `wrangler.jsonc` (`env.staging` values)
-- **Depends On:** TASK-101
+- **Depends On:** TASK-101, TASK-110
 - **Accepted Invariants:** actions pinned by SHA; `contents: read`; no secrets on fork PRs; fail closed on (1) any
   `*.map` in `dist/`, (2) secret/key-shaped literals in bundles, (3) any `/api/app/*` or `/api/owner/*` route without
   auth + projection middleware (route-table scan); staging deploy waits for the protected `staging` environment
   approval every run; production deploy manual only.
 - **Done when:** hosted `ci.yml` run green (link in `STATUS.md`); four fixtures turn it red: a broken unit test, an
-  emitted `.map`, an injected secret literal, an unprotected route; first staging deploy approved by the owner.
+  emitted `.map`, an injected secret literal, an unprotected route; first staging deploy approved by the owner, immediately followed by `pnpm probes --env
+  staging` green and one synthetic failing probe delivering an owner alert (evidence in `BUILD-LOG.md`).
 
-### TASK-110: Observability base and staging probes
+### TASK-110: Observability base (pre-deploy)
 - **Requirement:** `OBSERVABILITY.md`, `observability-engineering`
 - **Risk Level:** R2
 - **Job:** implementation
@@ -179,8 +180,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Accepted Invariants:** structured events with bounded labels; redaction of keys, cookies, OTPs, tokens, raw
   bodies, phones; probes of `OBSERVABILITY.md` runnable as `pnpm probes --env`; alert delivery to the owner channel
   (Cloudflare notifications or a scheduled checker) configured per environment.
-- **Done when:** redaction tests; `pnpm probes --env staging` green after the first staging deploy; a synthetic
-  failing probe produces an owner alert (evidence in `BUILD-LOG.md`).
+- **Done when:** redaction tests; `pnpm probes --env local` green against `wrangler dev`; the alert channel configured
+  for staging and a dry-run alert received (post-deploy verification is part of TASK-109).
 
 ### TASK-111: Host and tenant isolation suite (M1 surfaces)
 - **Requirement:** spec 11 §8, ADR-0002, ADR-0006
@@ -252,11 +253,13 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Depends On:** TASK-202, TASK-106
 - **Accepted Invariants:** 5 Super Admin menus; approval needs recent TOTP + reason and activates `<slug>.gerai.cc`;
   `registration_unknown` resolved by read-back; BYOK fallback; seller key encrypted in the tenant object; suspend/
-  unsuspend bumps `routing_version`; masking kill-switch and `masking_daily_quota` editable with TOTP + reason.
+  unsuspend bumps `routing_version`; masking kill-switch and `masking_daily_quota` editable with TOTP + reason; approve **and** reject insert
+  an `application_status` email into the outbox in the same transaction as the state change.
 - **Visual Contract:** owner shell + `/gerai` tabs, `/gerai/pengajuan/:id`, `/gerai/:slug` per visual 07; `/daftar`
   steps 1/5; states loading/empty/error/success.
 - **Done when:** sandbox apply → approve → seller → key stored → `connected`; register timeout → read-back; suspend →
-  403 on the mini-site within 30 s; audit rows for every mutation.
+  403 on the mini-site within 30 s; audit rows for every mutation; approve and reject each enqueue exactly one `application_status`
+  email (a mailer retry never repeats the transition).
 
 ### TASK-204: Webhooks, inbox, status combine and polling floor
 - **Requirement:** PR-02b, spec 01 §2.7, §3
@@ -267,7 +270,8 @@ No task is in progress. TASK-101 starts when the owner says go.
   `apps/web-app/src/routes/pengaturan/mengantar/**`, `packages/db/migrations/{control,tenant}/204-*`, matching tests
 - **Depends On:** TASK-201, TASK-203
 - **Accepted Invariants:** token hash → tenant; verify in the object; inbox before ack; provider/custody combine;
-  hourly polling while not `active`; alarm re-enqueue; 30-day retention.
+  hourly polling while not `active`; alarm re-enqueue; 30-day retention; every effective-status change
+  republishes `shipment_index` (versioned).
 - **Visual Contract:** `/pengaturan/mengantar` (copy URL, paste secret, status chip) per visual 08 §2.
 - **Done when:** spec 01 §2.7 and §3 test lists pass (incl. permutation property test); isolation suite extended
   with cross-tenant webhook tokens; R4 review.
@@ -285,7 +289,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ### TASK-206: Courier catalog, `Ekspedisi Aktif`, area search
 - **Requirement:** DEC-213, DEC-223, spec 06
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `shadcn-ui`, `ui-validation`
 - **Allowed Paths:** `apps/worker/src/couriers/**`, `apps/web-app/src/routes/pengaturan/ekspedisi/**`,
@@ -302,7 +306,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `admin-product-ux`, `shadcn-ui`
 - **Allowed Paths:** `apps/worker/src/pricing/rules/**`, `apps/web-owner/src/routes/tarif/**`,
   `packages/db/migrations/{control,tenant}/207-*`, matching tests
-- **Depends On:** TASK-107, TASK-203
+- **Depends On:** TASK-107, TASK-203; DEC-226 commercial mode recorded in `DECISIONS.md` before start (Mengantar
+  answer, or the owner's written go-ahead on the internal-estimate fallback)
 - **Accepted Invariants:** `assigned <= observed`; TOTP + reason + audit; effective timestamps; `Selisih tarif` is info.
 - **Visual Contract:** `/tarif` tabs per visual 07.
 - **Done when:** rule above observed rejected; audit per change; cashback ledger states unit-tested.
@@ -326,7 +331,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Job:** release
 - **Capability:** `testing-engineering`
 - **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**` (via `delivery-ledger`)
-- **Depends On:** TASK-201..208; Mengantar answer on DEC-226 recorded (or fallback accepted by the owner)
+- **Depends On:** TASK-201..208
 - **Accepted Invariants:** sandbox only; no production Partner call.
 - **Done when:** integrated run PASS incl. sandbox onboarding end-to-end; zero raw key URLs in logs (test).
 
@@ -347,7 +352,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ### TASK-302: Contacts, WA verification, risk badge, media uploads
 - **Requirement:** PR-14, PR-15 (verification), DEC-212
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `shadcn-ui`, `ui-validation`
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/contacts/**`, `apps/worker/src/media/**`, `apps/web-app/src/routes/kontak/**`,
@@ -381,10 +386,12 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Depends On:** TASK-108, TASK-204, TASK-303
 - **Accepted Invariants:** journal → call → record; unknown → `reconciliation_needed` read-back; unpaid → `provider_unpaid_hold`
   with the shared `payUnpaid(batch_id)` primitive; label printable only with AWB; cancel before pickup = `DELETE /order`
-  then read-back, payment void first; counter payment state machine spec 03 §1.1.
+  then read-back, payment void first; counter payment state machine spec 03 §1.1; every shipment create and status change publishes the
+  D1 `shipment_index` row through the outbox (versioned absolute upsert).
 - **Visual Contract:** POS C4, sticky checkout bar on phones, one primary `Tandai Lunas & Cetak`; pending states.
 - **Done when:** double submit → one order; timeout → read-back; unpaid → `payUnpaid` after top-up (fixture);
-  cancel unknown outcome → read-back; scripted checkout < 45 s; R4 review.
+  cancel unknown outcome → read-back; `shipment_index` lost-ack, restart and stale-version
+  tests against the real projection; scripted checkout < 45 s; R4 review.
 
 ### TASK-305: Masking presets, quota, reveal audit
 - **Requirement:** PR-15, DEC-206, ADR-0005, spec 05
@@ -402,7 +409,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ### TASK-306: Printing — 100 mm PDFs (PC-first), 58 mm ESC/POS, bulk print
 - **Requirement:** PR-08, DEC-224, DEC-229, visual 04
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `native-first`, `ui-validation`
 - **Allowed Paths:** `packages/thermal-print/**`, `apps/worker/src/labels/**`, `apps/web-app/src/{print,routes/kiriman/cetak-massal}/**`, matching tests
@@ -440,7 +447,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ### TASK-309: Owner dashboard, Kasir home, period filter
 - **Requirement:** PR-18, DEC-221, visual 08 §1
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `admin-dashboard`, `ui-validation`
 - **Allowed Paths:** `apps/web-app/src/{routes/index,components/period-filter}/**`, `apps/worker/src/analytics/**`, matching tests
@@ -464,13 +471,27 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Visual Contract:** visual 08 §2 (desktop left menu, phone grouped list).
 - **Done when:** Kasir 403 tests; email-change OTP and session-revoke tests; NPWP never returned in plain text.
 
+### TASK-311: `Kiriman` list, tabs, search and export
+- **Requirement:** DEC-213, DEC-220, spec 06 menu 3, visual 07 `/kiriman`
+- **Risk Level:** R3
+- **Job:** implementation
+- **Capability:** `admin-dashboard`, `shadcn-ui`, `ui-validation`
+- **Allowed Paths:** `apps/web-app/src/routes/kiriman/index/**`, `apps/worker/src/do/gerai-vault/listing/**`, matching tests
+- **Depends On:** TASK-304
+- **Accepted Invariants:** tabs `Semua · Belum Dibayar · Draf QR · Menunggu Saldo · Pickup & Manifest · Riwayat
+  Massal · Kendala & Klaim · Meja Retur` with counts (each specialist tab's content stays with its task); search by
+  INV/AWB/name/phone; period filter; `Tandai Lunas` row action; owner-only CSV export with cost/margin columns.
+- **Visual Contract:** visual 06/07 Kiriman table → cards under 768 px; empty and filtered-empty states.
+- **Done when:** two-tenant listing test; Kasir projection (no cost columns, export 403); payment-state tab and row
+  action tests; CSV snapshot.
+
 ### TASK-399: M3 close
 - **Requirement:** ROADMAP M3 exit gate
 - **Risk Level:** R4
 - **Job:** release
 - **Capability:** `testing-engineering`, `ui-validation`
 - **Allowed Paths:** `STATUS.md`, `BUILD-LOG.md`, `.delivery/**`
-- **Depends On:** TASK-301..310; counsel answer before masking is advertised
+- **Depends On:** TASK-301..311; counsel answer before masking is advertised
 - **Accepted Invariants:** viewport matrix 390/768/1280 for Playwright.
 - **Done when:** integrated run PASS; DTO role-projection suite PASS; sub-45 s checkout evidence.
 
@@ -503,12 +524,12 @@ No task is in progress. TASK-101 starts when the owner says go.
 
 ### TASK-403: Pickup manifest and Surat Jalan
 - **Requirement:** PR-16, spec 04 §1, spec 01 §2.4
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `ui-validation`
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/pickup/**`, `apps/web-app/src/routes/kiriman/pickup/**`,
   `packages/db/migrations/tenant/403-*`, matching tests
-- **Depends On:** TASK-306
+- **Depends On:** TASK-399, TASK-306
 - **Accepted Invariants:** wrong courier, `cancelled`, `provider_unpaid_hold` block; counter-unpaid warns; driver
   fields required; handover records custody.
 - **Visual Contract:** scan mode (red + sound on block, amber on unpaid), driver form, signature.
@@ -521,14 +542,14 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `application-security`
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/returns/**`, `apps/web-app/src/routes/kiriman/retur/**`,
   `packages/db/migrations/tenant/404-*`, matching tests
-- **Depends On:** TASK-204, TASK-403
+- **Depends On:** TASK-399, TASK-204, TASK-403
 - **Accepted Invariants:** intake and handback are custody stages; code hashed; reveal audited.
 - **Visual Contract:** intake → photo → WA code → handback.
 - **Done when:** custody tests incl. contradictions → `Status Bertentangan`; e2e intake → handback.
 
 ### TASK-405: Exceptions and claims
 - **Requirement:** PR-20, spec 04 §3
-- **Risk Level:** R2
+- **Risk Level:** R3
 - **Job:** implementation
 - **Capability:** `testing-engineering`
 - **Allowed Paths:** `apps/worker/src/do/gerai-vault/exceptions/**`, `apps/web-app/src/routes/kiriman/kendala/**`,
@@ -581,7 +602,7 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `openapi-spec`, `application-security`
 - **Allowed Paths:** `apps/worker/src/api-v1/**`, `apps/web-app/src/routes/pengaturan/api-mcp/**`,
   `packages/db/migrations/control/503-*`, matching tests
-- **Depends On:** TASK-304, TASK-308
+- **Depends On:** TASK-499, TASK-304, TASK-308
 - **Accepted Invariants:** spec from Zod; Bearer only; payment mutations not exposed.
 - **Visual Contract:** keys table, `Buat Kunci` shown once, revoke confirm.
 - **Done when:** generated `openapi.json` validates; scope-denial tests; API keys added to the isolation suite.
@@ -629,7 +650,8 @@ No task is in progress. TASK-101 starts when the owner says go.
 - **Capability:** `vps-deploy`, `vultr`
 - **Allowed Paths:** `infra/partner-relay/**` (deploy files), `BUILD-LOG.md`, `STATUS.md`
 - **Depends On:** TASK-599
-- **Accepted Invariants:** 4 Partner routes only; secrets not in Coolify variables.
+- **Accepted Invariants:** 4 Partner routes only; no Mengantar credential on the VPS; relay HMAC secrets
+  (`RELAY_SECRET`, `RELAY_SECRET_PREVIOUS` during rotation) provisioned exactly as spec 10 §5.
 - **Done when:** every spec 10 §6 check recorded; Mengantar allowlist confirmed.
 
 ### TASK-602: Production zones, SaaS setup, monitoring
@@ -678,7 +700,7 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 |---|---|---|---|
 | **M1** | TASK-101..112, close 199 | PR-01, PR-04, PR-05 (math) | DEC-201, 202, 209, 210, 211, 215, 217, 227, 228; ADR-0001, 0002, 0006 |
 | **M2** | TASK-201..208, close 299 | PR-02, PR-02b, PR-03 (activation), PR-11 | DEC-203, 204, 205, 209 (console), 218 (platform legal), 219 (client + relay program), 226; ADR-0003, 0004 (§5 rotation) |
-| **M3** | TASK-301..310, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229; ADR-0004 (dispatch), 0005 |
+| **M3** | TASK-301..311, close 399 | PR-05 (UI), PR-06, PR-07, PR-08, PR-09, PR-10, PR-14, PR-15, PR-18 | DEC-206 (masking), 208, 212, 213, 218 (tenant forms), 220, 221, 222, 223, 224, 225, 229; ADR-0004 (dispatch), 0005 |
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
 | **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production); ADR-0006 §7 |
@@ -689,5 +711,6 @@ Milestone notes carried forward:
   loading/empty/error states for every screen (deferred from TASK-001).
 - **M2/M4 sandbox verifications:** weight echo, `POST /time` timezone, `/invoices` ordering, `pay-unpaid`
   idempotency, item-value limits per courier (specs 02, 04, 09).
-- **Before M2:** Mengantar answer on per-seller discount control (DEC-226).
+- **Before TASK-207:** Mengantar answer on per-seller discount control, or the owner's recorded go-ahead on the
+  fallback (DEC-226).
 - **Before M3 masking is advertised:** counsel review (Permenkomdigi 8/2025 Art. 77, UU PDP retention).
