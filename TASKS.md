@@ -51,7 +51,7 @@ tenant B's record).
 - **Depends On:** working headless Chrome on the host
 - **Done when:** `bash` gate script rows show 0 fail and admin-geometry exit 0 on all prototype routes.
 
-### TASK-006: Independent review APPROVE of the M0 documents
+### TASK-006: Independent review APPROVE of the M0 documents — DONE 2026-11-15 (Sol round 10 APPROVE on `702262f`)
 - **Requirement:** ROADMAP M0 exit gate, `docs/WORKFLOW.md` §6
 - **Risk Level:** R0
 - **Job:** review
@@ -59,7 +59,7 @@ tenant B's record).
 - **Depends On:** TASK-003
 - **Done when:** a reviewer of a different model family than the editor returns APPROVE on the current head, the
   review is archived under `docs/review/`, and `STATUS.md` records reviewer, model and head. GPT-6.1 Sol rounds 1–2
-  were REQUEST_CHANGES (2026-11-14/15).
+  were REQUEST_CHANGES; rounds 3–9 closed the remaining findings; round 10 APPROVE (2026-11-15).
 
 ### TASK-002: Owner picks the visual direction — DONE 2026-11-14 (Direction A, `DESIGN.md`)
 - **Requirement:** `DESIGN.md` Direction
