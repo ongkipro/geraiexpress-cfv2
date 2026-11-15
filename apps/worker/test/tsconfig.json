@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/vitest-plugin/types", "../worker-configuration.d.ts"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts", "../src/**/*.tsx", "../worker-configuration.d.ts"]
+}

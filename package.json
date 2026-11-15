@@ -1,0 +1,33 @@
+{
+  "name": "geraiexpress-cfv2",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter @gx/web-app --filter @gx/web-owner build",
+    "dev": "pnpm build && wrangler dev --local",
+    "typecheck": "pnpm cf-typegen >/dev/null && pnpm -r --workspace-concurrency=2 typecheck",
+    "lint": "eslint . --max-warnings=0",
+    "test:unit": "vitest run --project unit",
+    "test:worker": "pnpm --filter @gx/worker test",
+    "security:bundle-audit": "node scripts/ci/bundle-audit.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && pnpm test:worker && pnpm security:bundle-audit",
+    "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts --env-interface Env",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.65.1",
+    "@types/node": "^24",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "4.1.12",
+    "wrangler": "4.162.0"
+  }
+}

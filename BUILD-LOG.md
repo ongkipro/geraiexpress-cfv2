@@ -49,3 +49,21 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   all fields present, acyclic, no forward-milestone dependency, every M2–M6 task gated, every P0 PR, DEC-201..233 and
   ADR-0001..0006 owned, every UI task has a Visual Contract, no tenant-data task below R3; TASKS.md 45.8 KB, STATUS.md
   4.0 KB.
+
+## 2026-11-16 — TASK-101 workspace scaffold (M1)
+
+- Scope: pnpm workspace (`apps/{worker,web-app,web-owner}`, `packages/{domain,db,mengantar-sdk,thermal-print}`),
+  `wrangler.jsonc` with every spec 07 §3 binding (placeholder resource ids; staging stub), Workers Vitest integration
+  (`@cloudflare/vitest-plugin` 1.8.2, Vitest 4.1), Vite 8 + React 19 + TanStack Router/Query SPAs built into
+  `dist/assets/{app,owner}` and served by the Worker only on their own host, comfort primitives copied from the M0
+  prototype, Direction A theme, bundle audit (`scripts/ci/bundle-audit.mjs`).
+- Evidence: `pnpm check` exit 0 (also on a clean copy with `pnpm install --frozen-lockfile`); dotuiux 0 fail and
+  admin-geometry exit 0 on both shells; reviewer-carbon round 1 REQUEST_CHANGES (9 findings fixed), round 2 APPROVE.
+- Gotchas:
+  - An empty `packages/db/migrations/control/` is not committed by Git; `readD1Migrations` then throws ENOENT on a clean
+    clone — keep `.gitkeep` files.
+  - Dropping shadcn's `@custom-variant dark (&:is(.dark *))` makes Tailwind v4 compile `dark:*` under
+    `prefers-color-scheme`, so a light-only app (DEC-222) half-darkens on OS dark mode.
+  - Wrangler 4.162: declaring `secrets.required` turns `.dev.vars` into an allowlist (`vars ∪ secrets.required`); list
+    every secret there or it silently disappears from `env` and generated types.
+  - `.sql` files import as Text modules both in `wrangler deploy --dry-run` bundles and in the Workers Vitest pool.

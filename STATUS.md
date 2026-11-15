@@ -1,36 +1,28 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Updated: 2026-11-15
-Status: M0 locked — owner sign-off 2026-11-14 and independent review APPROVE 2026-11-15 (GPT-6.1 Sol round 10); M1 may start (TASK-101)
-State: PLANNED
-Review-Risk: R0
-Independent-Review: PASS — GPT-6.1 Sol round 10 APPROVE on 702262f (rounds 1–9 REQUEST_CHANGES, all findings fixed; archive docs/review/2026-11-14..15-sol-round*); earlier docs PASS (Fable 1–3, Carbon 1–3)
-Primary-Worker: pi session (Claude), 2026-11-12/13
-Independent-Reviewer: reviewer-fable (claude-fable-5-1), reviewer (gemini-4-carbon-high), reviewer (gpt-6.1-sol)
-Independent-Review-Head: 702262f (Sol round 10 APPROVE)
+Updated: 2026-11-16
+Status: M1 in progress — TASK-101 done (Carbon round 2 APPROVE); next TASK-103 → TASK-102 → TASK-107/108/110 → TASK-104..106 → TASK-111/109/112 → TASK-199
+State: IN_PROGRESS
+Review-Risk: R4
+Independent-Review: TASK-101 PASS — reviewer-carbon (gemini-4-carbon-high) round 1 REQUEST_CHANGES (2 P1, 6 P2, 1 P3, all fixed), round 2 APPROVE (`docs/review/TASK-101/`); M0 docs PASS (GPT-6.1 Sol round 10)
+Primary-Worker: pi session (Claude Opus 5.5 via 9router-fantastico), 2026-11-16
+Independent-Reviewer: reviewer-carbon (9router-fantastico/ag/gemini-4-carbon-high)
+Independent-Review-Head: TASK-101 working tree (diff `docs/review/TASK-101/TASK-101.diff`)
 
 ## Now
 
-M0 documentation is complete and pushed to the private remote `github.com/ongkipro/geraiexpress-cfv2`: PRD PR-01..PR-24, DECISIONS DEC-201..DEC-233,
-ADR-0001..0006, specs 01–12, visual 01–08, research 01–03, `docs/WORKFLOW.md`, `docs/DIAGRAMS.md` (14 Mermaid diagrams), `RELEASE.md` (NOT_RELEASED), `OBSERVABILITY.md`, `BUILD-LOG.md`, `.delivery/` ledger (verified), `DESIGN.md` (Direction A picked), `design/` brief, refs and
-comfort size contract. No application code exists. The v1 repository `~/Projects/geraiexpress` is untouched.
+M1 build on branch `dev` (worktree `~/Projects/.worktrees/geraiexpress-cfv2/dev`), merged fast-forward to `main` per task.
+
+| Task | State | Evidence |
+|---|---|---|
+| TASK-101 Scaffold | DONE 2026-11-16 | `pnpm check` exit 0 incl. clean-clone copy (`pnpm install --frozen-lockfile`); `wrangler dev` `/healthz` 200 on 5 hosts; both shells served host-isolated (Workers tests `spa.test.ts`); dotuiux 0 fail + admin-geometry exit 0 at 390/1366/1536 on both shells; bundle audit mutation-proved (`.map`, client secret name) |
+
+Live owner actions so far: none required by TASK-101.
 
 ## Next
 
-1. TASK-001 done: `prototype/` (shadcn base-nova, comfort primitives, 3 directions). Gates: `design/evidence/
-   prototype-gates.md` (TASK-005 re-run 2026-11-14: 0 fail on 12 routes; admin-geometry exit 0 at 390/1366/1536). Preview:
-   `http://100.127.67.86:55180/` while the preview task runs.
-2. TASK-002 done (Direction A) and TASK-005 done (gates re-run).
-3. TASK-003 done: owner signed off M0 on 2026-11-14. Accepted as deferred: Mengantar's answer on per-seller discount
-   control (DEC-226) — superseded 2026-11-15 by DEC-230 (configurable, not a blocker).
-4. 2026-11-15: owner accepted DEC-227 (Cloudflare Email Sending only), DEC-228 (D1 control plane + per-gerai SQLite
-   Durable Object, ADR-0006; SaaS routing spec 11), DEC-229 (Paket Massal Excel/CSV, Riwayat Massal, Cek Resi, Akun
-   Saya). Development flow: `docs/WORKFLOW.md` + spec 07 §5–7; M1 plan revised later (see item 6).
-5. TASK-006 done: GPT-6.1 Sol round 10 APPROVE (2026-11-15). Next: TASK-101 (M1 scaffold) when the owner says go.
-6. 2026-11-15: TASKS.md holds the execution plan for M1–M6 (50 contracts incl. milestone-close tasks x99; post-launch
-   701..703). Plan review: GPT-6.1 Sol plan rounds 1–2 REQUEST_CHANGES, **round 3 APPROVE** (2026-11-15,
-   `docs/review/2026-11-15-sol-plan-round3-review.md`) — ready for development A–Z, subject to the recorded
-   prerequisites, milestone gates and per-action owner approvals.
+1. TASK-103 storage foundation (R4), TASK-102 host classifier (R4), then the rest of M1 in `TASKS.md` order.
+2. Every R3/R4 task: reviewer-carbon until APPROVE, archive under `docs/review/TASK-<id>/`.
 
 ## Blockers
 

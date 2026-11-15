@@ -22,7 +22,7 @@ tenant B's record).
 
 ## In progress
 
-No task is in progress. TASK-101 starts when the owner says go.
+TASK-101 DONE 2026-11-16 (see STATUS.md). In progress: M1 (TASK-103 next).
 
 ## Pending
 

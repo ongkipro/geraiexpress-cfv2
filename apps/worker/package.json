@@ -1,0 +1,23 @@
+{
+  "name": "@gx/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gx/db": "workspace:*",
+    "@gx/domain": "workspace:*",
+    "@gx/mengantar-sdk": "workspace:*",
+    "@gx/thermal-print": "workspace:*",
+    "hono": "4.13.18",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.8.2",
+    "vitest": "4.1.12",
+    "wrangler": "4.162.0",
+    "typescript": "~6.0.3"
+  }
+}
