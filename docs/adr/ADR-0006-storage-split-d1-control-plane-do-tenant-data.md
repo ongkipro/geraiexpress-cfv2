@@ -47,12 +47,15 @@ journal lives in the DO while the shipment row lives in D1.
    `listShipments`, …); no raw SQL crosses the boundary. Writes and reads that must be consistent with them go through
    the object. The object updates `shipment_index` in D1 after its own commit (outbox row in the DO, retried by
    alarm until acknowledged), so the index is eventually consistent and **never authoritative**.
+   Every push from an object to D1 (shipment index, risk index, daily stats) is an idempotent **absolute, versioned
+   upsert**, never an increment, so outbox retries are safe.
 4. **Schema migrations per object.** Forward-only SQL files shared by every object, applied by an explicit
    `migrate(targetVersion)` RPC (not in the constructor), with `PRAGMA`-free version tracking in a `schema_version`
    table. A failing object enters `recovery` alone; the deploy pipeline migrates objects in batches and records
    progress in D1 (`tenant_schema_versions`).
-5. **Analytics across tenants** (Super Admin `Ringkasan`) read pre-aggregated daily counters that each object pushes to
-   D1 (`tenant_daily_stats`), not live fan-out queries.
+5. **Analytics across tenants** (Super Admin `Ringkasan`) read per-tenant daily totals that each object recomputes and
+   pushes to D1 (`tenant_daily_stats`, absolute values keyed by `(tenant_id, day)` with a version), not live fan-out
+   queries.
 6. **Placement.** Objects are created with `locationHint: "apac"` (a latency hint, not data residency).
 7. **Backups.** Durable Object point-in-time recovery is used per object; a daily Cron also exports each active
    object's tenant tables to R2 (`t/<tenant_id>/backup/<date>.sqlite.gz`). Restore drills are an M6 gate.
