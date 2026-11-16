@@ -681,3 +681,37 @@ export const shipmentClaims = sqliteTable(
   },
   (t) => [uniqueIndex("shipment_claims_slug_kind").on(t.shipmentSlug, t.kind)],
 )
+
+// TASK-501 mini-site QR pre-booking and public tracking unlock attempts.
+export const minisiteDrafts = sqliteTable(
+  "minisite_drafts",
+  {
+    slug: text("slug").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    cod: integer("cod").notNull(),
+    senderName: text("sender_name").notNull(),
+    senderPhone: text("sender_phone").notNull(),
+    senderStore: text("sender_store"),
+    recipientName: text("recipient_name").notNull(),
+    recipientPhone: text("recipient_phone").notNull(),
+    recipientAreaId: text("recipient_area_id").notNull(),
+    recipientAreaLabel: text("recipient_area_label"),
+    recipientStreet: text("recipient_street").notNull(),
+    content: text("content").notNull(),
+    weightGram: integer("weight_gram").notNull(),
+    codGoodsIdr: integer("cod_goods_idr").notNull().default(0),
+    ipHash: text("ip_hash").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    claimedAt: integer("claimed_at"),
+    claimedBy: text("claimed_by"),
+  },
+  (t) => [index("minisite_drafts_expires").on(t.expiresAt)],
+)
+
+export const trackingUnlocks = sqliteTable("tracking_unlocks", {
+  slug: text("slug").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  lockedUntil: integer("locked_until"),
+  updatedAt: integer("updated_at").notNull(),
+})

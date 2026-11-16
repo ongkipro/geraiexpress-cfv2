@@ -59,3 +59,20 @@ allow: primary-actions — admin shell: the count includes the header, in-page t
 allow: nav-label — tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
 allow: marker-count — status badges are per table row in operational lists; each is dot + text, neutral chip
 allow: icon-overload — settings list on phones: a trailing chevron on every row is the platform cue that the row opens its own page (visual 08 §2.2); no icon tiles
+
+## Direction — mini-site `<slug>.gerai.cc` (TASK-501)
+
+Picked-by: inherited from the accepted workspace direction A (owner 2026-11-14) + visual 03 §1 (owner-approved
+wireframe). No separate owner pick was made for the public page; the independent visual verdict is pending
+(final reviewer pass) → visual acceptance UNVERIFIED until then.
+Surface/job: neighbourhood customers on a phone from a WhatsApp link or shop QR — "what does it cost, can I fill
+this in at home, where is my parcel?"
+Sections (in order): outlet name + address + hours + WhatsApp → three tabs (`Cek Ongkir`, `Kirim dari Rumah`,
+`Lacak Paket`) → the active tab's form/result → `Kenapa kirim di …` (home only, background shift) → footer
+`Didukung jaringan resmi GeraiExpress` + privacy link.
+Type / color / shape: system stack; Mengantar blue `#2E47BA` for the one primary per page; white canvas, `#F7F9FC`
+band; 6–8 px radius; no cards, no imagery (no owner photos exist yet — the outlet logo slot is reserved).
+### Composition contract
+C1: SSR HTML + inline CSS < 35 KB; JavaScript only for the area search and the Turnstile widget.
+C2: one column ≤ 640 px for forms on every width; header and tabs span the 960 px frame.
+C3: anonymous tracking shows initials + district/city only; the 4-digit gate is the only way to the recipient name.

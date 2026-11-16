@@ -81,6 +81,8 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
     now,
     now,
   )
+  // An INV that started as a mini-site QR pre-booking keeps that entry channel (dashboard "Sumber order").
+  sql.exec("UPDATE shipments SET entry_channel = 'minisite_qr' WHERE slug = ? AND EXISTS (SELECT 1 FROM minisite_drafts WHERE slug = ?)", slug, slug)
   return { ok: true, value: readShipment(sql, slug)! }
 }
 

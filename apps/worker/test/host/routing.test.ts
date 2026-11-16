@@ -53,7 +53,7 @@ describe("host routing through D1 tenant_hostnames (TASK-102)", () => {
       ["berkahjaya.gerai.localhost", "/api/owner/gerai"],
       ["berkahjaya.gerai.localhost", "/webhooks/mengantar/abc", "POST"],
       ["berkahjaya.gerai.localhost", "/internal/ops/do-migrate", "POST"],
-      ["berkahjaya.gerai.localhost", "/", "POST"],
+      ["berkahjaya.gerai.localhost", "/", "PUT"],
       ["app.geraiexpress.localhost", "/api/owner/gerai"],
       ["app.geraiexpress.localhost", "/webhooks/mengantar/abc"],
       ["app.geraiexpress.localhost", "/internal/ops/do-migrate"],
@@ -77,7 +77,7 @@ describe("host routing through D1 tenant_hostnames (TASK-102)", () => {
     expect((await get("relay.geraiexpress.localhost")).status).toBe(404)
   })
 
-  it("tenant slug is HTML-escaped on the placeholder page", async () => {
+  it("tenant name is HTML-escaped on the not-yet-prepared page", async () => {
     const r = await get("berkahjaya.gerai.localhost")
     expect(await r.text()).toContain("Gerai berkahjaya")
   })

@@ -30,6 +30,7 @@ import { balanceSufficient } from "./finance/reserve"
 import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
 import { desk as returnDesk, handback as returnHandback, intake as returnIntake, issueCode as issueReturnCode, type ReturnError } from "./returns"
 import { bucketCounts, expireClaims, listBucket, moveClaim, noteConflict, openClaim, type Bucket, type ExceptionError, type ExceptionRow } from "./exceptions"
+import { insertDraft, parseDraft, publicProfile, publicTrack, purgeDrafts, readDraft, unlock as unlockTrack, type DraftInput, type DraftRow, type PublicProfile, type PublicTrack } from "./minisite"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -181,6 +182,8 @@ export type ExceptionsValue =
   | { kind: "claim"; id: string; deadline_at: number | null }
   | { kind: "moved" }
 export type ClaimPacket = { slug: string; kind: string; status: string; deadline_at: number | null; note: string | null; evidenceKeys: string[]; awb_number: string; courier_code: string; mengantar_order_code: string | null; actual_weight_gram: number | null; billable_weight_gram: number | null; content_declaration_text: string | null; cod_goods_amount_idr: number | null; issued_at: number | null }
+
+export type { PublicProfile, PublicTrack, DraftRow }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -1175,6 +1178,75 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: financeView(this.ctx.storage.sql, now) }
+  }
+
+  // ---- Mini-site (TASK-501) --------------------------------------------------------------------------------------
+
+  async minisiteProfile(tenantId: string): Promise<VaultResult<PublicProfile | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: publicProfile(this.ctx.storage.sql) }
+  }
+
+  /** Public QR pre-booking: allocates an INV slug (purpose `minisite_qr`) and stores the typed data for 48 h. */
+  async createMinisiteDraft(tenantId: string, input: DraftInput, ipHash: string): Promise<{ ok: true; value: { slug: string; expires_at: number } } | { ok: false; refused?: VaultRefusal; errors?: Record<string, string> }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const parsed = parseDraft(input)
+    if (!parsed.ok) return { ok: false, errors: parsed.errors }
+    const now = Date.now()
+    const d = this.ctx.storage.transactionSync(() => insertDraft(this.ctx.storage.sql, tenantId, allocateSlug(this.ctx.storage, "minisite_qr", now), parsed.value, ipHash, now))
+    return { ok: true, value: { slug: d.slug, expires_at: d.expires_at } }
+  }
+
+  async minisiteTrack(tenantId: string, code: string): Promise<VaultResult<PublicTrack | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: publicTrack(this.ctx.storage.sql, code) }
+  }
+
+  async minisiteUnlock(tenantId: string, slug: string, digits: string): Promise<VaultResult<ReturnType<typeof unlockTrack>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: this.ctx.storage.transactionSync(() => unlockTrack(this.ctx.storage.sql, slug, digits, Date.now())) }
+  }
+
+  /**
+   * Counter claim (`Scan QR`): the QR's INV opens at the counter; contacts are created (or reused by phone) and the
+   * draft is marked claimed. The counter then quotes and freezes under the SAME slug, so QR, receipt and tracking
+   * share one code. Expired or already-claimed drafts are refused in Indonesian.
+   */
+  async claimMinisiteDraft(tenantId: string, slug: string, actorId: string): Promise<{ ok: true; value: { draft: DraftRow; senderId: string; recipientId: string } } | { ok: false; refused?: VaultRefusal; error?: { status: number; code: string; message: string } }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    return this.ctx.storage.transactionSync(() => {
+      const d = readDraft(sql, slug)
+      if (!d) return { ok: false as const, error: { status: 404, code: "DRAFT_NOT_FOUND", message: "Kode QR tidak ditemukan di gerai ini." } }
+      if (d.expires_at < now && !d.claimed_at) return { ok: false as const, error: { status: 410, code: "DRAFT_EXPIRED", message: "Kode QR sudah lewat 48 jam. Minta pelanggan mengisi ulang." } }
+      const existingSender = sql.exec<{ id: string }>("SELECT id FROM sender_contacts WHERE true_phone = ? AND is_archived = 0 LIMIT 1", d.sender_phone).toArray()[0]
+      let senderId = existingSender?.id ?? null
+      if (!senderId) {
+        const r = createSender(sql, tenantId, { senderKind: d.sender_store ? "reseller_dropship" : "walk_in", name: d.sender_name, phone: d.sender_phone, brandName: d.sender_store ?? undefined }, now)
+        if (!r.ok) return { ok: false as const, error: { status: 422, code: "INVALID_SENDER", message: r.errors[0]!.message } }
+        senderId = r.value.id
+      }
+      const existingRecipient = sql.exec<{ id: string }>("SELECT id FROM recipient_contacts WHERE phone = ? AND mengantar_area_id = ? AND is_archived = 0 LIMIT 1", d.recipient_phone, d.recipient_area_id).toArray()[0]
+      let recipientId = existingRecipient?.id ?? null
+      if (!recipientId) {
+        const r = createRecipient(sql, tenantId, { name: d.recipient_name, phone: d.recipient_phone, street: d.recipient_street, areaId: d.recipient_area_id, areaLabel: d.recipient_area_label }, now)
+        if (!r.ok) return { ok: false as const, error: { status: 422, code: "INVALID_RECIPIENT", message: r.errors[0]!.message } }
+        recipientId = r.value.id
+      }
+      if (!d.claimed_at) {
+        sql.exec("UPDATE minisite_drafts SET claimed_at = ?, claimed_by = ? WHERE slug = ?", now, actorId, slug)
+        // The INV row may not exist yet (it is created from the frozen quote); mark it when it does.
+        sql.exec("UPDATE shipments SET entry_channel = 'minisite_qr' WHERE slug = ?", slug)
+        this.audit(tenantId, now, "user", actorId, "minisite.claim", { slug })
+      }
+      return { ok: true as const, value: { draft: readDraft(sql, slug)!, senderId, recipientId } }
+    })
   }
 
   // ---- Kendala & Klaim (TASK-405) --------------------------------------------------------------------------------
@@ -2404,6 +2476,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => {
       flagStuck(sql, now)
       expireClaims(sql, now)
+      purgeDrafts(sql, now)
       if (conn) sql.exec("UPDATE mengantar_connections SET last_polled_at = ?, last_sync_status = ?", now, failed > 0 ? `poll_failed:${failed}` : "ok")
       if (pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + (active ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_INACTIVE_MS))
       else sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")

@@ -52,15 +52,15 @@ const COD_FEE_MODES: Array<{ id: Mode; label: string }> = [
   { id: "cod_all_in", label: "COD all-in" },
 ]
 
-export function QuotePanel({ onChoose, chooseLabel, footer }: { onChoose?: (req: QuoteRequest, card: QuoteCard) => Promise<void> | void; chooseLabel?: string; footer?: ReactNode }) {
+export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoose?: (req: QuoteRequest, card: QuoteCard) => Promise<void> | void; chooseLabel?: string; footer?: ReactNode; initial?: { area: Area; gram: number; codGoodsIdr: number } }) {
   const w = useWorkspace()
   const owner = isOwner(w)
-  const [kind, setKind] = useState<"non_cod" | "cod_goods" | "cod_shipping">("non_cod")
+  const [kind, setKind] = useState<"non_cod" | "cod_goods" | "cod_shipping">(initial?.codGoodsIdr ? "cod_goods" : "non_cod")
   const [feeMode, setFeeMode] = useState<Mode>("buyer_bears_fee")
-  const [area, setArea] = useState<Area | null>(null)
-  const [gram, setGram] = useState(1000)
+  const [area, setArea] = useState<Area | null>(initial?.area ?? null)
+  const [gram, setGram] = useState(initial?.gram ?? 1000)
   const [dims, setDims] = useState({ l: "", w: "", h: "" })
-  const [goods, setGoods] = useState("")
+  const [goods, setGoods] = useState(initial?.codGoodsIdr ? initial.codGoodsIdr.toLocaleString("id-ID") : "")
   const [tab, setTab] = useState<"regular" | "cargo">("regular")
   const [showMargin, setShowMargin] = useState(false)
   const [data, setData] = useState<QuoteResponse | null>(null)

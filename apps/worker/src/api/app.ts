@@ -291,7 +291,13 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const card = q.cards.find((x) => x.serviceCode === b.serviceCode && x.available)
     if (!card) throw new AppError(409, "SERVICE_UNAVAILABLE", "Layanan ini tidak tersedia lagi. Pilih ekspedisi lain.")
     const vault = vaultFor(c.env, m.tenantId)
-    const slug = await vault.allocateSlug(m.tenantId, "draft")
+    // A claimed QR pre-booking keeps its own INV (TASK-501): the quote freezes under the same slug.
+    const qr = typeof b.slug === "string" && /^[23456789abcdefghjkmnpqrstvwxyz]{7}$/.test(b.slug) ? b.slug : null
+    if (qr) {
+      const claim = await vault.claimMinisiteDraft(m.tenantId, qr, c.get("session").user.id)
+      if (!claim.ok) return vaultErr(claim)
+    }
+    const slug = qr ? { ok: true as const, value: qr } : await vault.allocateSlug(m.tenantId, "draft")
     if (!slug.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const frozen = await vault.freezeQuote(m.tenantId, frozenFrom(slug.value, q, card))
     if (!frozen.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
@@ -325,6 +331,15 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!/^[A-Za-z0-9_-]{8,64}$/.test(k)) throw new AppError(400, "IDEMPOTENCY_KEY_REQUIRED", "Permintaan tidak lengkap. Muat ulang halaman lalu coba lagi.")
     return k
   }
+  // QR pre-booking from the mini-site (TASK-501): the counter opens it, contacts are created/reused, the INV keeps
+  // its slug. Returns what the quote form needs; the counter then freezes with `{ slug }` and checks out normally.
+  r("POST", "/minisite-drafts/:slug/claim", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).claimMinisiteDraft(m.tenantId, slugParam(c), c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    const d = r.value.draft
+    return ok({ slug: d.slug, senderId: r.value.senderId, recipientId: r.value.recipientId, destination: { id: d.recipient_area_id, label: d.recipient_area_label ?? "" }, weightGram: d.weight_gram, cod: d.cod === 1, codGoodsIdr: d.cod_goods_idr, content: d.content })
+  })
   r("GET", "/shipments/:slug", "app_member", "role", (c) => detail(c, slugParam(c)))
 
   // Shift drawer and sender COD payout (TASK-307, spec 03 §1.2, §4). Never via API key or MCP (session routes only).

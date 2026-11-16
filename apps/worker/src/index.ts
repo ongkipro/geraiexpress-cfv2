@@ -3,7 +3,7 @@ import { ownerApi } from "./api/owner"
 import { serveSpa } from "./assets/spa"
 import { classify, hostShape, normalizeHost, probeSignature } from "./host/classify"
 import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
-import { escapeHtml, healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
+import { healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDevLastMail } from "./ops/dev-mail"
 import { handleDevPreview } from "./ops/dev-preview"
 import { handleDoMigrate } from "./ops/do-migrate"
@@ -14,6 +14,7 @@ import { runDiscountVerifier } from "./pricing/rules"
 import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
+import { handleMinisite } from "./minisite"
 import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -57,14 +58,10 @@ export default {
 
     const ctx = c.ctx
     const path = url.pathname
-    const readOnly = request.method === "GET" || request.method === "HEAD"
     if (ctx.kind === "tenant") {
-      // Mini-site routes arrive with TASK-501; until then only `GET /` answers.
-      if (!readOnly || path !== "/") return notFoundHtml()
-      return new Response(
-        `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Gerai</title></head><body><p>Gerai ${escapeHtml(ctx.tenantSlug)}</p></body></html>`,
-        { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
-      )
+      // Mini-site (TASK-501): API families are foreign on tenant hosts (ADR-0002).
+      if (isApiFamily(path)) return notFoundHtml()
+      return handleMinisite(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
     }
     switch (ctx.context) {
       case "GERAI_WORKSPACE":

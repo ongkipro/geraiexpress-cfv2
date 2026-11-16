@@ -73,7 +73,9 @@
     "MENGANTAR_PARTNER_ORIGIN": "mock",
     "PARTNER_TRANSPORT": "direct",
     "MENGANTAR_PARTNER_ID": "ongkirich",
-    "MAIL_FROM": "noreply@mail.geraiexpress.com"
+    "MAIL_FROM": "noreply@mail.geraiexpress.com",
+    // Public Turnstile site key for mini-site forms (Cloudflare's documented always-pass test key locally).
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
   },
   "secrets": {
     // spec 07 §3.2. Values live in .dev.vars locally and in `wrangler secret` remotely, never in this file.
@@ -97,7 +99,10 @@
         "MENGANTAR_PARTNER_ORIGIN": "https://sandbox.mengantar.com",
         "PARTNER_TRANSPORT": "direct",
         "MENGANTAR_PARTNER_ID": "ongkirich",
-        "MAIL_FROM": "noreply@mail.geraiexpress.com"
+        "MAIL_FROM": "noreply@mail.geraiexpress.com",
+        // Set by the owner when the Turnstile widget for *.gerai.cc is created (AWAITING_OWNER); empty → public
+        // forms refuse with a polite message instead of accepting unverified submissions.
+        "TURNSTILE_SITE_KEY": ""
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
@@ -154,7 +159,10 @@
         "MENGANTAR_PARTNER_ORIGIN": "https://app.mengantar.com",
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
-        "MAIL_FROM": "noreply@mail.geraiexpress.com"
+        "MAIL_FROM": "noreply@mail.geraiexpress.com",
+        // Set by the owner when the Turnstile widget for *.gerai.cc is created (AWAITING_OWNER); empty → public
+        // forms refuse with a polite message instead of accepting unverified submissions.
+        "TURNSTILE_SITE_KEY": ""
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]

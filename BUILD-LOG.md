@@ -527,3 +527,20 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   provider amounts, mirror link states, sub-item links, discrepancies and the balance are identical.
 - Sandbox-only verifications (weight echo, `POST /time`, `/invoices` order, `pay-unpaid` semantics) need the sandbox
   seller key → AWAITING_OWNER_ACTION (STATUS). `docs/SYSTEM-MAP.md` refreshed for M4.
+
+## 2026-11-16 — TASK-501 Mini-site, QR pre-booking, private tracking (M5)
+
+- Shipped: SSR mini-site on every active gerai host with publish-price check, `Kirim dari Rumah` QR pre-booking (48 h),
+  privacy-safe tracking with the 4-digit gate, counter claim that keeps the QR's INV, robots/sitemap.
+- Evidence: home has the outlet name and the network footer, no `Set-Cookie`; quote without Turnstile 422, with it
+  publish prices only (no provider net `Rp 10.000`, no margin words); draft TTL exactly 48 h; QR card with SVG;
+  counter claim → freeze `{ slug }` returns the same INV → issued → `entry_channel = minisite_qr`; tracking by INV and
+  by AWB shows `R*** K******` + `Tebet, Jakarta Selatan` and none of name/phone/last-4/street/sender/item; gate
+  refused before delivery, wrong digits 400, right digits show `Diterima oleh: Rina Kartika`, 5 wrong → 429;
+  expired draft → `DRAFT_EXPIRED` at the counter and purged by the sweep; another gerai cannot claim or track it;
+  isolation suite: cross-tenant INV/AWB 404 and no PII across in_transit/undelivery/delivered/RTS. Lighthouse mobile
+  (local): `/` and `/kirim` 100 in all categories; `/lacak` SEO 66 only because it is `noindex` by design.
+- Visual: rendered narrow + wide and corrected (header/main spacing, Turnstile widget placement); dotuiux 0 fail.
+  Independent visual verdict not yet given → UNVERIFIED until the final review pass.
+- Changed older tests: routing test's write-method case on a tenant host is `PUT` (the mini-site now serves
+  `POST /`); the placeholder-page test now covers the `sedang disiapkan` page.
