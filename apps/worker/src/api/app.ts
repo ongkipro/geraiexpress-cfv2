@@ -352,6 +352,41 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(r.value)
   })
 
+  // Kendala & Klaim (TASK-405, spec 04 §3): buckets, claim records + packet; outcomes and conflicts are owner-only.
+  const BUCKETS = ["tidak_bergerak", "gagal_antar", "selisih_berat", "bisa_klaim", "bertentangan"] as const
+  const exceptions = async (c: AppCtx, op: Parameters<GeraiVaultDO["exceptionsOp"]>[2]) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).exceptionsOp(m.tenantId, { userId: c.get("session").user.id, role: m.role }, op)
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, r.value))
+  }
+  r("GET", "/exceptions", "app_member", "role", (c) => {
+    const b = c.req.query("bucket")
+    return exceptions(c, { op: "list", bucket: (BUCKETS as readonly string[]).includes(b ?? "") ? (b as (typeof BUCKETS)[number]) : "tidak_bergerak" })
+  })
+  r("POST", "/shipments/:slug/claim", "app_member", "role", async (c) => {
+    const b = await body(c)
+    return exceptions(c, { op: "claim", slug: slugParam(c), kind: b.kind, note: b.note, evidenceIds: Array.isArray(b.evidenceIds) ? (b.evidenceIds as unknown[]).filter((x): x is string => typeof x === "string") : [] })
+  })
+  r("POST", "/claims/:id/status", "app_member", "role", async (c) => exceptions(c, { op: "move", id: c.req.param("id") ?? "", to: (await body(c)).status }))
+  r("POST", "/shipments/:slug/conflict-note", "app_owner", "role", async (c) => {
+    const b = await body(c)
+    return exceptions(c, { op: "conflict", slug: slugParam(c), note: b.note, resolve: b.resolve === true })
+  })
+  r("GET", "/claims/:id/packet", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).claimPacket(m.tenantId, c.req.param("id") ?? "")
+    if (!r.ok) return vaultErr(r)
+    if (!r.value) throw new AppError(404, "CLAIM_NOT_FOUND", "Klaim tidak ditemukan.")
+    const v = r.value
+    // Evidence is served through short-lived signed media links (never raw R2 keys).
+    const media = await vaultFor(c.env, m.tenantId).mediaIdsForKeys(m.tenantId, v.evidenceKeys)
+    const links = media.ok ? await Promise.all(media.value.map((id) => signMediaUrl(c.env.KEK_SECRET, m.tenantId, id, now()))) : []
+    const { evidenceKeys: _k, ...rest } = v
+    void _k
+    return ok(projectFor(m.role, { ...rest, evidence: links }))
+  })
+
   // Meja Retur (TASK-404, spec 04 §2, ADR-0005): Kasir and owner; ID override is owner-only (checked in the object).
   const returns = async (c: AppCtx, op: Parameters<GeraiVaultDO["returnsOp"]>[2]) => {
     const m = c.get("membership")!

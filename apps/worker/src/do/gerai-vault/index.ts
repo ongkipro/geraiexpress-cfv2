@@ -29,6 +29,7 @@ import { financeView, type FinanceView } from "./finance/view"
 import { balanceSufficient } from "./finance/reserve"
 import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
 import { desk as returnDesk, handback as returnHandback, intake as returnIntake, issueCode as issueReturnCode, type ReturnError } from "./returns"
+import { bucketCounts, expireClaims, listBucket, moveClaim, noteConflict, openClaim, type Bucket, type ExceptionError, type ExceptionRow } from "./exceptions"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -174,6 +175,12 @@ export type ReturnsValue =
   | { kind: "intake"; slug: string; conflict: boolean; sender: { name: string; phone: string; brand: string | null } | null; awb: string | null }
   | { kind: "code"; code: string }
   | { kind: "handback"; method: "code" | "id_override" }
+
+export type ExceptionsValue =
+  | { kind: "list"; counts: Record<Bucket, number>; rows: ExceptionRow[] }
+  | { kind: "claim"; id: string; deadline_at: number | null }
+  | { kind: "moved" }
+export type ClaimPacket = { slug: string; kind: string; status: string; deadline_at: number | null; note: string | null; evidenceKeys: string[]; awb_number: string; courier_code: string; mengantar_order_code: string | null; actual_weight_gram: number | null; billable_weight_gram: number | null; content_declaration_text: string | null; cod_goods_amount_idr: number | null; issued_at: number | null }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -396,6 +403,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const id = crypto.randomUUID()
     this.ctx.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, tenantId, m.key, m.purpose, m.contentType, m.sizeBytes, m.uploadedBy, now)
     return { ok: true, value: id }
+  }
+
+  async mediaIdsForKeys(tenantId: string, keys: string[]): Promise<VaultResult<string[]>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const ids: string[] = []
+    for (const k of keys.slice(0, 20)) {
+      const r = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM media_objects WHERE r2_key = ?", k).toArray()[0]
+      if (r) ids.push(r.id)
+    }
+    return { ok: true, value: ids }
   }
 
   async mediaKey(tenantId: string, id: string): Promise<VaultResult<{ key: string; contentType: string } | null>> {
@@ -1157,6 +1175,57 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: financeView(this.ctx.storage.sql, now) }
+  }
+
+  // ---- Kendala & Klaim (TASK-405) --------------------------------------------------------------------------------
+
+  async exceptionsOp(
+    tenantId: string,
+    actor: { userId: string; role: "gerai_admin" | "cashier" },
+    op:
+      | { op: "list"; bucket: Bucket }
+      | { op: "claim"; slug: string; kind: unknown; note: unknown; evidenceIds: string[] }
+      | { op: "move"; id: string; to: unknown }
+      | { op: "conflict"; slug: string; note: unknown; resolve: boolean },
+  ): Promise<{ ok: true; value: ExceptionsValue } | { ok: false; refused?: VaultRefusal; error?: ExceptionError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    return this.ctx.storage.transactionSync((): { ok: true; value: ExceptionsValue } | { ok: false; error: ExceptionError } => {
+      if (op.op === "list") return { ok: true, value: { kind: "list", counts: bucketCounts(sql, now), rows: listBucket(sql, op.bucket, now) } }
+      if (op.op === "claim") {
+        const keys = op.evidenceIds.filter((x) => /^[0-9a-f-]{36}$/.test(x)).map((x) => sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ?", x).toArray()[0]?.r2_key).filter((k): k is string => !!k)
+        const intakePhoto = sql.exec<{ photo_r2_key: string | null }>("SELECT photo_r2_key FROM return_intakes WHERE slug = ?", op.slug).toArray()[0]?.photo_r2_key
+        const r = openClaim(sql, tenantId, { slug: op.slug, kind: op.kind, note: op.note, evidence: [...(intakePhoto ? [intakePhoto] : []), ...keys], actorId: actor.userId }, now)
+        if (!r.ok) return r
+        this.audit(tenantId, now, "user", actor.userId, "claim.open", { slug: op.slug, kind: op.kind })
+        return { ok: true, value: { kind: "claim", id: r.value.id, deadline_at: r.value.deadline_at } }
+      }
+      if (op.op === "move") {
+        if (actor.role !== "gerai_admin" && op.to !== "submitted") return { ok: false, error: { status: 403, code: "OWNER_ONLY", message: "Hanya pemilik yang mencatat hasil klaim." } }
+        const r = moveClaim(sql, op.id, op.to, now)
+        if (!r.ok) return r
+        this.audit(tenantId, now, "user", actor.userId, "claim.move", { id: op.id, to: op.to })
+        return { ok: true, value: { kind: "moved" } }
+      }
+      if (actor.role !== "gerai_admin") return { ok: false, error: { status: 403, code: "OWNER_ONLY", message: "Hanya pemilik yang menangani status bertentangan." } }
+      const r = noteConflict(sql, op.slug, op.note, op.resolve, now)
+      if (!r.ok) return r
+      this.audit(tenantId, now, "user", actor.userId, "conflict.note", { slug: op.slug, resolve: op.resolve })
+      return { ok: true, value: { kind: "moved" } }
+    })
+  }
+
+  /** Claim packet for Mengantar Live Chat (spec 04 §3.2): INV facts, counter weight, frozen quote, evidence links. */
+  async claimPacket(tenantId: string, id: string): Promise<VaultResult<ClaimPacket | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const c = sql.exec<{ shipment_slug: string; kind: string; status: string; deadline_at: number | null; note: string | null; evidence_json: string }>("SELECT shipment_slug, kind, status, deadline_at, note, evidence_json FROM shipment_claims WHERE id = ?", id).toArray()[0]
+    if (!c) return { ok: true, value: null }
+    const s = sql.exec<{ awb_number: string; courier_code: string; mengantar_order_code: string | null; actual_weight_gram: number | null; billable_weight_gram: number | null; content_declaration_text: string | null; cod_goods_amount_idr: number | null; issued_at: number | null }>("SELECT awb_number, courier_code, mengantar_order_code, actual_weight_gram, billable_weight_gram, content_declaration_text, cod_goods_amount_idr, issued_at FROM shipments WHERE slug = ?", c.shipment_slug).one()
+    return { ok: true, value: { slug: c.shipment_slug, kind: c.kind, status: c.status, deadline_at: c.deadline_at, note: c.note, evidenceKeys: JSON.parse(c.evidence_json) as string[], ...s } }
   }
 
   // ---- Meja Retur (TASK-404) -------------------------------------------------------------------------------------
@@ -2334,6 +2403,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const active = readConnection(sql)?.webhook_state === "active"
     this.ctx.storage.transactionSync(() => {
       flagStuck(sql, now)
+      expireClaims(sql, now)
       if (conn) sql.exec("UPDATE mengantar_connections SET last_polled_at = ?, last_sync_status = ?", now, failed > 0 ? `poll_failed:${failed}` : "ok")
       if (pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + (active ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_INACTIVE_MS))
       else sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")

@@ -14,7 +14,11 @@ const TAB_WHERE: Record<Tab, string> = {
   "draf-qr": "s.dispatch_state = 'draft' AND s.entry_channel = 'minisite_qr'",
   "menunggu-saldo": "s.dispatch_state = 'provider_unpaid_hold'",
   pickup: "s.dispatch_state = 'issued' AND s.status = 'ready_for_pickup'",
-  kendala: "(s.stuck_attention_at IS NOT NULL AND s.status = 'in_transit') OR s.status = 'undelivery_hold' OR s.provider_status_conflict_at IS NOT NULL OR s.dispatch_state IN ('failed','reconciliation_needed','cancel_unknown')",
+  // Same five buckets as `Kendala & Klaim` (spec 04 §3) plus dispatch problems that need a person.
+  kendala: `(s.stuck_attention_at IS NOT NULL AND s.status = 'in_transit') OR s.status = 'undelivery_hold' OR s.provider_status = 'lost'
+    OR (s.provider_status_conflict_at IS NOT NULL AND s.conflict_resolved_at IS NULL) OR s.dispatch_state IN ('failed','reconciliation_needed','cancel_unknown')
+    OR s.slug IN (SELECT shipment_slug FROM finance_discrepancies WHERE kind = 'adjustment' AND resolved_at IS NULL)
+    OR s.slug IN (SELECT slug FROM return_intakes WHERE condition != 'baik')`,
   retur: "s.status IN ('rts_in_transit','provider_returned','rts_at_gerai')",
 }
 

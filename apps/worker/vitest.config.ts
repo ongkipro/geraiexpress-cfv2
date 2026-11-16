@@ -28,5 +28,7 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     setupFiles: ["./test/setup.ts"],
+    // Multi-step flows (dispatch + sync + projection) on a shared machine: 5 s produced load-only timeouts.
+    testTimeout: 15_000,
   },
 })

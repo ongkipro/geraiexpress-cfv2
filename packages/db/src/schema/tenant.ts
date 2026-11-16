@@ -201,6 +201,8 @@ export const shipments = sqliteTable(
     providerReconciledCostIdr: integer("provider_reconciled_cost_idr"),
     reconciledExtraAdjustmentIdr: integer("reconciled_extra_adjustment_idr"),
     pickupBatchId: text("pickup_batch_id"),
+    conflictNote: text("conflict_note"),
+    conflictResolvedAt: integer("conflict_resolved_at"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -656,4 +658,26 @@ export const returnIntakes = sqliteTable(
     claimOffered: integer("claim_offered").notNull().default(0),
   },
   (t) => [index("return_intakes_open").on(t.handbackAt, t.intakeAt)],
+)
+
+// TASK-405 claims.
+export const shipmentClaims = sqliteTable(
+  "shipment_claims",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    shipmentSlug: text("shipment_slug").notNull(),
+    kind: text("kind", { enum: ["rusak", "hilang", "isi_kurang"] }).notNull(),
+    status: text("status", { enum: ["draft", "submitted", "approved", "rejected", "paid", "expired"] }).notNull(),
+    deadlineAt: integer("deadline_at"),
+    note: text("note"),
+    evidenceJson: text("evidence_json").notNull().default("[]"),
+    submittedAt: integer("submitted_at"),
+    decidedAt: integer("decided_at"),
+    paidInvoiceId: text("paid_invoice_id"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("shipment_claims_slug_kind").on(t.shipmentSlug, t.kind)],
 )

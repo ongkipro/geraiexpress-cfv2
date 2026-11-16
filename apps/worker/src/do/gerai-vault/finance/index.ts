@@ -2,6 +2,8 @@
 // upsert an `/invoices` row (PII stripped), reconcile it to INVs by type, and record `Selisih Sync` findings.
 // Reconciliation is idempotent: re-reading the same invoice sets (never adds) the per-INV provider amounts.
 
+import { markClaimPaid } from "../exceptions"
+
 export const FINAL_STATUSES = new Set(["statusCleared", "statusExpired"])
 export const KNOWN_TYPES = new Set(["typeAddBalance", "typePayment", "typeReconciliation", "typeRefund", "typeWithdraw"])
 
@@ -184,6 +186,7 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
     if (ref) {
       linked++
       if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, m![1]!, int(raw.amount), ref.slug)
+      if (status === "statusCleared") markClaimPaid(sql, ref.slug, id, now)
     } else unlinked++
   }
   if (state !== "unknown_type" && (type === "typeReconciliation" || type === "typePayment" || type === "typeRefund")) state = unlinked === 0 ? "linked" : linked === 0 ? "unlinked" : "partial"

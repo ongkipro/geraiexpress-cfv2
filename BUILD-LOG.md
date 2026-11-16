@@ -504,3 +504,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   code; Kasir override → `OWNER_ONLY`, owner override needs ≥ 5 chars; provider `delivered` after intake keeps
   `rts_at_gerai`, sets the conflict and the INV appears in `Kendala & Klaim`; an INV that never left → `NOT_SENT`.
   e2e at three viewports reads the code from the WhatsApp link. Mutation red.
+
+## 2026-11-16 — TASK-405 Exceptions and claims (M4)
+
+- Shipped: `Kendala & Klaim` with five buckets, per-courier claim countdowns from Mengantar's published windows,
+  claim records + packet, refund-driven `paid`, conflict notes, expiry sweep.
+- Evidence: one INV per bucket lands in the right bucket (stuck 6 days → `5–14 hari`; undelivery; `penyesuaian`
+  3.000 from `/invoices`; J&T lost → `Bisa Klaim`, deadline ≤ 72 h after the lost status; handback-then-delivered →
+  `Status Bertentangan`); claim open is idempotent per kind with a frozen deadline; Kasir may submit, not approve;
+  `paid` straight from `draft`/`submitted` refused; refund `ref1` marks the claim paid; lost 4 days ago on J&T →
+  `CLAIM_EXPIRED`; a draft past its deadline expires on the poll sweep; conflict note < 5 chars refused, valid note
+  closes it. Domain tests on J&T/SiCepat/SAP/Lion windows, chips and bands. e2e at three viewports. Mutation red.
