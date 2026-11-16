@@ -295,3 +295,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   line across all M2 Mengantar paths; mutation (log a keyed URL in `publicClient`) turns it red.
 - Sandbox onboarding end-to-end runs on the offline mock locally; the live sandbox run needs Partner sandbox
   credentials → AWAITING_OWNER_ACTION. `docs/SYSTEM-MAP.md` refreshed for M2.
+
+## 2026-11-16 — TASK-301 Web app shell, navigation, notifications, role projection (M3)
+
+- Shipped: role projection module (server strips cost/discount/margin/cashback/balance for Kasir), workspace endpoint,
+  per-user notifications in the tenant object, the gerai workspace shell (desktop sidebar, tablet rail, phone bottom
+  bar + sheet), text-size preference without zoom locks, Dashboard frames, `/notifikasi`, shared page states.
+- Evidence: Workers tests for projection (deep strip, input untouched), owner vs Kasir workspace DTOs, gerai under
+  review, notification audience/read state/safe links/cross-tenant; e2e (applicant → `/daftar/status`, Kasir home
+  without Keuangan); UI gates 0 fail (one expected duplicate-href warning on `/notifikasi` with three items linking to
+  `/kiriman`); mutation red.
+- Note: pages owned by later tasks render a `Segera hadir` state inside the shell (never a dead link or a 404).

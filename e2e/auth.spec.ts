@@ -17,8 +17,10 @@ test.describe("TASK-105 accounts", () => {
     await page.getByRole("button", { name: "Buat Akun" }).click()
     // The account step continues into the outlet application (TASK-203).
     await expect(page.getByText("Langkah 3/5 · Data gerai")).toBeVisible()
+    // No gerai yet → the workspace sends the applicant to the application status page.
     await page.goto(`${APP}/`)
-    await expect(page.getByRole("heading", { name: "Halo, Ani Lestari" })).toBeVisible()
+    await expect(page).toHaveURL(/\/daftar\/status$/)
+    await expect(page.getByRole("heading", { name: "Status Pengajuan" })).toBeVisible()
 
     await page.getByRole("button", { name: "Keluar" }).click()
     await expect(page).toHaveURL(/\/masuk$/)
@@ -28,7 +30,7 @@ test.describe("TASK-105 accounts", () => {
     await expect(page.getByRole("alert")).toHaveText("Email atau kata sandi salah.")
     await page.getByLabel("Kata sandi").fill("sandi-e2e-kuat-1")
     await page.getByRole("button", { name: "Masuk" }).click()
-    await expect(page.getByRole("heading", { name: "Halo, Ani Lestari" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Status Pengajuan" })).toBeVisible()
 
     await page.getByRole("button", { name: "Keluar" }).click()
     await page.getByRole("link", { name: "Lupa kata sandi?" }).click()
@@ -71,7 +73,10 @@ test.describe("TASK-105 accounts", () => {
     await page.getByLabel("Nama lengkap").fill("Sari Kasir")
     await page.getByLabel("Buat kata sandi").fill("kasir-e2e-kuat-1")
     await page.getByRole("button", { name: "Buat Akun" }).click()
-    await expect(page.getByText("Toko E2E · Kasir")).toBeVisible()
+    // The Kasir lands in the workspace: Kasir home, no Keuangan menu.
+    await expect(page.getByRole("heading", { name: "Tugas Loket Hari Ini" })).toBeVisible()
+    if ((page.viewportSize()?.width ?? 0) >= 768) await expect(page.getByText("Toko E2E").first()).toBeVisible()
+    await expect(page.getByRole("link", { name: "Keuangan" })).toHaveCount(0)
     await context.clearCookies()
     await page.goto(link)
     await expect(page.getByRole("alert")).toContainText("Undangan tidak berlaku")

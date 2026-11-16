@@ -14,6 +14,7 @@ import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
+import { projectFor } from "../dto/projection"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { vaultFor } from "../do/gerai-vault/stub"
 
@@ -206,6 +207,47 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(await connectByok(c.env, m.tenantId, typeof b.apiKey === "string" ? b.apiKey : "", now()))
   })
 
+  // Workspace shell (TASK-301): who am I, which menus, badge counts; never money for a cashier.
+  r("GET", "/workspace", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const s = c.get("session")
+    // A gerai still under review (or rejected and being corrected) has no workspace yet: the SPA shows /daftar/status.
+    const status = await c.env.DB.prepare("SELECT status FROM tenants WHERE id = ?").bind(m.tenantId).first<{ status: string }>()
+    if (status?.status !== "active") throw new AppError(403, "NO_MEMBERSHIP", "Gerai Anda belum aktif.")
+    const vault = vaultFor(c.env, m.tenantId)
+    const [notes, webhook, memberships] = await Promise.all([
+      vault.listNotifications(m.tenantId, { userId: s.user.id, role: m.role }, 1),
+      m.role === "gerai_admin" ? vault.webhookStatus(m.tenantId) : Promise.resolve(null),
+      c.env.DB.prepare("SELECT t.id, t.name, t.slug FROM tenant_members tm JOIN tenants t ON t.id = tm.tenant_id WHERE tm.user_id = ? AND tm.status = 'active' AND t.status = 'active' ORDER BY t.name").bind(s.user.id).all<{ id: string; name: string; slug: string }>(),
+    ])
+    const menus = ["dashboard", "buat-pengiriman", "kiriman", "kontak", ...(m.role === "gerai_admin" ? ["keuangan"] : []), "pengaturan"]
+    return ok(
+      projectFor(m.role, {
+        user: { id: s.user.id, name: s.user.name, email: s.user.email },
+        tenant: { id: m.tenantId, name: m.tenantName, slug: m.tenantSlug, miniSiteHost: `${m.tenantSlug}.${c.env.TENANT_ZONE}` },
+        role: m.role,
+        menus,
+        badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
+        hints: { mengantarWebhook: webhook && webhook.ok && webhook.value && webhook.value.webhookState !== "active" ? webhook.value.webhookState : null },
+        tenants: memberships.results,
+      }),
+    )
+  })
+  r("GET", "/notifications", "app_member", "self", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).listNotifications(m.tenantId, { userId: c.get("session").user.id, role: m.role }, 100)
+    if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    return ok(r.value)
+  })
+  r("POST", "/notifications/read", "app_member", "self", async (c) => {
+    const b = await body(c)
+    const m = c.get("membership")!
+    const ids = b.all === true ? "all" : Array.isArray(b.ids) ? (b.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 200) : []
+    const r = await vaultFor(c.env, m.tenantId).markNotificationsRead(m.tenantId, { userId: c.get("session").user.id, role: m.role }, ids)
+    if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    return ok({ marked: r.value })
+  })
+
   // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223): instant-save toggles and pickup mode.
   r("GET", "/settings/couriers", "app_owner", "role", async (c) => ok({ items: await listCouriers(c.env, c.get("membership")!.tenantId) }))
   r("POST", "/settings/couriers/:code", "app_owner", "role", async (c) => {
@@ -239,6 +281,18 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const { vaultFor } = await import("../do/gerai-vault/stub")
     await vaultFor(c.env, id).migrate(id)
     return ok({ tenantId: id, slug }, 201)
+  })
+  // Local only: add a synthetic notification to the caller's gerai (renders `/notifikasi` states).
+  r("POST", "/dev/notify", "app_member", "none", async (c) => {
+    if (c.env.GX_ENV !== "local") return fail(404, "NOT_FOUND", "Alamat tidak ditemukan.")
+    const b = await body(c)
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).addNotification(
+      m.tenantId,
+      { kind: "system", audience: b.audience === "owner" ? "owner" : "all", title: typeof b.title === "string" ? b.title : "Notifikasi contoh", body: typeof b.body === "string" ? b.body : null, link: typeof b.link === "string" ? b.link : null },
+      typeof b.at === "number" ? b.at : now(),
+    )
+    return ok(r, 201)
   })
 
   return app

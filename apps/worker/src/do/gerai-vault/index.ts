@@ -10,6 +10,7 @@ import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
 import type { CourierRate } from "@gx/mengantar-sdk"
+import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, recordProviderObservation, setTimer, findShipment, type TimerName } from "./status"
 
@@ -155,6 +156,63 @@ export class GeraiVaultDO extends DurableObject<Env> {
     // Rotation fence (ADR-0004 §5): no Mengantar call with a key that may be replaced right now.
     if (!row?.encrypted_api_key || row.rotation_state !== "idle") return null
     return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
+  }
+
+  // ---- Notifications (TASK-301) -------------------------------------------------------------------------------------
+
+  async addNotification(tenantId: string, n: { kind: NotificationKind; audience: "all" | "owner"; title: string; body?: string | null; link?: string | null; dedupeKey?: string }, now: number = Date.now()): Promise<VaultResult<string>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const id = n.dedupeKey ? `d:${n.dedupeKey}`.slice(0, 120) : crypto.randomUUID()
+    this.ctx.storage.sql.exec(
+      "INSERT INTO notifications (id, tenant_id, kind, audience, title, body, link, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+      id,
+      tenantId,
+      n.kind,
+      n.audience,
+      n.title.slice(0, 160),
+      n.body?.slice(0, 500) ?? null,
+      safeLink(n.link),
+      now,
+    )
+    // Keep the table bounded: 90 days.
+    this.ctx.storage.sql.exec("DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE created_at < ?)", now - 90 * 24 * 3600_000)
+    this.ctx.storage.sql.exec("DELETE FROM notifications WHERE created_at < ?", now - 90 * 24 * 3600_000)
+    return { ok: true, value: id }
+  }
+
+  /** Newest first for one user; owner-only items are excluded for cashiers at the source. */
+  async listNotifications(tenantId: string, viewer: { userId: string; role: "gerai_admin" | "cashier" }, limit = 100): Promise<VaultResult<{ items: NotificationItem[]; unread: number }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const audience = viewer.role === "gerai_admin" ? "('all','owner')" : "('all')"
+    const rows = this.ctx.storage.sql
+      .exec<{ id: string; kind: NotificationKind; title: string; body: string | null; link: string | null; created_at: number; read_at: number | null }>(
+        `SELECT n.id, n.kind, n.title, n.body, n.link, n.created_at, r.read_at FROM notifications n
+         LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_id = ?
+         WHERE n.audience IN ${audience} ORDER BY n.created_at DESC LIMIT ?`,
+        viewer.userId,
+        Math.min(200, Math.max(1, limit)),
+      )
+      .toArray()
+    const unread = this.ctx.storage.sql
+      .exec<{ n: number }>(`SELECT COUNT(*) AS n FROM notifications n LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_id = ? WHERE n.audience IN ${audience} AND r.read_at IS NULL`, viewer.userId)
+      .one().n
+    return { ok: true, value: { items: rows.map((r) => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, createdAt: r.created_at, readAt: r.read_at })), unread } }
+  }
+
+  /** Marks the given ids (or all visible ones) read for this user only. */
+  async markNotificationsRead(tenantId: string, viewer: { userId: string; role: "gerai_admin" | "cashier" }, ids: string[] | "all", now: number = Date.now()): Promise<VaultResult<number>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const audience = viewer.role === "gerai_admin" ? "('all','owner')" : "('all')"
+    let n = 0
+    this.ctx.storage.transactionSync(() => {
+      const visible = this.ctx.storage.sql.exec<{ id: string }>(`SELECT id FROM notifications WHERE audience IN ${audience}`).toArray().map((r) => r.id)
+      const target = ids === "all" ? visible : ids.filter((id) => visible.includes(id))
+      for (const id of target) n += this.ctx.storage.sql.exec("INSERT INTO notification_reads (notification_id, user_id, read_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING RETURNING notification_id", id, viewer.userId, now).toArray().length
+    })
+    return { ok: true, value: n }
   }
 
   // ---- Discount verification (TASK-207) -----------------------------------------------------------------------------

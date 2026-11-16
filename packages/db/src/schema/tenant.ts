@@ -190,3 +190,28 @@ export const tenantCourierPrefs = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.courierCode] })],
 )
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    kind: text("kind").notNull(),
+    audience: text("audience", { enum: ["all", "owner"] }).notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("notifications_created").on(t.createdAt)],
+)
+
+export const notificationReads = sqliteTable(
+  "notification_reads",
+  {
+    notificationId: text("notification_id").notNull(),
+    userId: text("user_id").notNull(),
+    readAt: integer("read_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.notificationId, t.userId] })],
+)

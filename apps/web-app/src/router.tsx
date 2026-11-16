@@ -8,8 +8,13 @@ import { DaftarPage } from "./routes/daftar/page"
 import { DaftarStatusPage } from "./routes/daftar/status"
 import { PengaturanMengantarPage } from "./routes/pengaturan/mengantar/page"
 import { PengaturanEkspedisiPage } from "./routes/pengaturan/ekspedisi/page"
+import type { ReactNode } from "react"
 import { api, ApiError } from "./lib/api"
-import { Button } from "./components/ui/button"
+import { AppShell } from "./shell/app-shell"
+import { ComingSoon, ErrorState, Forbidden } from "./shell/states"
+import { useWorkspace, WorkspaceContext, type Workspace } from "./shell/workspace"
+import { DashboardPage } from "./routes/index/page"
+import { NotifikasiPage } from "./routes/notifikasi/page"
 
 // Route table for the app SPA. Feature tasks add their routes under src/routes/** and register them here.
 export interface Me {
@@ -30,55 +35,83 @@ function NotFound() {
   )
 }
 
-// Signed-in home placeholder; the workspace shell replaces it in TASK-301.
-function Home() {
-  const me = indexRoute.useLoaderData()
+// Authenticated workspace layout (TASK-301): loads the projected workspace once; 401 → /masuk, no gerai yet →
+// /daftar/status. Feature pages render inside the shell.
+const workspaceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "workspace",
+  loader: async () => {
+    try {
+      return await api<Workspace>("/workspace")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) throw redirect({ to: "/masuk" })
+      if (err instanceof ApiError && err.status === 403 && err.body.code === "NO_MEMBERSHIP") throw redirect({ to: "/daftar/status" })
+      throw err
+    }
+  },
+  errorComponent: WorkspaceError,
+  component: function Workspace() {
+    const w = workspaceRoute.useLoaderData()
+    return (
+      <WorkspaceContext.Provider value={w}>
+        <AppShell />
+      </WorkspaceContext.Provider>
+    )
+  },
+})
+
+function WorkspaceError() {
   return (
     <main className="flex min-h-svh items-center justify-center p-4">
-      <div className="flex w-full max-w-[440px] flex-col gap-4 rounded-lg border border-border p-6">
-        <h1 className="text-[28px] leading-tight font-semibold">Halo, {me.user.name}</h1>
-        <p className="text-base text-muted-foreground">
-          {me.membership ? `${me.membership.tenantName} · ${me.membership.role === "gerai_admin" ? "Pemilik" : "Kasir"}` : "Akun Anda belum terhubung ke gerai."}
-        </p>
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={async () => {
-            await api("/auth/logout", { body: {} }).catch(() => undefined)
-            window.location.assign("/masuk")
-          }}
-        >
-          Keluar
-        </Button>
+      <div className="flex w-full max-w-[440px] flex-col gap-3">
+        <ErrorState message="Ruang kerja tidak dapat dimuat. Periksa koneksi lalu coba lagi." onRetry={() => window.location.reload()} />
       </div>
     </main>
   )
 }
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  loader: async () => {
-    try {
-      return await api<Me>("/auth/me")
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) throw redirect({ to: "/masuk" })
-      throw err
-    }
-  },
-  component: Home,
-})
+/** Owner-only page guard (the API refuses too; this only avoids a dead screen for a Kasir). */
+function ownerOnly(Page: () => ReactNode) {
+  return function OwnerOnly() {
+    const w = useWorkspace()
+    return w.role === "gerai_admin" ? <Page /> : <Forbidden />
+  }
+}
+
+const indexRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/", component: DashboardPage })
+const notifikasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/notifikasi", component: NotifikasiPage })
+const pengaturanMengantarRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/mengantar", component: ownerOnly(PengaturanMengantarPage) })
+const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/ekspedisi", component: ownerOnly(PengaturanEkspedisiPage) })
+const soonPage = (title: string, body: string, task: string) => () => <ComingSoon title={title} body={body} task={task} />
+const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir", component: soonPage("Buat Pengiriman", "Kasir, cek ongkir cepat, paket massal, cek resi dan shift loket sedang disiapkan.", "TASK-303/304/307/308") })
+const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
+const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: soonPage("Kiriman", "Daftar kiriman dengan pencarian, filter dan ekspor sedang disiapkan.", "TASK-311") })
+const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: soonPage("Kontak › Pengirim", "Daftar pengirim sedang disiapkan.", "TASK-302") })
+const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: soonPage("Kontak › Penerima", "Daftar penerima sedang disiapkan.", "TASK-302") })
+const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(soonPage("Keuangan", "Saldo Mengantar, mutasi dan laba per INV sedang disiapkan.", "TASK-401")) })
+const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: soonPage("Pengaturan", "Menu pengaturan lengkap sedang disiapkan. Ekspedisi Aktif dan Mengantar sudah bisa dibuka.", "TASK-310") })
+const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: soonPage("Akun Saya", "Profil, kata sandi dan sesi aktif sedang disiapkan.", "TASK-310") })
+const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: soonPage("Bantuan & Panduan", "Panduan penggunaan sedang disiapkan. Butuh bantuan sekarang? Hubungi bantuan@geraiexpress.com.", "TASK-310") })
+const comingSoonRoutes = [kasirRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
+
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })
 const lupaSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/lupa-sandi", component: LupaSandiPage })
 const aturSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/atur-sandi/$token", component: AturSandiPage })
 const daftarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar", component: DaftarPage })
 const daftarStatusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar/status", component: DaftarStatusPage })
-const pengaturanMengantarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pengaturan/mengantar", component: PengaturanMengantarPage })
-const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pengaturan/ekspedisi", component: PengaturanEkspedisiPage })
 const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/undangan/$token", component: UndanganPage })
 
-export const routeTree = rootRoute.addChildren([indexRoute, masukRoute, daftarAkunRoute, lupaSandiRoute, aturSandiRoute, undanganRoute, daftarRoute, daftarStatusRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute])
+export const routeTree = rootRoute.addChildren([
+  workspaceRoute.addChildren([indexRoute, notifikasiRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute, ...comingSoonRoutes]),
+  masukRoute,
+  daftarAkunRoute,
+  lupaSandiRoute,
+  aturSandiRoute,
+  undanganRoute,
+  daftarRoute,
+  daftarStatusRoute,
+])
 
 export const router = createRouter({ routeTree, defaultPreload: "intent" })
 
