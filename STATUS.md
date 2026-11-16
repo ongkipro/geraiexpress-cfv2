@@ -1,7 +1,7 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-16
-Status: M1 CLOSED 2026-11-16; M2 CLOSED 2026-11-16 (TASK-201..208, 299); M3 CLOSED 2026-11-16 — TASK-301..311, TASK-399 done (live steps awaiting owner below); M4 in progress — TASK-401..405 done; next TASK-499 (M4 close). Live owner steps pending, listed below.
+Status: M1 CLOSED 2026-11-16; M2 CLOSED 2026-11-16 (TASK-201..208, 299); M3 CLOSED 2026-11-16 — TASK-301..311, TASK-399 done (live steps awaiting owner below); M4 CLOSED 2026-11-16 — TASK-401..405, TASK-499 done (sandbox verifications awaiting owner below); next M5 TASK-501. Live owner steps pending, listed below.
 State: IN_PROGRESS
 Review-Risk: R4
 Independent-Review: owner directive 2026-11-16 — per-task reviews deferred to one final reviewer-carbon pass after M1–M6 code; TASK-110 round 1 REQUEST_CHANGES (2 P1, 3 P2, 1 P3) fixed, pending final pass; TASK-107/108 PASS — reviewer-carbon round 1 REQUEST_CHANGES (1 P1, 5 P2, 1 P3, fixed), round 2 APPROVE (`docs/review/TASK-107-108/`); TASK-102/103 PASS — reviewer-carbon round 1 REQUEST_CHANGES (2 P1, 4 P2, 1 P3, all fixed), round 2 APPROVE (`docs/review/TASK-102-103/`); TASK-101 PASS (round 2 APPROVE, `docs/review/TASK-101/`)
@@ -58,8 +58,8 @@ Live owner actions so far: none required by TASK-101.
 
 ## Next
 
-1. M4: TASK-499 (M4 close), then M5 (501..505, 599) and M6 (601..603).
-2. Live steps awaiting the owner: staging alert webhook URL (TASK-110); first Super Admin bootstrap per deployed environment (`POST /internal/ops/bootstrap-admin` with the ops token, TASK-106); Cloudflare staging resources, secrets and protected environments + first staging deploy (TASK-109); Email Sending onboarding of `mail.geraiexpress.com`, DMARC decision and inbox tests (TASK-112, runbook); Mengantar sandbox Partner credentials + confirmed sandbox origins for a live sandbox onboarding run (TASK-203/299); sandbox seller key for a live sandbox `POST /order` (TASK-304); a photo of a real 100 mm thermal print (TASK-306); counsel answer before masking is advertised (TASK-305/399).
+1. M5: TASK-501 → 502 → 503 → 504 → 505 → TASK-599 (M5 close), then M6 (601..603).
+2. Live steps awaiting the owner: staging alert webhook URL (TASK-110); first Super Admin bootstrap per deployed environment (`POST /internal/ops/bootstrap-admin` with the ops token, TASK-106); Cloudflare staging resources, secrets and protected environments + first staging deploy (TASK-109); Email Sending onboarding of `mail.geraiexpress.com`, DMARC decision and inbox tests (TASK-112, runbook); Mengantar sandbox Partner credentials + confirmed sandbox origins for a live sandbox onboarding run (TASK-203/299); sandbox seller key for a live sandbox `POST /order` (TASK-304); a photo of a real 100 mm thermal print (TASK-306); counsel answer before masking is advertised (TASK-305/399); M4 sandbox verifications with a sandbox seller key — weight echo, `POST /time` lead time and timezone, `/invoices` sort order and `balanceAmount` monotonicity, `pay-unpaid` repeat-call and partial-batch semantics (TASK-499).
 3. Independent review: deferred by the goal runbook to one final reviewer-carbon pass per milestone diff after M6; R3/R4 ledger runs stay BLOCKED (review pending), never self-approved.
 
 ## Blockers

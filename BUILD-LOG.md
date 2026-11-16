@@ -515,3 +515,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `paid` straight from `draft`/`submitted` refused; refund `ref1` marks the claim paid; lost 4 days ago on J&T →
   `CLAIM_EXPIRED`; a draft past its deadline expires on the poll sweep; conflict note < 5 chars refused, valid note
   closes it. Domain tests on J&T/SiCepat/SAP/Lion windows, chips and bands. e2e at three viewports. Mutation red.
+
+## 2026-11-16 — TASK-499 M4 close
+
+- Integrated run (`scripts/ci/integrated-gate.sh TASK-499`): typecheck, lint, unit, build, worker, migrations,
+  isolation, security, e2e (18 specs × 390/768/1280) — all PASS in the ledger. A first run stopped at typecheck
+  (the new determinism test typed SQL rows as `unknown`); fixed and re-run on a frozen tree.
+- Exit gate "deterministic reconciliation across all types": `apps/worker/test/finance/determinism.test.ts` syncs the
+  same eight rows (top-up, Non-COD payment, COD payout, return debit, `penyesuaian`, refund, withdraw, unknown type)
+  newest-first in one gerai and one row per sync oldest-first in another, plus a replay and a pending rescan: shipments'
+  provider amounts, mirror link states, sub-item links, discrepancies and the balance are identical.
+- Sandbox-only verifications (weight echo, `POST /time`, `/invoices` order, `pay-unpaid` semantics) need the sandbox
+  seller key → AWAITING_OWNER_ACTION (STATUS). `docs/SYSTEM-MAP.md` refreshed for M4.
