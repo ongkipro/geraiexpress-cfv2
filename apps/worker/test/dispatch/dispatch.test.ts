@@ -286,6 +286,22 @@ describe("pay-unpaid batch fence (Sol delta B-1 / C-1)", () => {
     expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
   })
 
+  it("paid through A while B reads back WITHOUT an AWB (lagging): the fence stays, B never pays again (Sol R3 #1)", async () => {
+    const { t, a, b, batch } = await twoHeldInOneBatch("pagarlambat")
+    mockSeller.balanceIdr = 100_000
+    const calls = mockSeller.payUnpaidCalls
+    // Mengantar pays both, but B's order view lags (readable, still unpaid) during A's call and right after it.
+    mockFaults.readBackLagFor = new Set([batch.codeB])
+    expect((await post(`/shipments/${a}/pay-unpaid`, t.cookie, {})).status).toBe(200)
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(409)
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(409)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+    // Once Mengantar's view catches up, B is recorded issued without another payment.
+    mockFaults.readBackLagFor = undefined
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(200)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+  })
+
   it("two concurrent pay-unpaid calls for sibling INVs pay the batch once", async () => {
     const { t, a, b } = await twoHeldInOneBatch("pagarserentak")
     mockSeller.balanceIdr = 100_000

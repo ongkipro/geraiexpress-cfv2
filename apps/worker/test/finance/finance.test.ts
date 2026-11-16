@@ -178,6 +178,15 @@ describe("finance sync", () => {
     expect(extra).toBe(5000)
   })
 
+  it("a refund with one amount-only sub-item still matches by its description (Sol R3 #5)", async () => {
+    const t = await checkoutGerai("financedeskripsi")
+    const { cod } = await issuedPair(t)
+    mockInvoices.push({ _id: "rf3", type: "typeRefund", status: "statusCleared", amount: 20000, balanceAmount: 34000, createdAt: iso(1), description: `Claim approved for damaged or lost order ${cod.awb_number}`, subItems: [{ amount: 20000 }] })
+    await t.vault.financeSync(t.tenantId, "manual")
+    const link = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ s: string | null }>("SELECT shipment_slug AS s FROM mengantar_invoice_subitems WHERE invoice_id = 'rf3'").one().s)
+    expect(link).toBe(cod.slug)
+  })
+
   it("daily pending rescan reaches an old pending invoice behind > 250 newer cleared rows (Sol delta C-3)", { timeout: 40_000 }, async () => {
     const t = await checkoutGerai("financelapar")
     const { cod } = await issuedPair(t)

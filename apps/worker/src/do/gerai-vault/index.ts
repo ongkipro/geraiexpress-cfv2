@@ -619,6 +619,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
       // counter amount, courier and weight can never disagree with what is dispatched.
       const cur = sql.exec<{ dispatch_state: string; counter_payment_status: string }>("SELECT dispatch_state, counter_payment_status FROM shipments WHERE slug = ?", snap.shipment_slug).toArray()[0]
       if (cur && (cur.dispatch_state !== "draft" || cur.counter_payment_status === "paid")) return { ok: false, refused: "SHIPMENT_LOCKED" }
+      // A draft whose amount an API key already reserved (Paket Massal via `/api/v1`) keeps that frozen quote.
+      if (cur && sql.exec("SELECT 1 FROM api_key_spend WHERE slug = ?", snap.shipment_slug).toArray().length) return { ok: false, refused: "SHIPMENT_LOCKED" }
       // A dispatch that already read this draft's quote (awaiting key/pickup) owns it until it journals or gives up.
       if (this.dispatching.has(snap.shipment_slug)) return { ok: false, refused: "SHIPMENT_LOCKED" }
       sql.exec(`INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`, id, tenantId, ...cols.map((c) => snap[c] as SqlStorageValue))
@@ -935,7 +937,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
       for (const sib of siblings) {
         const it = sib.mengantar_order_code ? await client.getOrder({ orderId: sib.mengantar_order_code }).catch(() => null) : null
         if (it?.cnote_no) siblingItems.push({ slug: sib.slug, item: it })
-        else if (!it) siblingsUnknown = true
+        // Unreadable, or readable without an AWB while the batch is known paid (Mengantar's view may lag): unresolved.
+        else if (!it || item?.cnote_no) siblingsUnknown = true
       }
     }
     // Members already recorded as issued from this batch mean the batch was paid.
@@ -2000,7 +2003,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
       const r = await this.dispatchShipment(tenantId, row.shipment_slug, row.created_by, Date.now(), platform)
       if (!r.ok && r.error && ["ISSUE_RATE_LIMITED", "KEY_ROTATING", "DISPATCH_IN_PROGRESS"].includes(r.error.code)) return { issued, failed, more: true }
       const error = r.ok ? null : (r.error?.message ?? "Gerai sedang diperbarui.")
-      sql.exec("UPDATE bulk_import_rows SET dispatch_attempted_at = ?, dispatch_error = ? WHERE batch_id = ? AND row_no = ?", Date.now(), error, batchId, row.row_no)
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE bulk_import_rows SET dispatch_attempted_at = ?, dispatch_error = ? WHERE batch_id = ? AND row_no = ?", Date.now(), error, batchId, row.row_no)
+        // A definitive refusal before anything reached Mengantar (still a draft or failed): the row's API-key cap
+        // reservation is given back. Held, in-flight and ambiguous rows keep theirs.
+        const st = sql.exec<{ d: string }>("SELECT dispatch_state AS d FROM shipments WHERE slug = ?", row.shipment_slug).toArray()[0]?.d
+        if (!r.ok && (st === "draft" || st === "failed")) releaseApiSpend(sql, row.shipment_slug)
+      })
       if (r.ok) issued++
       else failed++
     }

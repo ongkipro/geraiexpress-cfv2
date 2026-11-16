@@ -203,7 +203,8 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
     const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? m?.[1] ?? null
     if (subs.length) {
       // Each sub-item stands for its own order: resolve and link it independently (never borrow another's INV).
-      const top = findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) })
+      // A single sub-item may rely on the invoice's own reference or its description token (spec 09 §2.2).
+      const top = findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ?? (m?.[1] ? findSlug(sql, { awb: m[1], order: m[1] }) : null)
       subs.forEach((x, i) => {
         const ref = findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) }) ?? (subs.length === 1 ? top : null)
         if (!ref) {

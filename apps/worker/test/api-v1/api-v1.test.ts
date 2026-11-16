@@ -164,16 +164,17 @@ describe("/api/v1", () => {
     }
     // Two rows × (12.500 due + 10.000 cost) = 45.000: exactly the cap → accepted (publish-price math would refuse).
     const ok = await make(45_000)
+    // Zero balance first: the queued dispatch (consumer may run right after commit) puts the rows on a balance hold.
+    mockSeller.balanceIdr = 0
     const r = await v1(`/bulk-imports/${ok.id}/commit`, ok.k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `c-${ok.id}` } })
     expect(r.status).toBe(200)
     expect((await spent(t.vault, ok.k.id)).n).toBe(45_000)
     // Sol R2 #7: the rows go to a balance hold; paying them with the same key (cap exactly used) is not counted again.
-    mockSeller.balanceIdr = 0
     await t.vault.bulkDispatch(t.tenantId, ok.id, { maskingEnabled: false, dailyQuota: null })
     const rows = ((await (await v1(`/bulk-imports/${ok.id}`, ok.k.token)).json()) as { data: { rows: Array<{ shipment_slug: string }> } }).data.rows
     mockSeller.balanceIdr = 100_000
     const pay = await v1(`/shipments/${rows[0]!.shipment_slug}/pay-unpaid`, ok.k.token, { method: "POST", headers: { "idempotency-key": `p-${ok.id}` } })
-    expect(pay.status).toBe(200)
+    expect(pay.status, await pay.clone().text()).toBe(200)
     expect((await spent(t.vault, ok.k.id)).n).toBe(45_000)
     // One Rupiah short → refused, and nothing stays reserved.
     const short = await make(44_999)
@@ -213,6 +214,34 @@ describe("/api/v1", () => {
     expect((await v1(`/shipments/${b}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `b2-${b}` } })).status).toBe(200)
     const heavy = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ a: number }>("SELECT amount_idr AS a FROM api_key_spend WHERE slug = ?", b).one().a)
     expect(heavy).toBeGreaterThan(22_500)
+  })
+
+  it("a draft whose amount an API key reserved cannot be re-quoted (Sol R3 #2)", async () => {
+    const t = await checkoutGerai("apikunciquote")
+    const d = await v1("/shipments", (await key(t.cookie, ["shipments:draft"])).token, { method: "POST", body: { destination_area_id: DEST, weight_gram: 1000, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
+    const slug = ((await d.json()) as { data: { slug: string } }).data.slug
+    const { frozenFrom, parseQuoteInput, runQuote } = await import("../../src/pricing/quote/service")
+    const q = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 5000, mode: "none" }, "5fc62f5df8f44b34aa4c0d8c"), Date.now())
+    const card = q.cards.find((x) => x.serviceCode === "JT" && x.available)!
+    // As materialized by a bulk commit: the draft holds a reservation of its frozen amount.
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec("INSERT INTO api_key_spend (slug, key_id, wib_day, amount_idr, created_at) VALUES (?, 'k', '2026-11-16', 22500, 1)", slug))
+    expect(await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).toMatchObject({ ok: false, refused: "SHIPMENT_LOCKED" })
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec("DELETE FROM api_key_spend WHERE slug = ?", slug))
+    expect((await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).ok).toBe(true)
+  })
+
+  it("a bulk row refused before reaching Mengantar (expired quote) gives its reservation back (Sol R3 #3)", async () => {
+    const { checkBatch } = await import("../../src/bulk/service")
+    const t = await checkoutGerai("apimassalgagal")
+    const csv = ["Nama Penerima,No HP,Alamat,Kecamatan/Kota,Kode Pos,Isi Paket,Berat (gram)", "Rina Kartika,0857-1234-8821,Jl. Tebet Barat No. 14,Tebet Barat,12810,Pakaian,1000"].join("\r\n")
+    const k = await key(t.cookie, ["shipments:issue"], { dailyIssueCapIdr: 100_000 })
+    const id = ((await (await v1("/bulk-imports", k.token, { method: "POST", body: { sender_id: t.sender, service_code: "JT", csv } })).json()) as { data: { id: string } }).data.id
+    for (let i = 0; i < 3 && (await checkBatch(env, t.tenantId, id)).more; i++);
+    expect((await v1(`/bulk-imports/${id}/commit`, k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `g-${id}` } })).status).toBe(200)
+    expect((await spent(t.vault, k.id)).c).toBe(1)
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec("UPDATE quote_snapshots SET expires_at = 1"))
+    await t.vault.bulkDispatch(t.tenantId, id, { maskingEnabled: false, dailyQuota: null })
+    expect(await spent(t.vault, k.id)).toEqual({ n: 0, c: 0 })
   })
 
   it("OpenAPI 3.1 document is generated from the route table (every route, scopes, Idempotency-Key)", async () => {

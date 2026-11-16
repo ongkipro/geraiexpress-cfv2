@@ -22,6 +22,8 @@ export const mockFaults: {
   readBack?: "timeout"
   /** `GET /order` for these order ids times out (every call while set). */
   readBackFailFor?: Set<string>
+  /** `GET /order` for these order ids shows them still unpaid (a lagging provider view) while set. */
+  readBackLagFor?: Set<string>
   invoices?: "error"
   /** `sellers/list` ignores the externalUserId filter and returns every seller (loose provider filter). */
   listIgnoresFilter?: true
@@ -105,6 +107,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const id = url.searchParams.get("tracking_id") ?? url.searchParams.get("order_id") ?? ""
     if (mockFaults.readBackFailFor?.has(id)) throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
     const created = mockCreated.get(id) ?? [...mockCreated.values()].find((o) => o.cnote_no === id)
+    if (created && mockFaults.readBackLagFor?.has(created.ORDER_ID)) return json(200, { success: true, data: { ...created, isPaid: false, cnote_no: null, status: "UNPAID" } })
     if (created) return json(200, { success: true, data: created })
     const o = mockOrders.get(id)
     return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })

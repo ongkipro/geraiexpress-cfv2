@@ -704,3 +704,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   test); claim creation arms the alarm; the route scan proves each handler's exact guard precedes it; refund
   sub-items link independently; mixed null return amounts fall back to the invoice amount once.
 - Evidence: each fix's test proven red by a mutation; `pnpm check` green (unit 166, Workers 371).
+
+## 2026-11-16 — Sol delta round 3 and its fixes
+
+- Sol round 3 over `3bf169a..d50c664`: REQUEST_CHANGES (3 P1, 2 P2); round-2 items 2–12 verified FIXED.
+- Fixed: lagging-but-readable siblings keep a paid batch read-back-only; reserved bulk drafts cannot be re-quoted;
+  bulk rows refused before the journal release their reservation; control 0017 fails closed on live spend; single
+  sub-item refunds keep the description fallback. Each with a mutation-proven test.

@@ -57,3 +57,13 @@ fixed tree recorded in `BUILD-LOG.md`.
 
 Control `0015_api_key_spend_items` is superseded by `0017_retire_api_key_spend` (both forward-only). Evidence:
 `pnpm check` green (unit 166, Workers 371).
+
+## Round 3 (Sol, `3bf169a..d50c664`): REQUEST_CHANGES — 3 P1, 2 P2; R2 items 2–12 FIXED, R2-1 PARTIAL; all fixed
+
+| # | Sev | Finding | Fix | Test (mutation red) |
+|---|---|---|---|---|
+| R3-1 | P1 | Paid batch, sibling readable WITHOUT an AWB (lagging view) cleared the fence | with the batch known paid, a sibling without an AWB keeps the attempt `unknown` | `dispatch.test.ts` (`readBackLagFor`) |
+| R3-2 | P1 | A reserved bulk draft could be re-quoted (increase uncharged) | `freezeQuote` refuses a draft holding an API-key reservation | `api-v1.test.ts` |
+| R3-3 | P2 | Bulk rows refused before the journal kept their reservation | released in the same transaction that records the row's definitive pre-journal failure | `api-v1.test.ts` (expired quote) |
+| R3-4 | P1 | 0017 dropped populated D1 counters | 0017 aborts on any outstanding reservation or today's spend (no environment has written them yet) | `migrations/control-retire.test.ts` |
+| R3-5 | P2 | Refund with one amount-only sub-item lost the description fallback | a single sub-item may use the invoice's own reference or description token | `finance.test.ts` |

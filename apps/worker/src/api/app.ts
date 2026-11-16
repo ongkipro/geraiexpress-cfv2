@@ -327,7 +327,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const slug = qr ? { ok: true as const, value: qr } : await vault.allocateSlug(m.tenantId, "draft")
     if (!slug.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const frozen = await vault.freezeQuote(m.tenantId, frozenFrom(slug.value, q, card))
-    if (!frozen.ok && frozen.refused === "SHIPMENT_LOCKED") throw new AppError(409, "SHIPMENT_LOCKED", "Kiriman ini sudah dibayar atau diterbitkan. Buka kiriman untuk melanjutkan.")
+    if (!frozen.ok && frozen.refused === "SHIPMENT_LOCKED") throw new AppError(409, "SHIPMENT_LOCKED", "Kiriman ini sudah dibayar, diterbitkan, atau sedang diproses. Buka kiriman untuk melanjutkan.")
     if (!frozen.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const view = m.role === "gerai_admin" ? ownerCard(card) : cashierCard(card)
     return ok(projectFor(m.role, { slug: slug.value, quoteId: frozen.value, card: view, expiresAt: q.expiresAt }), 201)
