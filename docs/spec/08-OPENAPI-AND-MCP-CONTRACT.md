@@ -88,6 +88,14 @@ Exposes 4 strictly public, tenant-scoped tools: `get_gerai_outlet_info`, `quote_
 
 ---
 
+> **Implementation note (TASK-504, 2026-11-16):** both servers are stateless Streamable HTTP (POST JSON-RPC → JSON
+> reply; GET 405; protocol 2025-06-18 / 2025-03-26 / 2024-11-05) in `apps/worker/src/mcp/`. Outlet tools are adapters
+> over the `/api/v1` route table (`invoke`), so validation, scopes, Idempotency-Key, the daily Rupiah cap and the
+> Kasir projection are shared with REST; `tools/list` shows only the key's scopes; supporting REST twins added:
+> `GET /contacts/recipient-risk`, `GET /exceptions`, `GET /returns`, `GET /finance/analytics`,
+> `POST /contacts/{senders,recipients}/{id}`. The public server adds a fifth read-only tool, `search_areas`, because
+> quoting needs an area id; drafts are capped 5/h per IP and 50/WIB day per gerai, every call 30/min per IP.
+
 ## 5. Prompt-Injection & Audit Defenses
 - Untrusted parcel/address strings returned to MCP clients are structured JSON fields; tokens lacking `finance:read` or `shipments:issue` are rejected at the Hono middleware layer regardless of LLM prompt instructions.
 - Every API/MCP write logs `actor_type` (`api_key` | `mcp_client`) and `api_key_id` in the outlet's audit trail.

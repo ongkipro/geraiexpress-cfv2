@@ -17,6 +17,8 @@ import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
 import { handleMinisite } from "./minisite"
 import { handleBrand } from "./brand"
 import { handleApiV1 } from "./api-v1"
+import { handleOutletMcp } from "./mcp/outlet"
+import { handlePublicMcp } from "./mcp/public"
 import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -61,7 +63,8 @@ export default {
     const ctx = c.ctx
     const path = url.pathname
     if (ctx.kind === "tenant") {
-      // Mini-site (TASK-501): API families are foreign on tenant hosts (ADR-0002).
+      // Mini-site (TASK-501): API families are foreign on tenant hosts (ADR-0002) — except the public MCP (TASK-504).
+      if (path === "/mcp") return handlePublicMcp(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
       if (isApiFamily(path)) return notFoundHtml()
       return handleMinisite(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
     }
@@ -69,8 +72,9 @@ export default {
       case "GERAI_WORKSPACE":
         if (path.startsWith("/api/app/")) return APP_API.fetch(request, env, exec)
         if (path === "/internal/dev/preview") return handleDevPreview(request, env, "app")
-        // Partner API (TASK-503): Bearer only; `/mcp` arrives with TASK-504; every other API family is foreign here.
+        // Partner API (TASK-503) and outlet MCP (TASK-504): Bearer only; every other API family is foreign here.
         if (path === "/api/v1" || path.startsWith("/api/v1/")) return handleApiV1(request, env, exec)
+        if (path === "/mcp") return handleOutletMcp(request, env, exec)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "app")
       case "PLATFORM_OWNER":

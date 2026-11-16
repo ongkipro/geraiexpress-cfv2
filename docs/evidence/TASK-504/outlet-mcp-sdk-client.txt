@@ -1,0 +1,10 @@
+server: {"name":"geraiexpress-outlet","title":"GeraiExpress — sinarjaya","version":"1.0.0"} protocol ok
+- search_subdistrict_areas {"title":"Cari kecamatan","readOnlyHint":true,"openWorldHint":false}
+- compare_courier_rates {"title":"Bandingkan ongkir","readOnlyHint":true,"openWorldHint":true}
+- check_cod_recipient_risk {"title":"Cek riwayat COD penerima","readOnlyHint":true,"openWorldHint":false}
+- create_shipment_inv_draft {"title":"Buat draf INV","readOnlyHint":false,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}
+- get_shipment_by_inv_or_awb {"title":"Lihat kiriman","readOnlyHint":true,"openWorldHint":false}
+- list_attention_shipments {"title":"Kiriman perlu perhatian","readOnlyHint":true,"openWorldHint":false}
+- list_pending_returns_at_gerai {"title":"Retur di gerai","readOnlyHint":true,"openWorldHint":false}
+- get_gerai_financial_analytics {"title":"Analitik keuangan gerai","readOnlyHint":true,"openWorldHint":false}
+call search_subdistrict_areas isError=false {"items":[{"id":"5fc64714f8f44b34aa4cdd60","label":"Tebet Barat, Tebet, Jakarta Selatan, DKI Jakarta","postalCode":"12810"}]}

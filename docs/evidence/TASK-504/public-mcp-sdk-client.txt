@@ -1,0 +1,7 @@
+server: {"name":"geraiexpress-gerai","title":"Gerai sinarjaya","version":"1.0.0"} protocol ok
+- get_gerai_outlet_info {"title":"Info gerai","readOnlyHint":true,"openWorldHint":false}
+- search_areas {"title":"Cari kecamatan","readOnlyHint":true,"openWorldHint":false}
+- quote_public_shipping_rates {"title":"Cek ongkir","readOnlyHint":true,"openWorldHint":true}
+- create_public_prebooking_inv {"title":"Buat kode QR kiriman","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false}
+- track_public_shipment_privacy_safe {"title":"Lacak kiriman","readOnlyHint":true,"openWorldHint":false}
+call quote_public_shipping_rates isError=false {"weight_gram":1000,"rates":[{"service_code":"Sap","courier":"SAP Express","service":"SAP Express","eta":"2 - 3 hari","price_idr":11000},{"service_code":"lion","courier":"Lion Parcel","service":"Lion Parcel","eta":"2 - 3 hari","price_idr":11200},{"service_code":"iDexpress","courier":"iDexpress","ser

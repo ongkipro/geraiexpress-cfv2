@@ -37,6 +37,8 @@ describe("/lacak isolation", () => {
       const page = await res.text()
       for (const pii of ["085712348821", "081234567890", "Rina", "Kartika", "Ibu Siti", "Jl. Tebet", "150.000", "152.000", "Pakaian", "pod", "photo"]) expect(page, `${status}:${pii}`).not.toContain(pii)
     }
-    for (const path of ["/api/app/workspace", "/api/owner/overview", "/internal/ops/do-migrate", "/mcp", "/webhooks/mengantar/x"]) expect((await get(`${b.base}${path}`, b.cookie)).status, path).toBe(404)
+    for (const path of ["/api/app/workspace", "/api/owner/overview", "/internal/ops/do-migrate", "/api/v1/shipments", "/webhooks/mengantar/x"]) expect((await get(`${b.base}${path}`, b.cookie)).status, path).toBe(404)
+    // `/mcp` on a tenant host is the public mini-site MCP (TASK-504): POST-only, no stream.
+    expect((await get(`${b.base}/mcp`, b.cookie)).status).toBe(405)
   })
 })

@@ -11,9 +11,12 @@ import { vaultFor } from "../do/gerai-vault/stub"
 import { escposBytes, labelsPdf, rollLines } from "@gx/thermal-print"
 import { platformOf, enqueue } from "../bulk/service"
 import { rowsFromCsv, validateRow } from "@gx/domain/bulk"
+import { periodFromParams, previousOf, resolvePreset } from "@gx/domain/period"
 import { authenticate, releaseDailySpend, reserveDailySpend, type ApiKeyPrincipal, type Scope } from "./keys"
 
-type Ctx = { env: Env; request: Request; key: ApiKeyPrincipal; params: Record<string, string>; query: URLSearchParams; body: unknown; exec: ExecutionContext }
+export type { Route }
+
+type Ctx = { env: Env; key: ApiKeyPrincipal; actor: string; params: Record<string, string>; query: URLSearchParams; body: unknown; exec: ExecutionContext }
 type Handler = (c: Ctx) => Promise<Response>
 interface Route {
   method: "GET" | "POST"
@@ -29,7 +32,6 @@ interface Route {
 
 const slug = z.string().regex(/^[23456789abcdefghjkmnpqrstvwxyz]{7}$/).describe("INV slug, e.g. 8k4m2p7")
 const AREA = z.string().regex(/^[0-9a-f]{24}$/).describe("Mengantar area id (from GET /areas)")
-const actor = (k: ApiKeyPrincipal) => `apikey:${k.keyId}`
 // A key's response is projected like a Kasir's unless it carries `finance:read` (spec 08 §2).
 const project = <T>(k: ApiKeyPrincipal, v: T) => projectFor(k.scopes.has("finance:read") ? "gerai_admin" : "cashier", v)
 const vaultErr = (r: { refused?: string; error?: { status: number; code: string; message: string; fields?: Record<string, string> } }): never => {
@@ -130,7 +132,7 @@ export const ROUTES: Route[] = [
     scope: "tracking:read",
     summary: "Detail kiriman",
     handler: async (c) => {
-      const r = await vaultFor(c.env, c.key.tenantId).shipmentDetail(c.key.tenantId, slug.parse(c.params.slug), actor(c.key))
+      const r = await vaultFor(c.env, c.key.tenantId).shipmentDetail(c.key.tenantId, slug.parse(c.params.slug), c.actor)
       if (!r.ok) return vaultErr(r)
       if (!r.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
       const v = r.value
@@ -146,14 +148,14 @@ export const ROUTES: Route[] = [
     handler: async (c) => {
       const s = slug.parse(c.params.slug)
       const vault = vaultFor(c.env, c.key.tenantId)
-      const d = await vault.shipmentDetail(c.key.tenantId, s, actor(c.key))
+      const d = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
       if (!d.ok || !d.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
       const amount = Number(d.value.shipment.counter_due_idr ?? 0) + Number(d.value.quote?.effective_gerai_cost_idr ?? 0)
       const already = ["issued", "provider_unpaid_hold"].includes(String(d.value.shipment.dispatch_state))
       if (!already && !(await reserveDailySpend(c.env, c.key.keyId, c.key.dailyIssueCapIdr, amount, Date.now()))) {
         throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini sudah tercapai.")
       }
-      const r = await vault.dispatchShipment(c.key.tenantId, s, actor(c.key), Date.now(), await platformOf(c.env, c.key.tenantId))
+      const r = await vault.dispatchShipment(c.key.tenantId, s, c.actor, Date.now(), await platformOf(c.env, c.key.tenantId))
       if (!r.ok) {
         if (!already) await releaseDailySpend(c.env, c.key.keyId, amount, Date.now())
         return vaultErr(r)
@@ -168,7 +170,7 @@ export const ROUTES: Route[] = [
     summary: "Bayar kiriman yang menunggu saldo Mengantar",
     idempotent: true,
     handler: async (c) => {
-      const r = await vaultFor(c.env, c.key.tenantId).payUnpaid(c.key.tenantId, slug.parse(c.params.slug), actor(c.key))
+      const r = await vaultFor(c.env, c.key.tenantId).payUnpaid(c.key.tenantId, slug.parse(c.params.slug), c.actor)
       if (!r.ok) return vaultErr(r)
       return ok(r.value)
     },
@@ -216,7 +218,7 @@ export const ROUTES: Route[] = [
           return { raw: Object.fromEntries(Object.entries(x).map(([k, val]) => [k, String(val)])), valid: v.ok ? v.row : null, errors: v.ok ? [] : v.errors }
         })
       } else throw new AppError(422, "NO_ROWS", "Kirim `csv` atau `rows`.")
-      const r = await vaultFor(c.env, c.key.tenantId).bulkCreate(c.key.tenantId, { senderId: b.sender_id, source: b.csv ? "csv" : "manual", fileName: null, maskPreset: "standar_gerai", codFeeMode: b.cod_fee_mode, serviceCode: b.service_code, actorId: actor(c.key) }, rows)
+      const r = await vaultFor(c.env, c.key.tenantId).bulkCreate(c.key.tenantId, { senderId: b.sender_id, source: b.csv ? "csv" : "manual", fileName: null, maskPreset: "standar_gerai", codFeeMode: b.cod_fee_mode, serviceCode: b.service_code, actorId: c.actor }, rows)
       if (!r.ok) return vaultErr(r)
       c.exec.waitUntil(enqueue(c.env, { kind: "check", tenant_id: c.key.tenantId, batch_id: r.value.id }))
       return ok({ id: r.value.id }, 201)
@@ -243,7 +245,7 @@ export const ROUTES: Route[] = [
     body: z.object({ prohibited_ack: z.literal(true).describe("Konfirmasi isi paket bukan barang terlarang") }),
     handler: async (c) => {
       const id = z.string().uuid().parse(c.params.id)
-      const r = await vaultFor(c.env, c.key.tenantId).bulkMaterialize(c.key.tenantId, id, actor(c.key), true)
+      const r = await vaultFor(c.env, c.key.tenantId).bulkMaterialize(c.key.tenantId, id, c.actor, true)
       if (!r.ok) return vaultErr(r)
       c.exec.waitUntil(enqueue(c.env, { kind: "dispatch", tenant_id: c.key.tenantId, batch_id: id }))
       return ok(r.value)
@@ -289,6 +291,84 @@ export const ROUTES: Route[] = [
     },
   },
   {
+    method: "POST",
+    path: "/contacts/senders/{id}",
+    scope: "contacts:write",
+    summary: "Ubah pengirim",
+    description: "Changing the phone clears `wa_verified_*`.",
+    body: ContactBody.extend({ store_name: z.string().max(60).optional() }),
+    handler: async (c) => {
+      const b = c.body as z.infer<typeof ContactBody> & { store_name?: string }
+      return contacts(c, { op: "update_sender", id: z.string().uuid().parse(c.params.id), input: { senderKind: b.store_name ? "reseller_dropship" : "walk_in", name: b.name, phone: b.phone, street: b.street, areaId: b.area_id, areaLabel: b.area_label, postalCode: b.postal_code, brandName: b.store_name } })
+    },
+  },
+  {
+    method: "POST",
+    path: "/contacts/recipients/{id}",
+    scope: "contacts:write",
+    summary: "Ubah penerima",
+    body: ContactBody.extend({ street: z.string().min(5).max(200), area_id: AREA }),
+    handler: async (c) => {
+      const b = c.body as z.infer<typeof ContactBody>
+      return contacts(c, { op: "update_recipient", id: z.string().uuid().parse(c.params.id), input: { name: b.name, phone: b.phone, street: b.street, areaId: b.area_id, areaLabel: b.area_label, postalCode: b.postal_code } })
+    },
+  },
+  {
+    method: "GET",
+    path: "/contacts/recipient-risk",
+    scope: "tracking:read",
+    summary: "Riwayat COD penerima di gerai ini (badge risiko)",
+    query: z.object({ phone: z.string().min(6).max(20) }),
+    handler: async (c) => {
+      const r = await vaultFor(c.env, c.key.tenantId).contacts(c.key.tenantId, { op: "badge", phone: c.query.get("phone") ?? "" }, c.actor)
+      if (!r.ok) return vaultErr(r)
+      if (r.value.kind !== "badge") throw new AppError(422, "INVALID_PHONE", "Nomor HP tidak valid.")
+      const b = r.value.badge
+      return ok({ badge: b.badge, delivered_count: b.delivered, rts_count: b.rts, rts_bps: b.rtsBps })
+    },
+  },
+  {
+    method: "GET",
+    path: "/exceptions",
+    scope: "tracking:read",
+    summary: "Kiriman yang perlu perhatian (tidak bergerak > 48 jam, gagal antar, selisih berat, bisa klaim, status bertentangan)",
+    query: z.object({ bucket: z.enum(["tidak_bergerak", "gagal_antar", "selisih_berat", "bisa_klaim", "bertentangan"]).optional() }),
+    handler: async (c) => {
+      const bucket = (c.query.get("bucket") ?? "tidak_bergerak") as "tidak_bergerak"
+      const r = await vaultFor(c.env, c.key.tenantId).exceptionsOp(c.key.tenantId, { userId: c.actor, role: "cashier" }, { op: "list", bucket })
+      if (!r.ok) return vaultErr(r)
+      if (r.value.kind !== "list") return vaultErr({})
+      return ok(project(c.key, { bucket, counts: r.value.counts, items: r.value.rows.map((x) => ({ slug: x.slug, awb: x.awb, courier: x.courier, status: x.status, provider_status: x.provider_status, last_scan_at: x.last_scan_at, claim_kind: x.claim_kind, deadline_at: x.deadline_at, claim_status: x.claim?.status ?? null })) }))
+    },
+  },
+  {
+    method: "GET",
+    path: "/returns",
+    scope: "tracking:read",
+    summary: "Meja Retur: paket retur di gerai, sudah diambil (7 hari), dan dalam perjalanan kembali",
+    handler: async (c) => {
+      const r = await vaultFor(c.env, c.key.tenantId).returnsOp(c.key.tenantId, { userId: c.actor, role: "cashier" }, { op: "desk" })
+      if (!r.ok) return vaultErr(r)
+      if (r.value.kind !== "desk") return vaultErr({})
+      const row = (x: { slug: string; awb_number: string | null; courier_code: string; status: string; condition?: string | null; intake_at?: number | null; storage_deadline_at?: number | null; handback_at?: number | null }) => ({ slug: x.slug, awb: x.awb_number, courier: x.courier_code, status: x.status, condition: x.condition ?? null, intake_at: x.intake_at ?? null, storage_deadline_at: x.storage_deadline_at ?? null, handback_at: x.handback_at ?? null })
+      return ok({ at_gerai: r.value.open.map(row), returned_7d: r.value.returned.map(row), incoming: r.value.incoming.map(row) })
+    },
+  },
+  {
+    method: "GET",
+    path: "/finance/analytics",
+    scope: "finance:read",
+    summary: "Analitik gerai: kiriman, uang loket, laba kas, COD, retur per ekspedisi",
+    query: z.object({ periode: z.enum(["hari-ini", "kemarin", "7d", "30d", "bulan-ini", "bulan-lalu", "90d"]).optional() }),
+    handler: async (c) => {
+      const t = Date.now()
+      const period = periodFromParams({ periode: c.query.get("periode") ?? "7d" }, t)
+      const r = await vaultFor(c.env, c.key.tenantId).dashboard(c.key.tenantId, { role: "gerai_admin", userId: c.actor, period, previous: previousOf(period), today: resolvePreset("today", t) })
+      if (!r.ok) return vaultErr(r)
+      return ok({ period, ...r.value.data })
+    },
+  },
+  {
     method: "GET",
     path: "/finance/summary",
     scope: "finance:read",
@@ -313,7 +393,7 @@ export const ROUTES: Route[] = [
 ]
 
 async function contacts(c: Ctx, op: Parameters<ReturnType<typeof vaultFor>["contacts"]>[1], status = 200): Promise<Response> {
-  const r = await vaultFor(c.env, c.key.tenantId).contacts(c.key.tenantId, op, actor(c.key))
+  const r = await vaultFor(c.env, c.key.tenantId).contacts(c.key.tenantId, op, c.actor)
   if (!r.ok) return vaultErr(r)
   const v = r.value
   if (v.kind === "errors") throw new AppError(422, "INVALID_CONTACT", v.errors[0]!.message, Object.fromEntries(v.errors.map((e) => [e.field, e.message])))
@@ -322,7 +402,7 @@ async function contacts(c: Ctx, op: Parameters<ReturnType<typeof vaultFor>["cont
 
 async function labels(c: Ctx, slugs: string[]): Promise<Response> {
   const b = c.body as z.infer<typeof LabelBody>
-  const r = await vaultFor(c.env, c.key.tenantId).preparePrint(c.key.tenantId, { slugs, reason: b.reprint_reason, actorId: actor(c.key), trackingHost: `${c.key.tenantSlug}.${c.env.TENANT_ZONE}`, record: true })
+  const r = await vaultFor(c.env, c.key.tenantId).preparePrint(c.key.tenantId, { slugs, reason: b.reprint_reason, actorId: c.actor, trackingHost: `${c.key.tenantSlug}.${c.env.TENANT_ZONE}`, record: true })
   if (!r.ok) return vaultErr(r)
   if (r.value.items.length === 0) {
     const first = r.value.refused[0]
@@ -341,47 +421,68 @@ const match = (pattern: string, path: string): Record<string, string> | null => 
 
 const issueKey = (h: string | null) => (h && /^[A-Za-z0-9_-]{8,64}$/.test(h) ? h : null)
 
-export async function handleApiV1(request: Request, env: Env, exec: ExecutionContext): Promise<Response> {
-  const url = new URL(request.url)
-  const path = url.pathname.slice("/api/v1".length) || "/"
+/**
+ * Runs one route for an authenticated key: scope check, Idempotency-Key, Zod validation, handler. Shared by the HTTP
+ * surface and the MCP tools (TASK-504), so a tool can never skip a check its REST twin enforces.
+ */
+export async function invoke(
+  env: Env,
+  exec: ExecutionContext,
+  key: ApiKeyPrincipal,
+  actor: string,
+  r: Route,
+  input: { params?: Record<string, string>; query?: Record<string, string>; body?: unknown; idempotencyKey?: string | null },
+): Promise<Response> {
   try {
-    if (path === "/openapi.json" && request.method === "GET") return Response.json(openApi(`https://${url.host}`), { headers: { "cache-control": "public, max-age=300" } })
-    if (path === "/docs" && request.method === "GET") return docsPage()
-    for (const r of ROUTES) {
-      if (r.method !== request.method) continue
-      const params = match(r.path, path)
-      if (!params) continue
-      const key = await authenticate(env, request, Date.now())
-      if (!key) return fail(401, "UNAUTHENTICATED", "Kunci API tidak valid atau sudah dicabut.", {}, { "www-authenticate": 'Bearer realm="geraiexpress"' })
-      if (!key.scopes.has(r.scope)) return fail(403, "SCOPE_REQUIRED", `Kunci API ini tidak punya izin ${r.scope}.`)
-      const ip = request.headers.get("cf-connecting-ip") ?? "x"
-      const { success } = env.RATE_LIMITER ? await env.RATE_LIMITER.limit({ key: `v1:${key.keyId}:${ip}` }) : { success: true }
-      if (!success) return fail(429, "RATE_LIMITED", "Terlalu banyak permintaan. Coba lagi sebentar lagi.")
-      if (r.idempotent && !issueKey(request.headers.get("idempotency-key"))) return fail(400, "IDEMPOTENCY_KEY_REQUIRED", "Header Idempotency-Key wajib untuk aksi ini.")
-      let body: unknown = undefined
-      if (r.body) {
-        let raw: unknown = {}
-        try {
-          raw = await request.json()
-        } catch {
-          raw = {}
-        }
-        const parsed = r.body.safeParse(raw)
-        if (!parsed.success) return fail(422, "INVALID_REQUEST", "Data permintaan tidak valid.", Object.fromEntries(parsed.error.issues.map((i) => [i.path.join(".") || "body", i.message])))
-        body = parsed.data
-      }
-      if (r.query) {
-        const parsed = r.query.safeParse(Object.fromEntries(url.searchParams))
-        if (!parsed.success) return fail(422, "INVALID_REQUEST", "Parameter tidak valid.", Object.fromEntries(parsed.error.issues.map((i) => [i.path.join(".") || "query", i.message])))
-      }
-      return await r.handler({ env, request, key, params, query: url.searchParams, body, exec })
+    if (!key.scopes.has(r.scope)) return fail(403, "SCOPE_REQUIRED", `Kunci API ini tidak punya izin ${r.scope}.`)
+    if (r.idempotent && !issueKey(input.idempotencyKey ?? null)) return fail(400, "IDEMPOTENCY_KEY_REQUIRED", "Header Idempotency-Key wajib untuk aksi ini.")
+    let body: unknown = undefined
+    if (r.body) {
+      const parsed = r.body.safeParse(input.body ?? {})
+      if (!parsed.success) return fail(422, "INVALID_REQUEST", "Data permintaan tidak valid.", Object.fromEntries(parsed.error.issues.map((i) => [i.path.join(".") || "body", i.message])))
+      body = parsed.data
     }
-    return fail(404, "NOT_FOUND", "Alamat API tidak ditemukan.")
+    const query = new URLSearchParams(input.query ?? {})
+    if (r.query) {
+      const parsed = r.query.safeParse(Object.fromEntries(query))
+      if (!parsed.success) return fail(422, "INVALID_REQUEST", "Parameter tidak valid.", Object.fromEntries(parsed.error.issues.map((i) => [i.path.join(".") || "query", i.message])))
+    }
+    return await r.handler({ env, key, actor, params: input.params ?? {}, query, body, exec })
   } catch (err) {
-    if (err instanceof z.ZodError) return fail(404, "NOT_FOUND", "Alamat API tidak ditemukan.")
+    if (err instanceof z.ZodError) return fail(404, "NOT_FOUND", "Data tidak ditemukan.")
     if (!(err instanceof AppError)) console.error("API_V1_ERROR", err instanceof Error ? err.message : String(err))
     return fromError(err)
   }
+}
+
+export const routeOf = (method: Route["method"], path: string) => ROUTES.find((r) => r.method === method && r.path === path)!
+
+/** Bearer key + per-key/IP rate limit; null response means the caller may proceed. */
+export async function gate(env: Env, request: Request): Promise<{ key: ApiKeyPrincipal } | { res: Response }> {
+  const key = await authenticate(env, request, Date.now())
+  if (!key) return { res: fail(401, "UNAUTHENTICATED", "Kunci API tidak valid atau sudah dicabut.", {}, { "www-authenticate": 'Bearer realm="geraiexpress"' }) }
+  const ip = request.headers.get("cf-connecting-ip") ?? "x"
+  const { success } = env.RATE_LIMITER ? await env.RATE_LIMITER.limit({ key: `v1:${key.keyId}:${ip}` }) : { success: true }
+  if (!success) return { res: fail(429, "RATE_LIMITED", "Terlalu banyak permintaan. Coba lagi sebentar lagi.") }
+  return { key }
+}
+
+export async function handleApiV1(request: Request, env: Env, exec: ExecutionContext): Promise<Response> {
+  const url = new URL(request.url)
+  const path = url.pathname.slice("/api/v1".length) || "/"
+  if (path === "/openapi.json" && request.method === "GET") return Response.json(openApi(`https://${url.host}`), { headers: { "cache-control": "public, max-age=300" } })
+  if (path === "/docs" && request.method === "GET") return docsPage()
+  for (const r of ROUTES) {
+    if (r.method !== request.method) continue
+    const params = match(r.path, path)
+    if (!params) continue
+    const g = await gate(env, request)
+    if ("res" in g) return g.res
+    let body: unknown = undefined
+    if (r.body) body = await request.json().catch(() => ({}))
+    return invoke(env, exec, g.key, `apikey:${g.key.keyId}`, r, { params, query: Object.fromEntries(url.searchParams), body, idempotencyKey: request.headers.get("idempotency-key") })
+  }
+  return fail(404, "NOT_FOUND", "Alamat API tidak ditemukan.")
 }
 
 // ---- OpenAPI 3.1 from the same table -------------------------------------------------------------------------------

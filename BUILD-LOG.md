@@ -569,3 +569,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   admin-geometry 0; mutation (scope check disabled) turned the scope-denial test red; `pnpm check` green (unit 158,
   Workers 299).
 - Gaps: `labels.part = stub_only` and `declared_item_value_idr` not implemented (recorded in spec 08).
+
+## 2026-11-16 — TASK-504 MCP servers (M5)
+
+- Shipped: outlet MCP on `app./mcp` (11 tools, Bearer key) and public MCP on `<slug>.gerai.cc/mcp` (5 tools), both
+  stateless Streamable HTTP without an SDK dependency (small JSON-RPC core in `mcp/protocol.ts`).
+- Safety: outlet tools call the `/api/v1` route table through one `invoke`, so no tool can skip a REST check; a key
+  sees only its scopes' tools; `issue_paid_shipment` needs `idempotency_key` and hits the per-key daily cap; results
+  are structured JSON so injected text in names/addresses is returned as data; writes audited as `mcp_client`;
+  public drafts capped per IP and per gerai/day; public tracking initials-only and tenant-bound to the host.
+- Evidence: official `@modelcontextprotocol/sdk` 1.32.2 client (Streamable HTTP transport) connected to both dev
+  servers, listed tools with annotations and called one (`docs/evidence/TASK-504/*.txt`); Workers `test/mcp` (5);
+  mutations red; Redocly still valid after the REST twins; `pnpm check` green (unit 158, Workers 304).
