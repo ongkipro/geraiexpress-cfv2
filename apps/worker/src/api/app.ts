@@ -317,7 +317,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const v = r.value
     // Kasir: no cost/margin/discount; owner sees the frozen cost and estimated margin.
     const shipment = { ...v.shipment, effective_gerai_cost_idr: v.quote?.effective_gerai_cost_idr, estimated_profit_idr: v.quote?.estimated_margin_idr }
-    return ok(projectFor(m.role, { shipment, quote: v.quote, sender: v.sender, recipient: v.recipient, receipts: v.receipts, events: v.events }))
+    return ok(projectFor(m.role, { shipment, quote: v.quote, sender: v.sender, recipient: v.recipient, receipts: v.receipts, events: v.events, preflight: v.preflight }))
   }
   const idemKey = (c: AppCtx) => {
     const k = c.req.header("idempotency-key") ?? ""
@@ -825,10 +825,25 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const list = await vaultFor(c.env, m.tenantId).shipmentList(m.tenantId, { tab: "semua", q: "", fromMs: 0, toMs: Date.now() + 1, courier: null, printed: "semua", cursor: null, limit: 50 })
     if (!list.ok) return vaultErr(list)
-    const { mockInvoices } = await import("../mengantar/mock")
+    const { mockInvoices, mockSeller } = await import("../mengantar/mock")
+    const b = await body(c)
+    // `{ sellerBalance }` sets the mock seller balance (0 → the next Non-COD issue is held); no rows are added.
+    if (typeof b.sellerBalance === "number") {
+      mockSeller.balanceIdr = b.sellerBalance
+      return ok({ sellerBalance: mockSeller.balanceIdr })
+    }
+    // `{ topUp }` adds one cleared top-up row whose running balance continues from this gerai's newest row.
     const key = await vaultFor(c.env, m.tenantId).devMockSellerKey(m.tenantId)
     const seller = key.ok ? key.value : null
     if (!seller) return fail(409, "NOT_CONNECTED", "Gerai belum terhubung ke Mengantar.")
+    if (typeof b.topUp === "number") {
+      const mine = mockInvoices.filter((i) => i._seller === seller)
+      const last = mine.reduce((a, i) => (String(i.createdAt) > String(a?.createdAt ?? "") ? i : a), undefined as Record<string, unknown> | undefined)
+      const bal = Number(last?.balanceAmount ?? 0) + b.topUp
+      mockInvoices.push({ _id: `dev-top-${crypto.randomUUID().slice(0, 8)}`, type: "typeAddBalance", status: "statusCleared", amount: b.topUp, balanceAmount: bal, createdAt: new Date().toISOString(), description: "Top up saldo", _seller: seller })
+      mockSeller.balanceIdr = bal
+      return ok({ balance: bal }, 201)
+    }
     let balance = 500_000
     let t = Date.now() - 3600_000
     const at = () => new Date((t += 60_000)).toISOString()

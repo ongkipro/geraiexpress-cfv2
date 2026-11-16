@@ -13,7 +13,7 @@ import type { Courier, CourierRate, OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
 import { phoneHmac } from "../../admin/monitor"
-import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome } from "./dispatch"
+import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type QuoteRow } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
 import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
@@ -26,6 +26,7 @@ import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, p
 import { exportCsv, listShipments, tabCounts, type ListQuery, type ListRow, type Tab } from "./listing"
 import { applyInvoice, FINAL_STATUSES, settleBalance } from "./finance"
 import { financeView, type FinanceView } from "./finance/view"
+import { balanceSufficient } from "./finance/reserve"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -118,6 +119,8 @@ export interface ShipmentDetail {
   recipient: RecipientRow | null
   receipts: Receipt[]
   events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
+  /** Non-COD issue pre-flight (spec 09 §3.1): Kasir gets the boolean only (projection strips the amounts). */
+  preflight: { balance_sufficient: boolean | null; synced_balance_idr: number | null; estimated_debit_idr: number | null }
 }
 
 export type ShiftView = {
@@ -149,7 +152,14 @@ export type SettingsView = {
   cashierMayPay: boolean
 }
 
-export type FinanceRun = { trigger: string; pages: number; rows: number; newRows: number; linked: number; unlinked: number; balance: number | null; gaps: number; capped: boolean; error: string | null }
+export type FinanceRun = { trigger: string; pages: number; rows: number; newRows: number; linked: number; unlinked: number; balance: number | null; gaps: number; capped: boolean; error: string | null; recovery?: { resolved: number; paid: number; skipped: number } }
+
+function preflightOf(sql: SqlStorage, s: Record<string, SqlStorageValue>, q: QuoteRow | null): ShipmentDetail["preflight"] {
+  if (!q || s.dispatch_state !== "draft" || q.cod_fee_mode !== "none") return { balance_sufficient: null, synced_balance_idr: null, estimated_debit_idr: null }
+  const debit = q.provider_net_shipping_idr + (q.insurance_fee_idr ?? 0)
+  const b = balanceSufficient(sql, debit)
+  return { balance_sufficient: b.sufficient, synced_balance_idr: b.balance, estimated_debit_idr: debit }
+}
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -562,6 +572,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         sender: s.sender_contact_id ? readSender(sql, String(s.sender_contact_id)) : null,
         recipient: s.recipient_contact_id ? readRecipient(sql, String(s.recipient_contact_id)) : null,
         receipts: receiptsFor(sql, slug),
+        preflight: preflightOf(sql, s, q),
         events: sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>("SELECT source, raw_category, mapped_status, event_at FROM shipment_events WHERE slug = ? ORDER BY event_at DESC LIMIT 50", slug).toArray(),
       },
     }
@@ -1025,8 +1036,71 @@ export class GeraiVaultDO extends DurableObject<Env> {
       sql.exec("UPDATE finance_sync_state SET running_since = NULL, last_error = ? WHERE id = 1", result.error)
       sql.exec("UPDATE mengantar_connections SET last_sync_status = 'error'")
     }
+    if (!result.error) result.recovery = await this.recoverUnpaid(tenantId, Date.now())
     await this.armOutbox()
     return result
+  }
+
+  /**
+   * Unpaid recovery (TASK-402, spec 09 §3): after a sync, settle `pay_unpaid` journal rows a crash left `in_flight` /
+   * `unknown` by reading the order back (never re-calling), then — when the synced balance covers it — pay the oldest
+   * held batches once each as the system actor. A batch the balance cannot cover is left for the next top-up.
+   */
+  async recoverUnpaid(tenantId: string, now: number = Date.now()): Promise<{ resolved: number; paid: number; skipped: number }> {
+    const sql = this.ctx.storage.sql
+    const out = { resolved: 0, paid: 0, skipped: 0 }
+    const key = await this.keyForDispatch(tenantId)
+    if (!key.ok) return out
+    const client = publicClient(this.env, key.key)
+    // 1. Crash between call and record: the journal says in_flight/unknown; the order itself says whether it was paid.
+    const stale = sql
+      .exec<{ idempotency_key: string; slug: string }>("SELECT idempotency_key, slug FROM dispatch_journal WHERE op = 'pay_unpaid' AND state IN ('in_flight','unknown') AND updated_at < ?", now - 60_000)
+      .toArray()
+    for (const j of stale) {
+      const s = readShipment(sql, j.slug) as (ShipmentRow & { dispatch_state: string; mengantar_order_code: string | null; mengantar_batch_object_id: string | null }) | null
+      if (!s?.mengantar_order_code) continue
+      let item: OrderItem | null = null
+      try {
+        item = await client.getOrder({ orderId: s.mengantar_order_code })
+      } catch {
+        continue
+      }
+      const at = Date.now()
+      this.ctx.storage.transactionSync(() => {
+        if (item?.cnote_no && s.dispatch_state === "provider_unpaid_hold") {
+          recordOutcome(sql, j.slug, j.idempotency_key, { kind: "issued", item, batchId: s.mengantar_batch_object_id, batchCode: item.batch ?? null }, latestQuote(sql, j.slug)?.cod_fee_idr ?? 0, at)
+          this.audit(tenantId, at, "system", null, "shipment.pay_unpaid_recovered", { slug: j.slug })
+        } else sql.exec("UPDATE dispatch_journal SET state = ?, updated_at = ? WHERE idempotency_key = ?", item?.cnote_no ? "done" : "failed", at, j.idempotency_key)
+      })
+      out.resolved++
+    }
+    // 2. Pay held batches the synced balance can cover (oldest first, one call per batch).
+    const balance = sql.exec<{ b: number | null }>("SELECT synced_balance_idr AS b FROM mengantar_connections LIMIT 1").toArray()[0]?.b ?? null
+    if (balance === null) return out
+    const batches = sql
+      .exec<{ batch: string; slug: string; need: number }>(
+        `SELECT mengantar_batch_object_id AS batch, MIN(slug) AS slug, SUM(COALESCE(gerai_shipping_cost_idr, 0)) AS need FROM shipments
+         WHERE dispatch_state = 'provider_unpaid_hold' AND mengantar_batch_object_id IS NOT NULL
+           AND slug NOT IN (SELECT slug FROM dispatch_journal WHERE op = 'pay_unpaid' AND state IN ('in_flight','unknown'))
+         GROUP BY mengantar_batch_object_id ORDER BY MIN(created_at)`,
+      )
+      .toArray()
+    let left = balance
+    for (const b of batches) {
+      if (b.need > left) {
+        out.skipped++
+        continue
+      }
+      const r = await this.payUnpaid(tenantId, b.slug, "system", Date.now())
+      if (r.ok) {
+        out.paid++
+        left -= b.need
+      } else out.skipped++
+    }
+    if (out.paid) {
+      await this.addNotification(tenantId, { kind: "system", audience: "owner", title: `${out.paid} kiriman yang menunggu saldo sudah terbit resinya`, link: "/kiriman?tab=pickup", dedupeKey: `recovered:${Math.floor(now / 60_000)}` }, now)
+    }
+    return out
   }
 
   private tallyInvoice(r: FinanceRun, o: ReturnType<typeof applyInvoice>): void {

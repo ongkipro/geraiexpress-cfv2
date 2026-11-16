@@ -3,6 +3,7 @@
 // cancelled INVs never count. `Estimasi Laba` and `Laba Kas` are separate numbers, never summed.
 import { bucketOf, bucketsOf, type Period } from "@gx/domain/period"
 import { CASH_PROFIT_SQL } from "../do/gerai-vault/finance/view"
+import { reserveOf } from "../do/gerai-vault/finance/reserve"
 
 const ISSUED = "dispatch_state IN ('issued','provider_unpaid_hold') AND issued_at IS NOT NULL"
 
@@ -68,7 +69,8 @@ export function ownerDashboard(sql: SqlStorage, p: Period, prev: Period, now: nu
     .one()
   const conn = sql.exec<{ synced_balance_idr: number | null; last_invoice_synced_at: number | null }>("SELECT synced_balance_idr, last_invoice_synced_at FROM mengantar_connections LIMIT 1").toArray()[0]
   // Saldo Aman (spec 02 §4): balance minus the return exposure of parcels in return or held.
-  const reserve = sql.exec<{ s: number; c: number }>("SELECT SUM(publish_shipping_idr) AS s, COUNT(*) AS c FROM shipments WHERE status IN ('rts_in_transit','undelivery_hold')").one()
+  const res = reserveOf(sql)
+  const reserve = { s: res.total, c: res.rows.length }
   const balance = conn?.synced_balance_idr ?? null
 
   const buckets = new Map(bucketsOf(p).map((b) => [b, { bucket: b, nonCod: 0, cod: 0 }]))

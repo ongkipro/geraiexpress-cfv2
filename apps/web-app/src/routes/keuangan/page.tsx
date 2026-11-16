@@ -24,13 +24,15 @@ interface Mutation { invoice_id: string; inv_number: string | null; type: string
 interface Profit { slug: string; issued_at: number; cod_fee_mode: string; estimated_margin_idr: number | null; cash_profit_idr: number | null; reconciled: boolean; quote_drift: number }
 interface Discrepancy { id: string; kind: string; invoice_id: string; shipment_slug: string | null; expected_idr: number | null; actual_idr: number | null; detail: string | null; created_at: number }
 interface Shift { id: string; opened_at: number; closed_at: number | null; variance_idr: number | null; expected_cash_idr: number | null; counted_cash_idr: number | null; state: string }
-interface Finance { summary: Summary; mutations: Mutation[]; profits: Profit[]; discrepancies: Discrepancy[]; shifts: Shift[] }
+interface Reserve { slug: string; kind: "retur" | "sengketa"; status: string; amount_idr: number }
+interface Finance { summary: Summary; mutations: Mutation[]; profits: Profit[]; discrepancies: Discrepancy[]; shifts: Shift[]; reserve: Reserve[] }
 
 const TABS = [
   { id: "ringkasan", label: "Ringkasan" },
   { id: "mutasi", label: "Mutasi Sync" },
   { id: "laba", label: "Laba per INV" },
   { id: "kas", label: "Kas & Shift" },
+  { id: "cadangan", label: "Cadangan Retur" },
   { id: "selisih", label: "Selisih Sync" },
 ] as const
 type Tab = (typeof TABS)[number]["id"]
@@ -91,7 +93,7 @@ export function KeuanganPage() {
         <Card label="Kas loket hari ini" value={rp(s.counterToday.tunai + s.counterToday.qris + s.counterToday.transfer)} sub={`Tunai ${rp(s.counterToday.tunai)} · QRIS ${rp(s.counterToday.qris)} · Transfer ${rp(s.counterToday.transfer)}`} />
       </dl>
       {s.unpaidHold.count ? (
-        <p className="mt-4 border-l-4 border-warn py-1 pl-3 text-base font-medium">{s.unpaidHold.count} kiriman ({rp(s.unpaidHold.amount)}) menunggu saldo Mengantar. Top-up saldo, lalu buka INV-nya dan pilih Bayar Batch.</p>
+        <p className="mt-4 border-l-4 border-warn py-1 pl-3 text-base font-medium">{s.unpaidHold.count} kiriman ({rp(s.unpaidHold.amount)}) menunggu saldo Mengantar. Isi saldo di aplikasi Mengantar, lalu tekan Sinkronkan Sekarang — resinya diterbitkan otomatis. <Link to="/kiriman" search={{ tab: "menunggu-saldo" } as never} className="text-primary underline-offset-4 hover:underline">Lihat kiriman</Link></p>
       ) : null}
       <nav aria-label="Bagian keuangan" className="-mx-4 my-6 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
@@ -114,6 +116,7 @@ export function KeuanganPage() {
       {tab === "mutasi" ? <Mutations rows={d.mutations} /> : null}
       {tab === "laba" ? <Profits rows={d.profits} /> : null}
       {tab === "kas" ? <Shifts rows={d.shifts} /> : null}
+      {tab === "cadangan" ? <ReserveList rows={d.reserve} /> : null}
       {tab === "selisih" ? <Discrepancies rows={d.discrepancies} /> : null}
     </div>
   )
@@ -185,6 +188,20 @@ function Discrepancies({ rows }: { rows: Discrepancy[] }) {
         <li key={x.id} className="flex flex-col gap-1 px-4 py-3 text-base">
           <span className="font-medium">{KIND_LABEL[x.kind] ?? x.kind}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
           <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ReserveList({ rows }: { rows: Reserve[] }) {
+  if (!rows.length) return <EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />
+  return (
+    <ul className="divide-y rounded-lg border bg-card">
+      {rows.map((r) => (
+        <li key={`${r.kind}-${r.slug}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
+          <span><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> · {r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan"}</span>
+          <span className="font-medium tabular-nums">{rp(r.amount_idr)}</span>
         </li>
       ))}
     </ul>

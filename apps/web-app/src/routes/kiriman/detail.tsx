@@ -23,6 +23,7 @@ interface Detail {
   sender: Contact | null
   recipient: Contact | null
   receipts: Array<{ id: string; event: string; amount_idr: number; method: string; created_at: number }>
+  preflight?: { balance_sufficient: boolean | null; synced_balance_idr?: number | null; estimated_debit_idr?: number | null }
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -216,6 +217,13 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
               {method === "qris" || method === "transfer" ? <p className="text-base text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
             </>
           )}
+          {d.preflight?.balance_sufficient === false ? (
+            <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base font-medium">
+              {owner && d.preflight.synced_balance_idr != null && d.preflight.estimated_debit_idr != null
+                ? `Saldo Mengantar tercatat ${rp(d.preflight.synced_balance_idr)}, estimasi debet ${rp(d.preflight.estimated_debit_idr)}. Kiriman akan disimpan sebagai Menunggu Saldo sampai saldo diisi.`
+                : "Saldo pengiriman gerai belum mencukupi untuk menerbitkan resi sekarang. Kiriman akan disimpan sebagai Menunggu Saldo — silakan beri tahu pemilik gerai."}
+            </p>
+          ) : null}
           {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
           {busy ? <p role="status" className="text-base text-warn">Status penerbitan sedang dipastikan ke Mengantar. Jangan buat ulang kiriman ini.</p> : null}
           <Button className="hidden md:inline-flex" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>

@@ -50,6 +50,7 @@ export const OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "reserve_idr",
   // realised profit (spec 02 §3.5)
   "cash_profit_idr",
+  "estimated_debit_idr",
 ])
 
 /** Owner: unchanged. Cashier: a deep copy without owner-only keys. Never mutates the input. */

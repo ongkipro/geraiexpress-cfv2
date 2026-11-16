@@ -469,3 +469,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   manual 429 within 30 s, timer at +60 s after dispatch runs a sync, pending rescan clears a top-up, cron fan-out,
   Kasir 403. Mutation (add instead of set on re-read) red. One `pnpm check` run hit 5 s test timeouts while another
   project's suite loaded the machine; the re-run passed (153 unit, 268 Workers).
+
+## 2026-11-16 — TASK-402 Unpaid recovery and Saldo Aman (M4)
+
+- Shipped: finance-triggered `payUnpaid` after a top-up sync with crash-safe read-back, the Saldo Aman reserve
+  (return + dispute exposure, linked to INVs), and the role-safe Non-COD balance pre-flight.
+- Evidence: held INV → top-up row → sync pays once and issues the AWB, owner notified, second sync does not call;
+  balance below the debit → skipped with zero calls; journal `in_flight` with Mengantar already paid → read-back records
+  the AWB with zero `pay-unpaid` calls and the journal `done`; journal `unknown` with Mengantar unpaid → `failed`, then
+  paid once; reserve = P + N + 2.000 adjustment, released to 2.000 when the return debit syncs; Kasir sees
+  `{ balance_sufficient: false }` only and 403 on `/finance`. e2e held → top-up → `Sinkronkan Sekarang` → AWB.
+  Two mutations red. Independent R4 review deferred to the final pass (ledger BLOCKED, not approved).
