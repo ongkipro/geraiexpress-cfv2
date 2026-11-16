@@ -641,3 +641,8 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   production, confirming each drill message arrives).
 - Test fix: `dispatch.test.ts` rate-limit case seeded the current wall-clock minute and failed when the run crossed a
   minute boundary (seen once under machine load); it now starts with ≥ 10 s left and re-seeds the cancel window.
+
+## 2026-11-16 — M6 code complete: `docs/SYSTEM-MAP.md` refreshed
+
+- Real counts, routes, crons, ops endpoints, backups, operator checks and runbooks updated for the end of M6 code.
+  Next: the end-of-build reviewer-carbon pass by milestone/domain diff (goal runbook §2).
