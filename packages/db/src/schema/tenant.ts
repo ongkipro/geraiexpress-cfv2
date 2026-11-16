@@ -603,6 +603,19 @@ export const financeSyncState = sqliteTable("finance_sync_state", {
   rescanRange: text("rescan_range"),
 })
 
+// Per-API-key daily Rupiah cap ledger (spec 08 §2), one row per INV, committed with the dispatch journal.
+export const apiKeySpend = sqliteTable(
+  "api_key_spend",
+  {
+    slug: text("slug").primaryKey(),
+    keyId: text("key_id").notNull(),
+    wibDay: text("wib_day").notNull(),
+    amountIdr: integer("amount_idr").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("api_key_spend_key_day").on(t.keyId, t.wibDay)],
+)
+
 // TASK-403 pickup manifests (Surat Jalan).
 export const pickupBatches = sqliteTable(
   "pickup_batches",

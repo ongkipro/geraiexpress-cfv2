@@ -53,6 +53,22 @@ describe("GeraiVaultDO storage foundation (TASK-103, ADR-0006)", () => {
     expect(await a.migrate("tenant-idem", 99)).toEqual({ ok: false, refused: "UNKNOWN_TARGET" })
   })
 
+  it("an object already at v21 (shipped 0021) upgrades to the current version with the rescan columns and cap ledger (Sol R2 #4)", async () => {
+    const stub = vault("tenant-v21")
+    expect(await stub.migrate("tenant-v21", 21)).toMatchObject({ ok: true, to: 21 })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      const cols = s.storage.sql.exec<{ name: string }>("PRAGMA table_info(finance_sync_state)").toArray().map((c) => c.name)
+      expect(cols).toContain("backfill_cursor")
+      expect(cols).not.toContain("rescan_cursor")
+    })
+    expect(await stub.migrate("tenant-v21")).toMatchObject({ ok: true, to: TENANT_SCHEMA_VERSION })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      const cols = s.storage.sql.exec<{ name: string }>("PRAGMA table_info(finance_sync_state)").toArray().map((c) => c.name)
+      expect(cols).toEqual(expect.arrayContaining(["rescan_cursor", "rescan_range"]))
+      expect(tables(s)).toContain("api_key_spend")
+    })
+  })
+
   it("N−1 → N upgrade keeps data", async () => {
     const stub = vault("tenant-upgrade")
     await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {

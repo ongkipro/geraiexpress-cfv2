@@ -263,6 +263,29 @@ describe("pay-unpaid batch fence (Sol delta B-1 / C-1)", () => {
     expect((await detail(t.cookie, a)).shipment).toMatchObject({ dispatch_state: "issued" })
   })
 
+  it("paid through A with B unreadable: a later call through B never clears the fence or pays again (Sol R2 #1)", async () => {
+    const { t, a, b, batch } = await twoHeldInOneBatch("pagarterbayar")
+    mockSeller.balanceIdr = 100_000
+    mockFaults.readBackFailFor = new Set([batch.codeB])
+    const calls = mockSeller.payUnpaidCalls
+    expect((await post(`/shipments/${a}/pay-unpaid`, t.cookie, {})).status).toBe(200)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+    // B is still held locally. Even if Mengantar briefly shows B unpaid (lagging view) while A is issued from the same
+    // batch, a call through B stays read-back-only and never pays the batch again.
+    mockFaults.readBackFailFor = undefined
+    const ob = mockCreated.get(batch.codeB)!
+    const saved = { isPaid: ob.isPaid, cnote_no: ob.cnote_no, status: ob.status }
+    Object.assign(ob, { isPaid: false, cnote_no: null, status: "UNPAID" })
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(409)
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(409)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+    Object.assign(ob, saved)
+    // Once B reads back, it is recorded issued without another payment.
+    mockFaults.readBackFailFor = undefined
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(200)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+  })
+
   it("two concurrent pay-unpaid calls for sibling INVs pay the batch once", async () => {
     const { t, a, b } = await twoHeldInOneBatch("pagarserentak")
     mockSeller.balanceIdr = 100_000

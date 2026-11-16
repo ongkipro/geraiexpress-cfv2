@@ -693,3 +693,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   rollback by request id (control `0016_hostname_request`); restore success/refusal over HTTP.
 - Evidence: each fix has a regression test proven red by a mutation; `pnpm check` green (unit 166, Workers 366);
   e2e `quote` + `masking` green at 390/768/1280.
+
+## 2026-11-16 — Sol delta round 2 and its fixes
+
+- Sol round 2 over `bd009ce..3bf169a`: REQUEST_CHANGES (5 P1, 7 P2), `docs/review/final-2026-11-16/sol-delta/R2-sol.md`.
+- Fixed all: the API-key daily cap ledger moved into each tenant object (`api_key_spend`, tenant `0022`, control
+  `0017` retires the D1 counters) so reservations commit with the dispatch / pay-unpaid journal or the bulk
+  materialization and are released only where non-issue is established; the paid-batch read-back fence holds until
+  the whole batch reads back; migration 0021 restored and the rescan columns moved to a new 0022 (v21 → v22 upgrade
+  test); claim creation arms the alarm; the route scan proves each handler's exact guard precedes it; refund
+  sub-items link independently; mixed null return amounts fall back to the invoice amount once.
+- Evidence: each fix's test proven red by a mutation; `pnpm check` green (unit 166, Workers 371).

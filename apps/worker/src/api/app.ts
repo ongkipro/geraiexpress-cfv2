@@ -9,7 +9,7 @@ import { verifyTurnstile } from "../auth/turnstile"
 import { sha256Hex } from "../crypto"
 import { AppError, fail, fromError, ok } from "../http/envelope"
 import { clientIp, hostOrigin, ipHash } from "../http/request"
-import { register, type AuthLevel } from "./registry"
+import { ALLOWED_MIDDLEWARE, register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
@@ -118,7 +118,7 @@ function withoutStorageKeys<T>(v: T): T {
 export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   const app = new Hono<{ Bindings: Env; Variables: Vars }>().basePath("/api/app")
   // Handlers return plain Responses (envelope helpers); carry headers the guard set on the context (rolling cookie).
-  app.use(async (c, next) => {
+  const rolling: MiddlewareHandler<{ Bindings: Env; Variables: Vars }> = async (c, next) => {
     await next()
     const rolled = c.get("rolledCookie")
     if (rolled && c.res) {
@@ -126,7 +126,9 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       if (!res.headers.has("set-cookie")) res.headers.append("set-cookie", rolled)
       c.res = res
     }
-  })
+  }
+  ALLOWED_MIDDLEWARE.add(rolling)
+  app.use(rolling)
   app.onError((err) => {
     if (!(err instanceof AppError)) console.error("APP_API_ERROR", err instanceof Error ? err.message : String(err))
     return fromError(err)

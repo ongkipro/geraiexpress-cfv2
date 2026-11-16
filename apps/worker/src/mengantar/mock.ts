@@ -20,6 +20,8 @@ export const mockFaults: {
   order?: "timeout_after_create" | "timeout_before_create" | "validation_error" | "replayed_5xx" | "unavailable"
   deleteOrder?: "timeout_after_delete" | "timeout_before_delete" | "refused"
   readBack?: "timeout"
+  /** `GET /order` for these order ids times out (every call while set). */
+  readBackFailFor?: Set<string>
   invoices?: "error"
   /** `sellers/list` ignores the externalUserId filter and returns every seller (loose provider filter). */
   listIgnoresFilter?: true
@@ -101,6 +103,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
       return json(200, { success: true, data: hits, nextCursor: null })
     }
     const id = url.searchParams.get("tracking_id") ?? url.searchParams.get("order_id") ?? ""
+    if (mockFaults.readBackFailFor?.has(id)) throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
     const created = mockCreated.get(id) ?? [...mockCreated.values()].find((o) => o.cnote_no === id)
     if (created) return json(200, { success: true, data: created })
     const o = mockOrders.get(id)

@@ -13,9 +13,12 @@ import { platformOf, enqueue } from "../bulk/service"
 import { rowsFromCsv, validateRow } from "@gx/domain/bulk"
 import { primaryHost } from "../hostnames/service"
 import { periodFromParams, previousOf, resolvePreset } from "@gx/domain/period"
-import { authenticate, releaseSpend, reserveSpend, type ApiKeyPrincipal, type Scope } from "./keys"
+import { authenticate, type ApiKeyPrincipal, type Scope } from "./keys"
 
 export type { Route }
+
+/** The cap ledger lives in the tenant object (tenant 0022); keys without `shipments:issue` never reach it. */
+const spendOf = (k: ApiKeyPrincipal) => ({ keyId: k.keyId, capIdr: k.dailyIssueCapIdr })
 
 type Ctx = { env: Env; key: ApiKeyPrincipal; actor: string; params: Record<string, string>; query: URLSearchParams; body: unknown; exec: ExecutionContext }
 type Handler = (c: Ctx) => Promise<Response>
@@ -151,25 +154,9 @@ export const ROUTES: Route[] = [
       const vault = vaultFor(c.env, c.key.tenantId)
       const d = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
       if (!d.ok || !d.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
-      const now = Date.now()
-      const amount = Number(d.value.shipment.counter_due_idr ?? 0) + Number(d.value.quote?.effective_gerai_cost_idr ?? 0)
-      const already = ["issued", "provider_unpaid_hold", "cancelled"].includes(String(d.value.shipment.dispatch_state))
-      // One reservation per INV; it is kept for issued, held and ambiguous outcomes (held orders are later paid by
-      // unpaid recovery without asking the key again) and released only once non-issue is established.
-      if (!already && (await reserveSpend(c.env, c.key, s, amount, now)) === "cap") throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini sudah tercapai.")
-      const releaseIfNotIssued = async () => {
-        const after = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
-        const st = after.ok && after.value ? String(after.value.shipment.dispatch_state) : "draft"
-        if (["draft", "failed", "cancelled"].includes(st)) await releaseSpend(c.env, c.key.keyId, s)
-      }
-      let r: Awaited<ReturnType<typeof vault.dispatchShipment>>
-      try {
-        r = await vault.dispatchShipment(c.key.tenantId, s, c.actor, now, await platformOf(c.env, c.key.tenantId))
-      } catch (e) {
-        if (!already) await releaseIfNotIssued()
-        throw e
-      }
-      if (!already && !r.ok) await releaseIfNotIssued()
+      // The daily Rupiah cap is reserved inside the tenant object, in the same transaction as the dispatch journal
+      // (one reservation per INV, kept for held/ambiguous orders, released when non-issue is established).
+      const r = await vault.dispatchShipment(c.key.tenantId, s, c.actor, Date.now(), await platformOf(c.env, c.key.tenantId), spendOf(c.key))
       if (!r.ok) return vaultErr(r)
       return ok(r.value)
     },
@@ -182,16 +169,9 @@ export const ROUTES: Route[] = [
     idempotent: true,
     handler: async (c) => {
       const s = slug.parse(c.params.slug)
-      const vault = vaultFor(c.env, c.key.tenantId)
-      const d = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
-      if (!d.ok || !d.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
-      // Paying a held order spends Mengantar balance: counted once per INV (an API-issued hold already holds it).
-      const amount = Number(d.value.shipment.counter_due_idr ?? 0) + Number(d.value.quote?.effective_gerai_cost_idr ?? 0)
-      const res = await reserveSpend(c.env, c.key, s, amount, Date.now())
-      if (res === "cap") throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini sudah tercapai.")
-      const r = await vault.payUnpaid(c.key.tenantId, s, c.actor)
-      // Released only for a definitive refusal of a reservation made by this call (an unknown outcome keeps it).
-      if (res === "reserved" && !r.ok && r.error && r.error.code !== "STILL_UNPAID") await releaseSpend(c.env, c.key.keyId, s)
+      // Paying a held batch spends Mengantar balance: each held INV counts once against this key's cap (an INV the
+      // key issued into a hold already counts).
+      const r = await vaultFor(c.env, c.key.tenantId).payUnpaid(c.key.tenantId, s, c.actor, Date.now(), spendOf(c.key))
       if (!r.ok) return vaultErr(r)
       return ok(r.value)
     },
@@ -267,32 +247,10 @@ export const ROUTES: Route[] = [
     handler: async (c) => {
       const id = z.string().uuid().parse(c.params.id)
       const vault = vaultFor(c.env, c.key.tenantId)
-      // Every ready row is reserved against the daily cap (its frozen counter total + gerai cost) before any INV is
-      // created; all or nothing. Rows that later fail to issue are released by the bulk consumer.
-      const v = await vault.bulkView(c.key.tenantId, id)
-      if (!v.ok) return vaultErr(v)
-      if (!v.value) throw new AppError(404, "BATCH_NOT_FOUND", "Batch tidak ditemukan.")
-      const now = Date.now()
-      const reserved: string[] = []
-      const releaseAll = () => Promise.all(reserved.map((item) => releaseSpend(c.env, c.key.keyId, item)))
-      for (const x of v.value.rows.filter((row) => row.state === "ready")) {
-        const q = x.quote_json ? (JSON.parse(x.quote_json) as { counter_due_idr?: number; effective_gerai_cost_idr?: number }) : {}
-        const item = `bulk:${id}:${x.row_no}`
-        const res = await reserveSpend(c.env, c.key, item, Number(q.counter_due_idr ?? x.counter_due_idr ?? 0) + Number(q.effective_gerai_cost_idr ?? 0), now)
-        if (res === "cap") {
-          await releaseAll()
-          throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini tidak cukup untuk batch ini.")
-        }
-        if (res === "reserved") reserved.push(item)
-      }
-      const r = await vault.bulkMaterialize(c.key.tenantId, id, c.actor, true).catch(async (e) => {
-        await releaseAll()
-        throw e
-      })
-      if (!r.ok) {
-        await releaseAll()
-        return vaultErr(r)
-      }
+      // Every created INV is reserved against the daily cap inside the materialization transaction: all or nothing,
+      // and only the commit that moves the batch out of `ready` can reserve (no concurrent rollback of another's rows).
+      const r = await vault.bulkMaterialize(c.key.tenantId, id, c.actor, true, spendOf(c.key))
+      if (!r.ok) return vaultErr(r)
       c.exec.waitUntil(enqueue(c.env, { kind: "dispatch", tenant_id: c.key.tenantId, batch_id: id }))
       return ok(r.value)
     },

@@ -11,6 +11,7 @@ import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
 import { quotaFor } from "../partner-quota"
+import { CAP_REACHED, releaseApiSpend, reserveApiSpend, spendAmount, type ApiSpend } from "./api-spend"
 import type { Courier, CourierRate, OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
@@ -231,6 +232,9 @@ export type HealthSnapshot = {
   issuesLastHour: number
   issuesBaselineHourly: number
 }
+
+/** Thrown inside a materialization transaction to roll it back whole when the API key's cap would be exceeded. */
+class CapReached extends Error {}
 
 /** True when any INV of the Mengantar batch has an unresolved `pay_unpaid` attempt (the batch is paid as one). */
 function unresolvedBatchPay(sql: SqlStorage, batchId: string | null): boolean {
@@ -701,7 +705,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
    * the outcome; ambiguous → `reconciliation_needed` (read back, never re-send blindly). A second call while one is in
    * flight returns `DISPATCH_IN_PROGRESS`; a call after issue returns the issued shipment (double submit → one order).
    */
-  async dispatchShipment(tenantId: string, slug: string, actorId: string, now: number = Date.now(), platform: Platform = { maskingEnabled: false, dailyQuota: null }): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+  async dispatchShipment(tenantId: string, slug: string, actorId: string, now: number = Date.now(), platform: Platform = { maskingEnabled: false, dailyQuota: null }, apiSpend: ApiSpend | null = null): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -718,7 +722,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     // answers DISPATCH_IN_PROGRESS, so the quote read above is the one that gets journaled and sent.
     this.dispatching.add(slug)
     try {
-      return await this.dispatchOwned(tenantId, slug, actorId, now, platform, ready)
+      return await this.dispatchOwned(tenantId, slug, actorId, now, platform, ready, apiSpend)
     } finally {
       this.dispatching.delete(slug)
     }
@@ -731,6 +735,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     now: number,
     platform: Platform,
     ready: Extract<ReturnType<typeof readyToDispatch>, { ok: true }>,
+    apiSpend: ApiSpend | null,
   ): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const sql = this.ctx.storage.sql
     const key = await this.keyForDispatch(tenantId)
@@ -757,8 +762,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
         // Re-checked at journal time: the INV is still the draft bound to the quote that built this payload.
         const now2 = sql.exec<{ dispatch_state: string; quote_snapshot_id: string | null }>("SELECT dispatch_state, quote_snapshot_id FROM shipments WHERE slug = ?", slug).toArray()[0]
         if (!now2 || !["draft", "failed"].includes(now2.dispatch_state) || now2.quote_snapshot_id !== ready.q.id) return { ok: false, status: 409, code: "QUOTE_CHANGED", message: "Ongkir kiriman ini baru saja berubah. Periksa lagi lalu terbitkan." }
+        // An API key spends its daily cap here, atomically with the journal (spec 08 §2).
+        if (apiSpend && reserveApiSpend(sql, apiSpend, [{ slug, amount: spendAmount(ready.q) }], now) === "cap") return { ok: false, ...CAP_REACHED }
         const c = claimPreset(sql, platform, preset, reseller, now)
-        if (!c.ok) return c
+        if (!c.ok) {
+          if (apiSpend) releaseApiSpend(sql, slug)
+          return c
+        }
         sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'create_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify(payload), now, now)
         setDispatchStatus(sql, slug, "issuing_in_flight", now, {
           dispatch_state: "issuing_in_flight",
@@ -770,7 +780,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         })
         return c
       })
-      if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, ...(claim.code === "QUOTE_CHANGED" ? {} : { fields: { maskPreset: claim.message } }) } }
+      if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, ...(claim.code === "QUOTE_CHANGED" || claim.code === "DAILY_CAP_REACHED" ? {} : { fields: { maskPreset: claim.message } }) } }
       let outcome: OrderOutcome
       try {
         const res = await publicClient(this.env, key.key, tenantId).createOrder(payload, idem)
@@ -788,8 +798,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
       const at = Date.now()
       this.ctx.storage.transactionSync(() => {
         recordOutcome(sql, slug, idem, outcome, ready.q.cod_fee_idr, at)
-        // A rejected issue never happened: give the masking slot back.
-        if (outcome.kind === "rejected") releasePreset(sql, preset, reseller, now)
+        // A rejected issue never happened: give the masking slot and any API cap reservation back.
+        if (outcome.kind === "rejected") {
+          releasePreset(sql, preset, reseller, now)
+          releaseApiSpend(sql, slug)
+        }
         else this.scheduleFinanceSync(at)
         this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind, preset })
       })
@@ -838,6 +851,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         // The issue never reached Mengantar: give back the masking slot claimed for it.
         const sender = cur.sender_contact_id ? sql.exec<{ sender_kind: string }>("SELECT sender_kind FROM sender_contacts WHERE id = ?", cur.sender_contact_id).toArray()[0] : undefined
         releasePreset(sql, (cur.mask_preset ?? "standar_gerai") as MaskPreset, sender?.sender_kind === "reseller_dropship", journal?.created_at ?? now)
+        releaseApiSpend(sql, slug)
       }
     })
     await this.armOutbox()
@@ -846,7 +860,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   /** `provider_unpaid_hold` → `POST /order/pay-unpaid` (shared primitive, journaled) → read back the AWB. */
-  async payUnpaid(tenantId: string, slug: string, actorId: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+  async payUnpaid(tenantId: string, slug: string, actorId: string, now: number = Date.now(), apiSpend: ApiSpend | null = null): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -865,9 +879,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
       // Any unresolved attempt for ANY INV of this batch (pay-unpaid settles the whole batch) → read back, never pay.
       const unresolved = unresolvedBatchPay(sql, s.mengantar_batch_object_id)
       const idem = `gx-pay-${slug}-${now}-${crypto.randomUUID().slice(0, 8)}`
-      this.ctx.storage.transactionSync(() => {
+      // An API key pays the whole held batch: every held INV of it counts once against its daily cap.
+      const capped = this.ctx.storage.transactionSync((): "cap" | "reserved" | "already" | null => {
+        let r: "cap" | "reserved" | "already" | null = null
+        if (apiSpend) {
+          const held = sql.exec<{ slug: string }>("SELECT slug FROM shipments WHERE mengantar_batch_object_id = ? AND dispatch_state = 'provider_unpaid_hold'", s.mengantar_batch_object_id).toArray()
+          r = reserveApiSpend(sql, apiSpend, held.map((h) => ({ slug: h.slug, amount: spendAmount(latestQuote(sql, h.slug)) })), now)
+          if (r === "cap") return r
+        }
         sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id, readBackOnly: unresolved }), now, now)
+        return r
       })
+      if (capped === "cap") return { ok: false, error: CAP_REACHED }
       return await this.payUnpaidFenced(tenantId, slug, actorId, s, publicClient(this.env, key.key, tenantId), idem, unresolved)
     } finally {
       this.dispatching.delete(fence)
@@ -906,13 +929,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const siblings = sql.exec<{ slug: string; mengantar_order_code: string | null }>("SELECT slug, mengantar_order_code FROM shipments WHERE mengantar_batch_object_id = ? AND slug != ? AND dispatch_state = 'provider_unpaid_hold'", s.mengantar_batch_object_id, slug).toArray()
     const siblingItems: Array<{ slug: string; item: OrderItem }> = []
     let siblingsUnknown = false
-    if (item?.cnote_no) {
+    // Paid, or a read-back-only call: every held sibling is read back too (an unknown attempt is cleared only when
+    // the WHOLE batch reads back unpaid; any paid or unreadable member keeps the batch read-back-only).
+    if (item?.cnote_no || unresolved) {
       for (const sib of siblings) {
         const it = sib.mengantar_order_code ? await client.getOrder({ orderId: sib.mengantar_order_code }).catch(() => null) : null
         if (it?.cnote_no) siblingItems.push({ slug: sib.slug, item: it })
-        else siblingsUnknown = true
+        else if (!it) siblingsUnknown = true
       }
     }
+    // Members already recorded as issued from this batch mean the batch was paid.
+    const issuedLocally = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE mengantar_batch_object_id = ? AND dispatch_state = 'issued'", s.mengantar_batch_object_id).one().n > 0
     const at = Date.now()
     const batchSlugs = "SELECT slug FROM shipments WHERE mengantar_batch_object_id = ?"
     this.ctx.storage.transactionSync(() => {
@@ -924,9 +951,12 @@ export class GeraiVaultDO extends DurableObject<Env> {
         // The batch is paid: a sibling whose read-back failed stays read-back-only (an `unknown` row keeps the fence).
         if (siblingsUnknown) sql.exec("UPDATE dispatch_journal SET state = 'unknown', error = 'batch paid; sibling read-back pending', updated_at = ? WHERE idempotency_key = ?", at, idem)
         this.audit(tenantId, at, "user", actorId, "shipment.pay_unpaid", { slug })
-      } else if (item && unresolved) {
-        // Read back cleanly and still unpaid: the earlier attempts did not pay — the next click may pay again.
+      } else if (item && unresolved && !siblingsUnknown && siblingItems.length === 0 && !issuedLocally) {
+        // The whole batch read back cleanly and still unpaid: the earlier attempts did not pay — the next click may pay.
         sql.exec(`UPDATE dispatch_journal SET state = 'failed', error = 'read back: still unpaid', updated_at = ? WHERE slug IN (${batchSlugs}) AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')`, at, s.mengantar_batch_object_id)
+      } else if (unresolved) {
+        // Some member is paid or unreadable: stay read-back-only (this attempt stays unknown too; never pay again).
+        sql.exec("UPDATE dispatch_journal SET state = 'unknown', error = 'batch read-back incomplete', updated_at = ? WHERE idempotency_key = ?", at, idem)
       } else sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", payError ? "unknown" : "failed", payError ?? "no AWB after pay-unpaid", at, idem)
     })
     this.scheduleFinanceSync(Date.now())
@@ -956,6 +986,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       this.ctx.storage.transactionSync(() => {
         this.scheduleFinanceSync(at)
         setDispatchStatus(sql, slug, "cancelled", at, { dispatch_state: "cancelled", cancelled_at: at, counter_payment_status: "voided", custody_stage: "cancelled_local", custody_at: at })
+        releaseApiSpend(sql, slug)
         // A cancelled INV leaves any open pickup manifest it was scanned into (never handed over on a Surat Jalan).
         const open = sql.exec<{ batch_id: string }>("SELECT i.batch_id FROM pickup_batch_items i JOIN pickup_batches b ON b.id = i.batch_id WHERE i.slug = ? AND b.status = 'open'", slug).toArray()
         for (const o of open) {
@@ -1486,8 +1517,20 @@ export class GeraiVaultDO extends DurableObject<Env> {
   ): Promise<{ ok: true; value: ExceptionsValue } | { ok: false; refused?: VaultRefusal; error?: ExceptionError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
-    const sql = this.ctx.storage.sql
     const now = Date.now()
+    const out = this.exceptionsTx(tenantId, actor, op, now)
+    // `expireClaims` may have set or moved `claim_expiry`: install the alarm so an idle object still wakes for it.
+    await this.armAlarm()
+    return out
+  }
+
+  private exceptionsTx(
+    tenantId: string,
+    actor: { userId: string; role: "gerai_admin" | "cashier" },
+    op: Parameters<GeraiVaultDO["exceptionsOp"]>[2],
+    now: number,
+  ): { ok: true; value: ExceptionsValue } | { ok: false; error: ExceptionError } {
+    const sql = this.ctx.storage.sql
     return this.ctx.storage.transactionSync((): { ok: true; value: ExceptionsValue } | { ok: false; error: ExceptionError } => {
       if (op.op === "list") {
         // Draft claims expire on read too (not only when the status poll happens to run).
@@ -1863,7 +1906,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
    * `Buat n Kiriman`: one INV per ready row (own slug + frozen quote + recipient contact), in one transaction. An
    * expired row quote sends those rows back to `pending` and refuses the whole create (the caller re-checks).
    */
-  async bulkMaterialize(tenantId: string, batchId: string, actorId: string, prohibitedAck: boolean): Promise<{ ok: true; value: { created: number } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+  async bulkMaterialize(tenantId: string, batchId: string, actorId: string, prohibitedAck: boolean, apiSpend: ApiSpend | null = null): Promise<{ ok: true; value: { created: number } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     if (!prohibitedAck) return { ok: false, error: { status: 422, code: "PROHIBITED_ACK_REQUIRED", message: "Pastikan isi semua paket bukan barang terlarang.", fields: { prohibitedAck: "Wajib dicentang." } } }
@@ -1872,6 +1915,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const b = readBatch(sql, batchId)
     if (!b) return { ok: false, error: { status: 404, code: "BATCH_NOT_FOUND", message: "Batch tidak ditemukan." } }
     if (b.state !== "ready") return { ok: false, error: { status: 409, code: "BATCH_NOT_READY", message: b.state === "checking" ? "Masih memeriksa baris. Tunggu sebentar." : "Batch ini tidak bisa dibuat lagi." } }
+    try {
+      return this.bulkMaterializeTx(tenantId, batchId, actorId, b, now, apiSpend)
+    } catch (e) {
+      if (e instanceof CapReached) return { ok: false, error: { ...CAP_REACHED, message: "Batas nilai kiriman harian kunci API ini tidak cukup untuk batch ini." } }
+      throw e
+    }
+  }
+
+  private bulkMaterializeTx(tenantId: string, batchId: string, actorId: string, b: NonNullable<ReturnType<typeof readBatch>>, now: number, apiSpend: ApiSpend | null): { ok: true; value: { created: number } } | { ok: false; error: BulkError } {
+    const sql = this.ctx.storage.sql
     return this.ctx.storage.transactionSync((): { ok: true; value: { created: number } } | { ok: false; error: BulkError } => {
       const rows = sql.exec<BulkRow>("SELECT * FROM bulk_import_rows WHERE batch_id = ? AND state = 'ready' ORDER BY row_no", batchId).toArray()
       const expired = rows.filter((r) => !r.quote_json || (r.quoted_at ?? 0) + QUOTE_TTL_MS < now)
@@ -1881,6 +1934,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         return { ok: false, error: { status: 409, code: "QUOTE_EXPIRED", message: "Ongkir sebagian baris sudah kedaluwarsa dan sedang dihitung ulang. Tunggu sebentar lalu coba lagi." } }
       }
       let created = 0
+      const createdSlugs: Array<{ slug: string; amount: number }> = []
       for (const r of rows) {
         const existing = sql
           .exec<{ id: string }>("SELECT id FROM recipient_contacts WHERE phone = ? AND mengantar_area_id = ? AND street_address = ? AND is_archived = 0 LIMIT 1", r.recipient_phone, r.area_id, r.street)
@@ -1900,9 +1954,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
         if (e) throw new Error(e.code)
         sql.exec("UPDATE shipments SET bulk_batch_id = ?, entry_channel = 'counter_multi' WHERE slug = ?", batchId, slug)
         sql.exec("UPDATE bulk_import_rows SET state = 'created', shipment_slug = ? WHERE batch_id = ? AND row_no = ?", slug, batchId, r.row_no)
+        createdSlugs.push({ slug, amount: spendAmount(snap) })
         created++
       }
       if (created === 0) return { ok: false, error: { status: 409, code: "NOTHING_READY", message: "Tidak ada baris yang siap dibuat." } }
+      // An API key spends its daily cap for the whole batch in this same transaction: all rows or nothing (a throw
+      // rolls back every INV created above). Concurrent commits cannot both pass: the batch leaves `ready` here.
+      if (apiSpend && reserveApiSpend(sql, apiSpend, createdSlugs, now) === "cap") throw new CapReached()
       refreshCounts(sql, batchId, now)
       // A batch with nothing to collect at the counter (all COD) needs no payment step.
       const owed = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE bulk_batch_id = ? AND counter_payment_status = 'unpaid'", batchId).one().n

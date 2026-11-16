@@ -37,3 +37,23 @@ photo; `finance.sync` event and shared `last_sync_status` (M4-9); malformed-JSON
 
 Evidence: `pnpm check` green (unit 166, Workers 366); e2e `quote` + `masking` at 390/768/1280; integrated run on the
 fixed tree recorded in `BUILD-LOG.md`.
+
+## Round 2 (Sol, `bd009ce..3bf169a`): REQUEST_CHANGES — 5 P1, 7 P2; all fixed
+
+| # | Sev | Finding | Fix | Test (mutation red) |
+|---|---|---|---|---|
+| R2-1 | P1 | A call through a still-held sibling could clear the read-back-only fence of a paid batch | the fence clears only when the WHOLE batch reads back unpaid and no member is issued; otherwise the attempt stays `unknown` | `dispatch.test.ts` (lagging view) |
+| R2-2 | P1 | A concurrent `/issue` (DISPATCH_IN_PROGRESS) released the active request's reservation | cap ledger moved INTO the tenant object (`api_key_spend`, tenant `0022`): reserved in the dispatch-journal transaction, released only in the transaction that establishes non-issue | `api-v1.test.ts` (gated concurrent issue) |
+| R2-3 | P1 | Concurrent bulk commits rolled back the winner's reservations | reserved inside the materialization transaction (all or nothing; only the commit that leaves `ready` reserves) | `api-v1.test.ts` |
+| R2-4 | P1 | Editing shipped migration 0021 left v21 objects without the rescan columns | 0021 restored; new tenant `0022_rescan_and_api_spend` | `migrations/tenant.test.ts` (v21 → current) |
+| R2-5 | P1 | Read back "not found" → draft kept the reservation; a heavier re-quote was not charged | release in the same transaction as the draft reset (and on rejection / cancel) | `api-v1.test.ts` |
+| R2-6 | P2 | Spend identity was global though slugs are tenant-local | ledger is per tenant object | (structural: per-object table) |
+| R2-7 | P2 | A held bulk row was counted twice on pay-unpaid | one row per INV; pay-unpaid reserves each held INV of the batch once | `api-v1.test.ts` (exact cap then pay) |
+| R2-8 | P2 | Release not atomic with the usage decrement | single-row delete inside the DO transaction (no separate counter) | — |
+| R2-9 | P2 | Claim expiry timer set without arming the alarm | `exceptionsOp` arms the alarm after its transaction | `exceptions.test.ts` (idle object, no alarm before) |
+| R2-10 | P2 | Route scan did not prove the guard is mounted | `register()` records handler→guard; scan checks the exact guard precedes each handler and allowed middleware by identity | `route-scan.test.ts` (unguarded re-mount fixture) |
+| R2-11 | P2 | Refund sub-items all linked to the first matched INV | each sub-item resolved and linked independently; unmatched items flagged | `finance.test.ts` |
+| R2-12 | P2 | Mixed known/null return amounts produced a partial total | sub-item sum only when all are known; else the invoice amount once | `finance.test.ts` |
+
+Control `0015_api_key_spend_items` is superseded by `0017_retire_api_key_spend` (both forward-only). Evidence:
+`pnpm check` green (unit 166, Workers 371).

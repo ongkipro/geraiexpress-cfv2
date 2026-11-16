@@ -164,12 +164,12 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         linked++
         if (subs.length) subs.forEach((_s, i) => link(i, ref))
         else sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, returned[1]!, int(raw.amount), ref.slug)
-        // Sum of every CLEARED return debit linked to this INV, per invoice first: the sub-item amounts when known,
-        // else the invoice amount ONCE (never multiplied across null-amount sub-items); re-reads never double-count.
+        // Sum of every CLEARED return debit linked to this INV, per invoice first: the sub-item amounts only when ALL
+        // are known, else the invoice amount ONCE (never multiplied, never a partial total); re-reads never double-count.
         sql.exec(
           `UPDATE shipments SET reconciled_extra_adjustment_idr = (
              SELECT SUM(per_invoice) FROM (
-               SELECT CASE WHEN COUNT(si.amount_idr) > 0 THEN SUM(ABS(si.amount_idr)) ELSE ABS(MAX(m.amount_idr)) END AS per_invoice
+               SELECT CASE WHEN COUNT(si.amount_idr) = COUNT(*) THEN SUM(ABS(si.amount_idr)) ELSE ABS(MAX(m.amount_idr)) END AS per_invoice
                FROM mengantar_invoice_subitems si JOIN mengantar_invoice_mirror m ON m.invoice_id = si.invoice_id
                WHERE si.shipment_slug = ?1 AND m.type = 'typePayment' AND m.status = 'statusCleared' AND LOWER(COALESCE(m.description, '')) LIKE '%returned order%'
                GROUP BY si.invoice_id)), updated_at = ?2 WHERE slug = ?1`,
@@ -201,19 +201,31 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
   } else if (type === "typeRefund") {
     const m = /order\s+([A-Za-z0-9-]+)\s*$/i.exec(description ?? "")
     const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? m?.[1] ?? null
-    // Top-level AWB/order, then every sub-item AWB/order, then the description token (as AWB or order id).
-    const ref =
-      findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ??
-      subs.map((x) => findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) })).find(Boolean) ??
-      (m?.[1] ? findSlug(sql, { awb: m[1], order: m[1] }) : null)
-    if (ref) {
-      linked++
-      if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
-      else subs.forEach((_s, i) => link(i, ref))
-      if (cleared) markClaimPaid(sql, ref.slug, id, now)
+    if (subs.length) {
+      // Each sub-item stands for its own order: resolve and link it independently (never borrow another's INV).
+      const top = findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) })
+      subs.forEach((x, i) => {
+        const ref = findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) }) ?? (subs.length === 1 ? top : null)
+        if (!ref) {
+          unlinked++
+          flag(sql, id, "unmatched", `#${i}`, null, int(x.amount), `Pengembalian dana untuk resi ${str(x.cnote_no, 60) ?? str(x.ORDER_ID, 60) ?? "?"} tidak ditemukan di gerai ini`, now)
+          return
+        }
+        linked++
+        link(i, ref)
+        if (cleared) markClaimPaid(sql, ref.slug, id, now)
+      })
     } else {
-      unlinked++
-      flag(sql, id, "unmatched", null, null, int(raw.amount), `Pengembalian dana untuk resi ${awb ?? "?"} tidak ditemukan di gerai ini`, now)
+      // Top-level AWB/order, then the description token (as AWB or order id).
+      const ref = findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ?? (m?.[1] ? findSlug(sql, { awb: m[1], order: m[1] }) : null)
+      if (ref) {
+        linked++
+        sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
+        if (cleared) markClaimPaid(sql, ref.slug, id, now)
+      } else {
+        unlinked++
+        flag(sql, id, "unmatched", null, null, int(raw.amount), `Pengembalian dana untuk resi ${awb ?? "?"} tidak ditemukan di gerai ini`, now)
+      }
     }
   }
   if (state !== "unknown_type" && (type === "typeReconciliation" || type === "typePayment" || type === "typeRefund")) state = unlinked === 0 ? "linked" : linked === 0 ? "unlinked" : "partial"

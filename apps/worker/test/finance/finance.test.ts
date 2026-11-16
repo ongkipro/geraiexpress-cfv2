@@ -164,6 +164,20 @@ describe("finance sync", () => {
     expect(unmatched).toBe(0)
   })
 
+  it("refund sub-items link to their own INV each; a mixed known/unknown return uses the invoice amount once (Sol R2 #11/#12)", async () => {
+    const t = await checkoutGerai("financecampur")
+    const { non, cod } = await issuedPair(t)
+    mockInvoices.push({ _id: "rf2", type: "typeRefund", status: "statusCleared", amount: 30000, balanceAmount: 44000, createdAt: iso(1), description: "Claims approved", subItems: [{ ORDER_ID: cod.mengantar_order_code, amount: 20000 }, { ORDER_ID: non.mengantar_order_code, amount: 10000 }, { ORDER_ID: "NOTOURS-9", amount: 0 }] })
+    mockInvoices.unshift({ _id: "rt2", type: "typePayment", status: "statusCleared", amount: -5000, balanceAmount: 39000, createdAt: iso(2), description: `Payment for returned order ${non.awb_number}`, subItems: [{ cnote_no: non.awb_number, amount: -1000 }, { cnote_no: non.awb_number }] })
+    await t.vault.financeSync(t.tenantId, "manual")
+    const links = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ idx: number; shipment_slug: string | null }>("SELECT idx, shipment_slug FROM mengantar_invoice_subitems WHERE invoice_id = 'rf2' ORDER BY idx").toArray())
+    expect(links.map((l) => l.shipment_slug)).toEqual([cod.slug, non.slug, null])
+    const flags = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE invoice_id = 'rf2' AND kind = 'unmatched'").one().n)
+    expect(flags).toBe(1)
+    const extra = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ x: number | null }>("SELECT reconciled_extra_adjustment_idr AS x FROM shipments WHERE slug = ?", non.slug).one().x)
+    expect(extra).toBe(5000)
+  })
+
   it("daily pending rescan reaches an old pending invoice behind > 250 newer cleared rows (Sol delta C-3)", { timeout: 40_000 }, async () => {
     const t = await checkoutGerai("financelapar")
     const { cod } = await issuedPair(t)

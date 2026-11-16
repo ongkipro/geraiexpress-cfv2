@@ -441,30 +441,6 @@ export const tenantApiKeys = sqliteTable(
   (t) => [index("tenant_api_keys_tenant").on(t.tenantId, t.revokedAt)],
 )
 
-export const apiKeyDailyUsage = sqliteTable(
-  "api_key_daily_usage",
-  {
-    keyId: text("key_id").notNull(),
-    wibDay: text("wib_day").notNull(),
-    issuedIdr: integer("issued_idr").notNull().default(0),
-    issuedCount: integer("issued_count").notNull().default(0),
-  },
-  (t) => [primaryKey({ columns: [t.keyId, t.wibDay] })],
-)
-
-export const apiKeySpendItems = sqliteTable(
-  "api_key_spend_items",
-  {
-    item: text("item").primaryKey(),
-    keyId: text("key_id").notNull(),
-    tenantId: text("tenant_id").notNull(),
-    wibDay: text("wib_day").notNull(),
-    amountIdr: integer("amount_idr").notNull(),
-    createdAt: integer("created_at").notNull(),
-  },
-  (t) => [index("api_key_spend_items_key").on(t.keyId, t.wibDay)],
-)
-
 export const publicApiEvents = sqliteTable(
   "public_api_events",
   {

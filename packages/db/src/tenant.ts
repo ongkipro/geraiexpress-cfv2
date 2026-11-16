@@ -21,6 +21,7 @@ import m0018 from "../migrations/tenant/0018_claims.sql"
 import m0019 from "../migrations/tenant/0019_minisite.sql"
 import m0020 from "../migrations/tenant/0020_quote_fees.sql"
 import m0021 from "../migrations/tenant/0021_finance_backfill.sql"
+import m0022 from "../migrations/tenant/0022_rescan_and_api_spend.sql"
 
 export interface TenantMigration {
   version: number
@@ -50,6 +51,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 19, name: "minisite", sql: m0019 },
   { version: 20, name: "quote_fees", sql: m0020 },
   { version: 21, name: "finance_backfill", sql: m0021 },
+  { version: 22, name: "rescan_and_api_spend", sql: m0022 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length

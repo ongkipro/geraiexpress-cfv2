@@ -134,15 +134,24 @@ describe("Kendala & Klaim", () => {
     })
     const lost = await issued(t)
     await observe(t, lost.slug, "lost", Date.now())
+    // An idle object: no other timer and no alarm before the claim is opened.
+    await runInDurableObject(t.vault, async (_i, st) => {
+      st.storage.sql.exec("DELETE FROM vault_timers")
+      await st.storage.deleteAlarm()
+    })
     const c = ((await (await post(`/shipments/${lost.slug}/claim`, t.cookie, { kind: "hilang", evidenceIds: [logo] })).json()) as { data: { id: string } }).data
     const ev = await runInDurableObject(t.vault, (_i, st) => JSON.parse(st.storage.sql.exec<{ e: string }>("SELECT evidence_json AS e FROM shipment_claims WHERE id = ?", c.id).one().e) as string[])
     expect(ev).toEqual([])
+    // Creating the claim armed a real alarm at (or before) its deadline: an idle object wakes for it.
+    const armed = await runInDurableObject(t.vault, (_i, st) => Promise.all([st.storage.getAlarm(), st.storage.sql.exec<{ d: number }>("SELECT due_at AS d FROM vault_timers WHERE name = 'claim_expiry'").one().d]))
+    expect(armed[0]).not.toBeNull()
+    expect(armed[0]!).toBeLessThanOrEqual(armed[1])
     // Idle gerai: no poll and no reads — the claim_expiry timer alone expires the draft at its deadline.
     const deadline = Date.now() + 1000
     await runInDurableObject(t.vault, (_i, st) => {
       st.storage.sql.exec("UPDATE shipment_claims SET deadline_at = ? WHERE id = ?", deadline, c.id)
       st.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")
-      st.storage.sql.exec("INSERT INTO vault_timers (name, due_at) VALUES ('claim_expiry', ?) ON CONFLICT(name) DO UPDATE SET due_at = excluded.due_at", deadline)
+      st.storage.sql.exec("UPDATE vault_timers SET due_at = ? WHERE name = 'claim_expiry'", deadline)
     })
     await t.vault.runTimers(deadline + 1)
     expect(await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ s: string }>("SELECT status AS s FROM shipment_claims WHERE id = ?", c.id).one().s)).toBe("expired")

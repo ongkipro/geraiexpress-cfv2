@@ -39,8 +39,13 @@ export function register(
   const g = guard(meta.auth)
   REGISTERED.add(g)
   REGISTERED.add(handler)
+  MOUNTED.set(handler, { guard: g, meta })
   app.on(meta.method, meta.path, g, handler)
 }
 
 /** Every guard and handler mounted through `register` (the route scan rejects any other mounted handler). */
 export const REGISTERED = new WeakSet<object>()
+/** Handler → the guard `register` mounted in front of it (the scan proves this exact guard precedes the handler). */
+export const MOUNTED = new WeakMap<object, { guard: object; meta: RouteMeta }>()
+/** Global middleware an API mounts on purpose (identity checked by the route scan). */
+export const ALLOWED_MIDDLEWARE = new WeakSet<object>()

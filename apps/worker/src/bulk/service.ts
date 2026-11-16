@@ -1,6 +1,5 @@
 // `Paket Massal` orchestration in the Worker (spec 03 §1.3, DEC-229): parse + validate rows, area match and quote
 // through the `gx-bulk` Queue (never on the request path), then serialized dispatch inside the tenant object.
-import { releaseSpend } from "../api-v1/keys"
 import { rowsFromCsv, validateRow, BULK_MAX_ROWS, type BulkRowInput, type ValidRow } from "@gx/domain/bulk"
 import { searchAreas, type AreaItem } from "../couriers/areas"
 import { AppError } from "../http/envelope"
@@ -104,18 +103,6 @@ export async function checkBatch(env: Env, tenantId: string, batchId: string, no
   return { more: rows.length === CHECK_CHUNK }
 }
 
-/** API-key cap reservations of rows that did not issue are given back (rows created at the counter have none). */
-async function releaseFailedRows(env: Env, vault: ReturnType<typeof vaultFor>, tenantId: string, batchId: string): Promise<void> {
-  const v = await vault.bulkView(tenantId, batchId)
-  if (!v.ok || !v.value) return
-  for (const row of v.value.rows) {
-    if (row.dispatch_state && ["issued", "provider_unpaid_hold", "reconciliation_needed", "issuing_in_flight"].includes(row.dispatch_state)) continue
-    const item = `bulk:${batchId}:${row.row_no}`
-    const owner = await env.DB.prepare("SELECT key_id FROM api_key_spend_items WHERE item = ?").bind(item).first<{ key_id: string }>()
-    if (owner) await releaseSpend(env, owner.key_id, item)
-  }
-}
-
 export async function platformOf(env: Env, tenantId: string) {
   const t = await env.DB.prepare("SELECT masking_enabled, masking_daily_quota FROM tenants WHERE id = ?").bind(tenantId).first<{ masking_enabled: number; masking_daily_quota: number | null }>()
   return { maskingEnabled: t?.masking_enabled === 1, dailyQuota: t?.masking_daily_quota ?? null }
@@ -135,13 +122,9 @@ export async function consumeBulkBatch(batch: MessageBatch<BulkMessage>, env: En
         if (r.more) msg.retry({ delaySeconds: 5 })
         else msg.ack()
       } else {
-        const vault = vaultFor(env, m.tenant_id)
-        const r = await vault.bulkDispatch(m.tenant_id, m.batch_id, await platformOf(env, m.tenant_id))
+        const r = await vaultFor(env, m.tenant_id).bulkDispatch(m.tenant_id, m.batch_id, await platformOf(env, m.tenant_id))
         if (r.ok && r.value.more) msg.retry({ delaySeconds: 30 })
-        else {
-          if (r.ok) await releaseFailedRows(env, vault, m.tenant_id, m.batch_id)
-          msg.ack()
-        }
+        else msg.ack()
       }
     } catch {
       msg.retry({ delaySeconds: 30 })

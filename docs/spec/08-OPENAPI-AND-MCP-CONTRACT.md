@@ -61,8 +61,10 @@
 > **Implementation note (TASK-503, 2026-11-16):** the route table in `apps/worker/src/api-v1/index.ts` is the single
 > source for runtime validation, scope checks and `/api/v1/openapi.json` (OpenAPI 3.1 via `z.toJSONSchema`; Scalar
 > reference at `/api/v1/docs`). Keys are `gx_live_` + 43 base64url chars, stored as a peppered SHA-256 in
-> `tenant_api_keys` (control `0011`); `shipments:issue` keys require a daily Rupiah cap (`api_key_daily_usage`, WIB day,
-> reserved atomically per issue: counter due + effective gerai cost). Audit rows written by a key carry
+> `tenant_api_keys` (control `0011`); `shipments:issue` keys require a daily Rupiah cap (WIB day, counter due +
+> effective gerai cost per INV), accounted in the tenant object (`api_key_spend`, tenant `0022`) in the same
+> transaction as the dispatch journal, pay-unpaid journal or bulk materialization: one reservation per INV, kept for
+> held and ambiguous orders, released only when non-issue is established (rejected, not found, cancelled). Audit rows written by a key carry
 > `actor_type = 'api_key'`. Not yet built: `part: stub_only` on labels (no stub-only renderer exists) and
 > `declared_item_value_idr` (no insurance input in the quote engine) — both ignored if sent.
 

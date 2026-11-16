@@ -4,16 +4,26 @@
 import { env, exports } from "cloudflare:workers"
 import { runInDurableObject } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
+import type { GeraiVaultDO } from "../../src/do/gerai-vault"
 import { hostCache } from "../../src/host/lookup"
 import { mockSeller, resetMock } from "../../src/mengantar/mock"
 import { ownerOnlyKeysIn } from "../../src/dto/projection"
 import { checkoutGerai, post, DEST } from "../dispatch/helpers"
+
+const detail = async (cookie: string, slug: string) => ((await (await appGet(`/shipments/${slug}`, cookie)).json()) as { data: { shipment: Record<string, unknown> } }).data
 import { APP, appGet } from "../webhooks/helpers"
 
 beforeEach(() => {
   resetMock()
   hostCache.clear()
 })
+
+/** What a key has reserved today against its cap (the ledger lives in the tenant object, tenant 0022). */
+const spent = (vault: DurableObjectStub<GeraiVaultDO>, keyId: string): Promise<{ n: number; c: number }> =>
+  runInDurableObject(vault, (_i: GeraiVaultDO, st) => {
+    const r = st.storage.sql.exec<{ n: number; c: number }>("SELECT COALESCE(SUM(amount_idr), 0) AS n, COUNT(*) AS c FROM api_key_spend WHERE key_id = ?", keyId).one()
+    return { n: Number(r.n), c: Number(r.c) }
+  })
 
 async function key(cookie: string, scopes: string[], extra: Record<string, unknown> = {}) {
   const r = await post("/api-keys", cookie, { name: "Toko Online", scopes, ...extra })
@@ -108,7 +118,7 @@ describe("/api/v1", () => {
       await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
       return slug
     }
-    const used = async () => (await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>())!.n
+    const used = async () => (await spent(t.vault, k.id)).n
     const slug = await draft()
     mockSeller.balanceIdr = 0
     const held = await v1(`/shipments/${slug}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `held-${slug}` } })
@@ -137,8 +147,7 @@ describe("/api/v1", () => {
     await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
     mockFaults.order = "validation_error"
     expect((await v1(`/shipments/${slug}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `tolak-${slug}` } })).status).toBe(422)
-    expect((await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>())!.n).toBe(0)
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM api_key_spend_items WHERE key_id = ?").bind(k.id).first<{ n: number }>()).toEqual({ n: 0 })
+    expect(await spent(t.vault, k.id)).toEqual({ n: 0, c: 0 })
   })
 
   it("bulk commit reserves each row's frozen counter total + gerai cost, all or nothing (Sol delta C-4)", async () => {
@@ -157,12 +166,53 @@ describe("/api/v1", () => {
     const ok = await make(45_000)
     const r = await v1(`/bulk-imports/${ok.id}/commit`, ok.k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `c-${ok.id}` } })
     expect(r.status).toBe(200)
-    expect((await env.DB.prepare("SELECT issued_idr FROM api_key_daily_usage WHERE key_id = ?").bind(ok.k.id).first<{ issued_idr: number }>())!.issued_idr).toBe(45_000)
+    expect((await spent(t.vault, ok.k.id)).n).toBe(45_000)
+    // Sol R2 #7: the rows go to a balance hold; paying them with the same key (cap exactly used) is not counted again.
+    mockSeller.balanceIdr = 0
+    await t.vault.bulkDispatch(t.tenantId, ok.id, { maskingEnabled: false, dailyQuota: null })
+    const rows = ((await (await v1(`/bulk-imports/${ok.id}`, ok.k.token)).json()) as { data: { rows: Array<{ shipment_slug: string }> } }).data.rows
+    mockSeller.balanceIdr = 100_000
+    const pay = await v1(`/shipments/${rows[0]!.shipment_slug}/pay-unpaid`, ok.k.token, { method: "POST", headers: { "idempotency-key": `p-${ok.id}` } })
+    expect(pay.status).toBe(200)
+    expect((await spent(t.vault, ok.k.id)).n).toBe(45_000)
     // One Rupiah short → refused, and nothing stays reserved.
     const short = await make(44_999)
     expect((await v1(`/bulk-imports/${short.id}/commit`, short.k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `c-${short.id}` } })).status).toBe(429)
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM api_key_spend_items WHERE key_id = ?").bind(short.k.id).first<{ n: number }>()).toEqual({ n: 0 })
-    expect((await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(short.k.id).first<{ n: number }>())!.n).toBe(0)
+    expect(await spent(t.vault, short.k.id)).toEqual({ n: 0, c: 0 })
+  })
+
+  it("cap ledger round 2: a concurrent /issue never releases the active one's reservation; not-found read-back releases so a re-quote is charged anew; a held bulk row pays without a second count (Sol R2 #2/#5/#7)", async () => {
+    const { mockFaults } = await import("../../src/mengantar/mock")
+    const t = await checkoutGerai("apicapr2")
+    const k = await key(t.cookie, ["shipments:draft", "shipments:issue"], { dailyIssueCapIdr: 200_000 })
+    const draft = async (weight = 1000) => {
+      const d = await v1("/shipments", k.token, { method: "POST", body: { destination_area_id: DEST, weight_gram: weight, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
+      const slug = ((await d.json()) as { data: { slug: string } }).data.slug
+      await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
+      return slug
+    }
+    // #2: A is awaiting pickup registration; B hits DISPATCH_IN_PROGRESS; A's reservation survives and A issues.
+    const a = await draft()
+    let open!: () => void
+    mockFaults.addressGate = new Promise<void>((r) => (open = r))
+    const first = v1(`/shipments/${a}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `a1-${a}` } })
+    await new Promise((r) => setTimeout(r, 50))
+    expect((await v1(`/shipments/${a}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `a2-${a}` } })).status).toBe(409)
+    open()
+    expect((await first).status).toBe(200)
+    expect(await spent(t.vault, k.id)).toEqual({ n: 22_500, c: 1 })
+    // #5: ambiguous → read back "not found" → draft: the reservation is released; a heavier re-quote is charged in full.
+    const b = await draft()
+    mockFaults.order = "timeout_before_create"
+    await v1(`/shipments/${b}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `b1-${b}` } })
+    expect((await detail(t.cookie, b)).shipment).toMatchObject({ dispatch_state: "draft" })
+    expect((await spent(t.vault, k.id)).c).toBe(1)
+    const { frozenFrom, parseQuoteInput, runQuote } = await import("../../src/pricing/quote/service")
+    const q = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 3000, mode: "none" }, "5fc62f5df8f44b34aa4c0d8c"), Date.now())
+    expect((await t.vault.freezeQuote(t.tenantId, frozenFrom(b, q, q.cards.find((x) => x.serviceCode === "JT" && x.available)!))).ok).toBe(true)
+    expect((await v1(`/shipments/${b}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `b2-${b}` } })).status).toBe(200)
+    const heavy = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ a: number }>("SELECT amount_idr AS a FROM api_key_spend WHERE slug = ?", b).one().a)
+    expect(heavy).toBeGreaterThan(22_500)
   })
 
   it("OpenAPI 3.1 document is generated from the route table (every route, scopes, Idempotency-Key)", async () => {
