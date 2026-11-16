@@ -1,3 +1,4 @@
+import { BACKUP_FORMAT, BACKUP_KEEP_DAYS, backupKey, checksumOf, dumpTables, gunzipJson, gzipJson, restoreTables, schemaDdl, userTables, wibDayOf, type BackupSummary, type TenantBackup } from "./backup"
 import { DurableObject } from "cloudflare:workers"
 import { TENANT_MIGRATIONS, TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { applyTenantMigrations, readSchemaState, tableExists, type MigrateResult, type SchemaState } from "./core/migrate"
@@ -2114,6 +2115,43 @@ export class GeraiVaultDO extends DurableObject<Env> {
   protected keyVersionCurrent(version: number): boolean {
     const row = readConnection(this.ctx.storage.sql)
     return !!row && row.rotation_state === "idle" && row.key_version === version
+  }
+
+  // ---- Backups (TASK-603, ADR-0006 §7) --------------------------------------------------------------------------
+
+  /** Daily logical export to R2; skipped when today's (WIB) file exists; prunes files older than 35 days. */
+  async exportBackup(tenantId: string, now: number = Date.now()): Promise<{ ok: true; value: BackupSummary & { skipped: boolean } } | { ok: false; refused: VaultRefusal }> {
+    const bound = this.tenantId()
+    if (bound !== tenantId) return { ok: false, refused: bound ? "TENANT_MISMATCH" : "TENANT_NOT_PROVISIONED" }
+    const key = backupKey(tenantId, wibDayOf(now))
+    const prefix = `t/${tenantId}/backup/`
+    const cutoff = backupKey(tenantId, wibDayOf(now - BACKUP_KEEP_DAYS * 86_400_000))
+    const old = await this.env.BUCKET.list({ prefix })
+    const stale = old.objects.filter((o) => o.key < cutoff).map((o) => o.key)
+    if (stale.length) await this.env.BUCKET.delete(stale)
+    if (old.objects.some((o) => o.key === key)) return { ok: true, value: { key, bytes: 0, tables: 0, rows: 0, checksum: "", skipped: true } }
+    const sql = this.ctx.storage.sql
+    const tables = dumpTables(sql)
+    const backup: TenantBackup = { format: BACKUP_FORMAT, tenantId, schemaVersion: readSchemaState(this.ctx.storage).version, exportedAt: now, ddl: schemaDdl(sql), tables }
+    const checksum = await checksumOf(tables)
+    const body = await gzipJson(backup)
+    await this.env.BUCKET.put(key, body, { httpMetadata: { contentType: "application/gzip" }, customMetadata: { tenant: tenantId, checksum, format: BACKUP_FORMAT } })
+    const rows = Object.values(tables).reduce((n, t) => n + t.rows.length, 0)
+    return { ok: true, value: { key, bytes: body.byteLength, tables: Object.keys(tables).length, rows, checksum, skipped: false } }
+  }
+
+  /** Restore drill target: only an EMPTY object (never provisioned) accepts a backup; checksum is re-computed after. */
+  async restoreBackup(key: string): Promise<{ ok: true; value: { rows: number; sourceChecksum: string; restoredChecksum: string } } | { ok: false; error: string }> {
+    if (userTables(this.ctx.storage.sql).length) return { ok: false, error: "restore target is not empty" }
+    if (!/^t\/[^/]+\/backup\/\d{4}-\d{2}-\d{2}\.json\.gz$/.test(key)) return { ok: false, error: "invalid backup key" }
+    const obj = await this.env.BUCKET.get(key)
+    if (!obj) return { ok: false, error: "backup not found" }
+    const b = await gunzipJson<TenantBackup>(await obj.arrayBuffer())
+    if (b.format !== BACKUP_FORMAT || !key.startsWith(`t/${b.tenantId}/`)) return { ok: false, error: "backup format or tenant mismatch" }
+    const sourceChecksum = await checksumOf(b.tables)
+    if (obj.customMetadata?.checksum && obj.customMetadata.checksum !== sourceChecksum) return { ok: false, error: "backup checksum mismatch" }
+    const rows = this.ctx.storage.transactionSync(() => restoreTables(this.ctx.storage.sql, b.ddl, b.tables))
+    return { ok: true, value: { rows, sourceChecksum, restoredChecksum: await checksumOf(dumpTables(this.ctx.storage.sql)) } }
   }
 
   /** Test/ops probe of the fence (no key material leaves the object). */

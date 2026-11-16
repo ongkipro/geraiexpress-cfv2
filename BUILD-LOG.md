@@ -609,3 +609,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   cookies/keys/API families refused on a custom host, suspend → 403).
 - `docs/SYSTEM-MAP.md` refreshed for M5. Live steps awaiting the owner: Turnstile widgets, a team Cloudflare test zone
   + token for one real custom domain (TASK-505).
+
+## 2026-11-16 — TASK-603 Backups and restore drill (M6)
+
+- Shipped: daily logical export of every tenant object to R2 (gzip JSON with DDL + rows + content checksum), restore
+  into an empty `drill-*` object via an OPS_TOKEN endpoint, failure alert, runbook with RPO/RTO; DO PITR (30 d) and
+  D1 Time Travel (30 d) stay the first line and are remote-only.
+- Evidence: Workers `test/backup` (2, fake clock) + mutation red; local drill restored two objects with identical
+  checksums and the D1 control plane into a scratch D1 with identical counts (`docs/evidence/TASK-603/`);
+  `pnpm check` green (unit 158, Workers 318).
+- Awaiting owner: the same drill in a staging scratch environment once TASK-109 staging resources exist.
