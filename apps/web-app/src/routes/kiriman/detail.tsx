@@ -9,14 +9,15 @@ import { api, ApiError } from "../../lib/api"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "../kasir/quote-panel"
+import { PresetPicker, PRESET_LABEL, type MaskPreset } from "../../components/masking/preset-picker"
 
 // `/kiriman/:slug` checkout (visual 07 §3.2, visual 05 stages 3–6, DEC-220): sender → recipient & contents → locked
 // summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
 // owns every amount (frozen quote); the screen never computes money.
 type Method = "qris" | "tunai" | "transfer" | "later"
-interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; display_brand_name?: string | null }
+interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; display_brand_name?: string | null; sender_kind?: string }
 interface Detail {
-  shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null }
+  shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null; mask_preset: MaskPreset; mask_snapshot_json: string | null }
   quote: (Record<string, unknown> & { service_code: string; billable_weight_gram: number; expires_at: number; cod_fee_idr: number }) | null
   sender: Contact | null
   recipient: Contact | null
@@ -125,6 +126,8 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
   const [recipient, setRecipient] = useState<Contact | null>(d.recipient)
   const [content, setContent] = useState(s.content_declaration_text ?? "")
   const [ack, setAck] = useState(!!s.prohibited_ack_at)
+  const [preset, setPreset] = useState<MaskPreset>(s.mask_preset ?? "standar_gerai")
+  const w = useWorkspace()
   const [method, setMethod] = useState<Method>(s.counter_payment_status === "not_required" ? "later" : "qris")
   const [cash, setCash] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -141,7 +144,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
     setErrors({})
     setMsg(null)
     try {
-      await api(`/shipments/${s.slug}/parties`, { body: { senderId: sender?.id, recipientId: recipient?.id, content, prohibitedAck: ack } })
+      await api(`/shipments/${s.slug}/parties`, { body: { senderId: sender?.id, recipientId: recipient?.id, content, prohibitedAck: ack, maskPreset: preset } })
       if (needPay) {
         const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": payKey }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? cashNum : undefined }) })
         const j = (await res.json()) as { ok: boolean; error?: { message: string; field_errors: Record<string, string> } }
@@ -169,6 +172,8 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           <h3 id="pengirim" className="text-lg font-semibold">3. Pengirim</h3>
           <PartyPicker kind="senders" value={sender} onPick={setSender} />
           {errors.senderId ? <p role="alert" className="text-base text-danger">{errors.senderId}</p> : null}
+          <PresetPicker value={preset} onChange={setPreset} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+          {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
         </section>
         <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="penerima">
           <h3 id="penerima" className="text-lg font-semibold">4. Penerima & isi paket</h3>
@@ -252,6 +257,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
             <p className="flex items-center gap-2 text-lg font-semibold text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
             <p className="text-base tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
             <p className="text-base">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
+            {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
             <p className="text-base text-muted-foreground">Cetak label tersedia setelah modul cetak aktif.</p>
           </>
         ) : s.dispatch_state === "provider_unpaid_hold" ? (
@@ -283,5 +289,24 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
       </section>
       <Summary d={d} owner={owner} />
     </div>
+  )
+}
+
+function Reveal({ slug, preset }: { slug: string; preset: MaskPreset }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState("")
+  const [who, setWho] = useState<{ name: string; phone: string; brand: string | null } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  if (who) return <p className="rounded-lg bg-muted px-3 py-2 text-base">Pengirim asli: <strong>{who.name}</strong> · {who.phone}{who.brand ? ` (toko ${who.brand})` : ""}</p>
+  if (!open) return <div><Button variant="outline" onClick={() => setOpen(true)}>Lihat Pengirim Asli</Button> <span className="text-base text-muted-foreground">Label: {PRESET_LABEL[preset]}</span></div>
+  return (
+    <form onSubmit={async (e) => { e.preventDefault(); setError(null); try { setWho(await api(`/shipments/${slug}/reveal-sender`, { body: { reason } })) } catch (err) { setError(err instanceof ApiError ? err.body.message : "Gagal.") } }} className="flex flex-col gap-2 border-t pt-3" noValidate>
+      <Field data-invalid={error ? true : undefined}>
+        <FieldLabel htmlFor="alasan-buka">Alasan membuka data pengirim asli (dicatat)</FieldLabel>
+        <Input id="alasan-buka" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </Field>
+      <div className="flex gap-2"><Button type="submit" disabled={reason.trim().length < 5}>Buka</Button><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button></div>
+    </form>
   )
 }

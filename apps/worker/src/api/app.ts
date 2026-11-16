@@ -319,11 +319,46 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return k
   }
   r("GET", "/shipments/:slug", "app_member", "role", (c) => detail(c, slugParam(c)))
+
+  // Masking (TASK-305, ADR-0005, DEC-231): counter state, owner settings, audited reveal.
+  const platformMasking = async (c: AppCtx) => {
+    const t = await c.env.DB.prepare("SELECT masking_enabled, masking_daily_quota FROM tenants WHERE id = ?").bind(c.get("membership")!.tenantId).first<{ masking_enabled: number; masking_daily_quota: number | null }>()
+    return { maskingEnabled: t?.masking_enabled === 1, dailyQuota: t?.masking_daily_quota ?? null }
+  }
+  r("GET", "/masking", "app_member", "self", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).maskingState(m.tenantId, await platformMasking(c))
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("GET", "/settings/masking", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const platform = await platformMasking(c)
+    const r = await vaultFor(c.env, m.tenantId).maskingSettings(m.tenantId, platform)
+    if (!r.ok) return vaultErr(r)
+    return ok({ ...r.value, dailyQuota: platform.dailyQuota })
+  })
+  r("POST", "/settings/masking", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const r = await vaultFor(c.env, m.tenantId).saveMaskingSettings(m.tenantId, { offered: b.offered, presetsEnabled: b.presetsEnabled, defaultPreset: b.defaultPreset, maskRecipientOnCod: b.maskRecipientOnCod }, c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    const platform = await platformMasking(c)
+    const s = await vaultFor(c.env, m.tenantId).maskingSettings(m.tenantId, platform)
+    return ok(s.ok ? { ...s.value, dailyQuota: platform.dailyQuota } : null)
+  })
+  r("POST", "/shipments/:slug/reveal-sender", "app_member", "self", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const r = await vaultFor(c.env, m.tenantId).revealTrueSender(m.tenantId, slugParam(c), c.get("session").user.id, typeof b.reason === "string" ? b.reason : "")
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
   r("POST", "/shipments/:slug/parties", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const slug = slugParam(c)
     const b = await body(c)
-    const r = await vaultFor(c.env, m.tenantId).setShipmentParties(m.tenantId, slug, { senderId: b.senderId, recipientId: b.recipientId, content: b.content, prohibitedAck: b.prohibitedAck })
+    const r = await vaultFor(c.env, m.tenantId).setShipmentParties(m.tenantId, slug, { senderId: b.senderId, recipientId: b.recipientId, content: b.content, prohibitedAck: b.prohibitedAck, maskPreset: b.maskPreset })
     if (!r.ok) return vaultErr(r)
     return detail(c, slug)
   })
@@ -340,7 +375,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("POST", "/shipments/:slug/dispatch", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const slug = slugParam(c)
-    const r = await vaultFor(c.env, m.tenantId).dispatchShipment(m.tenantId, slug, c.get("session").user.id)
+    const r = await vaultFor(c.env, m.tenantId).dispatchShipment(m.tenantId, slug, c.get("session").user.id, Date.now(), await platformMasking(c))
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
   })
@@ -459,6 +494,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const { vaultFor } = await import("../do/gerai-vault/stub")
     const vault = vaultFor(c.env, id)
     await vault.migrate(id)
+    if (b.masking === true) await c.env.DB.prepare("UPDATE tenants SET masking_enabled = 1, masking_daily_quota = 20 WHERE id = ?").bind(id).run()
     if (b.connect === true) {
       // Local only: a connected seller on the offline Mengantar mock, a pickup outlet and 20 % rules.
       const reg = await partnerClient(c.env).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })

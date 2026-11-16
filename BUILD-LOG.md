@@ -352,3 +352,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   void-first, courier refusal, timeout after delete, read-back down → `cancel_unknown` → resolved without resending
   DELETE); issue/cancel 429; Kasir detail without cost/margin; `shipment_index` restart + lost-ack + stale version;
   dispatch refused while the key rotates. e2e: scripted checkout 3–5 s per viewport (< 45 s).
+
+## 2026-11-16 — TASK-305 Masking presets, quota, reveal audit (M3)
+
+- Shipped: masking domain rules, per-gerai `Label & Privasi` settings in the tenant object, issue-time preset claim
+  against `masking_daily_quota` (consumed atomically with the issue, released on provider rejection), immutable print
+  and pickup snapshots, audited `Lihat Pengirim Asli`, checkout preset picker with print preview.
+- Evidence: domain tests (offered presets incl. kill-switch, default fallback, quota rule, `printedIdentity` for all
+  four presets = label snapshots); Workers tests (settings validation, Dropship snapshot never shows the outlet, quota
+  422 with no Mengantar call and no silent downgrade, switching to Standar issues, preset not offered, verified WA,
+  brand required, reveal reason + audit); e2e owner enables Dropship → checkout prints the brand → reveal; UI gates;
+  mutation red.

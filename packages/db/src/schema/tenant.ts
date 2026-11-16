@@ -188,6 +188,9 @@ export const shipments = sqliteTable(
     printCount: integer("print_count").notNull().default(0),
     issuedAt: integer("issued_at"),
     cancelledAt: integer("cancelled_at"),
+    maskPreset: text("mask_preset", { enum: ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"] }).notNull().default("standar_gerai"),
+    maskSnapshotJson: text("mask_snapshot_json"),
+    pickupSnapshotJson: text("pickup_snapshot_json"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -409,3 +412,8 @@ export const counterReceipts = sqliteTable(
   },
   (t) => [index("counter_receipts_slug").on(t.shipmentSlug, t.createdAt), index("counter_receipts_shift").on(t.shiftId)],
 )
+
+export const maskingUsage = sqliteTable("masking_usage", {
+  wibDay: text("wib_day").primaryKey(),
+  count: integer("count").notNull(),
+})

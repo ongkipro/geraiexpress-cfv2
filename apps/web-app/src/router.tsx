@@ -20,6 +20,7 @@ import { PenerimaPage } from "./routes/kontak/penerima"
 import { KasirPage } from "./routes/kasir/index"
 import { CekCepatPage } from "./routes/kasir/cek-cepat"
 import { KirimanDetailPage } from "./routes/kiriman/detail"
+import { LabelPrivasiPage } from "./routes/pengaturan/label-privasi/page"
 
 // Route table for the app SPA. Feature tasks add their routes under src/routes/** and register them here.
 export interface Me {
@@ -86,6 +87,7 @@ function ownerOnly(Page: () => ReactNode) {
 const indexRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/", component: DashboardPage })
 const notifikasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/notifikasi", component: NotifikasiPage })
 const pengaturanMengantarRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/mengantar", component: ownerOnly(PengaturanMengantarPage) })
+const labelPrivasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/label-privasi", component: ownerOnly(LabelPrivasiPage) })
 const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/ekspedisi", component: ownerOnly(PengaturanEkspedisiPage) })
 const soonPage = (title: string, body: string, task: string) => () => <ComingSoon title={title} body={body} task={task} />
 const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir", component: KasirPage })
@@ -110,7 +112,7 @@ const daftarStatusRoute = createRoute({ getParentRoute: () => rootRoute, path: "
 const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/undangan/$token", component: UndanganPage })
 
 export const routeTree = rootRoute.addChildren([
-  workspaceRoute.addChildren([indexRoute, notifikasiRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute, ...comingSoonRoutes]),
+  workspaceRoute.addChildren([indexRoute, notifikasiRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute, labelPrivasiRoute, ...comingSoonRoutes]),
   masukRoute,
   daftarAkunRoute,
   lupaSandiRoute,

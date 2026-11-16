@@ -15,6 +15,8 @@ import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, 
 import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
+import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
+import type { MaskPreset } from "@gx/domain/masking"
 import type { MediaPurpose } from "../../media"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, readShipment, recordProviderObservation, setDispatchStatus, setTimer, findShipment, type ShipmentRow, type TimerName } from "./status"
@@ -521,7 +523,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
   }
 
-  async setShipmentParties(tenantId: string, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown }): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+  async setShipmentParties(tenantId: string, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown }): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     let e: DispatchError | null = null
@@ -552,7 +554,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
    * the outcome; ambiguous → `reconciliation_needed` (read back, never re-send blindly). A second call while one is in
    * flight returns `DISPATCH_IN_PROGRESS`; a call after issue returns the issued shipment (double submit → one order).
    */
-  async dispatchShipment(tenantId: string, slug: string, actorId: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+  async dispatchShipment(tenantId: string, slug: string, actorId: string, now: number = Date.now(), platform: Platform = { maskingEnabled: false, dailyQuota: null }): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -572,17 +574,32 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const attempt = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM dispatch_journal WHERE slug = ? AND op = 'create_order'", slug).one().n + 1
     const idem = dispatchKey(slug, attempt)
     const payload = orderPayload(ready.q, ready.sender, ready.recipient, String(ready.s.content_declaration_text), slug, pickup.value)
+    const preset = (ready.s.mask_preset ?? "standar_gerai") as MaskPreset
+    const reseller = ready.sender.sender_kind === "reseller_dropship"
+    const outlet = sql.exec<{ name: string; pic_phone: string | null; street_address: string | null; subdistrict_name: string | null }>("SELECT name, pic_phone, street_address, subdistrict_name FROM tenant_outlets WHERE id = ?", pickup.value.outletId).toArray()[0]
+    const printed = printedIdentity(preset, {
+      trueSender: { name: ready.sender.true_name, phone: ready.sender.true_phone },
+      brand: { name: ready.sender.display_brand_name, phone: ready.sender.display_brand_phone, hideOutlet: ready.sender.hide_gerai_branding === 1 },
+      outlet: { name: outlet?.name ?? "", phone: outlet?.pic_phone ?? null },
+      recipientPhone: ready.recipient.phone,
+    })
     this.dispatching.add(slug)
     try {
-      this.ctx.storage.transactionSync(() => {
+      const claim = this.ctx.storage.transactionSync((): ReturnType<typeof claimPreset> => {
+        const c = claimPreset(sql, platform, preset, reseller, now)
+        if (!c.ok) return c
         sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'create_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify(payload), now, now)
         setDispatchStatus(sql, slug, "issuing_in_flight", now, {
           dispatch_state: "issuing_in_flight",
           true_sender_json: JSON.stringify({ id: ready.sender.id, name: ready.sender.true_name, phone: ready.sender.true_phone, brand: ready.sender.display_brand_name }),
           true_recipient_json: JSON.stringify({ id: ready.recipient.id, name: ready.recipient.name, phone: ready.recipient.phone, street: ready.recipient.street_address, area: ready.recipient.subdistrict_name }),
           outlet_id: pickup.value.outletId,
+          mask_snapshot_json: JSON.stringify({ preset, ...printed }),
+          pickup_snapshot_json: JSON.stringify({ outletId: pickup.value.outletId, name: outlet?.name ?? null, phone: outlet?.pic_phone ?? null, street: outlet?.street_address ?? null, area: outlet?.subdistrict_name ?? null, addressId: pickup.value.addressId }),
         })
+        return c
       })
+      if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, fields: { maskPreset: claim.message } } }
       let outcome: OrderOutcome
       try {
         const res = await publicClient(this.env, key.key).createOrder(payload, idem)
@@ -600,7 +617,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
       const at = Date.now()
       this.ctx.storage.transactionSync(() => {
         recordOutcome(sql, slug, idem, outcome, ready.q.cod_fee_idr, at)
-        this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind })
+        // A rejected issue never happened: give the masking slot back.
+        if (outcome.kind === "rejected") releasePreset(sql, preset, reseller, now)
+        this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind, preset })
       })
       await this.armOutbox()
       if (outcome.kind === "ambiguous") return this.reconcileDispatch(tenantId, slug, at)
@@ -785,6 +804,45 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", courierCode).toArray()[0]
     void tenantId
     return { ok: true, value: { addressId, type: pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup", outletId: o.id } }
+  }
+
+  // ---- Masking (TASK-305) -----------------------------------------------------------------------------------------
+
+  async maskingState(tenantId: string, platform: Platform): Promise<VaultResult<ReturnType<typeof maskingState>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: maskingState(this.ctx.storage.sql, platform, Date.now()) }
+  }
+
+  async maskingSettings(tenantId: string, platform: Platform): Promise<VaultResult<ReturnType<typeof readSettings>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: readSettings(this.ctx.storage.sql, platform) }
+  }
+
+  async saveMaskingSettings(tenantId: string, input: SettingsInput, actorId: string): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const now = Date.now()
+    const r = this.ctx.storage.transactionSync(() => {
+      const w = writeSettings(this.ctx.storage.sql, tenantId, input, actorId, now)
+      if (w.ok) this.audit(tenantId, now, "user", actorId, "masking.settings_saved", { offered: input.offered === true, presets: input.presetsEnabled, defaultPreset: input.defaultPreset })
+      return w
+    })
+    return r.ok ? { ok: true } : { ok: false, error: { status: 422, code: "INVALID_SETTINGS", message: r.message, fields: { [r.field]: r.message } } }
+  }
+
+  /** `Lihat Pengirim Asli` on an issued masked INV: reason required, audit row `true_sender_reveal` (ADR-0005). */
+  async revealTrueSender(tenantId: string, slug: string, actorId: string, reason: string): Promise<{ ok: true; value: { name: string; phone: string; brand: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const r = reason.trim()
+    if (r.length < 5 || r.length > 200) return { ok: false, error: { status: 422, code: "REASON_REQUIRED", message: "Tulis alasan membuka data pengirim asli.", fields: { reason: "Wajib diisi (min. 5 huruf)." } } }
+    const s = this.ctx.storage.sql.exec<{ true_sender_json: string | null; mask_preset: string }>("SELECT true_sender_json, mask_preset FROM shipments WHERE slug = ?", slug).toArray()[0]
+    if (!s?.true_sender_json) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan atau belum diterbitkan." } }
+    const t = JSON.parse(s.true_sender_json) as { name: string; phone: string; brand: string | null }
+    this.audit(tenantId, Date.now(), "user", actorId, "true_sender_reveal", { slug, reason: r, preset: s.mask_preset })
+    return { ok: true, value: { name: t.name, phone: t.phone, brand: t.brand ?? null } }
   }
 
   // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------

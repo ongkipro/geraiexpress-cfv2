@@ -85,7 +85,7 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
 }
 
 /** Attaches sender/recipient/contents to a draft; immutable identity snapshots are taken at dispatch. */
-export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown }, now: number): DispatchError | null {
+export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown }, now: number): DispatchError | null {
   const s = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
   if (!s) return { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." }
   if (s.dispatch_state !== "draft" && s.dispatch_state !== "failed") return { status: 409, code: "ALREADY_ISSUED", message: "Kiriman sudah diproses; data tidak bisa diubah." }
@@ -96,13 +96,17 @@ export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknow
   if (p.recipientId !== undefined && !recipient) fields.recipientId = "Pilih penerima dari Kontak."
   const content = typeof p.content === "string" ? p.content.trim().replace(/\s+/g, " ") : undefined
   if (content !== undefined && (content.length < 3 || content.length > 100 || /<|>|https?:\/\//i.test(content))) fields.content = "Isi paket 3–100 huruf, tanpa tautan."
+  const preset = p.maskPreset === undefined ? undefined : ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"].includes(String(p.maskPreset)) ? String(p.maskPreset) : null
+  if (preset === null) fields.maskPreset = "Preset label tidak dikenal."
   if (Object.keys(fields).length) return { status: 422, code: "INVALID_PARTIES", message: Object.values(fields)[0]!, fields }
   sql.exec(
     `UPDATE shipments SET sender_contact_id = COALESCE(?, sender_contact_id), recipient_contact_id = COALESCE(?, recipient_contact_id),
-       content_declaration_text = COALESCE(?, content_declaration_text), prohibited_ack_at = CASE WHEN ? THEN ? ELSE prohibited_ack_at END, updated_at = ? WHERE slug = ?`,
+       content_declaration_text = COALESCE(?, content_declaration_text), mask_preset = COALESCE(?, mask_preset),
+       prohibited_ack_at = CASE WHEN ? THEN ? ELSE prohibited_ack_at END, updated_at = ? WHERE slug = ?`,
     sender?.id ?? null,
     recipient?.id ?? null,
     content ?? null,
+    preset ?? null,
     p.prohibitedAck === true ? 1 : 0,
     now,
     now,
@@ -126,8 +130,10 @@ export function readyToDispatch(sql: SqlStorage, slug: string, now: number): { o
   if (!s.content_declaration_text) fields.content = "Isi paket wajib diisi."
   if (!s.prohibited_ack_at) fields.prohibitedAck = "Pastikan isi paket bukan barang terlarang."
   if (recipient && recipient.mengantar_area_id !== q.destination_area_id) fields.recipientId = "Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir lagi."
-  // COD needs a sender WhatsApp confirmed at the counter (spec 03 §1 Path B step 2).
+  // COD and masked sends need a sender WhatsApp confirmed at the counter (spec 03 §1 Path B step 2, ADR-0005).
   if (sender && q.cod_fee_mode !== "none" && !sender.wa_verified_at) fields.senderId = "Kiriman COD butuh WhatsApp pengirim yang sudah diverifikasi."
+  else if (sender && s.mask_preset !== "standar_gerai" && !sender.wa_verified_at) fields.senderId = "Label masking butuh WhatsApp pengirim yang sudah diverifikasi."
+  if (s.mask_preset === "dropship_toko" && sender && !sender.display_brand_name) fields.maskPreset = "Dropship Toko butuh nama toko di data pengirim."
   if (Object.keys(fields).length) return { ok: false, error: { status: 422, code: "NOT_READY", message: Object.values(fields)[0]!, fields } }
   return { ok: true, s, q, sender: sender!, recipient: recipient! }
 }
