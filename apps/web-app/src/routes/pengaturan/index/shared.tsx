@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/button"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { api, ApiError } from "../../../lib/api"
+import { ItemList } from "../../../components/admin/page"
 
 // Pengaturan sub-navigation (visual 08 §2, DEC-223): desktop left menu inside the page (≥ 1024 px), phone grouped
 // list on `/pengaturan`; items are links with `aria-current`. Kasir sees only `Printer & Struk`.
@@ -62,7 +63,6 @@ export function SettingsLayout({ title, description, children }: { title: string
         ))}
       </nav>
       <main className="mx-auto flex w-full max-w-[880px] flex-col gap-6">
-        <nav aria-label="Breadcrumb" className="text-base text-muted-foreground lg:hidden"><Link to="/pengaturan" className="text-primary underline-offset-4 hover:underline">‹ Pengaturan</Link></nav>
         <div className="flex flex-col gap-2">
           <h2 className="text-[28px] leading-tight font-semibold">{title}</h2>
           {description ? <p className="text-base text-muted-foreground">{description}</p> : null}
@@ -83,7 +83,7 @@ export function PengaturanIndexPage() {
         {visibleGroups(isOwner(w)).map((g) => (
           <section key={g.label} aria-labelledby={`g-${g.label}`}>
             <h3 id={`g-${g.label}`} className="mb-2 text-base font-semibold text-muted-foreground">{g.label}</h3>
-            <ul className="divide-y rounded-lg border bg-card">
+            <ItemList>
               {g.items.map((i) => (
                 <li key={i.to}>
                   <Link to={i.to} className="flex min-h-14 items-center justify-between gap-3 px-4 text-base hover:bg-muted">
@@ -91,7 +91,7 @@ export function PengaturanIndexPage() {
                   </Link>
                 </li>
               ))}
-            </ul>
+            </ItemList>
           </section>
         ))}
       </div>
@@ -168,7 +168,7 @@ export function useSettingsForm<T>(pick: (s: SettingsView) => T, endpoint: strin
 }
 
 export interface SettingsView {
-  profile: { name: string; whatsapp: string | null; openingHours: string | null; areaId: string | null; areaLabel: string | null; street: string | null; postalCode: string | null; logoMediaId: string | null } | null
+  profile: { name: string; whatsapp: string | null; openingHours: string | null; areaId: string | null; areaLabel: string | null; street: string | null; postalCode: string | null; logoMediaId: string | null; latitude: number | null; longitude: number | null } | null
   business: { entityType: string | null; legalName: string | null; brandName: string | null; nib: string | null; npwpMasked: string | null; registeredAddress: string | null; picName: string | null; picRole: string | null; picEmail: string | null; picPhone: string | null }
   receipt: { defaultLabelFormat: string; unboxingRemark: string; showCommission: boolean }
   packing: { items: Array<{ id: string | null; name: string; priceIdr: number; active: boolean }>; serviceFeeEnabled: boolean; serviceFeeIdr: number | null }

@@ -32,7 +32,7 @@ test("Paket Massal: unggah CSV, perbaiki baris, buat, bayar; Cek Resi", async ({
   await page.getByRole("radio", { name: /Gubeng/ }).click()
   await page.getByRole("button", { name: "Simpan & Periksa" }).click()
   await expect(page.getByRole("tab", { name: "Siap (2)" })).toBeVisible({ timeout: 20_000 })
-  await page.getByLabel("Isi semua paket bukan barang terlarang").check()
+  await page.getByRole("checkbox", { name: /Isi semua paket bukan barang terlarang/ }).check()
   await page.getByRole("button", { name: "Buat 2 Kiriman" }).click()
   await expect(page.getByText("2 resi terbit")).toBeVisible({ timeout: 30_000 })
   await page.getByRole("button", { name: /^Tandai Lunas/ }).click()

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
+import { Panel } from "../../components/admin/page"
 
 // `/notifikasi` (visual 07 §3.2): grouped by WIB day, each item deep-links; `Tandai Semua Dibaca`.
 interface Item { id: string; kind: string; title: string; body: string | null; link: string | null; createdAt: number; readAt: number | null }
@@ -56,11 +57,11 @@ export function NotifikasiPage() {
         </Button>
       </PageTitle>
       {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat notifikasi" /> : data.items.length === 0 ? (
-        <section className="rounded-lg border bg-card"><EmptyState title="Belum ada notifikasi" body="Kabar penting soal kiriman, penjemputan dan akun Mengantar akan tampil di sini." /></section>
+        <Panel className="p-0 md:p-0"><EmptyState title="Belum ada notifikasi" body="Kabar penting soal kiriman, penjemputan dan akun Mengantar akan tampil di sini." /></Panel>
       ) : (
         <div className="flex flex-col gap-6">
           {[...groups.entries()].map(([k, items]) => (
-            <section key={k} aria-labelledby={`hari-${k}`} className="rounded-lg border bg-card">
+            <Panel key={k} aria-labelledby={`hari-${k}`} className="p-0 md:p-0">
               <h3 id={`hari-${k}`} className="border-b px-4 py-3 text-lg font-semibold">{dayLabel(items[0]!.createdAt)}</h3>
               <ul className="divide-y">
                 {items.map((i) => {
@@ -86,7 +87,7 @@ export function NotifikasiPage() {
                   )
                 })}
               </ul>
-            </section>
+            </Panel>
           ))}
         </div>
       )}

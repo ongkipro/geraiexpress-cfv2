@@ -1,11 +1,14 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react"
 import { Button } from "@shared/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@shared/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
+import { Textarea } from "@shared/components/ui/textarea"
 import { api, ApiError } from "../lib/api"
 
 /**
- * Sensitive Super Admin action: reason required, TOTP within 15 minutes (server-side `owner_recent`). When the server
- * answers TOTP_RECENT_REQUIRED, the operator is sent to re-confirm TOTP (visual 07 §2 banner).
+ * Sensitive Super Admin action (DEC-236: shadcn Dialog + Textarea): reason required, TOTP within 15 minutes
+ * (server-side `owner_recent`). When the server answers TOTP_RECENT_REQUIRED, the operator is sent to re-confirm TOTP
+ * (visual 07 §2 banner). Focus returns to the trigger when the dialog closes.
  */
 export function ReasonAction(props: {
   label: string
@@ -43,37 +46,38 @@ export function ReasonAction(props: {
     }
   }
 
-  if (!open) {
-    return (
-      <Button variant={props.variant ?? "default"} onClick={() => setOpen(true)}>
-        {props.label}
-      </Button>
-    )
-  }
   return (
-    <form onSubmit={submit} className="flex w-full flex-col gap-3 border-t pt-4" noValidate>
-      <Field data-invalid={error ? true : undefined}>
-        <FieldLabel htmlFor={id}>Alasan (wajib, dicatat di log audit)</FieldLabel>
-        <textarea
-          id={id}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          maxLength={500}
-          className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          aria-invalid={error ? true : undefined}
-        />
-        {props.hint ? <FieldDescription>{props.hint}</FieldDescription> : null}
-        {error ? <FieldError>{error}</FieldError> : null}
-      </Field>
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant={props.variant === "destructive" ? "destructive" : "default"} disabled={pending || reason.trim().length < 5}>
-          {pending ? "Memproses…" : props.confirmLabel}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-          Batal
-        </Button>
-      </div>
-    </form>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (pending) return
+        setOpen(o)
+        if (!o) setError(null)
+      }}
+    >
+      <DialogTrigger render={<Button variant={props.variant ?? "default"} />}>{props.label}</DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <DialogHeader>
+            <DialogTitle>{props.label}</DialogTitle>
+            <DialogDescription>Tindakan ini dicatat di log audit beserta alasan Anda.</DialogDescription>
+          </DialogHeader>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor={id}>Alasan (wajib, dicatat di log audit)</FieldLabel>
+            <Textarea id={id} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} aria-invalid={error ? true : undefined} />
+            {props.hint ? <FieldDescription>{props.hint}</FieldDescription> : null}
+            {error ? <FieldError>{error}</FieldError> : null}
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Batal
+            </Button>
+            <Button type="submit" variant={props.variant === "destructive" ? "destructive" : "default"} disabled={pending || reason.trim().length < 5}>
+              {pending ? "Memproses…" : props.confirmLabel}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

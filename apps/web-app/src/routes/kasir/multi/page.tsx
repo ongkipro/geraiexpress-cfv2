@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-grou
 import { api, ApiError } from "../../../lib/api"
 import { PageTitle } from "../../../shell/states"
 import { PartyPicker, type Contact } from "../../kiriman/detail"
+import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
 
 // `/kasir/multi` Paket Massal setup (visual 07, spec 03 §1.3): sender → courier + COD mode → rows by hand or CSV
 // upload (≤ 200 rows, 1 MB). The server parses and validates every row; checking continues on the batch page.
@@ -66,11 +67,9 @@ export function PaketMassalPage() {
   }
   return (
     <div className="pb-24 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground"><Link to="/kasir" className="text-primary underline-offset-4 hover:underline">Buat Pengiriman</Link> › Paket Massal</nav>
       <PageTitle title="Paket Massal" description="Satu pengirim, banyak paket, satu kali bayar di loket. Maksimal 200 baris." />
       <div className="flex flex-col gap-6">
-        <section className="rounded-lg border bg-card p-4 md:p-6" aria-labelledby="pengirim">
-          <h3 id="pengirim" className="mb-3 text-lg font-semibold">1. Pengirim</h3>
+        <SectionCard id="pengirim" title="1. Pengirim">
           {sender ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-base"><span className="font-medium">{sender.display_brand_name ?? sender.true_name}</span> <span className="text-muted-foreground tabular-nums">{sender.true_phone}</span></p>
@@ -80,23 +79,20 @@ export function PaketMassalPage() {
             <PartyPicker kind="senders" value={sender} onPick={setSender} />
           )}
           {errors.senderId ? <p role="alert" className="mt-2 text-base text-danger">{errors.senderId}</p> : null}
-        </section>
+        </SectionCard>
 
-        <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="layanan">
-          <h3 id="layanan" className="text-lg font-semibold">2. Ekspedisi & COD untuk semua baris</h3>
-          <div role="radiogroup" aria-label="Ekspedisi" className="flex flex-wrap gap-2">
-            {services.map((s) => (
-              <button key={s.code} type="button" role="radio" aria-checked={service === s.code} onClick={() => setService(s.code)} className={`h-11 rounded-lg border px-4 text-base ${service === s.code ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{s.name}</button>
-            ))}
-          </div>
+        <SectionCard id="layanan" title="2. Ekspedisi & COD untuk semua baris">
+          <div className="flex flex-col gap-4">
+          <ChoiceGroup label="Ekspedisi" value={service || null} onValueChange={setService} choices={services.map((s) => ({ value: s.code, label: s.name }))} />
           <ToggleGroup value={[mode]} onValueChange={(v) => v[0] && setMode(v[0])} variant="outline" aria-label="Mode COD" className="flex-wrap">
             {MODES.map((m) => <ToggleGroupItem key={m.id} value={m.id}>{m.label}</ToggleGroupItem>)}
           </ToggleGroup>
           <p className="text-base text-muted-foreground">Baris dengan nominal COD memakai mode COD di atas; baris tanpa COD dikirim biasa.</p>
-        </section>
+        </div>
+        </SectionCard>
 
-        <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="baris">
-          <h3 id="baris" className="text-lg font-semibold">3. Daftar paket</h3>
+        <SectionCard id="baris" title="3. Daftar paket">
+          <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 text-base font-medium focus-within:ring-2 focus-within:ring-ring">
               <UploadIcon aria-hidden className="size-4" /> Unggah CSV
@@ -130,7 +126,8 @@ export function PaketMassalPage() {
           )}
           {!file ? <div><Button variant="outline" disabled={rows.length >= 200} onClick={() => setRows((rs) => [...rs, { ...EMPTY }])}><PlusIcon aria-hidden /> Tambah Baris</Button></div> : null}
           {errors.rows ? <FieldError>{errors.rows}</FieldError> : <FieldDescription>Kolom template: Nama Penerima, No HP, Alamat, Kecamatan/Kota, Kode Pos, Isi Paket, Berat (gram), Panjang, Lebar, Tinggi, COD (Rp), Nilai Barang (Rp), Catatan.</FieldDescription>}
-        </section>
+        </div>
+        </SectionCard>
 
         {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
         <div className="flex flex-wrap gap-2">

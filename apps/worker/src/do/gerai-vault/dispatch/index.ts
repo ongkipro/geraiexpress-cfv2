@@ -5,7 +5,7 @@
 //   3. record the outcome (commit): issued / provider_unpaid_hold / failed / reconciliation_needed (ambiguous)
 // An ambiguous outcome is never retried blindly: `reconcileDispatch` reads back by `destinationMark` (the INV).
 import { isQuoteDrift } from "@gx/domain/money"
-import type { CreateOrderInput, OrderItem } from "@gx/mengantar-sdk"
+import { pickupVolume, type CreateOrderInput, type OrderItem, type PickupVolume } from "@gx/mengantar-sdk"
 import { readShipment, setDispatchStatus, markIssued, type ShipmentRow } from "../status"
 import { readRecipient, readSender, type RecipientRow, type SenderRow } from "../contacts"
 
@@ -30,6 +30,8 @@ export type QuoteRow = {
   provider_net_shipping_idr: number
   effective_gerai_cost_idr: number
   insurance_fee_idr: number | null
+  declared_value_idr: number
+  is_dangerous_goods: number
   cod_fee_idr: number
   cod_goods_amount_idr: number
   cod_collection_total_idr: number
@@ -98,7 +100,7 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
 }
 
 /** Attaches sender/recipient/contents to a draft; immutable identity snapshots are taken at dispatch. */
-export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown }, now: number): DispatchError | null {
+export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown; quantity?: unknown; deliveryInstruction?: unknown }, now: number): DispatchError | null {
   const s = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
   if (!s) return { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." }
   if (s.dispatch_state !== "draft" && s.dispatch_state !== "failed") return { status: 409, code: "ALREADY_ISSUED", message: "Kiriman sudah diproses; data tidak bisa diubah." }
@@ -111,15 +113,24 @@ export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknow
   if (content !== undefined && (content.length < 3 || content.length > 100 || /<|>|https?:\/\//i.test(content))) fields.content = "Isi paket 3–100 huruf, tanpa tautan."
   const preset = p.maskPreset === undefined ? undefined : ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"].includes(String(p.maskPreset)) ? String(p.maskPreset) : null
   if (preset === null) fields.maskPreset = "Preset label tidak dikenal."
+  // DEC-238: `orders[].quantity` (items in the parcel) and `orders[].deliveryInstruction` (note for the courier).
+  const qty = p.quantity === undefined || p.quantity === null || p.quantity === "" ? undefined : Number(p.quantity)
+  if (qty !== undefined && (!Number.isSafeInteger(qty) || qty < 1 || qty > 999)) fields.quantity = "Jumlah barang 1–999."
+  const note = typeof p.deliveryInstruction === "string" ? p.deliveryInstruction.trim().replace(/\s+/g, " ") : p.deliveryInstruction == null ? undefined : null
+  if (note === null || (note !== undefined && (note.length > 120 || /<|>|https?:\/\//i.test(note)))) fields.deliveryInstruction = "Instruksi kurir maksimal 120 huruf, tanpa tautan."
   if (Object.keys(fields).length) return { status: 422, code: "INVALID_PARTIES", message: Object.values(fields)[0]!, fields }
   sql.exec(
     `UPDATE shipments SET sender_contact_id = COALESCE(?, sender_contact_id), recipient_contact_id = COALESCE(?, recipient_contact_id),
        content_declaration_text = COALESCE(?, content_declaration_text), mask_preset = COALESCE(?, mask_preset),
+       item_quantity = COALESCE(?, item_quantity), delivery_instruction = CASE WHEN ? THEN NULLIF(?, '') ELSE delivery_instruction END,
        prohibited_ack_at = CASE WHEN ? THEN ? ELSE prohibited_ack_at END, updated_at = ? WHERE slug = ?`,
     sender?.id ?? null,
     recipient?.id ?? null,
     content ?? null,
     preset ?? null,
+    qty ?? null,
+    note !== undefined ? 1 : 0,
+    note ?? null,
     p.prohibitedAck === true ? 1 : 0,
     now,
     now,
@@ -151,8 +162,14 @@ export function readyToDispatch(sql: SqlStorage, slug: string, now: number): { o
   return { ok: true, s, q, sender: sender!, recipient: recipient! }
 }
 
-/** Mengantar `POST /order` body for one INV (destinationMark = INV, COD = frozen C, weight = frozen provider kg). */
-export function orderPayload(q: QuoteRow, sender: SenderRow, recipient: RecipientRow, content: string, slug: string, pickup: { addressId: string; type: "scheduledPickup" | "dropOff"; timeId?: string }): CreateOrderInput {
+export type PickupRef = { addressId: string; type: "scheduledPickup"; timeId: string; volume: PickupVolume } | { addressId: string; type: "dropOff" }
+
+/**
+ * Mengantar `POST /order` body for one INV (destinationMark = INV, COD = frozen C, weight = frozen provider kg) in the
+ * v2.0.0 shape: `scheduledPickup` carries `time_id` + `volume`, `dropOff` neither; non-COD sends the declared
+ * `goodsValue`; J&T ECO books `courier: "JT"` + `eco: true`; DG is a JSON boolean.
+ */
+export function orderPayload(q: QuoteRow, sender: SenderRow, recipient: RecipientRow, ship: { content: string; quantity: number; instruction: string | null }, slug: string, pickup: PickupRef): CreateOrderInput {
   const cod = q.cod_fee_mode !== "none"
   const order: Record<string, unknown> = {
     customerName: recipient.name,
@@ -160,15 +177,24 @@ export function orderPayload(q: QuoteRow, sender: SenderRow, recipient: Recipien
     customerAddress: [recipient.street_address, recipient.address_note].filter(Boolean).join(" · "),
     customerAddressDataId: recipient.mengantar_area_id,
     weight: Number(q.provider_weight_kg_text),
-    quantity: 1,
-    parcelContent: content,
+    quantity: ship.quantity,
+    parcelContent: ship.content,
     destinationMark: slug.toUpperCase(),
-    ...(cod ? { COD: q.cod_collection_total_idr } : { goodsValue: Math.max(q.cod_goods_amount_idr, 0) }),
+    ...(ship.instruction ? { deliveryInstruction: ship.instruction } : {}),
+    ...(cod ? { COD: q.cod_collection_total_idr } : { goodsValue: q.declared_value_idr }),
     ...(q.service_class === "cargo" ? { cargo: true } : {}),
+    ...(q.service_code === "JTEco" ? { eco: true } : {}),
+    ...(q.is_dangerous_goods === 1 ? { isDangerousGoods: true } : {}),
   }
   void sender
-  return { courier: q.courier_code as CreateOrderInput["courier"], pickup: { type: pickup.type, address_id: pickup.addressId, ...(pickup.timeId ? { time_id: pickup.timeId } : {}), volume: "volumeMotor" }, orders: [order] }
+  return {
+    courier: q.courier_code as CreateOrderInput["courier"],
+    pickup: pickup.type === "scheduledPickup" ? { type: "scheduledPickup", address_id: pickup.addressId, time_id: pickup.timeId, volume: pickup.volume } : { type: "dropOff", address_id: pickup.addressId },
+    orders: [order],
+  }
 }
+
+export { pickupVolume }
 
 export type OrderOutcome =
   | { kind: "issued"; item: OrderItem; batchId: string | null; batchCode: string | null }

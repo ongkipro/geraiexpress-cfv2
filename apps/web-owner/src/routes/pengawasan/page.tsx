@@ -6,6 +6,7 @@ import { Input } from "@shared/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, formatDate, PageHead, Section, StatusChip } from "../../components/page"
 import { api, ApiError } from "../../lib/api"
+import { Textarea } from "@shared/components/ui/textarea"
 
 // Super Admin `Pengawasan` (visual 07 §3.3): cross-tenant read-only search and the COD risk radar (risk_review +
 // recent TOTP + audited read). No action here changes a gerai's shipments (DEC-209).
@@ -125,7 +126,7 @@ function RiskRadar() {
           </Field>
           <Field>
             <FieldLabel htmlFor="alasan-risiko">Alasan (wajib)</FieldLabel>
-            <Input id="alasan-risiko" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+            <Textarea id="alasan-risiko" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
             <FieldDescription>Misalnya: laporan gerai tentang penerima COD.</FieldDescription>
           </Field>
         </div>

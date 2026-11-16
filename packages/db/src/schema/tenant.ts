@@ -17,6 +17,8 @@ export const tenantSettings = sqliteTable("tenant_settings", {
   maskRecipientPhoneOnCodDefault: integer("mask_recipient_phone_on_cod_default").notNull().default(0),
   updatedAt: integer("updated_at").notNull(),
   updatedBy: text("updated_by"),
+  mengantarDropshipperSync: integer("mengantar_dropshipper_sync").notNull().default(0),
+  mengantarDropshipperState: text("mengantar_dropshipper_state", { enum: ["ok", "disabled"] }),
 })
 
 export const tenantBusinessProfiles = sqliteTable("tenant_business_profiles", {
@@ -203,6 +205,8 @@ export const shipments = sqliteTable(
     pickupBatchId: text("pickup_batch_id"),
     conflictNote: text("conflict_note"),
     conflictResolvedAt: integer("conflict_resolved_at"),
+    itemQuantity: integer("item_quantity").notNull().default(1),
+    deliveryInstruction: text("delivery_instruction"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -251,6 +255,9 @@ export const tenantCourierPrefs = sqliteTable(
     pickupMode: text("pickup_mode", { enum: ["scheduled_pickup", "drop_off_only"] }).notNull(),
     updatedAt: integer("updated_at").notNull(),
     updatedBy: text("updated_by"),
+    codBlockedAt: integer("cod_blocked_at"),
+    codBlockedStatus: text("cod_blocked_status"),
+    codDeliveredRate: integer("cod_delivered_rate"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.courierCode] })],
 )
@@ -304,6 +311,8 @@ export const senderContacts = sqliteTable(
     isArchived: integer("is_archived").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
+    mengantarDropshipperId: text("mengantar_dropshipper_id"),
+    mengantarDropshipperKey: text("mengantar_dropshipper_key"),
   },
   (t) => [index("sender_contacts_phone").on(t.truePhone), index("sender_contacts_name").on(t.trueName)],
 )
@@ -383,6 +392,8 @@ export const quoteSnapshots = sqliteTable(
     expiresAt: integer("expires_at").notNull(),
     counterServiceFeeIdr: integer("counter_service_fee_idr").notNull().default(0),
     promoDiscountIdr: integer("promo_discount_idr").notNull().default(0),
+    declaredValueIdr: integer("declared_value_idr").notNull().default(0),
+    isDangerousGoods: integer("is_dangerous_goods").notNull().default(0),
   },
   (t) => [index("quote_snapshots_slug").on(t.shipmentSlug, t.quotedAt)],
 )
@@ -615,6 +626,33 @@ export const apiKeySpend = sqliteTable(
   },
   (t) => [index("api_key_spend_key_day").on(t.keyId, t.wibDay)],
 )
+
+// DEC-238: one Mengantar `POST /time` slot per (address, date, hour), reused while still ahead.
+export const pickupTimeSlots = sqliteTable(
+  "pickup_time_slots",
+  {
+    addressId: text("address_id").notNull(),
+    slotDate: text("slot_date").notNull(),
+    slotTime: text("slot_time").notNull(),
+    timeId: text("time_id").notNull(),
+    startsAt: integer("starts_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.addressId, t.slotDate, t.slotTime] })],
+)
+
+// DEC-238: Mengantar receiver score cache (24 h per phone, 403/429 outcomes included).
+export const receiverScoreCache = sqliteTable("receiver_score_cache", {
+  phone: text("phone").primaryKey(),
+  state: text("state", { enum: ["ok", "forbidden", "limited"] }).notNull(),
+  grade: text("grade"),
+  approximate: integer("approximate").notNull().default(0),
+  averageRateX10: integer("average_rate_x10"),
+  total: integer("total").notNull().default(0),
+  delivered: integer("delivered").notNull().default(0),
+  rts: integer("rts").notNull().default(0),
+  fetchedAt: integer("fetched_at").notNull(),
+})
 
 // TASK-403 pickup manifests (Surat Jalan).
 export const pickupBatches = sqliteTable(

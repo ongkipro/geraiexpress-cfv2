@@ -19,6 +19,12 @@ export const CourierRateSchema = z
     price: numOrNull,
     discountPercent: numOrNull,
     discount: numOrNull,
+    // v2.0.0: an extra promo on top of the seller discount; `estimatedSpecialPrice` already nets both.
+    discountExtra: numOrNull,
+    discountExtraPercent: numOrNull,
+    cargoDiscountPercent: numOrNull,
+    cargoDiscountExtra: numOrNull,
+    cargoDiscountExtraPercent: numOrNull,
     codFee: numOrNull,
     estimatedPrice: numOrNull,
     estimatedSpecialPrice: numOrNull,
@@ -32,6 +38,8 @@ export const CourierRateSchema = z
     unsupportedPickup: z.boolean().nullable().optional(),
     estimate_delivery: z.string().nullable().optional(),
     estimatedDate: z.string().nullable().optional(),
+    /** `spx` only: open pickup slots by `YYYY-MM-DD` (v2.0.0). */
+    pickupSchedule: z.record(z.string(), z.array(z.object({ start: z.string(), end: z.string() }).passthrough())).nullable().optional(),
   })
   .passthrough()
 export type CourierRate = z.infer<typeof CourierRateSchema>
@@ -118,6 +126,37 @@ export const SaveAddressSchema = z.object({ success: z.literal(true), _id: z.str
 export const PayUnpaidSchema = z.object({ success: z.literal(true), data: z.object({ count: num.optional(), cnote_no: z.array(z.string()).optional() }).passthrough().optional() }).passthrough()
 export const DeleteOrderSchema = z.object({ success: z.boolean() }).passthrough()
 
+const CourierScoreSchema = z.object({ total: numOrNull, delivered: numOrNull, rts: numOrNull, undelivered: numOrNull, inProgress: numOrNull, rate: numOrNull }).passthrough()
+/** GET /getReceiverScoreByNumberUser — COD history across every Mengantar seller; `average_score` may carry `≈`. */
+export const ReceiverScoreSchema = z
+  .object({
+    success: z.literal(true),
+    data: z
+      .object({
+        phone: z.string().optional(),
+        summary: z.object({ average_number: z.number().nullable().optional(), average_score: z.string().nullable().optional() }).passthrough().nullable().optional(),
+      })
+      .catchall(z.unknown()),
+  })
+  .passthrough()
+export interface ReceiverScore {
+  /** `A`..`E-`, or null when no courier has data (`-`). */
+  grade: string | null
+  /** True when Mengantar marked the grade `≈` (fewer than 4 transactions combined). */
+  approximate: boolean
+  /** Average delivered rate on a 0–10 scale; null without data. */
+  averageRate: number | null
+  /** COD orders counted across couriers (delivered + rts + undelivered). */
+  total: number
+  delivered: number
+  rts: number
+}
+
+export const DropshipperSchema = z.object({ id: z.string(), name: z.string(), phone: z.string() }).passthrough()
+export const DropshipperSaveSchema = z.object({ success: z.literal(true), data: DropshipperSchema }).passthrough()
+export const DropshipperListSchema = z.object({ success: z.literal(true), data: z.array(DropshipperSchema).default([]) }).passthrough()
+export const SimulationSchema = z.object({ success: z.literal(true), data: z.object({ orderId: z.string().optional(), trackingNumber: z.string().nullable().optional(), statusCategory: z.string().optional() }).passthrough() }).passthrough()
+
 // ---------------------------------------------------------------------------------------------------------------
 // Client
 
@@ -146,10 +185,82 @@ export interface EstimateQuery {
   dangerousGoods?: boolean
 }
 
+/** `SAP` / `SAPLite` / `JTEco` rate keys (courier=all) mapped to the catalog code; booking courier for each code. */
+export const RATE_KEY_ALIASES: Record<string, string> = { SAP: "Sap", SAPCargo: "SapCargo" }
+export const BOOKING_COURIER: Record<string, { courier: Courier; eco?: true; cargo?: true }> = {
+  JTEco: { courier: "JT", eco: true },
+  SAPLite: { courier: "Sap" },
+}
+
 export interface CreateOrderInput {
   courier: Courier
-  pickup: { type: "scheduledPickup" | "dropOff"; address_id: string; time_id?: string; volume: "volumeMotor" | "volumeMobil" | "volumeTruck" }
+  /** `time_id` and `volume` are required for `scheduledPickup` and must be omitted for `dropOff` (v2.0.0). */
+  pickup: { type: "scheduledPickup"; address_id: string; time_id: string; volume: PickupVolume } | { type: "dropOff"; address_id: string }
   orders: Array<Record<string, unknown>>
+}
+
+export type PickupVolume = "volumeMotor" | "volumeMobil" | "volumeTruck"
+
+/** Vehicle for a scheduled pickup from the batch's billable weight (< 20 kg motor, < 100 kg car, else truck). */
+export const pickupVolume = (billableGram: number): PickupVolume => (billableGram < 20_000 ? "volumeMotor" : billableGram < 100_000 ? "volumeMobil" : "volumeTruck")
+
+/** WIB wall clock (UTC+7, no DST). */
+const wib = (ms: number) => {
+  const d = new Date(ms + 7 * 3_600_000)
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), min: d.getUTCMinutes() }
+}
+const pad = (n: number) => String(n).padStart(2, "0")
+
+/**
+ * Next pickup slot for `POST /time`: the earliest whole hour 09:00–18:00 WIB at least `leadMinutes` (default 120, stricter
+ * than Mengantar's 90) from now; after the cut-off it rolls to 10:00 the next day. `spxWindows` (estimate
+ * `pickupSchedule`) narrows the choice to an open SPX slot. Returns `date` as MM-DD-YYYY and `time` as `HH:00`.
+ */
+export function nextPickupSlot(nowMs: number, leadMinutes = 120, spxWindows?: Record<string, Array<{ start: string; end: string }>> | null): { date: string; time: string; startsAtMs: number } | null {
+  for (let day = 0; day < 3; day++) {
+    const base = wib(nowMs + day * 86_400_000)
+    const firstHour = day === 0 ? 9 : 10
+    for (let h = firstHour; h <= 18; h++) {
+      const startsAtMs = Date.UTC(base.y, base.m - 1, base.d, h - 7, 0)
+      if (startsAtMs - nowMs < leadMinutes * 60_000) continue
+      const iso = `${base.y}-${pad(base.m)}-${pad(base.d)}`
+      if (spxWindows) {
+        const slots = spxWindows[iso] ?? []
+        const hh = `${pad(h)}:00`
+        if (!slots.some((s) => s.start <= hh && hh < s.end)) continue
+      }
+      return { date: `${pad(base.m)}-${pad(base.d)}-${base.y}`, time: `${pad(h)}:00`, startsAtMs }
+    }
+  }
+  return null
+}
+
+/** Pos Indonesia COD eligibility refusal (403 with `status` new_seller / insufficient / blocked), else null. */
+export function posCodRefusal(err: unknown): { status: "new_seller" | "insufficient" | "blocked"; deliveredRate: number | null; minimumDeliveredRate: number } | null {
+  if (!(err instanceof MengantarError) || err.status !== 403) return null
+  const b = err.body as { status?: unknown; deliveredRate?: unknown; minimumDeliveredRate?: unknown } | null
+  if (b?.status !== "new_seller" && b?.status !== "insufficient" && b?.status !== "blocked") return null
+  return { status: b.status, deliveredRate: typeof b.deliveredRate === "number" ? b.deliveredRate : null, minimumDeliveredRate: typeof b.minimumDeliveredRate === "number" ? b.minimumDeliveredRate : 82 }
+}
+
+const GRADE = /^(≈)?\s*([A-E]-?)$/
+
+/** Parses the receiver-score response into a stable shape (grade without the `≈`, totals across couriers). */
+export function receiverScoreOf(data: z.infer<typeof ReceiverScoreSchema>["data"]): ReceiverScore {
+  const raw = (data.summary?.average_score ?? "-").trim()
+  const m = GRADE.exec(raw)
+  let total = 0
+  let delivered = 0
+  let rts = 0
+  for (const [k, v] of Object.entries(data)) {
+    if (k === "summary" || !v || typeof v !== "object") continue
+    const c = CourierScoreSchema.safeParse(v)
+    if (!c.success) continue
+    total += c.data.total ?? 0
+    delivered += c.data.delivered ?? 0
+    rts += c.data.rts ?? 0
+  }
+  return { grade: m ? m[2]! : null, approximate: !!m?.[1], averageRate: data.summary?.average_number ?? null, total, delivered, rts }
 }
 
 export class MengantarPublicClient {
@@ -172,20 +283,21 @@ export class MengantarPublicClient {
   }
 
   /** POST /address: registers (or updates with `_id`) a pickup address from an area id; returns the address `_id`. */
-  async saveAddress(input: { _id?: string; areaId: string; name: string; phone: string; address: string; pinpoint?: { lat: number; lng: number } }): Promise<string> {
-    const raw = await request(this.opts, {
-      method: "POST",
-      path: "/address",
-      body: { ...(input._id ? { _id: input._id } : {}), PICKUP_AUTOFILL: input.areaId, PICKUP_NAME: input.name, PICKUP_PHONE: input.phone, PICKUP_ADDRESS: input.address, ...(input.pinpoint ? { pinpointData: input.pinpoint } : {}) },
-    })
+  /** POST /address (add) or PUT /address/{id} (update). v2.0.0 fields: `PICKUP_PIC` + `PICKUP_PIC_PHONE` are required on add;
+   *  `pinpointData` is required for a Pos Indonesia scheduled pickup. */
+  async saveAddress(input: { _id?: string; areaId: string; name: string; pic?: string; phone: string; address: string; pinpoint?: { lat: number; lng: number } | null }): Promise<string> {
+    const body = { PICKUP_AUTOFILL: input.areaId, PICKUP_NAME: input.name, PICKUP_PIC: input.pic ?? input.name, PICKUP_PIC_PHONE: input.phone, PICKUP_ADDRESS: input.address, ...(input.pinpoint ? { pinpointData: input.pinpoint } : {}) }
+    const path = input._id ? `/address/${encodeURIComponent(input._id)}` : "/address"
+    const raw = await request(this.opts, { method: input._id ? "PUT" : "POST", path, body })
     const out = parse(SaveAddressSchema, raw, "/address")
     const id = out.data?._id ?? out._id
     if (!id) throw new MengantarError("envelope", "/address", raw.status, "UNEXPECTED_SHAPE", "Alamat jemput tidak tersimpan di Mengantar.")
     return id
   }
 
-  /** POST /time: reserves one pickup slot (`date` mm-dd-yyyy, `time` "9:00".."18:00", ≥ 90 min ahead); returns its `_id`. */
+  /** POST /time: reserves one pickup slot (`date` MM-DD-YYYY, `time` two-digit hour "09:00".."20:00"); returns its `_id`. */
   async reserveTime(addressId: string, date: string, time: string): Promise<string> {
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(date) || !/^(09|1\d|20):00$/.test(time)) throw new MengantarError("envelope", "/time", null, "PICKUP_TIME_INVALID", "Jam penjemputan tidak valid.")
     const raw = await request(this.opts, { method: "POST", path: "/time", body: { address_id: addressId, date, time } })
     const out = parse(SaveAddressSchema, raw, "/time")
     const id = out.data?._id ?? out._id
@@ -230,6 +342,32 @@ export class MengantarPublicClient {
     if (!/^[0-9a-f]{24}$/i.test(batchId)) throw new MengantarError("envelope", "/order/pay-unpaid", null, "BATCH_ID_INVALID", "batch_id tidak valid.")
     const raw = await request(this.opts, { method: "POST", path: "/order/pay-unpaid", body: { courier, batch_id: batchId } })
     return parse(PayUnpaidSchema, raw, "/order/pay-unpaid")
+  }
+
+  /** GET /getReceiverScoreByNumberUser: one phone per call. 403 (not whitelisted) and 429 (daily limit) are thrown. */
+  async receiverScore(phone: string): Promise<ReceiverScore> {
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length < 8 || digits.length > 15) throw new MengantarError("envelope", "/getReceiverScoreByNumberUser", null, "PHONE_INVALID", "Nomor HP tidak valid.")
+    const raw = await request(this.opts, { method: "GET", path: "/getReceiverScoreByNumberUser", query: { search: digits } })
+    return receiverScoreOf(parse(ReceiverScoreSchema, raw, "/getReceiverScoreByNumberUser").data)
+  }
+
+  /** POST /dropshippers: idempotent on exact (name, phone); 403 when the feature is off for the seller account. */
+  async saveDropshipper(name: string, phone: string) {
+    const raw = await request(this.opts, { method: "POST", path: "/dropshippers", body: { name: name.trim(), phone: phone.trim() } })
+    return parse(DropshipperSaveSchema, raw, "/dropshippers").data
+  }
+
+  async searchDropshippers(search: string, page = 1) {
+    const q = search.replace(/[()[\]{}]/g, "").trim()
+    const raw = await request(this.opts, { method: "GET", path: "/dropshippers", query: { search: q || undefined, page, perPage: 20 } })
+    return parse(DropshipperListSchema, raw, "/dropshippers").data
+  }
+
+  /** POST /order/simulation (sandbox only; 404 in production): moves one order to ON DELIVERY / DELIVERED / RTS. */
+  async simulateStatus(courier: Courier, orderId: string, statusCategory: "ON DELIVERY" | "DELIVERED" | "RTS") {
+    const raw = await request(this.opts, { method: "POST", path: "/order/simulation", body: { courier, orderId, statusCategory } })
+    return parse(SimulationSchema, raw, "/order/simulation").data
   }
 
   async deleteOrders(courier: Courier, ids: string[]) {

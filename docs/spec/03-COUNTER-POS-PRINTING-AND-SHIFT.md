@@ -15,13 +15,25 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
    - records `QRIS gerai / Tunai / Transfer / Bayar nanti` → presses **`Tandai Lunas & Cetak (Ctrl+Enter)`** (DEC-220).
 
 ### Path B — Direct Walk-In POS (`< 45s`)
+
+Runs on one screen, `Buat Pengiriman › Kiriman Satuan` (`/kasir`, DEC-237): steps 1–4 in the left 60 %, step 5 in the
+sticky right 40 % (`Ringkasan & Pembayaran`); one primary freezes the quote (allocates the INV), attaches the parties,
+records the payment and issues, then shows `Resi terbit` + `Cetak Label` + `Kiriman Baru` without a page change. A
+retry after a refusal reuses the same INV and payment key; once a payment or a QR claim is recorded, a changed quote
+is finished on `/kiriman/:slug`. Senders and recipients can be added in a Sheet without leaving the screen.
+
 1. **Weight & Destination First:**
    - Weight defaults to **`1000`** with an inline 1-click **`[ gram ● | kg ]`** segmented toggle (`1250` `[gram ●]` ⇄ `1,25` `[kg ●]`), quick chips (`500 g`, `1.000 g`, `2 kg`, `5 kg`, `10 kg`), and helper text `= 1,25 kg · Masuk tarif 1 kg (toleransi s.d. 1.300 g)`.
    - **Unit-Mistake Guard:** entering `< 10` in `gram` mode (e.g., typing `2` intending `2 kg`) or `>= 100` in `kg` mode (e.g., typing `1000` intending `1000 g`) displays a 1-click yellow fix chip and blocks submission until confirmed.
    - Selecting destination subdistrict immediately streams parallel courier cards.
 2. **Sender (`Kontak > Pengirim`) & 3-Way Masking Preset:** masked or COD sends need `wa_verified_at`; an unverified sender shows `Verifikasi WA` (opens click-to-chat, cashier confirms) before `Tandai Lunas & Cetak` unlocks. Sender-masked presets are disabled when `masking_daily_quota` is used up.
 3. **Recipient (`Kontak > Penerima`), Local COD Phone Risk Badge & Anti-Cordest Validation:** auto-normalizes `+62` → `08`, blocks URLs/markup, requires >= 2 street words, and checks this gerai's `recipient_contacts` delivery/RTS counters (tenant object) (`⚪ Baru` when 0 history; `🟢 / 🟡 / 🔴` once local history exists — RTS share ≤ 20 % 🟢, ≤ 40 % 🟡, above 🔴 (`@gx/domain/contacts` `riskBadge`); optional Mengantar `getReceiverScoreByNumberUser` enrichment only if the seller account is production-whitelisted).
-4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.**
+4. **Item Declaration, Insurance Prompt (`>= Rp500.000`), & Shop Packing Add-Ons.** `Isi paket`, `Jumlah barang`
+   (`quantity`, default 1), `Instruksi kurir / patokan` (`deliveryInstruction`, ≤ 120 chars), `Nilai barang` on
+   Non-COD (`goodsValue`; required Rp1.000–Rp10.000.000 for Anteraja, Pos, SPX) and `Barang berbahaya (DG)` (only
+   SiCepat HALU and iDexpress) are sent to Mengantar as-is (DEC-238). The recipient card shows the local COD badge and
+   the Mengantar receiver score (`A`..`E-`, `≈` when fewer than 4 COD orders; hidden text when the account is not
+   whitelisted or the daily limit is used up).
 5. **Record Payment & 1-Click Print (DEC-220):** the outlet collects money itself; the POS only records it.
    - `Catat pembayaran` segmented control: `QRIS gerai` · `Tunai` (cash received → change) · `Transfer` · `Bayar nanti`.
    - QRIS/Transfer: the cashier checks the outlet's own QRIS notification or bank mutation and confirms; no proof upload.

@@ -7,7 +7,7 @@ export interface Workspace {
   role: "gerai_admin" | "cashier"
   menus: string[]
   badges: { kiriman: number; notifications: number }
-  hints: { mengantarWebhook: string | null }
+  hints: { mengantarWebhook: string | null; sandboxTools?: boolean }
   tenants: Array<{ id: string; name: string; slug: string }>
 }
 

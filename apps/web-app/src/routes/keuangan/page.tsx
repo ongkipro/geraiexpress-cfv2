@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useSearch } from "@tanstack/react-router"
 import { RefreshCwIcon } from "lucide-react"
+import { DataTableShell } from "../../components/admin/data-table"
+import { CalloutAlert, MetricCard, MetricGrid, SectionCard, StatusBadge } from "../../components/admin/page"
 import { Button } from "../../components/ui/button"
+import { Field, FieldLabel } from "../../components/ui/field"
+import { Input } from "../../components/ui/input"
+import { Separator } from "../../components/ui/separator"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { rp } from "../kasir/quote-panel"
+import { LinkButton } from "../../components/admin/link-button"
 
 // `Keuangan` (visual 06 §3, visual 07 `/keuangan`, spec 09; owner only — the API refuses Kasir): synced balance,
 // Saldo Aman, COD waiting, counter cash → tabs Ringkasan · Mutasi Sync · Laba per INV · Kas & Shift · Selisih Sync.
@@ -83,23 +89,28 @@ export function KeuanganPage() {
   if (!d) return <div>{header}<LoadingState label="Memuat keuangan" rows={4} /></div>
   const s = d.summary
   return (
-    <div className="min-w-0 pb-24 md:pb-0">
+    <div className="flex min-w-0 flex-col gap-6">
       {header}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
-      <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card label="Saldo Mengantar (sync)" value={s.balance === null ? "Belum tersinkron" : rp(s.balance)} sub="Top-up dilakukan di aplikasi Mengantar" />
-        <Card label="Saldo aman tersedia" value={s.safeBalance === null ? "—" : rp(s.safeBalance)} sub={`Cadangan retur ${rp(s.reserve)}`} />
-        <Card label="COD menunggu cair" value={rp(s.codWaiting.amount)} sub={`${s.codWaiting.count} INV`} />
-        <Card label="Kas loket hari ini" value={rp(s.counterToday.tunai + s.counterToday.qris + s.counterToday.transfer)} sub={`Tunai ${rp(s.counterToday.tunai)} · QRIS ${rp(s.counterToday.qris)} · Transfer ${rp(s.counterToday.transfer)}`} />
-      </dl>
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`-mt-2 text-base font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
+      <MetricGrid>
+        <MetricCard label="Saldo Mengantar (sync)" value={s.balance === null ? "Belum tersinkron" : rp(s.balance)} footer="Top-up dilakukan di aplikasi Mengantar" />
+        <MetricCard label="Saldo aman tersedia" value={s.safeBalance === null ? "—" : rp(s.safeBalance)} footer={`Cadangan retur ${rp(s.reserve)}`} />
+        <MetricCard label="COD menunggu cair" value={rp(s.codWaiting.amount)} footer={`${s.codWaiting.count} INV`} />
+        <MetricCard label="Kas loket hari ini" value={rp(s.counterToday.tunai + s.counterToday.qris + s.counterToday.transfer)} footer={`Tunai ${rp(s.counterToday.tunai)} · QRIS ${rp(s.counterToday.qris)} · Transfer ${rp(s.counterToday.transfer)}`} />
+      </MetricGrid>
       {s.unpaidHold.count ? (
-        <p className="mt-4 border-l-4 border-warn py-1 pl-3 text-base font-medium">{s.unpaidHold.count} kiriman ({rp(s.unpaidHold.amount)}) menunggu saldo Mengantar. Isi saldo di aplikasi Mengantar, lalu tekan Sinkronkan Sekarang — resinya diterbitkan otomatis. <Link to="/kiriman" search={{ tab: "menunggu-saldo" } as never} className="text-primary underline-offset-4 hover:underline">Lihat kiriman</Link></p>
+        <CalloutAlert
+          title={`${s.unpaidHold.count} kiriman (${rp(s.unpaidHold.amount)}) menunggu saldo Mengantar`}
+          action={<LinkButton variant="outline" size="sm" to="/kiriman" search={{ tab: "menunggu-saldo" } as never}>Lihat kiriman</LinkButton>}
+        >
+          Isi saldo di aplikasi Mengantar, lalu tekan Sinkronkan Sekarang — resinya diterbitkan otomatis.
+        </CalloutAlert>
       ) : null}
-      <nav aria-label="Bagian keuangan" className="-mx-4 my-6 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <nav aria-label="Bagian keuangan" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
           {TABS.map((t) => (
             <li key={t.id}>
-              <Link to="/keuangan" search={{ tab: t.id === "ringkasan" ? undefined : t.id } as never} aria-current={t.id === tab ? "page" : undefined} className={`flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${t.id === tab ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}>
+              <Link to="/keuangan" search={{ tab: t.id === "ringkasan" ? undefined : t.id } as never} aria-current={t.id === tab ? "page" : undefined} className={`flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${t.id === tab ? "bg-card font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}>
                 {t.label}{t.id === "selisih" && d.discrepancies.length ? <span className="tabular-nums text-danger">({d.discrepancies.length})</span> : null}
               </Link>
             </li>
@@ -107,11 +118,15 @@ export function KeuanganPage() {
         </ul>
       </nav>
       {tab === "ringkasan" ? (
-        <section className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-3 md:p-6" aria-label="Ringkasan laba">
-          <div><p className="text-base text-muted-foreground">Estimasi Laba</p><p className="text-2xl font-semibold tabular-nums">{rp(s.estimated_margin_idr)}</p><p className="text-base text-muted-foreground">Dari selisih tarif saat resi terbit (30 hari)</p></div>
-          <div><p className="text-base text-muted-foreground">Laba Kas</p><p className="text-2xl font-semibold tabular-nums">{rp(s.cash_profit_idr)}</p><p className="text-base text-muted-foreground">Sudah lunas dan cocok dengan Mengantar (30 hari)</p></div>
-          <div><p className="text-base text-muted-foreground">Hutang COD ke pengirim</p><p className="text-2xl font-semibold tabular-nums">{rp(s.payableToSenders)}</p><p className="text-base text-muted-foreground">Belum dibayarkan ke pengirim</p></div>
-        </section>
+        <SectionCard id="laba" title="Ringkasan laba" description="30 hari terakhir · dua angka laba tidak pernah dijumlahkan">
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
+            <Figure label="Estimasi Laba" value={rp(s.estimated_margin_idr)} note="Dari selisih tarif saat resi terbit" />
+            <Separator orientation="vertical" className="hidden sm:block" />
+            <Figure label="Laba Kas" value={rp(s.cash_profit_idr)} note="Sudah lunas dan cocok dengan Mengantar" />
+            <Separator orientation="vertical" className="hidden sm:block" />
+            <Figure label="Hutang COD ke pengirim" value={rp(s.payableToSenders)} note="Belum dibayarkan ke pengirim" />
+          </div>
+        </SectionCard>
       ) : null}
       {tab === "mutasi" ? <Mutations rows={d.mutations} /> : null}
       {tab === "laba" ? <Profits rows={d.profits} /> : null}
@@ -122,61 +137,83 @@ export function KeuanganPage() {
   )
 }
 
-function Card({ label, value, sub }: { label: string; value: string; sub: string }) {
+function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border bg-card p-4 md:p-6">
-      <dt className="text-base text-muted-foreground">{label}</dt>
-      <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
-      <dd className="text-base text-muted-foreground tabular-nums">{sub}</dd>
+    <div className="flex flex-col gap-1">
+      <p className="text-base text-muted-foreground">{label}</p>
+      <p className="text-[28px] leading-tight font-bold tabular-nums">{value}</p>
+      <p className="text-base text-muted-foreground">{note}</p>
     </div>
   )
 }
 
+const STATUS_TEXT: Record<string, string> = { statusPending: "Menunggu", statusExpired: "Kedaluwarsa", statusCleared: "Selesai" }
+
 function Mutations({ rows }: { rows: Mutation[] }) {
-  if (!rows.length) return <EmptyState title="Belum ada mutasi" body="Tekan Sinkronkan Sekarang untuk menarik mutasi saldo dari Mengantar." />
   return (
-    <ul className="divide-y rounded-lg border bg-card">
-      {rows.map((m) => (
-        <li key={m.invoice_id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 text-base">
-          <span className="min-w-0">
-            <span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span>{m.status && m.status !== "statusCleared" ? <span className="text-muted-foreground"> · {m.status === "statusPending" ? "menunggu" : m.status === "statusExpired" ? "kedaluwarsa" : m.status}</span> : null}
-            <span className="block text-muted-foreground tabular-nums">{when(m.provider_created_at)} · {m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}{m.link_state === "unlinked" || m.link_state === "partial" ? " · belum cocok semua" : ""}</span>
-          </span>
-          <span className="text-right tabular-nums">
-            <span className={(m.amount_idr ?? 0) < 0 ? "font-medium" : "font-medium text-safe"}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span>
-            <span className="block text-muted-foreground">Saldo {m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <SectionCard id="mutasi" title="Mutasi Sync" description="Mutasi saldo dari Mengantar, terbaru di atas">
+      <DataTableShell
+        caption="Mutasi saldo Mengantar"
+        rows={rows}
+        rowKey={(m) => m.invoice_id}
+        empty={<EmptyState title="Belum ada mutasi" body="Tekan Sinkronkan Sekarang untuk menarik mutasi saldo dari Mengantar." />}
+        columns={[
+          { key: "waktu", header: "Waktu", cell: (m) => <span className="tabular-nums">{when(m.provider_created_at)}</span> },
+          { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span> },
+          { key: "ref", header: "Referensi", className: "whitespace-normal", cell: (m) => <span className="tabular-nums">{m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span> },
+          { key: "status", header: "Status", cell: (m) => <StatusBadge tone={m.link_state === "unlinked" || m.link_state === "partial" ? "warn" : m.status === "statusCleared" || !m.status ? "safe" : "muted"}>{m.link_state === "unlinked" || m.link_state === "partial" ? "Belum cocok semua" : (STATUS_TEXT[m.status ?? "statusCleared"] ?? m.status)}</StatusBadge> },
+          { key: "jumlah", header: "Jumlah", align: "right", cell: (m) => <span className={(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span> },
+          { key: "saldo", header: "Saldo", align: "right", wide: true, cell: (m) => (m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)) },
+        ]}
+        mobile={(m) => (
+          <div className="flex flex-col gap-1 text-base">
+            <span className="flex justify-between gap-2"><span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
+            <span className="text-muted-foreground tabular-nums">{when(m.provider_created_at)} · {m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span>
+            <span className="text-muted-foreground tabular-nums">Saldo {m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)}{m.link_state === "unlinked" || m.link_state === "partial" ? " · belum cocok semua" : ""}</span>
+          </div>
+        )}
+      />
+    </SectionCard>
   )
 }
 
 function Profits({ rows }: { rows: Profit[] }) {
-  if (!rows.length) return <EmptyState title="Belum ada kiriman" body="Laba per INV muncul setelah resi terbit." />
   return (
-    <ul className="divide-y rounded-lg border bg-card">
-      {rows.map((p) => (
-        <li key={p.slug} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
-          <span><Link to="/kiriman/$slug" params={{ slug: p.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {p.slug.toUpperCase()}</Link> <span className="text-muted-foreground">· {when(p.issued_at)}{p.quote_drift ? " · berbeda dari perkiraan" : ""}</span></span>
-          <span className="tabular-nums">Estimasi {rp(p.estimated_margin_idr ?? 0)} · Laba Kas {p.reconciled && p.cash_profit_idr !== null ? rp(p.cash_profit_idr) : <span className="text-muted-foreground">menunggu</span>}</span>
-        </li>
-      ))}
-    </ul>
+    <SectionCard id="laba-inv" title="Laba per INV" description="Estimasi saat resi terbit dan Laba Kas setelah cocok dengan Mengantar">
+      <DataTableShell
+        caption="Laba per INV"
+        rows={rows}
+        rowKey={(p) => p.slug}
+        empty={<EmptyState title="Belum ada kiriman" body="Laba per INV muncul setelah resi terbit." />}
+        columns={[
+          { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {p.slug.toUpperCase()}</Link> },
+          { key: "terbit", header: "Terbit", cell: (p) => <span className="tabular-nums">{when(p.issued_at)}</span> },
+          { key: "estimasi", header: "Estimasi", align: "right", cell: (p) => rp(p.estimated_margin_idr ?? 0) },
+          { key: "kas", header: "Laba Kas", align: "right", cell: (p) => (p.reconciled && p.cash_profit_idr !== null ? rp(p.cash_profit_idr) : <span className="text-muted-foreground">menunggu</span>) },
+          { key: "catatan", header: "Catatan", wide: true, cell: (p) => (p.quote_drift ? <StatusBadge tone="warn">Berbeda dari perkiraan</StatusBadge> : <span className="text-muted-foreground">—</span>) },
+        ]}
+      />
+    </SectionCard>
   )
 }
 
 function Shifts({ rows }: { rows: Shift[] }) {
-  if (!rows.length) return <EmptyState title="Belum ada shift" body="Shift Loket yang dibuka kasir akan muncul di sini." />
   return (
-    <ul className="divide-y rounded-lg border bg-card">
-      {rows.map((x) => (
-        <li key={x.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base tabular-nums">
-          <span>{when(x.opened_at)} → {x.closed_at ? when(x.closed_at) : "masih buka"}</span>
-          <span>{x.state === "closed" ? `Seharusnya ${rp(x.expected_cash_idr ?? 0)} · dihitung ${rp(x.counted_cash_idr ?? 0)}` : ""}{x.variance_idr ? <span className="font-medium text-danger"> · selisih {rp(Math.abs(x.variance_idr))} ({x.variance_idr > 0 ? "lebih" : "kurang"})</span> : null}</span>
-        </li>
-      ))}
-    </ul>
+    <SectionCard id="kas" title="Kas & Shift" description="Shift Loket kasir dan selisih laci">
+      <DataTableShell
+        caption="Shift loket"
+        rows={rows}
+        rowKey={(x) => x.id}
+        empty={<EmptyState title="Belum ada shift" body="Shift Loket yang dibuka kasir akan muncul di sini." />}
+        columns={[
+          { key: "buka", header: "Dibuka", cell: (x) => <span className="tabular-nums">{when(x.opened_at)}</span> },
+          { key: "tutup", header: "Ditutup", cell: (x) => (x.closed_at ? <span className="tabular-nums">{when(x.closed_at)}</span> : <StatusBadge tone="primary">Masih buka</StatusBadge>) },
+          { key: "seharusnya", header: "Seharusnya", align: "right", cell: (x) => (x.state === "closed" ? rp(x.expected_cash_idr ?? 0) : "—") },
+          { key: "dihitung", header: "Dihitung", align: "right", cell: (x) => (x.state === "closed" ? rp(x.counted_cash_idr ?? 0) : "—") },
+          { key: "selisih", header: "Selisih", align: "right", cell: (x) => (x.variance_idr ? <span className="font-medium text-danger">{rp(Math.abs(x.variance_idr))} ({x.variance_idr > 0 ? "lebih" : "kurang"})</span> : "—") },
+        ]}
+      />
+    </SectionCard>
   )
 }
 
@@ -199,14 +236,18 @@ function Discrepancies({ rows }: { rows: Discrepancy[] }) {
     }
   }
   return (
-    <ul className="divide-y rounded-lg border bg-card">
+    <SectionCard id="selisih" title="Selisih Sync" description="Mutasi Mengantar yang belum cocok dengan kiriman gerai" flush>
+    <ul className="divide-y">
       {open.map((x) => (
-        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base">
+        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base md:px-6">
           <span className="font-medium">{KIND_LABEL[x.kind] ?? "Selisih"}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
           <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
           {closing === x.id ? (
             <div className="flex flex-wrap items-end gap-2">
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-base">Alasan (dicatat)<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className="h-11 rounded-md border border-input px-3" /></label>
+              <Field className="min-w-0 flex-1">
+                <FieldLabel htmlFor={`alasan-${x.id}`}>Alasan (dicatat)</FieldLabel>
+                <Input id={`alasan-${x.id}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
+              </Field>
               <Button variant="outline" onClick={() => setClosing(null)}>Batal</Button>
               <Button disabled={reason.trim().length < 5} onClick={() => resolve(x.id)}>Tandai Selesai</Button>
             </div>
@@ -217,19 +258,24 @@ function Discrepancies({ rows }: { rows: Discrepancy[] }) {
         </li>
       ))}
     </ul>
+    </SectionCard>
   )
 }
 
 function ReserveList({ rows }: { rows: Reserve[] }) {
-  if (!rows.length) return <EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />
   return (
-    <ul className="divide-y rounded-lg border bg-card">
-      {rows.map((r) => (
-        <li key={`${r.kind}-${r.slug}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
-          <span><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> · {r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan"}</span>
-          <span className="font-medium tabular-nums">{rp(r.amount_idr)}</span>
-        </li>
-      ))}
-    </ul>
+    <SectionCard id="cadangan" title="Cadangan Retur" description="Saldo yang ditahan untuk retur atau sengketa">
+      <DataTableShell
+        caption="Cadangan retur"
+        rows={rows}
+        rowKey={(r) => `${r.kind}-${r.slug}`}
+        empty={<EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />}
+        columns={[
+          { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> },
+          { key: "jenis", header: "Jenis", cell: (r) => (r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan") },
+          { key: "jumlah", header: "Jumlah", align: "right", cell: (r) => <span className="font-medium">{rp(r.amount_idr)}</span> },
+        ]}
+      />
+    </SectionCard>
   )
 }

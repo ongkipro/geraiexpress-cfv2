@@ -41,9 +41,9 @@
 | Zone | Contains | Never contains |
 |---|---|---|
 | Sidebar header | Outlet logo + name (`▾` opens the outlet switcher only when the user is a member of >1 tenant, PR-24), mini-site link | Promo, upgrade banners |
-| Sidebar nav | The 6 menus, in this order; `Kontak` expands to 2 sub-items; badge counts only on `Kiriman` (items needing action) | Third-level links, settings sub-tabs, external links |
+| Sidebar nav | The 6 menus, in this order; `Buat Pengiriman` expands to its 5 tools (`Kiriman Satuan` · `Paket Massal (CSV)` · `Cek Ongkir Cepat` · `Cek Resi` · `Shift Loket`, DEC-237) and `Kontak` to 2 sub-items — a Collapsible tree (shadcn `sidebar-07`) that opens when its section is active; badge counts only on `Kiriman` (items needing action) | Third-level links, settings sub-tabs, external links |
 | Sidebar footer | Printer status (🟢/🟠/🔴 + text), active shift + cashier name, collapse toggle | Logout (lives in the account menu) |
-| Header left | Page title of the current menu (breadcrumb only on detail pages: `Kiriman › INV 8K4M2P7`) | Menu duplication |
+| Header left | Sidebar trigger + breadcrumb whose last crumb is the page `h1` (`Buat Pengiriman › Kiriman Satuan`, `Kiriman › INV 8K4M2P7`; DEC-236); pages never repeat a breadcrumb in the body | Menu duplication |
 | Header right | Global search (INV, AWB, phone; `Ctrl+K`), notifications, account menu, **`📷 Scan QR`** and **`+ Kiriman Baru`** — primary style only on `Dashboard`, `/kasir` and `/kiriman`; on every page that has its own primary action (§3) it renders as an outline button, and it is hidden on `/kiriman/:slug` | More than one primary button per screen |
 | Page body | Title row → in-page tabs → filters/toolbar → content → sticky action bar when the page has a commit action | A second navigation sidebar |
 
@@ -73,10 +73,12 @@ that opens a full-width search sheet. `+ Kiriman Baru` stays visible.
 
 - Bottom bar: `Beranda` (Dashboard) · `Buat Pengiriman` (short label `Buat` on 390 px) · center **`＋`** (= `+ Kiriman Baru`, 56 px) · `Kiriman` · `Lainnya`.
   The center `＋` follows the header rule: filled only on `Dashboard`, `/kasir`, `/kiriman`; outline elsewhere.
-  Commit flows (`/kasir/multi`, `/kasir/shift`, `/kiriman/pickup/:batch`, `/kiriman/retur/:awb`) replace the
-  bottom bar with their sticky commit bar. Page bodies never repeat a `+ Kiriman Baru` button.
-- `Lainnya` opens a sheet with `Kontak › Pengirim`, `Kontak › Penerima`, `Keuangan` (owner only), `Pengaturan`,
-  printer status, `Keluar`.
+  Commit flows (`/kasir`, `/kasir/multi`, `/kasir/shift`, `/kiriman/:slug`, `/kiriman/pickup/:batch`,
+  `/kiriman/retur/:awb`) replace the bottom bar with their sticky commit bar. Page bodies never repeat a
+  `+ Kiriman Baru` button.
+- `Lainnya` (and the header `☰`) opens the sidebar as a Sheet with the same tree as desktop: `Buat Pengiriman`
+  and its 5 tools, `Kiriman`, `Kontak › Pengirim / Penerima`, `Keuangan` (owner only), `Pengaturan`, and the account
+  menu (`Keluar`).
 - On `/kiriman/:slug` the bottom bar is replaced by the sticky **checkout bar** (`Total Rp 27.000` + `Tandai Lunas & Cetak`).
 
 ---
@@ -117,12 +119,12 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 |---|---|---|---|---|---|
 | `/` | O | Dashboard | `+ Kiriman Baru` | period filter (WIB presets + calendar range, default `7 hari terakhir`, DEC-221, visual 08 §1) → 4 KPI (kiriman, tercatat dibayar, belum dibayar, saldo Mengantar aman) → `Grafik pengiriman` (stacked Non-COD/COD bars) → `Riwayat pengiriman` (INV, ekspedisi, penerima, tagihan, pembayaran, status) → courier performance + `Perlu tindakan` | — |
 | `/` | K | Tugas Loket Hari Ini | `+ Kiriman Baru` | shift card → `Siap Pickup` per courier → `Meja Retur` waiting → recent INV list | No money totals, no Mengantar balance |
-| `/kasir` | O K | Buat Pengiriman | `+ Kiriman Baru` | tabs `Paket Reguler · Paket Massal · Cek Ongkir Cepat · Cek Resi · Shift Loket`; default tab = recent drafts + scan QR box | Margin toggle owner only |
+| `/kasir` | O K | Buat Pengiriman › Kiriman Satuan | `Tandai Lunas & Cetak · Rp X` (or `Simpan & Cetak`) | 60/40 counter POS (DEC-237): scan QR / buka INV → left: `1. Tujuan & berat` (mode, area, weight, dims, COD goods + fee mode, `Nilai barang`, `Barang berbahaya (DG)`, packing, counter fee) → `2. Pilih ekspedisi` (cards, medals, courier-rule hints) → `3. Pengirim, label & penerima` (pickers + `+ … baru` Sheets, provenance cards, WA state, area check, COD badge + Mengantar score, preset, `Isi paket`, `Jumlah barang`, `Instruksi kurir / patokan`, prohibited-goods check); right (sticky): `Ringkasan & Pembayaran`; after issue `Resi terbit` + `Cetak Label` + `Kiriman Baru` | Margin, `Modal Mengantar`, `Estimasi laba` owner only (server-projected) |
 | `/kiriman/:slug` | O K | Kiriman › INV 8K4M2P7 | `Tandai Lunas & Cetak` (or `Simpan & Cetak` when `Bayar nanti`) | left 60 %: tujuan & berat → ekspedisi → pengirim & masking → penerima & isi; right 40 %: locked summary → pembayaran → cetak | Kasir sees customer price only |
 | `/kiriman/:slug` (issued) | O K | Kiriman › INV 8K4M2P7 | `Cetak Ulang` | status stepper → AWB + label preview → payment record → event timeline → actions (`Batalkan`, `Kirim WA`); masked INV: `Lihat Pengirim Asli` (reason + audit) | Cost/margin rows owner only |
-| `/kasir/multi` | O K | Buat Pengiriman › Paket Massal | `Buat n Kiriman` then `Tandai Lunas & Cetak Semua` | sender picker → `Tambah Baris` or `Unggah Excel/CSV` (+ `Unduh Template`) → tabs `Siap (n) · Perlu Diperbaiki (n)` with inline edit → batch totals → dispatch progress → print queue (spec 03 §1.3) | Kasir sees customer price only; max 200 rows |
+| `/kasir/multi` | O K | Buat Pengiriman › Paket Massal (CSV) | `Buat n Kiriman` then `Tandai Lunas & Cetak Semua` | sender picker → `Tambah Baris` or `Unggah Excel/CSV` (+ `Unduh Template`) → tabs `Siap (n) · Perlu Diperbaiki (n)` with inline edit → batch totals → dispatch progress → print queue (spec 03 §1.3) | Kasir sees customer price only; max 200 rows |
 | `/kasir/cek-resi` | O K | Buat Pengiriman › Cek Resi | — | one search (INV / AWB / HP) → timeline per koli; foreign AWB → courier link (spec 03 §1.4) | read-only |
-| `/kasir/cek-cepat` | O K | Buat Pengiriman › Cek Cepat | `Buat Kiriman dari Hasil Ini` | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
+| `/kasir/cek-cepat` | O K | Buat Pengiriman › Cek Ongkir Cepat | `Buat Kiriman dari Tarif Ini` (opens `/kasir` prefilled, same service selected) | destination + weight → courier price list → COD risk badge | Creates no draft until the primary is pressed |
 | `/kasir/shift` | O K | Buat Pengiriman › Shift Loket | `Buka Shift` / `Tutup Shift` | opening cash → live totals (Tunai/QRIS/Transfer) → closing count → variance | Kasir: own shift; owner: all shifts |
 | `/kiriman` | O K | Kiriman | `+ Kiriman Baru` | tabs `Semua · Belum Dibayar · Draf QR · Menunggu Saldo · Pickup & Manifest · Riwayat Massal · Kendala & Klaim · Meja Retur` → search + period filter (visual 08 §1) → table with `Pembayaran` column and `Tandai Lunas` row action | Cost/margin columns + CSV owner only |
 | `/kiriman/massal/:batch` | O K | Kiriman › Riwayat Massal › 15 Nov 10:12 | `Cetak Semua` | batch header (sender, rows, ready/failed, total) → rows with INV, status, error → `Batalkan yang Belum Terbit` | — |

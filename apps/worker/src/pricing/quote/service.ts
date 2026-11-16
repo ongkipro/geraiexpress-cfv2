@@ -10,7 +10,8 @@ import { vaultFor } from "../../do/gerai-vault/stub"
 import type { FrozenQuote, ObservedRate } from "../../do/gerai-vault"
 import { AppError } from "../../http/envelope"
 import { recordObservation } from "../rules"
-import { buildCard, eligibleServices, medals, priceOf, QUOTE_TTL_MS, type CatalogEntry, type QuoteCard, type QuoteInput } from "./engine"
+import { COD_BLOCK_TTL_MS, posCodMessage } from "./messages"
+import { buildCard, codLimitReason, eligibleServices, medals, priceOf, QUOTE_TTL_MS, type CatalogEntry, type QuoteCard, type QuoteInput } from "./engine"
 
 export const QUOTES_PER_MINUTE = 30
 const AREA = /^[0-9a-f]{24}$/
@@ -35,8 +36,24 @@ export function parseQuoteInput(b: Record<string, unknown>, originAreaId: string
   const S = int(b.serviceFeeIdr, 0)
   const V = int(b.promoIdr, 0)
   for (const [k, v] of Object.entries({ packingIdr: K, serviceFeeIdr: S, promoIdr: V })) if (!Number.isSafeInteger(v) || v < 0 || v > 10_000_000) errors[k] = "Nominal tidak valid."
+  // DEC-238: Non-COD goods value (`goodsValue`), up to Mengantar's Rp10.000.000 non-COD ceiling; COD sends `COD` instead.
+  const D = mode === "none" ? int(b.declaredValueIdr, 0) : 0
+  if (!Number.isSafeInteger(D) || D < 0 || D > 10_000_000) errors.declaredValueIdr = "Nilai barang Rp0–Rp10.000.000."
+  if (b.dangerousGoods !== undefined && typeof b.dangerousGoods !== "boolean") errors.dangerousGoods = "Pilihan barang berbahaya tidak valid."
   if (Object.keys(errors).length) throw new AppError(422, "INVALID_QUOTE", Object.values(errors)[0]!, errors)
-  return { originAreaId, destinationAreaId: destination, mode, actualWeightGram: weight, dims: anyDim ? { lengthCm: dimsRaw[0]!, widthCm: dimsRaw[1]!, heightCm: dimsRaw[2]! } : null, codGoodsIdr: G, packingIdr: K, serviceFeeIdr: S, promoIdr: V }
+  return {
+    originAreaId,
+    destinationAreaId: destination,
+    mode,
+    actualWeightGram: weight,
+    dims: anyDim ? { lengthCm: dimsRaw[0]!, widthCm: dimsRaw[1]!, heightCm: dimsRaw[2]! } : null,
+    codGoodsIdr: G,
+    packingIdr: K,
+    serviceFeeIdr: S,
+    promoIdr: V,
+    declaredValueIdr: D,
+    dangerousGoods: b.dangerousGoods === true,
+  }
 }
 
 export interface QuoteResult {
@@ -53,13 +70,17 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
   if (!limit.allowed) throw new AppError(429, "QUOTE_RATE_LIMITED", "Terlalu banyak cek ongkir. Coba lagi sebentar lagi.", {}, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) })
   const vault = vaultFor(env, tenantId)
   const [catalog, prefs, rules] = await Promise.all([
-    env.DB.prepare("SELECT service_code, courier_code, courier_name, display_name, service_class, cod_supported, rounding_tolerance_gram, min_weight_gram, max_weight_gram FROM courier_service_catalog WHERE is_active = 1 ORDER BY sort_order").all<CatalogEntry>(),
+    env.DB.prepare(
+      "SELECT service_code, courier_code, courier_name, display_name, service_class, cod_supported, rounding_tolerance_gram, min_weight_gram, max_weight_gram, min_cod_idr, max_cod_idr, min_goods_value_idr, max_goods_value_idr, dg_supported, booking_eco FROM courier_service_catalog WHERE is_active = 1 ORDER BY sort_order",
+    ).all<CatalogEntry>(),
     vault.courierPrefs(tenantId),
     env.DB.prepare("SELECT service_code, assigned_bps FROM tenant_discount_rules WHERE tenant_id = ?").bind(tenantId).all<{ service_code: string; assigned_bps: number }>(),
   ])
   if (!prefs.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
   const disabled = new Set(prefs.value.filter((p) => p.enabled === 0).map((p) => p.courier_code))
   const dropOff = new Set(prefs.value.filter((p) => p.pickup_mode === "drop_off_only").map((p) => p.courier_code))
+  // Pos Indonesia refused COD for this seller (403 new_seller / insufficient / blocked) within the last 24 h.
+  const codBlocked = new Map(prefs.value.filter((p) => p.cod_blocked_at !== null && now - (p.cod_blocked_at ?? 0) < COD_BLOCK_TTL_MS).map((p) => [p.courier_code, p]))
   const assigned = new Map(rules.results.map((r) => [r.service_code, r.assigned_bps]))
   // Paket Massal quotes one chosen service per row (spec 03 §1.3): never fan out COD passes across the whole catalog.
   const services = eligibleServices(opts.serviceCode ? catalog.results.filter((c) => c.service_code === opts.serviceCode) : catalog.results, disabled, input)
@@ -69,7 +90,7 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
   const pass1 = new Map<number, Record<string, ObservedRate> | null>()
   await Promise.all(
     weights.map(async (w) => {
-      const r = await vault.estimateRates(tenantId, { originId: input.originAreaId, destinationId: input.destinationAreaId, courier: "all", weightKg: w })
+      const r = await vault.estimateRates(tenantId, { originId: input.originAreaId, destinationId: input.destinationAreaId, courier: "all", weightKg: w, dangerousGoods: input.dangerousGoods })
       if (!r.ok && r.refused === "NO_KEY") throw new AppError(409, "NOT_CONNECTED", "Gerai belum terhubung ke Mengantar atau kunci sedang dirotasi.")
       pass1.set(w, r.ok ? r.value : null)
     }),
@@ -95,13 +116,16 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
       }
       if (reason) return void cards.push(unavailable(base))
       const row = pass1.get(weightKg)?.[entry.service_code]
-      if (!row) return void cards.push(unavailable({ ...base, unavailableReason: "Layanan tidak tersedia untuk rute ini." }))
+      if (!row) return void cards.push(unavailable({ ...base, unavailableReason: entry.booking_eco ? "J&T ECO tidak tersedia untuk rute ini." : "Layanan tidak tersedia untuk rute ini." }))
+      if (input.dangerousGoods && row.dgSupported === false) return void cards.push(unavailable({ ...base, unavailableReason: "Kurir ini tidak menerima barang berbahaya untuk rute ini." }))
       base.eta = row.eta
       base.dropOffOnly = base.dropOffOnly || row.unsupportedPickup
       const p1 = priceOf(entry.service_class, row)
       if (!p1) return void cards.push(unavailable({ ...base, unavailableReason: "Layanan tidak tersedia untuk rute ini." }))
       if (p1.observedBps !== null) observations.push({ serviceCode: entry.service_code, bps: p1.observedBps })
       if (input.mode !== "none" && row.unsupportedCod) return void cards.push(unavailable({ ...base, unavailableReason: "COD tidak tersedia untuk rute ini." }))
+      const blocked = input.mode !== "none" ? codBlocked.get(entry.courier_code) : undefined
+      if (blocked) return void cards.push(unavailable({ ...base, unavailableReason: posCodMessage(blocked.cod_blocked_status, blocked.cod_delivered_rate) }))
       try {
         if (input.mode === "none") {
           cards.push({ ...buildCard({ ...base, available: true }, { ...p1, F: 0 }, input, assigned.get(entry.service_code) ?? null) })
@@ -111,7 +135,8 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
         let finalRow: ObservedRate | null = null
         const codMode = input.mode
         const { F, C } = await resolveCodFee(codMode, { P: p1.P, I: null, G: input.codGoodsIdr }, async (codAmount) => {
-          const r = await vault.estimateRates(tenantId, { originId: input.originAreaId, destinationId: input.destinationAreaId, courier: entry.courier_code as Courier, weightKg, codAmountIdr: codAmount })
+          // J&T ECO has no `courier` value of its own: its COD row exists only in a `courier=all` estimate (v2.0.0).
+          const r = await vault.estimateRates(tenantId, { originId: input.originAreaId, destinationId: input.destinationAreaId, courier: entry.booking_eco ? "all" : (entry.courier_code as Courier), weightKg, codAmountIdr: codAmount, dangerousGoods: input.dangerousGoods })
           const x = r.ok ? r.value[entry.service_code] : undefined
           if (!x || x.codFee === null || !Number.isSafeInteger(x.codFee)) throw new AppError(502, "PROVIDER_UNAVAILABLE", "Biaya COD tidak bisa dihitung saat ini.")
           finalRow = x
@@ -119,8 +144,11 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
         })
         const fin = finalRow ? priceOf("regular", finalRow) : null
         if (!fin || fin.F !== F) throw new MoneyRuleError("COD_FEE_UNSTABLE", "Biaya COD berubah, ulangi cek ongkir.")
+        const card = buildCard({ ...base, available: true }, fin, input, assigned.get(entry.service_code) ?? null)
+        // Mengantar rejects a COD outside the courier's bounds at create-order: say so before the counter sells it.
+        const over = codLimitReason(entry, card.flow.codCollectionTotalIdr)
         void C
-        cards.push(buildCard({ ...base, available: true }, fin, input, assigned.get(entry.service_code) ?? null))
+        cards.push(over ? unavailable({ ...base, unavailableReason: over }) : card)
       } catch (err) {
         const msg = err instanceof MoneyRuleError ? err.userMessage : err instanceof AppError ? err.userMessage : "Layanan tidak bisa dihitung."
         cards.push(unavailable({ ...base, unavailableReason: msg }))
@@ -189,6 +217,8 @@ export function frozenFrom(slug: string, q: QuoteResult, c: QuoteCard): FrozenQu
     assigned_gerai_discount_bps: c.assignedBps,
     effective_gerai_cost_idr: c.effectiveCostIdr,
     insurance_fee_idr: null,
+    declared_value_idr: input.declaredValueIdr,
+    is_dangerous_goods: input.dangerousGoods ? 1 : 0,
     cod_fee_idr: c.F,
     cod_goods_amount_idr: input.codGoodsIdr,
     cod_collection_total_idr: c.flow.codCollectionTotalIdr,

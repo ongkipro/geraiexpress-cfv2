@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react"
-import { Link, useNavigate, useParams } from "@tanstack/react-router"
+import { useNavigate, useParams } from "@tanstack/react-router"
 import { ScanLineIcon, TruckIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
+import { SectionCard, Panel } from "../../../components/admin/page"
 
 // `Pickup & Manifest` (spec 04 §1, visual 07 `/kiriman/pickup/:batch`): per-courier queue → scan into the manifest
 // (red banner + tone on block, amber on counter-unpaid) → driver fields + on-screen signature → Surat Jalan PDF.
@@ -34,11 +35,11 @@ export function PickupQueue() {
   return (
     <ul className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {groups.map((g) => (
-        <li key={g.courier_code} className="flex flex-col gap-2 rounded-lg border bg-card p-4">
+        <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
           <p className="flex items-center justify-between gap-2 text-lg font-semibold">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
           <p className="flex items-center gap-2 text-base text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
           <div><Button onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
-        </li>
+        </Panel>
       ))}
     </ul>
   )
@@ -102,18 +103,17 @@ export function ManifestPage() {
   const open = b.status === "open"
   return (
     <div className="min-w-0 pb-24 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground"><Link to="/kiriman" search={{ tab: "pickup" } as never} className="text-primary underline-offset-4 hover:underline">Pickup & Manifest</Link> › {name}</nav>
       <PageTitle title={`Manifest ${name}`} description={open ? `${b.scanned_count} paket dipindai` : `Diserahkan · ${b.scanned_count} paket`}>
         {!open ? <a href={`/api/app/pickup/${b.id}/surat-jalan.pdf`} target="_blank" rel="noopener" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Cetak Surat Jalan</a> : null}
       </PageTitle>
       {open ? (
-        <form onSubmit={scan} className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4">
+        <Panel as="form" onSubmit={scan} className="mb-4 flex flex-wrap items-end gap-2 md:p-4">
           <Field className="min-w-0 flex-1">
             <FieldLabel htmlFor="scan">Pindai barcode resi atau QR INV</FieldLabel>
             <Input id="scan" ref={input} autoFocus autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Arahkan pemindai ke barcode" />
           </Field>
           <Button type="submit" size="lg">Tambah</Button>
-        </form>
+        </Panel>
       ) : null}
       {last ? (
         last.result === "blocked" ? (
@@ -125,8 +125,7 @@ export function ManifestPage() {
         )
       ) : null}
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border bg-card p-4 md:p-6" aria-labelledby="dipindai">
-          <h3 id="dipindai" className="mb-3 text-lg font-semibold">Dipindai ({b.items.length})</h3>
+        <SectionCard id="dipindai" title={<>Dipindai ({b.items.length})</>}>
           {b.items.length === 0 ? <p className="text-base text-muted-foreground">Belum ada paket.</p> : (
             <ul className="divide-y">
               {b.items.map((i) => (
@@ -137,16 +136,15 @@ export function ManifestPage() {
               ))}
             </ul>
           )}
-        </section>
+        </SectionCard>
         {open ? (
-          <section className="rounded-lg border bg-card p-4 md:p-6" aria-labelledby="belum">
-            <h3 id="belum" className="mb-3 text-lg font-semibold">Belum dipindai ({b.missing.length})</h3>
+          <SectionCard id="belum" title={<>Belum dipindai ({b.missing.length})</>}>
             {b.missing.length === 0 ? <p className="text-base text-muted-foreground">Semua paket {name} sudah dipindai.</p> : (
               <ul className="divide-y">
                 {b.missing.map((i) => <li key={i.slug} className="py-2 text-base tabular-nums">{i.awb} · INV {i.slug.toUpperCase()}</li>)}
               </ul>
             )}
-          </section>
+          </SectionCard>
         ) : null}
       </div>
       {open && b.items.length ? <Handover batchId={b.id} onDone={load} /> : null}
@@ -215,8 +213,8 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
     }
   }
   return (
-    <section className="mt-6 flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="serah">
-      <h3 id="serah" className="text-lg font-semibold">Serah terima ke kurir</h3>
+    <SectionCard id="serah" className="mt-6" title="Serah terima ke kurir">
+      <div className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-3">
         <Field data-invalid={fields.driverName ? true : undefined}><FieldLabel htmlFor="drv-name">Nama kurir</FieldLabel><Input id="drv-name" value={name} onChange={(e) => setName(e.target.value)} />{fields.driverName ? <FieldError>{fields.driverName}</FieldError> : null}</Field>
         <Field data-invalid={fields.driverPhone ? true : undefined}><FieldLabel htmlFor="drv-phone">No HP kurir</FieldLabel><Input id="drv-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />{fields.driverPhone ? <FieldError>{fields.driverPhone}</FieldError> : null}</Field>
@@ -233,6 +231,7 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
         <Button size="lg" disabled={pending} onClick={() => submit("handed_over")}>Selesai & Tanda Tangan</Button>
         <Button variant="outline" disabled={pending} onClick={() => submit("dropped_at_branch")}>Diantar Mandiri ke Cabang</Button>
       </div>
-    </section>
+    </div>
+    </SectionCard>
   )
 }

@@ -34,15 +34,16 @@ test("Mini-site: QR dari rumah → kasir buka INV yang sama → lacak tanpa data
   await page.getByRole("button", { name: "Buka", exact: true }).click()
   await expect(page.getByText(`INV ${slug.toUpperCase()}`).first()).toBeVisible()
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
-  await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Pilih & Lanjutkan" }).click()
-  await expect(page).toHaveURL(new RegExp(`/kiriman/${slug}$`))
-  await expect(page.getByRole("heading", { name: `INV ${slug.toUpperCase()}` })).toBeVisible()
+  await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Pilih", exact: true }).click()
+  // The QR's sender and recipient are already on the POS (DEC-237): the counter only confirms and pays.
+  await expect(page.getByText("Rina Kartika").first()).toBeVisible()
 
-  // Issue it (parties were set from the QR data), then track it publicly.
-  const sender = ((await (await api.get(`${APP}/api/app/shipments/${slug}`)).json()) as { data: { sender: { id: string } } }).data.sender.id
-  await api.post(`${APP}/api/app/contacts/senders/${sender}/verify-wa`, { headers: h, data: {} })
-  await api.post(`${APP}/api/app/shipments/${slug}/parties`, { headers: h, data: { prohibitedAck: true } })
-  expect((await api.post(`${APP}/api/app/shipments/${slug}/dispatch`, { headers: h, data: {} })).status()).toBe(200)
+  // Issue it on the POS: the QR's INV is reused (one INV for QR, receipt and tracking).
+  await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
+  await page.getByRole("button", { name: "Bayar nanti" }).click()
+  await page.getByRole("button", { name: /Simpan & Cetak/ }).last().click()
+  await expect(page.getByText("Resi terbit").first()).toBeVisible()
+  await expect(page.getByText(`INV ${slug.toUpperCase()}`).first()).toBeVisible()
   await page.goto(`${site}/lacak?q=${slug.toUpperCase()}`)
   await expect(page.getByText("R*** K******")).toBeVisible()
   await expect(page.locator("body")).not.toContainText("Rina")

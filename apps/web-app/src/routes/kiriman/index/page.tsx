@@ -4,7 +4,10 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { DownloadIcon, PrinterIcon, SearchIcon } from "lucide-react"
 import { paramsOf, periodFromParams, resolvePreset, type Period } from "@gx/domain/period"
 import { PeriodFilter } from "../../../components/period-filter/period-filter"
+import { DataTableShell } from "../../../components/admin/data-table"
+import { SectionCard, StatusBadge } from "../../../components/admin/page"
 import { Button } from "../../../components/ui/button"
+import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
@@ -13,6 +16,7 @@ import { rp } from "../../kasir/quote-panel"
 import { PickupQueue } from "../pickup/page"
 import { MejaRetur } from "../retur/page"
 import { Kendala } from "../kendala/page"
+import { AnchorButton, LinkButton } from "../../../components/admin/link-button"
 
 // `Kiriman` (visual 06 §1, visual 07 `/kiriman`, DEC-213/220): tabs with counts → search + period + courier + print
 // filters → table (cards under 768 px) with `Pembayaran` and the `Tandai Lunas` row action. Specialist tabs
@@ -101,20 +105,18 @@ export function KirimanPage() {
   const exportHref = `/api/app/shipments-export.csv?${qs}`
   const filtered = !!(search.q || search.cetak)
   return (
-    <div className="min-w-0 pb-24 md:pb-0">
+    <div className="min-w-0">
       <PageTitle title="Kiriman">
-        <div className="flex flex-wrap gap-2">
-          <Link to="/kasir/multi" className="inline-flex h-11 items-center rounded-lg border px-4 text-base font-medium md:h-10">Paket Massal</Link>
-          <Link to="/kiriman/cetak-massal" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base font-medium md:h-10"><PrinterIcon aria-hidden className="size-4" /> Cetak Resi Massal</Link>
-          {owner ? <a href={exportHref} className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base font-medium md:h-10"><DownloadIcon aria-hidden className="size-4" /> Ekspor CSV</a> : null}
-        </div>
+        <LinkButton variant="outline" to="/kasir/multi">Paket Massal</LinkButton>
+        <LinkButton variant="outline" to="/kiriman/cetak-massal"><PrinterIcon aria-hidden data-icon="inline-start" /> Cetak Resi Massal</LinkButton>
+        {owner ? <AnchorButton variant="outline" href={exportHref}><DownloadIcon aria-hidden data-icon="inline-start" /> Ekspor CSV</AnchorButton> : null}
       </PageTitle>
       <nav aria-label="Status kiriman" className="-mx-4 mb-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
           {TABS.map((t) => {
             const active = t.id === tab
             const count = t.id === "massal" ? null : data?.counts[t.id]
-            const cls = `flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${active ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`
+            const cls = `flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${active ? "bg-card font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`
             return (
               <li key={t.id}>
                 {t.id === "massal" ? (
@@ -136,76 +138,60 @@ export function KirimanPage() {
           <Input id="cari-kiriman" type="search" className="pl-9" placeholder="Cari INV, resi, nama, atau HP" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
         <PeriodFilter value={period} onChange={(p: Period) => go({ periode: undefined, dari: undefined, sampai: undefined, ...paramsOf(p) })} />
-        <div role="group" aria-label="Status cetak" className="flex gap-1">
+        <ToggleGroup aria-label="Status cetak" variant="outline" value={[search.cetak ?? "semua"]} onValueChange={(v) => v[0] && go({ cetak: v[0] === "semua" ? undefined : (v[0] as "belum" | "sudah") })}>
           {(["semua", "belum", "sudah"] as const).map((c) => (
-            <Button key={c} variant={(search.cetak ?? "semua") === c ? "default" : "outline"} aria-pressed={(search.cetak ?? "semua") === c} onClick={() => go({ cetak: c === "semua" ? undefined : c })}>{c === "semua" ? "Semua" : c === "belum" ? "Belum Cetak" : "Sudah Cetak"}</Button>
+            <ToggleGroupItem key={c} value={c}>{c === "semua" ? "Semua" : c === "belum" ? "Belum Cetak" : "Sudah Cetak"}</ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
       </div>
       {tab === "pickup" ? <PickupQueue /> : null}
       {tab === "retur" ? <MejaRetur /> : null}
       {tab === "kendala" ? <Kendala /> : null}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 text-base font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
       {tab === "pickup" || tab === "retur" || tab === "kendala" ? null : error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
         filtered ? (
           <EmptyState title="Tidak ada yang cocok" body="Tidak ada kiriman dengan pencarian atau filter ini." action={<Button variant="outline" onClick={() => { setQ(""); go({ q: undefined, cetak: undefined }) }}>Hapus Filter</Button>} />
         ) : (
-          <EmptyState title="Belum ada kiriman di sini" body="Kiriman yang resinya terbit akan muncul di daftar ini." action={<Link to="/kasir" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Buat Pengiriman</Link>} />
+          <EmptyState title="Belum ada kiriman di sini" body="Kiriman yang resinya terbit akan muncul di daftar ini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />
         )
       ) : (
-        <>
-          <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
-          <table className="w-full text-base">
-            <thead className="text-left text-muted-foreground">
-              <tr className="border-b">
-                <th className="px-4 py-3 font-medium">INV</th>
-                <th className="px-4 py-3 font-medium">Kurir & resi</th>
-                <th className="px-4 py-3 font-medium">Pengirim → Penerima</th>
-                <th className="px-4 py-3 text-right font-medium">Tagihan</th>
-                <th className="px-4 py-3 font-medium">Pembayaran</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium"><span className="sr-only">Aksi</span></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((r) => (
-                <tr key={r.slug} className="align-top">
-                  <td className="px-4 py-3"><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link><span className="block text-muted-foreground tabular-nums">{time(r.created_at)}</span></td>
-                  <td className="px-4 py-3">{r.courier_code}<span className="block text-muted-foreground tabular-nums">{r.awb_number ?? "Resi belum terbit"}{r.print_count ? ` · ${r.print_count}× cetak` : ""}</span></td>
-                  <td className="px-4 py-3">{r.sender_brand ?? r.sender ?? "—"}<span className="block text-muted-foreground">→ {r.recipient ?? "—"}{r.recipient_area ? ` (${r.recipient_area.split(",")[0]})` : ""}</span></td>
-                  <td className="px-4 py-3 text-right tabular-nums">{rp(r.counter_due_idr)}<span className="block text-muted-foreground">{MODE[r.cod_fee_mode] ?? r.cod_fee_mode}{r.cod_collection_total_idr ? ` ${rp(r.cod_collection_total_idr)}` : ""}</span>{owner && r.estimated_margin_idr != null ? <span className="block text-muted-foreground">laba {rp(r.estimated_margin_idr)}</span> : null}</td>
-                  <td className="px-4 py-3"><Payment r={r} /></td>
-                  <td className="px-4 py-3">{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</td>
-                  <td className="px-4 py-3 text-right">{r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-          <ul className="flex flex-col gap-3 md:hidden">
-            {rows.map((r) => (
-              <li key={r.slug} className="rounded-lg border bg-card p-4">
+        <SectionCard id="daftar-kiriman" title="Daftar kiriman" description={`${rows.length} kiriman ditampilkan`}>
+          <DataTableShell
+            caption="Daftar kiriman"
+            rows={rows}
+            rowKey={(r) => r.slug}
+            footer={cursor ? <Button variant="outline" onClick={loadMore}>Muat Lebih Banyak</Button> : undefined}
+            columns={[
+              { key: "inv", header: "INV", cell: (r) => <><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link><span className="block text-muted-foreground tabular-nums">{time(r.created_at)}</span></> },
+              { key: "kurir", header: "Kurir & resi", cell: (r) => <>{r.courier_code}<span className="block text-muted-foreground tabular-nums">{r.awb_number ?? "Resi belum terbit"}{r.print_count ? ` · ${r.print_count}× cetak` : ""}</span></> },
+              { key: "pihak", header: "Pengirim → Penerima", wide: true, className: "whitespace-normal", cell: (r) => <>{r.sender_brand ?? r.sender ?? "—"}<span className="block text-muted-foreground">→ {r.recipient ?? "—"}{r.recipient_area ? ` (${r.recipient_area.split(",")[0]})` : ""}</span></> },
+              { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => <>{rp(r.counter_due_idr)}<span className="block text-muted-foreground">{MODE[r.cod_fee_mode] ?? r.cod_fee_mode}{r.cod_collection_total_idr ? ` ${rp(r.cod_collection_total_idr)}` : ""}</span>{owner && r.estimated_margin_idr != null ? <span className="block text-muted-foreground">laba {rp(r.estimated_margin_idr)}</span> : null}</> },
+              { key: "bayar", header: "Pembayaran", cell: (r) => <Payment r={r} /> },
+              { key: "status", header: "Status", cell: (r) => <StatusBadge tone={r.dispatch_state === "issued" ? "primary" : r.dispatch_state === "cancelled" ? "muted" : "warn"}>{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</StatusBadge> },
+              { key: "aksi", header: <span className="sr-only">Aksi</span>, align: "right", cell: (r) => (r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null) },
+            ]}
+            mobile={(r) => (
+              <div className="flex flex-col gap-1.5 text-base">
                 <div className="flex items-baseline justify-between gap-2">
                   <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
-                  <span className="text-base text-muted-foreground tabular-nums">{time(r.created_at)}</span>
+                  <span className="text-muted-foreground tabular-nums">{time(r.created_at)}</span>
                 </div>
-                <p className="text-base">{r.courier_code} · <span className="tabular-nums">{r.awb_number ?? "Resi belum terbit"}</span></p>
-                <p className="text-base text-muted-foreground">{r.sender_brand ?? r.sender ?? "—"} → {r.recipient ?? "—"}</p>
-                <p className="text-base tabular-nums">{rp(r.counter_due_idr)} · <Payment r={r} /> · {statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</p>
-                {r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" className="mt-2" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}
-              </li>
-            ))}
-          </ul>
-          {cursor ? <div className="mt-4"><Button variant="outline" onClick={loadMore}>Muat Lebih Banyak</Button></div> : null}
-        </>
+                <p>{r.courier_code} · <span className="tabular-nums">{r.awb_number ?? "Resi belum terbit"}</span></p>
+                <p className="text-muted-foreground">{r.sender_brand ?? r.sender ?? "—"} → {r.recipient ?? "—"}</p>
+                <p className="flex flex-wrap items-center gap-2 tabular-nums">{rp(r.counter_due_idr)} <Payment r={r} /> <StatusBadge tone={r.dispatch_state === "issued" ? "primary" : r.dispatch_state === "cancelled" ? "muted" : "warn"}>{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</StatusBadge></p>
+                {r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" className="mt-1 w-fit" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}
+              </div>
+            )}
+          />
+        </SectionCard>
       )}
     </div>
   )
 }
 
 function Payment({ r }: { r: Row }) {
-  if (r.counter_payment_status === "paid") return <span>Lunas · {METHOD[r.counter_payment_method ?? ""] ?? r.counter_payment_method}</span>
-  if (r.counter_payment_status === "unpaid") return <span className="font-medium text-warn">Belum dibayar</span>
-  if (r.counter_payment_status === "voided") return <span className="text-muted-foreground">Dibatalkan</span>
-  return <span className="text-muted-foreground">Tanpa tagihan</span>
+  if (r.counter_payment_status === "paid") return <StatusBadge tone="safe">Lunas · {METHOD[r.counter_payment_method ?? ""] ?? r.counter_payment_method}</StatusBadge>
+  if (r.counter_payment_status === "unpaid") return <StatusBadge tone="warn">Belum dibayar</StatusBadge>
+  if (r.counter_payment_status === "voided") return <StatusBadge tone="muted">Dibatalkan</StatusBadge>
+  return <StatusBadge tone="muted">Tanpa tagihan</StatusBadge>
 }

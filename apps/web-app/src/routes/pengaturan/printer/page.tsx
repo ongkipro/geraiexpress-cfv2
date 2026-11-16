@@ -9,6 +9,7 @@ import { deviceDensity, FORMAT_LABEL, PAPER_HINT, setDeviceDensity, type Format 
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
+import { ChoiceGroup } from "../../../components/admin/page"
 
 // Pengaturan › Printer & Struk (visual 08 §2.3, DEC-224/225): this device's density (instant, local, Kasir allowed)
 // in its own card; outlet label format + receipt content (owner, Save bar). Instant and Save never share a card.
@@ -75,14 +76,7 @@ function ReceiptForm() {
       <Card>
         <CardHeader><CardTitle className="text-lg">Format label bawaan</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
-          <div role="radiogroup" aria-label="Format label bawaan" className="flex flex-col gap-2">
-            {FORMATS.map((x) => (
-              <button key={x} type="button" role="radio" aria-checked={f.defaultLabelFormat === x} onClick={() => set({ defaultLabelFormat: x })} className={`flex min-h-11 flex-col items-start rounded-lg border px-4 py-2 text-left text-base ${f.defaultLabelFormat === x ? "border-primary bg-primary/10" : "border-input"}`}>
-                <span className="font-medium">{FORMAT_LABEL[x]}</span>
-                <span className="text-muted-foreground">{PAPER_HINT[x]}</span>
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup label="Format label bawaan" layout="column" value={f.defaultLabelFormat} onValueChange={(x) => set({ defaultLabelFormat: x })} choices={FORMATS.map((x) => ({ value: x, label: FORMAT_LABEL[x], description: PAPER_HINT[x] }))} />
         </CardContent>
       </Card>
       <Card>

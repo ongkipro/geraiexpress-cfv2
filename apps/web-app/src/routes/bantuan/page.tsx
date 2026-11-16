@@ -5,6 +5,7 @@ import { Field, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { api } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
+import { Panel } from "../../components/admin/page"
 
 // `Bantuan & Panduan` (visual 07 `/bantuan`): searchable guides (first setup, printer on PC, custom domain, COD flow,
 // returns) and `Hubungi Bantuan` on WhatsApp (contact set by the platform; email as fallback).
@@ -65,13 +66,13 @@ export function BantuanPage() {
       {list.length === 0 ? <p className="text-base text-muted-foreground">Tidak ada panduan yang cocok. Coba kata lain atau hubungi bantuan.</p> : null}
       <div className="flex flex-col gap-3">
         {list.map((g) => (
-          <details key={g.id} className="rounded-lg border bg-card p-4 md:p-6" open={q.length > 0}>
+          <Panel as="details" key={g.id} open={q.length > 0}>
             <summary className="flex min-h-11 cursor-pointer items-center text-lg font-semibold">{g.title}</summary>
             <ol className="mt-3 flex list-decimal flex-col gap-2 pl-6 text-base">
               {g.steps.map((s) => <li key={s}>{s}</li>)}
             </ol>
             {g.link ? <Link to={g.link.to} className="mt-3 inline-flex text-base text-primary underline-offset-4 hover:underline">{g.link.label}</Link> : null}
-          </details>
+          </Panel>
         ))}
       </div>
     </div>

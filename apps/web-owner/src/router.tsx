@@ -54,7 +54,7 @@ const consoleRoute = createRoute({
   loader: loadMe,
   component: function Console() {
     const { me, pending } = consoleRoute.useLoaderData()
-    return <ConsoleShell environment={import.meta.env.MODE === "production" && location.hostname === "owner.geraiexpress.com" ? "Produksi" : "Sandbox"} userName={me.user.name} pending={pending} />
+    return <ConsoleShell environment={import.meta.env.MODE === "production" && location.hostname === "owner.geraiexpress.com" ? "Produksi" : "Sandbox"} userName={me.user.name} userEmail={me.user.email} pending={pending} />
   },
 })
 

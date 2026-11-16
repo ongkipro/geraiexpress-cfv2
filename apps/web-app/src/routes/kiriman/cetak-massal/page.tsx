@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link } from "@tanstack/react-router"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -7,6 +6,7 @@ import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-grou
 import { api, ApiError } from "../../../lib/api"
 import { FORMAT_LABEL, fetchPrint, printPdf, PrintError, type Format } from "../../../print/print"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
+import { CheckboxField, Panel } from "../../../components/admin/page"
 
 // `Cetak Resi Massal` (visual 07, DEC-225/229): filter Belum/Sudah Cetak, select up to 50 with a live counter, one
 // merged exact-size PDF; reprints require a reason.
@@ -55,7 +55,6 @@ export function CetakMassalPage() {
   }
   return (
     <div className="pb-24 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground"><Link to="/kiriman" className="text-primary underline-offset-4 hover:underline">Kiriman</Link> › Cetak Resi Massal</nav>
       <PageTitle title="Cetak Resi Massal" description="Pilih sampai 50 kiriman, cetak sekaligus dalam satu PDF." />
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <ToggleGroup value={[status]} onValueChange={(v) => v[0] && setStatus(v[0] as "belum" | "sudah")} variant="outline" aria-label="Status cetak">
@@ -66,25 +65,24 @@ export function CetakMassalPage() {
           {(["label_10x15_with_stub", "label_10x10", "label_10x15"] as Format[]).map((f) => <ToggleGroupItem key={f} value={f}>{FORMAT_LABEL[f]}</ToggleGroupItem>)}
         </ToggleGroup>
       </div>
-      <section className="rounded-lg border bg-card">
+      <Panel className="p-0 md:p-0">
         {error ? <div className="p-4"><ErrorState message={error} onRetry={load} /></div> : !rows ? <div className="p-4"><LoadingState label="Memuat kiriman" /></div> : rows.length === 0 ? (
           <EmptyState title={status === "belum" ? "Semua resi sudah dicetak" : "Belum ada resi yang dicetak"} body="Kiriman dengan resi terbit akan tampil di sini." />
         ) : (
           <ul className="divide-y" aria-label="Kiriman siap cetak">
             {rows.map((r) => (
               <li key={r.slug}>
-                <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-2 text-base">
-                  <input type="checkbox" className="size-5" checked={sel.has(r.slug)} onChange={() => toggle(r.slug)} disabled={!sel.has(r.slug) && sel.size >= MAX} />
+                <CheckboxField className="px-4 py-2" checked={sel.has(r.slug)} onCheckedChange={() => toggle(r.slug)} disabled={!sel.has(r.slug) && sel.size >= MAX}>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="font-medium tabular-nums">INV {r.slug.toUpperCase()} · {r.courier} · {r.awb}</span>
                     <span className="text-muted-foreground">{r.recipient}{r.print_count ? ` · dicetak ${r.print_count}×` : ""}</span>
                   </span>
-                </label>
+                </CheckboxField>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
       {anyReprint ? (
         <Field className="mt-4">
           <FieldLabel htmlFor="alasan-massal">Alasan cetak ulang (dicatat)</FieldLabel>

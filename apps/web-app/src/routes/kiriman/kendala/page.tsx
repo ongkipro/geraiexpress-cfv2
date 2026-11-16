@@ -6,6 +6,7 @@ import { api, ApiError } from "../../../lib/api"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { EmptyState, ErrorState, LoadingState } from "../../../shell/states"
 import { rp } from "../../kasir/quote-panel"
+import { Panel } from "../../../components/admin/page"
 
 // `Kendala & Klaim` (spec 04 §3): five sub-filters, per-courier claim countdown chips (Mengantar help 8140017),
 // claim records with a ready-to-send packet, owner notes on `Status Bertentangan`.
@@ -76,7 +77,7 @@ export function Kendala() {
 function KendalaRow({ r, bucket, owner, act }: { r: Row; bucket: Bucket; owner: boolean; act: (fn: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const [note, setNote] = useState(r.conflict_note ?? "")
   return (
-    <li className="flex flex-col gap-2 rounded-lg border bg-card p-4">
+    <Panel as="li" className="flex flex-col gap-2 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
         <span className="text-base text-muted-foreground tabular-nums">{r.courier} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
@@ -111,6 +112,6 @@ function KendalaRow({ r, bucket, owner, act }: { r: Row; bucket: Bucket; owner: 
           <Button variant="outline" onClick={() => act(() => api(`/shipments/${r.slug}/conflict-note`, { body: { note, resolve: true } }), "Catatan disimpan dan kendala ditutup.")}>Simpan & Tutup</Button>
         </div>
       ) : null}
-    </li>
+    </Panel>
   )
 }

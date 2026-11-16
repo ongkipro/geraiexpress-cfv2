@@ -20,12 +20,18 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
 
 ### Composition contract
 
-- C1: desktop shell = 256 px sidebar (6 menus, `Kontak` expands) + 64 px header with search, scan, account, and
-  `+ Kiriman Baru`; content max 1440 px (visual 07 §1.1).
-- C2: phone shell = 64 px header + 64 px bottom bar with a center `＋`; POS replaces the bottom bar with a sticky
-  checkout bar (visual 07 §1.3).
+- C1: desktop shell = 256 px sidebar (6 menus; `Buat Pengiriman` and `Kontak` are Collapsible trees, DEC-237) + 64 px
+  header with sidebar trigger, breadcrumb (last crumb = page `h1`), search, scan and `+ Kiriman Baru`; account menu
+  (`NavUser`) in the sidebar footer; content max 1440 px (visual 07 §1.1). Super Admin uses the same `AdminShell`
+  (DEC-236).
+- C0: one kit for both consoles (DEC-236): `apps/web-app/src/components/admin/` — `PageHeader`, `SectionCard`,
+  `Panel`, `ItemList`, `MetricCard`, `StatusBadge` (dot + label), `CalloutAlert`, state blocks, `DataTableShell`,
+  `AdminBarChart`, `CheckboxField`, `ChoiceGroup`, `DetailList`; Sonner for toasts. No hand-rolled cards or controls.
+- C2: phone shell = 64 px header + 64 px bottom bar with a center `＋`; POS (`/kasir`, `/kiriman/:slug`) replaces the
+  bottom bar with a sticky checkout bar; the menu opens as a Sheet with the same tree (visual 07 §1.3).
 - C3: list pages = title → in-page tabs with counts → filter bar → table; tables become cards under 768 px.
-- C4: POS = 60/40 split at ≥ 1024 px (inputs left, locked summary + payment + print right); single column on phones.
+- C4: POS = 60/40 split at ≥ 1024 px (inputs left, sticky `Ringkasan & Pembayaran` right); single column on phones;
+  one primary issues without leaving `/kasir` (DEC-237).
 - C5: dashboard (owner) = period filter: presets + calendar range (default 7 hari terakhir, visual 08 §1) → 4 KPI → shipment chart → shipment history →
   courier table + `Perlu tindakan`; Kasir home has no money totals.
 - C6: settings = left settings menu + one form per route on desktop; grouped list of rows → item page on phones

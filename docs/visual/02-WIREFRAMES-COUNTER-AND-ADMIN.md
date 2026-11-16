@@ -39,13 +39,17 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 
 ---
 
-## 2. Counter POS Overview (`Buat Pengiriman` — `/kiriman/8k4m2p7`, `DEC-225`)
+## 2. Counter POS Overview (`Buat Pengiriman › Kiriman Satuan` — `/kasir`, `DEC-225`, `DEC-237`)
+
+*(DEC-237: the order-creation tools are a sidebar tree, not tabs — the first row below is the breadcrumb + shift and
+printer status, not a tab bar. The INV number appears once the primary is pressed; `/kiriman/:slug` keeps the same
+layout for existing drafts.)*
 
 *(Full step-by-step courier selection & mobile flow is detailed in `05-SHIPMENT-CREATION-AND-COURIER-SELECTION-FLOW.md`.)*
 
 ```text
 ┌────────────────────────────────────────────────────────────┬─────────────────────────────────────────┐
-│ [● Paket Reguler] [Paket Massal] [Cek Ongkir] [Shift]      │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
+│ Buat Pengiriman › Kiriman Satuan                           │ [Shift Pagi: Rp762rb] [🟢 BT: POS-58]   │
 ├────────────────────────────────────────────────────────────┼─────────────────────────────────────────┤
 │ KIRIMAN BARU — INV #8K4M2P7        [📷 Scan QR dari Rumah]  │ RINGKASAN KUNCI (INV #8K4M2P7)         │
 │ ────────────────────────────────────────────────────────── │ ─────────────────────────────────────── │

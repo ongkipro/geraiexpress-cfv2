@@ -56,14 +56,18 @@ const QuoteBody = z.object({
   height_cm: z.number().int().min(1).max(300).optional(),
   cod_fee_mode: z.enum(["none", "buyer_bears_fee", "sender_bears_fee", "cod_all_in", "dfod"]).default("none"),
   cod_goods_amount_idr: z.number().int().min(0).optional(),
+  declared_value_idr: z.number().int().min(0).max(10_000_000).optional().describe("Non-COD goods value sent to Mengantar as goodsValue"),
+  dangerous_goods: z.boolean().optional().describe("Dangerous goods (SiCepat HALU / iDexpress only)"),
 })
-const toQuoteInput = (b: z.infer<typeof QuoteBody>) => ({ destinationAreaId: b.destination_area_id, weightGram: b.weight_gram, lengthCm: b.length_cm, widthCm: b.width_cm, heightCm: b.height_cm, mode: b.cod_fee_mode, codGoodsIdr: b.cod_goods_amount_idr })
+const toQuoteInput = (b: z.infer<typeof QuoteBody>) => ({ destinationAreaId: b.destination_area_id, weightGram: b.weight_gram, lengthCm: b.length_cm, widthCm: b.width_cm, heightCm: b.height_cm, mode: b.cod_fee_mode, codGoodsIdr: b.cod_goods_amount_idr, declaredValueIdr: b.declared_value_idr, dangerousGoods: b.dangerous_goods })
 
 const DraftBody = QuoteBody.extend({
   service_code: z.string().min(2).max(30).describe("Courier service from POST /quotes (e.g. JT)"),
   sender_id: z.string().uuid().optional().describe("Existing sender contact id (contacts:read)"),
   recipient_id: z.string().uuid().optional().describe("Existing recipient contact id"),
   content: z.string().min(3).max(100).optional(),
+  quantity: z.number().int().min(1).max(999).optional(),
+  delivery_instruction: z.string().max(120).optional(),
 })
 const ContactBody = z.object({ name: z.string().min(1).max(80), phone: z.string().min(6).max(20), street: z.string().max(200).optional(), area_id: AREA.optional(), area_label: z.string().max(200).optional(), postal_code: z.string().regex(/^\d{5}$/).optional() })
 const LabelBody = z.object({ format: z.enum(["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"]).default("label_10x15_with_stub"), reprint_reason: z.string().min(3).max(200).optional() })
@@ -109,8 +113,8 @@ export const ROUTES: Route[] = [
       if (!s.ok) return vaultErr(s)
       const f = await vault.freezeQuote(c.key.tenantId, frozenFrom(s.value, q, card))
       if (!f.ok) return vaultErr({})
-      if (b.sender_id || b.recipient_id || b.content) {
-        const p = await vault.setShipmentParties(c.key.tenantId, s.value, { senderId: b.sender_id, recipientId: b.recipient_id, content: b.content })
+      if (b.sender_id || b.recipient_id || b.content || b.quantity || b.delivery_instruction) {
+        const p = await vault.setShipmentParties(c.key.tenantId, s.value, { senderId: b.sender_id, recipientId: b.recipient_id, content: b.content, quantity: b.quantity, deliveryInstruction: b.delivery_instruction })
         if (!p.ok) return vaultErr(p)
       }
       const host = await primaryHost(c.env, c.key.tenantId, c.key.tenantSlug)

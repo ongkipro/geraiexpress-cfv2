@@ -5,6 +5,7 @@ import { Input } from "../../../components/ui/input"
 import { Button } from "../../../components/ui/button"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
+import { ChoiceGroup } from "../../../components/admin/page"
 
 // Pengaturan › Data Usaha (DEC-218): all optional; NPWP is stored encrypted and only ever shown masked. Typing a new
 // NPWP replaces it; `Hapus NPWP` clears it; leaving the field empty keeps the stored one.
@@ -51,11 +52,7 @@ export function DataUsahaPage() {
         <CardContent className="flex flex-col gap-4">
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-base font-medium">Bentuk usaha</legend>
-            <div role="radiogroup" aria-label="Bentuk usaha" className="flex flex-wrap gap-2">
-              {ENTITIES.map(([id, label]) => (
-                <button key={id} type="button" role="radio" aria-checked={f.entityType === id} onClick={() => set({ entityType: f.entityType === id ? "" : id })} className={`h-11 rounded-lg border px-4 text-base ${f.entityType === id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{label}</button>
-              ))}
-            </div>
+            <ChoiceGroup label="Bentuk usaha" value={f.entityType || null} onValueChange={(v) => set({ entityType: v })} choices={ENTITIES.map(([id, label]) => ({ value: id, label }))} />
           </fieldset>
           {field("legalName", "Nama resmi")}
           {field("nib", "NIB", { inputMode: "numeric", className: "tabular-nums" })}

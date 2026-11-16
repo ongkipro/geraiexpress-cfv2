@@ -13,6 +13,7 @@ import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rupiah } from "./shared"
+import { Panel } from "../../components/admin/page"
 
 // Kontak › Pengirim (visual 06 §2, visual 07, DEC-212): walk-in senders and reseller/dropship brands. Deposit column
 // owner only (the server strips it for Kasir). WA verification = operator confirms at the counter after a click-to-chat.
@@ -72,7 +73,7 @@ export function PengirimPage() {
         </div>
         <Input aria-label="Cari nama, toko atau nomor HP" placeholder="Cari nama, toko atau nomor HP" value={q} onChange={(e) => setQ(e.target.value)} className="lg:w-80" type="search" />
       </div>
-      <section className="rounded-lg border bg-card">
+      <Panel className="p-0 md:p-0">
         {error ? <div className="p-4"><ErrorState message={error} onRetry={load} /></div> : !data ? <div className="p-4"><LoadingState label="Memuat pengirim" /></div> : data.items.length === 0 ? (
           filtered ? (
             <EmptyState title="Tidak ada yang cocok" body="Coba kata kunci lain atau hapus filter." action={<Button variant="outline" onClick={() => { setQ(""); setFilter("all") }}>Hapus filter</Button>} />
@@ -123,7 +124,7 @@ export function PengirimPage() {
             </ul>
           </>
         )}
-      </section>
+      </Panel>
       <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
@@ -136,7 +137,7 @@ export function PengirimPage() {
   )
 }
 
-function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: boolean; onSaved: () => void }) {
+export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: boolean; onSaved: (saved?: { id: string }) => void }) {
   const [kind, setKind] = useState<Sender["sender_kind"]>(sender?.sender_kind ?? "walk_in")
   const [name, setName] = useState(sender?.true_name ?? "")
   const [phone, setPhone] = useState(sender?.true_phone ?? "")
@@ -157,8 +158,8 @@ function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: 
     setMsg(null)
     try {
       const body = { senderKind: kind, name, phone, street: street || null, areaId: area?.id ?? null, areaLabel: area?.label ?? null, brandName: brand || null, brandPhone: brandPhone || null, hideGeraiBranding: hide }
-      await api(sender ? `/contacts/senders/${sender.id}` : "/contacts/senders", { body })
-      onSaved()
+      const r = await api<{ item: { id: string } }>(sender ? `/contacts/senders/${sender.id}` : "/contacts/senders", { body })
+      onSaved(r.item)
     } catch (err) {
       if (err instanceof ApiError) {
         setErrors(err.body.field_errors)

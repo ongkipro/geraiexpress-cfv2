@@ -48,9 +48,12 @@ This specification defines exact integer arithmetic for weights, customer tariff
   appears, `apply_channel = partner_api` and the same rule is pushed automatically. Nothing else changes.
 - **Expected lead time:** `platform_pricing_policy.apply_sla_minutes` (default `60`). Until it passes, a mismatch is
   normal (`Belum diterapkan`); the verifier checks at `requested_at + 15 min`, `+ 60 min` and `+ 120 min`, then daily.
-- **Observed discount, per service class:** regular services use `discountPercent` (or `discount / price`); cargo
-  services use the cargo fields only (`cargoDiscount / cargoPrice`, §1 item 4). Both are normalised to
-  `observed_bps = floor(discount × 10000 / price)` and stored per quote with the service class.
+- **Observed discount, per service class:** regular services use `discount + discountExtra` over `price` (or
+  `discountPercent + discountExtraPercent`); cargo services use the cargo fields only (`cargoDiscount / cargoPrice`,
+  §1 item 4). Both are normalised to `observed_bps = floor(discount × 10000 / price)` and stored per quote with the
+  service class. Mengantar v2.0.0 may add an extra promo (`discountExtra`, e.g. 5 %) on top of the seller rate;
+  `estimatedSpecialPrice` already nets both, so `N` is unchanged, and counting the extra keeps a promo from turning a
+  rule `Selisih` (DEC-238). `raw_discount_percent` stores `"20+5"` when an extra applies.
 - **Verification states** (scheduled checks above plus every quote; tolerance `|assigned − observed| ≤ 1` bp):
 
   | From | Condition | To |
@@ -67,6 +70,16 @@ This specification defines exact integer arithmetic for weights, customer tariff
   applied never inflates profit; `M − N` is shown as `Selisih tarif` for information only, never booked.
 - **Customers:** walk-in senders always pay the normal publish tariff `P`; the discount is GeraiExpress's selling
   value to the gerai and is never shown on customer screens, receipts or the mini-site (DEC-205, DEC-230).
+- **Estimate keys (DEC-238):** a `courier=all` estimate answers `SAP`/`SAPCargo` for the `Sap` services (normalised in
+  the tenant object), `JTEco` next to `JT` on routes with a J&T ECO tariff (booked as `courier: "JT"` + `eco: true`,
+  never with cargo or DG), and `SAPLite` (catalogued inactive: the Public API cannot book it).
+- **Courier limits (DEC-238, catalog data):** COD amount max Rp2.000.000 for Sap, Anteraja, Pos and Rp5.000.000 for the
+  others (checked on the final COD amount `C`); COD min Rp10.000 for Lion, Rp1.000 otherwise; Anteraja, Pos and SPX
+  need a non-COD goods value of Rp1.000–Rp10.000.000 and at most 50 kg; J&T at most 50 kg; dangerous goods only
+  SiCepat (HALU) and iDexpress regular. A card outside a limit is shown unavailable with the Indonesian reason before
+  any dispatch. Pos Indonesia COD additionally needs a delivered rate ≥ 82 % (rolling 21–60 days, all couriers): a
+  create-order `403` with `status` `new_seller | insufficient | blocked` is explained with `deliveredRate` vs 82 % and
+  hides COD Pos from quotes for 24 h (`tenant_courier_prefs.cod_blocked_*`); non-COD Pos stays available.
 - **Guards:** `min_discount_bps <= assigned_bps <= max_discount_bps` is the only validation on saving a rule. The requested value may differ
   from what Mengantar currently gives in any state; cost always uses `effective_bps` (§2 table) and flows use `N`
   (§3), so no subsidy is ever booked.

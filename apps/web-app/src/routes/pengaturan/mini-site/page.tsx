@@ -8,6 +8,7 @@ import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SettingsLayout } from "../index/shared"
+import { ChoiceGroup } from "../../../components/admin/page"
 
 // Pengaturan › Mini-Site (visual 08 §2.3) with `Domain Sendiri` (spec 11 §5–6): DNS record to add, steps,
 // `Periksa Lagi`, and the remedy for the current state. Cloudflare work happens server-side; this page only shows it.
@@ -144,14 +145,18 @@ function AddDomain({ pending, onAdd }: { pending: boolean; onAdd: (hostname: str
         <FieldDescription>Disarankan subdomain (kirim.tokoanda.id): email dan website toko tetap aman.</FieldDescription>
       </Field>
       {isRoot ? (
-        <div role="radiogroup" aria-label="Alamat utama" className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <p className="text-base font-medium">Domain utama dipakai sebagai</p>
-          {([["root_primary", `${bare} (www diarahkan ke sini)`, "Butuh pengelola DNS yang mendukung CNAME di @, misalnya Cloudflare DNS."], ["www_primary", `www.${bare}`, "Domain utama diteruskan ke www lewat pengaturan di registrar."]] as const).map(([k, t, d]) => (
-            <button key={k} type="button" role="radio" aria-checked={root === k} onClick={() => setRoot(k)} className={`flex min-h-11 flex-col items-start rounded-lg border px-4 py-2 text-left text-base ${root === k ? "border-primary bg-primary/10" : "border-input"}`}>
-              <span className="font-medium">{t}</span>
-              <span className="text-muted-foreground">{d}</span>
-            </button>
-          ))}
+          <ChoiceGroup
+            label="Alamat utama"
+            layout="column"
+            value={root}
+            onValueChange={setRoot}
+            choices={[
+              { value: "root_primary" as const, label: `${bare} (www diarahkan ke sini)`, description: "Butuh pengelola DNS yang mendukung CNAME di @, misalnya Cloudflare DNS." },
+              { value: "www_primary" as const, label: `www.${bare}`, description: "Domain utama diteruskan ke www lewat pengaturan di registrar." },
+            ]}
+          />
         </div>
       ) : null}
       <div><Button type="submit" disabled={pending || bare.length < 4}>Tambah Domain</Button></div>

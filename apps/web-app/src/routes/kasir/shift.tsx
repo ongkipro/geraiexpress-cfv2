@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { Link } from "@tanstack/react-router"
 import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
@@ -7,6 +6,7 @@ import { api, ApiError } from "../../lib/api"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "./quote-panel"
+import { ChoiceGroup, SectionCard, Panel } from "../../components/admin/page"
 
 // `/kasir/shift` (visual 07, spec 03 §4): opening float → live totals → closing count → variance with reason code.
 interface Totals { tunaiIn: number; tunaiOut: number; voidTunai: number; codPayoutTunai: number; qris: number; transfer: number; deposit: number; expectedCash: number }
@@ -36,11 +36,9 @@ export function ShiftPage() {
   if (!v) return <LoadingState label="Memuat shift" />
   return (
     <div className="pb-24 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground"><Link to="/kasir" className="text-primary underline-offset-4 hover:underline">Buat Pengiriman</Link> › Shift Loket</nav>
       <PageTitle title="Shift Loket" description={v.shift ? `Dibuka ${time(v.shift.opened_at)}` : "Buka shift sebelum menerima uang tunai."} />
       {v.shift && v.totals ? <OpenShift shift={v.shift} totals={v.totals} onClosed={load} /> : <OpenForm onOpened={load} />}
-      <section className="mt-6 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="riwayat">
-        <h3 id="riwayat" className="mb-3 text-lg font-semibold">{isOwner(w) ? "Riwayat shift semua kasir" : "Riwayat shift Anda"}</h3>
+      <SectionCard id="riwayat" className="mt-6" title={<>{isOwner(w) ? "Riwayat shift semua kasir" : "Riwayat shift Anda"}</>}>
         {history.length === 0 ? <p className="text-base text-muted-foreground">Belum ada shift yang ditutup.</p> : (
           <ul className="divide-y">
             {history.map((s) => (
@@ -51,7 +49,7 @@ export function ShiftPage() {
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
     </div>
   )
 }
@@ -74,14 +72,14 @@ function OpenForm({ onOpened }: { onOpened: () => void }) {
     }
   }
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" noValidate>
+    <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor="modal">Modal awal laci</FieldLabel>
         <Input id="modal" inputMode="numeric" value={float} onChange={(e) => setFloat(fmtIn(e.target.value))} placeholder="150.000" className="w-48 tabular-nums" />
         {error ? <FieldError>{error}</FieldError> : <FieldDescription>Uang tunai di laci saat shift dimulai.</FieldDescription>}
       </Field>
       <div><Button type="submit" size="lg" disabled={pending}>{pending ? "Membuka…" : "Buka Shift"}</Button></div>
-    </form>
+    </Panel>
   )
 }
 
@@ -110,8 +108,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
   )
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <section className="rounded-lg border bg-card p-4 md:p-6" aria-labelledby="laci">
-        <h3 id="laci" className="mb-3 text-lg font-semibold">Isi laci (langsung)</h3>
+      <SectionCard id="laci" title="Isi laci (langsung)">
         <dl className="flex flex-col gap-2 text-base tabular-nums">
           {row("Modal awal", shift.opening_float_idr)}
           {row("Tunai masuk", totals.tunaiIn)}
@@ -121,8 +118,8 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
           <div className="flex justify-between gap-3 pt-2"><dt className="text-muted-foreground">QRIS tercatat</dt><dd>{rp(totals.qris)}</dd></div>
           <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Transfer tercatat</dt><dd>{rp(totals.transfer)}</dd></div>
         </dl>
-      </section>
-      <form onSubmit={submit} className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" noValidate>
+      </SectionCard>
+      <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <h3 className="text-lg font-semibold">Tutup shift</h3>
         <Field>
           <FieldLabel htmlFor="hitung">Uang tunai fisik dihitung</FieldLabel>
@@ -133,11 +130,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
           <>
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-base font-medium">Alasan selisih</legend>
-              <div role="radiogroup" aria-label="Alasan selisih" className="flex flex-wrap gap-2">
-                {REASONS.map(([id, label]) => (
-                  <button key={id} type="button" role="radio" aria-checked={reason === id} onClick={() => setReason(id)} className={`h-11 rounded-lg border px-4 text-base ${reason === id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{label}</button>
-                ))}
-              </div>
+              <ChoiceGroup label="Alasan selisih" value={reason || null} onValueChange={setReason} choices={REASONS.map(([id, label]) => ({ value: id, label }))} />
             </fieldset>
             <Field>
               <FieldLabel htmlFor="catatan">Catatan</FieldLabel>
@@ -147,7 +140,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
         ) : null}
         {error ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{error}</p> : null}
         <div><Button type="submit" size="lg" disabled={pending || !counted}>{pending ? "Menutup…" : "Tutup Shift"}</Button></div>
-      </form>
+      </Panel>
     </div>
   )
 }

@@ -7,6 +7,8 @@ import { ErrorBlock, formatDate, LoadingBlock, PageHead, Section, StatusChip } f
 import { api, ApiError } from "../../lib/api"
 import { useApi } from "../../lib/use-api"
 import { pct, STATE_LABEL } from "./index"
+import { Textarea } from "@shared/components/ui/textarea"
+import { Panel } from "@shared/components/admin/page"
 
 // One gerai's matrix: requested vs observed discount per service, status, and an editor (TOTP + reason).
 interface Rule {
@@ -84,7 +86,7 @@ function RuleEditor({ tenantId, rule, onDone, onCancel }: { tenantId: string; ru
     }
   }
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border p-4" noValidate>
+    <Panel as="form" onSubmit={submit} className="flex flex-col gap-3 md:p-4" noValidate>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`d-${rule.service_code}`}>Diskon gerai ({pct(rule.band.minBps)}–{pct(rule.band.maxBps)})</FieldLabel>
@@ -97,13 +99,13 @@ function RuleEditor({ tenantId, rule, onDone, onCancel }: { tenantId: string; ru
       </div>
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor={`r-${rule.service_code}`}>Alasan (wajib, dicatat di log audit)</FieldLabel>
-        <Input id={`r-${rule.service_code}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+        <Textarea id={`r-${rule.service_code}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
         {error ? <FieldError>{error}</FieldError> : null}
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan Perubahan"}</Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>Batal</Button>
       </div>
-    </form>
+    </Panel>
   )
 }

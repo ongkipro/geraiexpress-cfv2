@@ -12,7 +12,8 @@ import { fetchPrint, printPdf, PrintError } from "../../../print/print"
 import { ErrorState, LoadingState, PageTitle } from "../../../shell/states"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { rp } from "../../kasir/quote-panel"
-import { BATCH_STATE, when, type BulkRow, type BulkView } from "./shared"
+import { BATCH_STATE, type BulkRow, type BulkView } from "./shared"
+import { CheckboxField, ChoiceGroup, Panel, ItemList } from "../../../components/admin/page"
 
 // `/kiriman/massal/:batch` (visual 07, spec 03 §1.3 steps 3–6): tabs `Siap` / `Perlu Diperbaiki` with inline fix →
 // totals → `Buat n Kiriman` → dispatch progress → one payment for the batch → `Cetak Semua` (≤ 50 per PDF).
@@ -49,7 +50,6 @@ export function BatchPage() {
   const editable = ["draft", "checking", "ready"].includes(v.batch.state)
   return (
     <div className="pb-24 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground"><Link to="/kiriman/massal" className="text-primary underline-offset-4 hover:underline">Riwayat Massal</Link> › {when(v.batch.created_at)}</nav>
       <PageTitle title="Paket Massal" description={`${v.sender ? (v.sender.brand ?? v.sender.name) : "Pengirim"} · ${v.batch.file_name ?? "isian manual"} · ${BATCH_STATE[v.batch.state] ?? v.batch.state}`} />
       <Totals v={v} owner={owner} />
       {editable ? (
@@ -76,36 +76,36 @@ function Totals({ v, owner }: { v: BulkView; owner: boolean }) {
     <div className="flex flex-col"><dt className="text-base text-muted-foreground">{label}</dt><dd className="text-lg font-semibold tabular-nums">{rp(value)}</dd></div>
   )
   return (
-    <dl className="grid grid-cols-2 gap-4 rounded-lg border bg-card p-4 md:grid-cols-5 md:p-6">
+    <Panel as="dl" className="grid grid-cols-2 gap-4 md:grid-cols-5">
       {item("Total tagihan loket", t.due)}
       {item("Ongkir", t.ongkir)}
       {item("COD ditagih", t.codCollected)}
       {item("Hak pengirim", t.senderPayable)}
       {owner && t.estimated_margin_idr !== undefined ? item("Perkiraan laba", t.estimated_margin_idr) : null}
-    </dl>
+    </Panel>
   )
 }
 
 function ReadyList({ rows, owner }: { rows: BulkRow[]; owner: boolean }) {
   if (!rows.length) return <p className="py-4 text-base text-muted-foreground">Belum ada baris yang siap.</p>
   return (
-    <ul className="divide-y rounded-lg border bg-card">
+    <ItemList>
       {rows.map((r) => (
         <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
           <span><span className="text-muted-foreground tabular-nums">#{r.row_no}</span> <span className="font-medium">{r.recipient_name}</span> · {r.area_label}</span>
           <span className="tabular-nums">{(r.weight_gram ?? 0).toLocaleString("id-ID")} g{r.cod_goods_idr ? ` · COD ${rp(r.cod_collection_total_idr ?? 0)}` : ""} · <span className="font-medium">{rp(r.counter_due_idr ?? 0)}</span>{owner && r.estimated_margin_idr != null ? <span className="text-muted-foreground"> · laba {rp(r.estimated_margin_idr)}</span> : null}</span>
         </li>
       ))}
-    </ul>
+    </ItemList>
   )
 }
 
 function FixList({ batch, rows, onChange }: { batch: string; rows: BulkRow[]; onChange: (v: BulkView) => void }) {
   if (!rows.length) return <p className="py-4 text-base text-muted-foreground">Semua baris sudah benar.</p>
   return (
-    <ul className="flex flex-col divide-y rounded-lg border bg-card">
+    <ItemList className="flex flex-col">
       {rows.map((r) => <FixRow key={r.row_no} batch={batch} r={r} onChange={onChange} />)}
-    </ul>
+    </ItemList>
   )
 }
 
@@ -136,11 +136,16 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
       {r.candidates.length ? (
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-base font-medium">Pilih kecamatan yang benar</legend>
-          <div role="radiogroup" aria-label={`Kecamatan baris ${r.row_no}`} className="flex flex-col gap-2">
-            {r.candidates.map((c) => (
-              <button key={c.id} type="button" role="radio" aria-checked={area?.id === c.id} onClick={() => setArea({ id: c.id, label: c.label, postalCode: null })} className={`min-h-11 rounded-lg border px-3 py-2 text-left text-base ${area?.id === c.id ? "border-primary bg-primary/10 font-medium" : "border-input"}`}>{c.label}</button>
-            ))}
-          </div>
+          <ChoiceGroup
+            label={`Kecamatan baris ${r.row_no}`}
+            layout="column"
+            value={area?.id ?? null}
+            onValueChange={(id) => {
+              const c = r.candidates.find((x) => x.id === id)
+              if (c) setArea({ id: c.id, label: c.label, postalCode: null })
+            }}
+            choices={r.candidates.map((c) => ({ value: c.id, label: c.label }))}
+          />
         </fieldset>
       ) : r.errors.some((e) => e.startsWith("Kecamatan")) ? (
         <AreaPicker label="Cari kecamatan tujuan" value={area} onChange={setArea} />
@@ -176,21 +181,20 @@ function CreateBar({ batch, n, pendingRows, onDone }: { batch: string; n: number
     }
   }
   return (
-    <div className="mt-6 flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6">
-      <label className="flex min-h-11 items-center gap-3 text-base">
-        <input type="checkbox" className="size-5" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+    <Panel as="div" className="mt-6 flex flex-col gap-3">
+      <CheckboxField checked={ack} onCheckedChange={setAck}>
         Isi semua paket bukan barang terlarang
-      </label>
+      </CheckboxField>
       {pendingRows ? <p className="text-base text-muted-foreground">Masih memeriksa sebagian baris…</p> : null}
       {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
       <div><Button size="lg" disabled={pending || n === 0 || !ack} onClick={create}>{pending ? "Membuat…" : `Buat ${n} Kiriman`}</Button></div>
-    </div>
+    </Panel>
   )
 }
 
 function CreatedList({ rows }: { rows: BulkRow[] }) {
   return (
-    <ul className="mt-6 divide-y rounded-lg border bg-card">
+    <ItemList className="mt-6">
       {rows.map((r) => (
         <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
           <span>
@@ -202,7 +206,7 @@ function CreatedList({ rows }: { rows: BulkRow[] }) {
           </span>
         </li>
       ))}
-    </ul>
+    </ItemList>
   )
 }
 
@@ -250,7 +254,7 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
     }
   }
   return (
-    <div className="mt-6 flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6">
+    <Panel as="div" className="mt-6 flex flex-col gap-4">
       <p className="text-base font-medium">{v.batch.state === "dispatching" ? `Menerbitkan resi… ${issued.length} dari ${v.rows.filter((r) => r.state === "created").length}` : `${issued.length} resi terbit`}</p>
       {paid ? (
         <p className="text-base text-safe font-medium">Batch sudah lunas{v.batch.change_idr ? ` · kembalian ${rp(v.batch.change_idr)}` : ""}.</p>
@@ -272,6 +276,6 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
         <Button variant="outline" disabled={issued.length === 0} onClick={printAll}><PrinterIcon aria-hidden /> Cetak Semua ({issued.length})</Button>
         {unissued.length ? <Button variant="ghost" onClick={cancelUnissued}>Batalkan yang Belum Terbit ({unissued.length})</Button> : null}
       </div>
-    </div>
+    </Panel>
   )
 }

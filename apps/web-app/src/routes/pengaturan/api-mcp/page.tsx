@@ -8,6 +8,7 @@ import { api, ApiError } from "../../../lib/api"
 import { rp } from "../../kasir/quote-panel"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SettingsLayout } from "../index/shared"
+import { CheckboxField } from "../../../components/admin/page"
 
 // Pengaturan › API & MCP (spec 08 §2, visual 08 §2.3): keys table, `Buat Kunci` (the token is shown once), revoke with
 // a confirm naming the key, links to the API reference and the MCP endpoint.
@@ -143,10 +144,9 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
           <fieldset className="flex flex-col gap-1">
             <legend className="mb-1 text-base font-medium">Izin</legend>
             {scopes.map((s) => (
-              <label key={s} className="flex min-h-11 items-center gap-3 text-base">
-                <input type="checkbox" className="size-5" checked={picked.has(s)} onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(s); else n.delete(s); return n })} />
+              <CheckboxField key={s} checked={picked.has(s)} onCheckedChange={(on) => setPicked((p) => { const n = new Set(p); if (on) n.add(s); else n.delete(s); return n })}>
                 {SCOPE_LABEL[s] ?? s}
-              </label>
+              </CheckboxField>
             ))}
             {fields.scopes ? <FieldError>{fields.scopes}</FieldError> : <FieldDescription>Pencatatan pembayaran di loket tidak pernah bisa lewat API.</FieldDescription>}
           </fieldset>

@@ -31,7 +31,22 @@ export const mockFaults: {
   publicIpNotAllowed?: true
   /** `POST /address` waits on this promise first (tests interleave a request while dispatch is awaiting). */
   addressGate?: Promise<void>
+  /** Pos Indonesia COD create-order answers 403 with this eligibility status (create-order "Pos Indonesia"). */
+  posCod?: "new_seller" | "insufficient" | "blocked"
+  /** `GET /getReceiverScoreByNumberUser` answers 403 (not whitelisted) or 429 (daily limit). */
+  receiverScore?: 403 | 429
+  /** `/dropshippers` answers 403 "feature not enabled". */
+  dropshipperDisabled?: true
 } = {}
+
+/** Requests the mock received, for contract assertions (path without the key, method, parsed body). */
+export const mockLog: Array<{ path: string; method: string; body: Record<string, unknown> }> = []
+/** Extra promo per rate key in bps (v2.0.0 `discountExtra`, already netted in `estimatedSpecialPrice`). */
+export const mockDiscountExtraBps = new Map<string, number>()
+/** Saved pickup addresses by `_id` (to validate `pinpointData` for a Pos scheduled pickup). */
+const mockAddresses = new Map<string, Record<string, unknown>>()
+const mockTimes = new Set<string>()
+const mockDropshippers = new Map<string, { id: string; name: string; phone: string }>()
 
 /** Seller balance per mock key (IDR); an order the balance cannot cover is created unpaid (no AWB). */
 export const mockSeller = { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0, invoiceCalls: 0 }
@@ -58,6 +73,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
   const body = init?.body ? JSON.parse(String(init.body)) : {}
   const p = url.pathname
+  if (p.startsWith("/api/public/")) mockLog.push({ path: p.replace(/^\/api\/public\/[^/]+/, ""), method: init?.method ?? "GET", body })
   if (mockFaults.publicIpNotAllowed && p.startsWith("/api/public/")) return json(403, { success: false, code: "IP_NOT_ALLOWED", message: "IP not allowed" })
   if (p === "/api/partner/v1/sellers") {
     if (String(body.email).startsWith("timeout")) throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
@@ -117,8 +133,59 @@ export const mockFetch: typeof fetch = async (input, init) => {
     delete mockFaults.addressGate
     await gate
   }
-  if (/^\/api\/public\/[^/]+\/address$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: body._id ?? hex24() } })
-  if (/^\/api\/public\/[^/]+\/time$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: hex24(), date: body.date, time: body.time } })
+  if (/^\/api\/public\/[^/]+\/address(\/[0-9a-f]{24})?$/.test(p) && (init?.method === "POST" || init?.method === "PUT")) {
+    // v2.0.0 add-users-address: PICKUP_PIC and PICKUP_PIC_PHONE are required when adding.
+    for (const f of ["PICKUP_NAME", "PICKUP_PIC", "PICKUP_PIC_PHONE", "PICKUP_ADDRESS", "PICKUP_AUTOFILL"]) if (init.method === "POST" && !body[f]) return json(400, { success: false, field: f, message: `${f} is required` })
+    const id = p.split("/")[5] ?? hex24()
+    mockAddresses.set(id, { ...(mockAddresses.get(id) ?? {}), ...body })
+    return json(200, { success: true, data: { _id: id } })
+  }
+  if (/^\/api\/public\/[^/]+\/time$/.test(p) && init?.method === "POST") {
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(String(body.date))) return json(400, { success: false, message: "Error on add time" })
+    if (!/^(09|1\d|20):00$/.test(String(body.time))) return json(400, { success: false, message: "Time allowed 09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00, 17:00, 18:00, 19:00, 20:00" })
+    if (!mockAddresses.has(String(body.address_id))) return json(404, { success: false, message: "address not found" })
+    const id = hex24()
+    mockTimes.add(id)
+    return json(200, { success: true, data: { _id: id, date: body.date, time: body.time } })
+  }
+  if (/^\/api\/public\/[^/]+\/getReceiverScoreByNumberUser$/.test(p)) {
+    if (mockFaults.receiverScore === 403) return json(403, { success: false, message: "Not allowed" })
+    if (mockFaults.receiverScore === 429) return json(429, { success: false, message: "Daily limit reached" })
+    const search = url.searchParams.getAll("search")
+    if (search.length !== 1 || !search[0]) return json(422, { success: false, message: "Missing 'search' in the query param." })
+    const phone = search[0].replace(/^(\+?62|0)/, "")
+    if (phone.endsWith("0")) return json(200, { success: true, data: { JNE: {}, JT: {}, summary: { average_number: null, average_score: "-" } } })
+    const rts = Number(phone.at(-1)) % 4
+    const total = 10
+    const rate = Math.round(((total - rts) * 100) / total) / 10
+    const grade = rate >= 9 ? "A" : rate >= 8 ? "A-" : rate >= 7 ? "B" : "B-"
+    return json(200, { success: true, data: { phone, JNE: { total, value: 1000000, inProgress: 0, delivered: total - rts, rts, undelivered: 0, rate }, summary: { average_number: rate, average_score: phone.endsWith("1") ? `≈${grade}` : grade } } })
+  }
+  if (/^\/api\/public\/[^/]+\/dropshippers$/.test(p)) {
+    if (mockFaults.dropshipperDisabled) return json(403, { success: false, message: "Dropshipper Feature is not enabled. Enable it through Seller Web." })
+    if (init?.method === "POST") {
+      const name = String(body.name ?? "").trim()
+      const phone = String(body.phone ?? "").trim()
+      if (!name || !phone) return json(400, { success: false, message: "Missing fields: name, phone" })
+      const k = `${name}|${phone}`
+      const existing = mockDropshippers.get(k) ?? { id: hex24(), name, phone }
+      mockDropshippers.set(k, existing)
+      return json(201, { success: true, data: existing })
+    }
+    const q = (url.searchParams.get("search") ?? "").toLowerCase()
+    return json(200, { success: true, data: [...mockDropshippers.values()].filter((d) => d.name.toLowerCase().startsWith(q) || d.phone.startsWith(q)) })
+  }
+  if (/^\/api\/public\/[^/]+\/order\/simulation$/.test(p) && init?.method === "POST") {
+    const o = mockCreated.get(String(body.orderId)) ?? [...mockCreated.values()].find((x) => x.cnote_no === body.trackingId)
+    if (!o) return json(404, { success: false, message: "Order not found" })
+    const next = String(body.statusCategory ?? body.status)
+    if (!["ON DELIVERY", "DELIVERED", "RTS"].includes(next)) return json(400, { success: false, message: "Invalid statusCategory" })
+    const previous = o.statusCategory
+    o.status = next
+    o.statusCategory = next
+    o.history.push({ date: jakartaNow(), statusCategory: next })
+    return json(200, { success: true, data: { orderId: o.ORDER_ID, trackingNumber: o.cnote_no, courier: o.courier, previousStatusCategory: previous, statusCategory: next, history: o.history } })
+  }
   if (/^\/api\/public\/[^/]+\/order$/.test(p) && init?.method === "POST") {
     const headers = new Headers(init?.headers)
     const key = headers.get("idempotencyKey") ?? headers.get("idempotencykey") ?? ""
@@ -129,9 +196,36 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const prior = idempotent.get(key)
     if (prior) return new Response(JSON.stringify(prior.body), { status: prior.status, headers: { "content-type": "application/json", "idempotent-replayed": "true" } })
     if (fault === "validation_error") return json(400, { success: false, code: "VALIDATION_ERROR", message: "customerPhone must be 10-15 digits" })
-    mockSeller.createCalls++
     const o = body.orders?.[0] ?? {}
     const courier = String(body.courier)
+    // v2.0.0 create-order body rules the mock enforces (a real 400 would otherwise surface only against live sandbox).
+    const pk = (body.pickup ?? {}) as Record<string, unknown>
+    const bad = (message: string) => json(400, { success: false, message })
+    if (pk.type === "scheduledPickup") {
+      if (!mockTimes.has(String(pk.time_id))) return bad("invalid pickup time")
+      if (!["volumeMotor", "volumeMobil", "volumeTruck"].includes(String(pk.volume))) return bad("pickup.volume is required")
+      if (courier === "pos") {
+        const pin = mockAddresses.get(String(pk.address_id))?.pinpointData as { lat?: unknown; lng?: unknown } | undefined
+        if (typeof pin?.lat !== "number" || typeof pin?.lng !== "number") return bad("Pickup address must have pinpointData for courier pos")
+      }
+    } else if (pk.type === "dropOff") {
+      if (courier === "anteraja") return bad("anteraja does not support dropOff")
+    } else return bad("pickup.type is required")
+    if (o.eco !== undefined && (courier !== "JT" || o.cargo || o.isDangerousGoods || typeof o.eco !== "boolean")) return bad("orders[0].eco is only available for courier JT")
+    if (o.isDangerousGoods !== undefined && typeof o.isDangerousGoods !== "boolean") return bad("orders[0].isDangerousGoods must be a boolean")
+    if (o.isDangerousGoods === true && o.cargo) return bad("Dangerous goods cannot be combined with cargo service")
+    if (o.isDangerousGoods === true && !["SiCepat", "iDexpress"].includes(courier)) return bad(`Dangerous goods service is not supported by courier ${courier}`)
+    if (o.COD === undefined && typeof o.goodsValue !== "number") return bad("goodsValue must be a number")
+    if (["anteraja", "pos", "spx"].includes(courier) && o.COD === undefined && (o.goodsValue < 1000 || o.goodsValue > 10_000_000)) return bad("goodsValue out of range")
+    const maxCod = ["Sap", "anteraja", "pos"].includes(courier) ? 2_000_000 : 5_000_000
+    if (o.COD !== undefined && (o.COD < (courier === "lion" ? 10_000 : 1000) || o.COD > maxCod)) return bad("COD amount exceeds the courier limit")
+    if (!Number.isInteger(o.quantity) || o.quantity < 1) return bad("orders[0].quantity must be a positive number")
+    for (const f of ["price", "estimatedPrice", "estimatedSpecialPrice", "discount", "discountPercent", "discountExtra", "discountExtraPercent"]) if (f in o) return bad(`Fields not allowed in public API request: ${f}`)
+    if (courier === "pos" && o.COD !== undefined && mockFaults.posCod) {
+      const status = mockFaults.posCod
+      return json(403, { success: false, message: "Pos Indonesia COD is not available for this account", status, deliveredRate: status === "new_seller" ? 0 : status === "insufficient" ? 40 : 70, minimumDeliveredRate: 82 })
+    }
+    mockSeller.createCalls++
     // The debit the mock charges: 10.000 per kg (deterministic, independent of the quote mock's tariffs).
     const cost = 10_000 * Math.max(1, Math.ceil(Number(o.weight ?? 1)))
     const paid = mockSeller.balanceIdr >= cost
@@ -228,23 +322,31 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const cod = url.searchParams.get("COD_AMOUNT")
     const codAmount = cod === null ? null : Number(cod)
     const only = url.searchParams.get("courier") ?? "all"
-    const keys = ["JNE", "JNECargo", "SiCepat", "SiCepatCargo", "Sap", "SapCargo", "iDexpress", "iDexpressCargo", "JT", "lion", "anteraja", "pos", "spx"]
-    const base: Record<string, number> = { JNE: 12000, SiCepat: 13000, Sap: 11000, iDexpress: 11500, JT: 12500, lion: 11200, anteraja: 12800, pos: 14000, spx: 11800 }
+    // v2.0.0 keys: `SAP` (not the booking courier `Sap`), `SAPLite`, `SapCargo`, and `JTEco` next to `JT` (courier=all).
+    const dg = url.searchParams.get("isDangerousGoods") === "true"
+    const keys = ["JNE", "JNECargo", "SiCepat", "SiCepatCargo", "SAP", "SAPLite", "SapCargo", "iDexpress", "iDexpressCargo", "JT", "JTEco", "lion", "anteraja", "pos", "spx"]
+    const base: Record<string, number> = { JNE: 12000, SiCepat: 13000, SAP: 11000, SAPLite: 9000, iDexpress: 11500, JT: 12500, JTEco: 10500, lion: 11200, anteraja: 12800, pos: 14000, spx: 11800 }
+    const forCourier: Record<string, string[]> = { Sap: ["SAP", "SapCargo"], JT: ["JT"] }
     const data: Record<string, unknown> = {}
     for (const k of keys) {
-      if (only !== "all" && k !== only && k !== `${only}Cargo`) continue
+      if (only !== "all" && !(forCourier[only] ?? [only, `${only}Cargo`]).includes(k)) continue
+      if (k === "JTEco" && (dg || mockUnsupported.has("JTEco"))) continue
       const bps = mockDiscountBps.get(k) ?? 2000
       const fee = codAmount === null ? 0 : mockCodFeeUnstable.on ? ++mockCodFeeUnstable.n * 37 : Math.ceil((codAmount * 0.028) / 1000) * 1000
       if (k.endsWith("Cargo")) {
         const cargoPrice = 60000 + Math.max(0, weight - 5) * 6000
         const cargoDiscount = Math.floor((cargoPrice * bps) / 10000)
-        data[k] = { unsupported: false, unsupported_cod: true, price: 0, discountPercent: 0, discount: 0, codFee: 0, cargoPrice, cargoDiscount, cargoEstimatedPrice: cargoPrice, cargoEstimatedSpecialPrice: cargoPrice - cargoDiscount, minimumWeightCargo: 5, estimate_delivery: "3 - 5 hari" }
+        const cargoDiscountExtra = Math.floor((cargoPrice * (mockDiscountExtraBps.get(k) ?? 0)) / 10000)
+        data[k] = { unsupported: false, unsupported_cod: true, price: 0, discountPercent: 0, discount: 0, codFee: 0, cargoPrice, cargoDiscount, cargoDiscountExtra, cargoEstimatedPrice: cargoPrice, cargoEstimatedSpecialPrice: cargoPrice - cargoDiscount - cargoDiscountExtra, minimumWeightCargo: 5, estimate_delivery: "3 - 5 hari" }
         continue
       }
       const price = base[k]! * weight
       const discount = Math.floor((price * bps) / 10000)
+      const extraBps = mockDiscountExtraBps.get(k) ?? 0
+      const discountExtra = Math.floor((price * extraBps) / 10000)
+      const heavy = ["anteraja", "pos", "spx"].includes(k) && weight > 50
       data[k] = {
-        unsupported: mockUnsupported.has(k),
+        unsupported: mockUnsupported.has(k) || heavy,
         unsupported_cod: false,
         unsupportedPickup: k === "SiCepat" && mockUnsupported.has("SiCepatPickup"),
         price,
@@ -252,8 +354,12 @@ export const mockFetch: typeof fetch = async (input, init) => {
         discount,
         codFee: fee,
         estimatedPrice: price + fee,
-        estimatedSpecialPrice: price - discount + fee,
+        discountExtra,
+        discountExtraPercent: extraBps / 100,
+        estimatedSpecialPrice: price - discount - discountExtra + fee,
         estimate_delivery: k === "SiCepat" ? "1 - 2 hari" : "2 - 3 hari",
+        ...(dg ? { isDangerousGoodsSupported: k === "SiCepat" || k === "iDexpress" } : {}),
+        ...(k === "spx" ? { pickupSchedule: spxSchedule() } : {}),
       }
     }
     return json(200, { success: true, data })
@@ -270,12 +376,24 @@ export const mockFetch: typeof fetch = async (input, init) => {
   return json(404, { success: false, message: "mock: route not implemented" })
 }
 
+/** SPX open pickup windows for today and the next two days (WIB dates), 08:00–22:00. */
+function spxSchedule() {
+  const out: Record<string, Array<{ timeRangeId: number; start: string; end: string; timeEpoch: number }>> = {}
+  for (let d = 0; d < 3; d++) out[new Date(Date.now() + 7 * 3600_000 + d * 86_400_000).toISOString().slice(0, 10)] = [{ timeRangeId: 1, start: "08:00", end: "22:00", timeEpoch: 0 }]
+  return out
+}
+
 export function resetMock() {
   sellers.clear()
   mockOrders.clear()
   mockDiscountBps.clear()
   mockUnsupported.clear()
   mockCreated.clear()
+  mockLog.length = 0
+  mockDiscountExtraBps.clear()
+  mockAddresses.clear()
+  mockTimes.clear()
+  mockDropshippers.clear()
   idempotent.clear()
   Object.assign(mockSeller, { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0, invoiceCalls: 0 })
   mockInvoices.length = 0

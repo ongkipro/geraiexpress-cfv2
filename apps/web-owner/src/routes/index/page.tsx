@@ -1,8 +1,12 @@
-import { Link } from "@tanstack/react-router"
-import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, PageHead, Section, StatusChip } from "../../components/page"
+import { ArrowRightIcon } from "lucide-react"
+import { AdminBarChart } from "@shared/components/admin/bar-chart"
+import { EmptyState, ErrorState, LoadingState, MetricCard, MetricGrid, PageHeader, SectionCard, StatusBadge, type StatusTone } from "@shared/components/admin/page"
+import { formatDate } from "../../components/page"
 import { useApi } from "../../lib/use-api"
+import { LinkButton } from "@shared/components/admin/link-button"
 
-// Super Admin `Ringkasan` (visual 07 §3.3): 4 KPI → alerts → 14-day volume (read-only, no PII).
+// Super Admin `Ringkasan` (visual 07 §3.3, DEC-236): the same MetricCard / SectionCard / bar chart as the Gerai
+// dashboard — 4 KPI → 14-day volume chart → `Perlu perhatian` action rows (read-only, no PII).
 interface Overview {
   kpi: { active_tenants: number; shipments_today: number; pending_applications: number; onboarding_stuck: number; tenants_in_recovery: number; discount_mismatch: number; email_failed_7d: number; health: "ok" | "attention"; partnerQuota: { minute: number; day: number } | null }
   series: Array<{ day: number; shipments: number }>
@@ -10,70 +14,123 @@ interface Overview {
 }
 
 const nf = new Intl.NumberFormat("id-ID")
-const dayLabel = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(ms)
+const dayLabel = (ms: number | string) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }).format(Number(ms))
 
-const ALERT_LABEL = (key: string) =>
-  key.startsWith("discount_selisih") ? "Diskon gerai belum sesuai di Mengantar" : key === "tenant_recovery" ? "Gerai dalam pemulihan data" : key.replace(/[._-]/g, " ")
+// Alert keys (OBSERVABILITY.md, ops/alert-drill.ts) → Indonesian operator wording; never show the raw identifier.
+const ALERT_TEXT: Record<string, string> = {
+  issue_reconciliation_rate: "Banyak penerbitan resi perlu dicek ulang",
+  issue_failed_streak: "Penerbitan resi gagal beruntun",
+  webhook_inbox_age: "Webhook Mengantar tertahan",
+  finance_sync_age: "Sinkron keuangan terlambat",
+  public_api_ip_not_allowed: "Mengantar menolak IP (API Publik)",
+  partner_api_ip_not_allowed: "Mengantar menolak IP (API Partner)",
+  public_api_auth_spike: "Lonjakan penolakan kunci API Mengantar",
+  public_api_issue_volume_spike: "Lonjakan penerbitan resi tidak wajar",
+  relay_down: "Relay Partner tidak terjangkau",
+  discount_overdue: "Diskon gerai belum diterapkan Mengantar",
+  discount_selisih: "Diskon gerai belum sesuai di Mengantar",
+  email_failure_rate: "Banyak email gagal terkirim",
+  email_bounce_rate: "Banyak email terpental",
+  hostname_quota: "Kuota domain sendiri hampir habis",
+  hostname_probe: "Domain sendiri gerai gagal diperiksa",
+  tenant_recovery: "Gerai dalam pemulihan data",
+  tenant_backup_failed: "Cadangan data gerai gagal",
+}
 
-function Kpi({ label, value, hint, to }: { label: string; value: string; hint?: string; to?: string }) {
-  const body = (
-    <div className="flex h-full flex-col gap-1 rounded-lg border bg-card p-4">
-      <span className="text-base text-muted-foreground">{label}</span>
-      <span className="text-[28px] leading-tight font-bold tabular-nums">{value}</span>
-      {hint ? <span className="text-base text-muted-foreground">{hint}</span> : null}
-    </div>
-  )
-  return to ? <Link to={to} className="block rounded-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{body}</Link> : body
+/** `drill.<key>` = alert drill (TASK-602); `<key>.<scope>` = scoped alert. */
+function alertText(key: string): { label: string; drill: boolean } {
+  const drill = key.startsWith("drill.")
+  const base = (drill ? key.slice(6) : key).split(".")[0]!
+  return { label: ALERT_TEXT[base] ?? "Peringatan sistem", drill }
+}
+
+interface Attention {
+  key: string
+  tone: StatusTone
+  label: string
+  detail?: string
+  to?: string
+  search?: Record<string, string>
+  action?: string
 }
 
 export function RingkasanPage() {
   const { data, error, loading, reload } = useApi<Overview>("/overview")
-  if (loading) return <LoadingBlock label="Memuat ringkasan" />
-  if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat ringkasan."} onRetry={reload} />
+  const header = <PageHeader title="Ringkasan" description="Semua gerai · waktu WIB" />
+  if (loading) return <div>{header}<LoadingState label="Memuat ringkasan" rows={4} /></div>
+  if (error || !data) return <div>{header}<ErrorState message={error ?? "Gagal memuat ringkasan."} onRetry={reload} /></div>
   const k = data.kpi
-  const max = Math.max(1, ...data.series.map((s) => s.shipments))
+  const total14 = data.series.reduce((a, s) => a + s.shipments, 0)
+  const rows: Attention[] = [
+    k.tenants_in_recovery ? { key: "recovery", tone: "danger", label: `${nf.format(k.tenants_in_recovery)} gerai dalam pemulihan data`, to: "/sistem", action: "Buka Sistem" } : null,
+    k.onboarding_stuck ? { key: "onboarding", tone: "warn", label: `${nf.format(k.onboarding_stuck)} pendaftaran Mengantar tertunda`, to: "/gerai", action: "Buka Gerai" } : null,
+    k.discount_mismatch ? { key: "discount", tone: "warn", label: `${nf.format(k.discount_mismatch)} diskon belum sesuai di Mengantar`, to: "/tarif", search: { tab: "permintaan" }, action: "Buka Tarif" } : null,
+    k.email_failed_7d ? { key: "email", tone: "warn", label: `${nf.format(k.email_failed_7d)} email gagal terkirim (7 hari)`, to: "/sistem", action: "Buka Sistem" } : null,
+    ...data.alerts.map((a): Attention => {
+      const t = alertText(a.alert_key)
+      return { key: a.alert_key, tone: t.drill ? "muted" : "warn", label: t.drill ? `Uji alert: ${t.label}` : t.label, detail: `Terakhir ${formatDate(a.last_sent_at)}`, to: "/sistem", action: "Buka Sistem" }
+    }),
+  ].filter((x): x is Attention => x !== null)
   return (
     <div className="flex flex-col gap-6">
-      <PageHead title="Ringkasan" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Gerai aktif" value={nf.format(k.active_tenants)} to="/gerai?tab=direktori" />
-        <Kpi label="Kiriman hari ini" value={nf.format(k.shipments_today)} hint="Semua gerai, WIB" />
-        <Kpi label="Pengajuan menunggu" value={nf.format(k.pending_applications)} to="/gerai" />
-        <Kpi label="Kesehatan sinkron & relay" value={k.health === "ok" ? "Baik" : "Perlu dicek"} hint={k.partnerQuota ? `Kuota Partner: ${k.partnerQuota.minute}/60 per menit` : undefined} to="/sistem" />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Perlu perhatian">
-          {k.tenants_in_recovery + k.onboarding_stuck + k.discount_mismatch + k.email_failed_7d + data.alerts.length === 0 ? (
-            <EmptyBlock title="Semua aman" body="Tidak ada peringatan dalam 7 hari terakhir." />
+      {header}
+      <MetricGrid>
+        <MetricCard label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
+        <MetricCard label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" />
+        <MetricCard label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
+        <MetricCard
+          label="Kesehatan sinkron & relay"
+          value={k.health === "ok" ? "Baik" : "Perlu dicek"}
+          footer={k.partnerQuota ? `Kuota Partner: ${k.partnerQuota.minute}/60 per menit` : "Relay & kuota Partner"}
+          to="/sistem"
+          tone={k.health === "ok" ? undefined : "warn"}
+        />
+      </MetricGrid>
+      <div className="grid gap-6 xl:grid-cols-5">
+        <SectionCard id="volume" className="xl:col-span-3" title="Kiriman 14 hari terakhir" description={`${nf.format(total14)} paket · per hari · semua gerai`}>
+          <AdminBarChart
+            data={data.series}
+            xKey="day"
+            series={[{ key: "shipments", label: "Kiriman", color: "var(--chart-1)" }]}
+            xLabel={dayLabel}
+            caption="Jumlah kiriman per hari, 14 hari terakhir"
+          />
+        </SectionCard>
+        <SectionCard
+          id="perhatian"
+          className="xl:col-span-2"
+          title="Perlu perhatian"
+          description={rows.length > 6 ? `${nf.format(rows.length)} peringatan 7 hari terakhir · 6 teratas` : "Peringatan 7 hari terakhir"}
+          flush
+          footer={
+            rows.length > 6 ? (
+              <LinkButton variant="outline" to="/sistem">
+                Lihat semua di Sistem & Audit <ArrowRightIcon aria-hidden data-icon="inline-end" />
+              </LinkButton>
+            ) : undefined
+          }
+        >
+          {rows.length === 0 ? (
+            <EmptyState title="Semua aman" body="Tidak ada peringatan dalam 7 hari terakhir." />
           ) : (
-            <ul className="flex flex-col gap-3 text-base">
-              {k.tenants_in_recovery ? <li><StatusChip tone="danger">{k.tenants_in_recovery} gerai dalam pemulihan data</StatusChip></li> : null}
-              {k.onboarding_stuck ? <li><StatusChip tone="warn">{k.onboarding_stuck} pendaftaran Mengantar tertunda</StatusChip></li> : null}
-              {k.discount_mismatch ? <li><Link to="/tarif" search={{ tab: "permintaan" }} className="text-primary underline-offset-4 hover:underline">{k.discount_mismatch} diskon belum sesuai di Mengantar</Link></li> : null}
-              {k.email_failed_7d ? <li><StatusChip tone="warn">{k.email_failed_7d} email gagal terkirim (7 hari)</StatusChip></li> : null}
-              {data.alerts.map((a) => (
-                <li key={a.alert_key} className="flex flex-wrap justify-between gap-2">
-                  <span>{ALERT_LABEL(a.alert_key)}</span>
-                  <span className="text-muted-foreground tabular-nums">{formatDate(a.last_sent_at)}</span>
+            <ul className="flex flex-col divide-y">
+              {rows.slice(0, 6).map((r) => (
+                <li key={r.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <StatusBadge tone={r.tone} className="w-fit">{r.tone === "danger" ? "Kritis" : r.tone === "warn" ? "Perlu dicek" : "Uji"}</StatusBadge>
+                    <span className="text-base">{r.label}</span>
+                    {r.detail ? <span className="text-base text-muted-foreground tabular-nums">{r.detail}</span> : null}
+                  </div>
+                  {r.to ? (
+                    <LinkButton variant="outline" size="sm" to={r.to} search={r.search as never}>
+                      {r.action} <ArrowRightIcon aria-hidden data-icon="inline-end" />
+                    </LinkButton>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
-        </Section>
-        <Section title="Kiriman 14 hari terakhir">
-          <ol className="flex h-40 items-end gap-1" aria-label="Grafik jumlah kiriman per hari">
-            {data.series.map((s) => (
-              <li key={s.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(s.day)}: ${nf.format(s.shipments)} kiriman`}>
-                <span className="sr-only">{`${dayLabel(s.day)}: ${nf.format(s.shipments)} kiriman`}</span>
-                <span className="block rounded-t bg-primary" style={{ height: `${Math.max(2, (s.shipments / max) * 100)}%` }} aria-hidden />
-              </li>
-            ))}
-          </ol>
-          <div className="mt-2 flex justify-between text-base text-muted-foreground tabular-nums">
-            <span>{dayLabel(data.series[0]!.day)}</span>
-            <span>{dayLabel(data.series.at(-1)!.day)}</span>
-          </div>
-        </Section>
+        </SectionCard>
       </div>
     </div>
   )

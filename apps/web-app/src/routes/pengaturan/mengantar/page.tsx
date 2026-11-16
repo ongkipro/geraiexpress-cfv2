@@ -88,11 +88,8 @@ export function PengaturanMengantarPage() {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-[880px] flex-col gap-6 px-4 py-6 md:px-8">
-      <nav aria-label="Breadcrumb" className="text-base text-muted-foreground">
-        <span>Pengaturan</span> <span aria-hidden>›</span> <span className="text-foreground">Mengantar</span>
-      </nav>
       <div className="flex flex-col gap-2">
-        <h1 className="text-[28px] leading-tight font-semibold">Mengantar</h1>
+        <h2 className="text-[28px] leading-tight font-bold tracking-[-0.02em]">Mengantar</h2>
         <p className="text-base text-muted-foreground">Hubungkan kabar status kiriman dari Mengantar ke gerai Anda.</p>
       </div>
 

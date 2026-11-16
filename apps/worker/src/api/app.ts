@@ -267,7 +267,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
         role: m.role,
         menus,
         badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
-        hints: { mengantarWebhook: webhook && webhook.ok && webhook.value && webhook.value.webhookState !== "active" ? webhook.value.webhookState : null },
+        hints: { mengantarWebhook: webhook && webhook.ok && webhook.value && webhook.value.webhookState !== "active" ? webhook.value.webhookState : null, sandboxTools: c.env.GX_ENV !== "production" && m.role === "gerai_admin" },
         tenants: memberships.results,
       }),
     )
@@ -908,7 +908,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("POST", "/settings/masking", "app_owner", "role", async (c) => {
     const m = c.get("membership")!
     const b = await body(c)
-    const r = await vaultFor(c.env, m.tenantId).saveMaskingSettings(m.tenantId, { offered: b.offered, presetsEnabled: b.presetsEnabled, defaultPreset: b.defaultPreset, maskRecipientOnCod: b.maskRecipientOnCod }, c.get("session").user.id)
+    const r = await vaultFor(c.env, m.tenantId).saveMaskingSettings(m.tenantId, { offered: b.offered, presetsEnabled: b.presetsEnabled, defaultPreset: b.defaultPreset, maskRecipientOnCod: b.maskRecipientOnCod, dropshipperSync: b.dropshipperSync }, c.get("session").user.id)
     if (!r.ok) return vaultErr(r)
     const platform = await platformMasking(c)
     const s = await vaultFor(c.env, m.tenantId).maskingSettings(m.tenantId, platform)
@@ -925,7 +925,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const slug = slugParam(c)
     const b = await body(c)
-    const r = await vaultFor(c.env, m.tenantId).setShipmentParties(m.tenantId, slug, { senderId: b.senderId, recipientId: b.recipientId, content: b.content, prohibitedAck: b.prohibitedAck, maskPreset: b.maskPreset })
+    const r = await vaultFor(c.env, m.tenantId).setShipmentParties(m.tenantId, slug, { senderId: b.senderId, recipientId: b.recipientId, content: b.content, prohibitedAck: b.prohibitedAck, maskPreset: b.maskPreset, quantity: b.quantity, deliveryInstruction: b.deliveryInstruction })
     if (!r.ok) return vaultErr(r)
     return detail(c, slug)
   })
@@ -992,6 +992,13 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("POST", "/contacts/recipients/:id", "app_member", "role", async (c) => contacts(c, { op: "update_recipient", id: c.req.param("id") ?? "", input: (await body(c)) as RecipientInput }))
   r("POST", "/contacts/recipients/:id/archive", "app_owner", "role", (c) => contacts(c, { op: "archive", contact: "recipient", id: c.req.param("id") ?? "" }))
   r("GET", "/contacts/risk-badge", "app_member", "role", (c) => contacts(c, { op: "badge", phone: c.req.query("phone") ?? "" }))
+  // DEC-238: Mengantar receiver score (cross-seller COD history, A..E-), cached 24 h in the tenant object.
+  r("GET", "/contacts/receiver-score", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).receiverScore(m.tenantId, c.req.query("phone") ?? "")
+    if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    return ok(r.value)
+  })
 
   // Media (TASK-302): upload into `t/<tenant>/…`, read through a short-lived signed URL bound to the tenant.
   r("POST", "/media", "app_member", "self", async (c) => {
@@ -1067,7 +1074,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       // Local only: a connected seller on the offline Mengantar mock, a pickup outlet and 20 % rules.
       const reg = await partnerClient(c.env).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })
       if (reg.kind === "ok" && reg.data.apiKey) await vault.recordOnboarding(id, { environment: "sandbox", state: "connected", sellerId: reg.data.sellerId, externalUserId: id, apiKey: reg.data.apiKey })
-      await vault.upsertDefaultOutlet(id, { name: typeof b.name === "string" ? b.name.slice(0, 80) : "Gerai Contoh", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago, Coblong, Kota Bandung" })
+      await vault.upsertDefaultOutlet(id, { name: typeof b.name === "string" ? b.name.slice(0, 80) : "Gerai Contoh", picName: "Pemilik Contoh", picPhone: "081200000000", street: "Jl. Dago No. 1", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago, Coblong, Kota Bandung" })
       await c.env.DB.prepare(
         `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, effective_from, requested_at, updated_at)
          SELECT ?1, service_code, courier_code, service_class, 2000, ?2, ?2, ?2 FROM courier_service_catalog WHERE is_active = 1 ON CONFLICT DO NOTHING`,
@@ -1130,6 +1137,19 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).devProviderStatus(m.tenantId, String(b.slug ?? ""), String(b.category ?? ""))
     if (!r.ok) return vaultErr(r)
     return ok({ status: r.value })
+  })
+
+  // Sandbox/local only (DEC-238): Mengantar `POST /order/simulation` moves one of this gerai's issued orders to
+  // ON DELIVERY / DELIVERED / RTS (production answers 404, so the route is closed there). Owner only.
+  r("POST", "/dev/simulate-status", "app_owner", "role", async (c) => {
+    if (c.env.GX_ENV === "production") return fail(404, "NOT_FOUND", "Alamat tidak ditemukan.")
+    const m = c.get("membership")!
+    const b = await body(c)
+    const status = String(b.status ?? "")
+    if (!["ON DELIVERY", "DELIVERED", "RTS"].includes(status)) throw new AppError(422, "INVALID_STATUS", "Pilih status ON DELIVERY, DELIVERED atau RTS.")
+    const r = await vaultFor(c.env, m.tenantId).simulateProviderStatus(m.tenantId, String(b.slug ?? "").toLowerCase(), status as "ON DELIVERY" | "DELIVERED" | "RTS", c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
   })
 
   // Local only: add a synthetic notification to the caller's gerai (renders `/notifikasi` states).

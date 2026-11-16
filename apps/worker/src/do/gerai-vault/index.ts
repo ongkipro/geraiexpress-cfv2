@@ -12,17 +12,18 @@ import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
 import { quotaFor } from "../partner-quota"
 import { CAP_REACHED, releaseApiSpend, reserveApiSpend, spendAmount, type ApiSpend } from "./api-spend"
-import type { Courier, CourierRate, OrderItem } from "@gx/mengantar-sdk"
+import { nextPickupSlot, pickupVolume, posCodRefusal, type Courier, type CourierRate, type OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
 import { phoneHmac } from "../../admin/monitor"
-import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type QuoteRow } from "./dispatch"
+import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type PickupRef, type QuoteRow } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
 import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
 import type { ValidRow } from "@gx/domain/bulk"
 import { normalizePhone08 } from "@gx/domain/contacts"
 import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
+import { posCodMessage } from "../../pricing/quote/messages"
 import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type OwnerDashboard } from "../../analytics/queries"
 import { resolvePreset, type Period } from "@gx/domain/period"
 import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, parseReceipt } from "./settings"
@@ -35,7 +36,7 @@ import { desk as returnDesk, handback as returnHandback, intake as returnIntake,
 import { bucketCounts, expireClaims, listBucket, moveClaim, noteConflict, openClaim, type Bucket, type ExceptionError, type ExceptionRow } from "./exceptions"
 import { insertDraft, parseDraft, publicProfile, publicTrack, purgeDrafts, readDraft, unlock as unlockTrack, type DraftInput, type DraftRow, type PublicProfile, type PublicTrack } from "./minisite"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
-import { maskPhone } from "@gx/domain/masking"
+import { isSenderMasked, maskPhone } from "@gx/domain/masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
 import { labelDataFrom } from "../../labels/build"
@@ -67,6 +68,14 @@ export type ContactOpResult =
   | { kind: "archived"; done: boolean }
   | { kind: "badge"; badge: { phone: string | null; delivered: number; rts: number } & Risk }
 
+type ReceiverScoreCacheRow = { phone: string; state: "ok" | "forbidden" | "limited"; grade: string | null; approximate: number; average_rate_x10: number | null; total: number; delivered: number; rts: number; fetched_at: number }
+export type ReceiverScoreView =
+  | { state: "ok"; grade: string | null; approximate: boolean; averageRate: number | null; total: number; delivered: number; rts: number; fetchedAt: number }
+  | { state: "forbidden" | "limited" | "unavailable" | "invalid" }
+const RECEIVER_SCORE_TTL_MS = 24 * 3_600_000
+
+export type CourierPrefRow = { courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number; cod_blocked_at: number | null; cod_blocked_status: string | null; cod_delivered_rate: number | null }
+
 /** One estimate row as plain values (safe across RPC; spec 02 §1 cargo fields kept apart). */
 export interface ObservedRate {
   unsupported: boolean
@@ -75,16 +84,30 @@ export interface ObservedRate {
   price: number | null
   discount: number | null
   discountPercent: number | null
+  /** v2.0.0 extra promo (already netted in `estimatedSpecialPrice`). */
+  discountExtra?: number | null
+  discountExtraPercent?: number | null
   codFee: number | null
   estimatedPrice: number | null
   estimatedSpecialPrice: number | null
   cargoPrice: number | null
   cargoDiscount: number | null
+  /** v2.0.0 extra cargo promo (already netted in `cargoEstimatedSpecialPrice`). */
+  cargoDiscountExtra?: number | null
   cargoEstimatedPrice: number | null
   cargoEstimatedSpecialPrice: number | null
   minimumWeightCargo: number | null
+  /** Only with an `isDangerousGoods=true` estimate. */
+  dgSupported?: boolean | null
   eta: string | null
 }
+
+/** Our pickup lead time (stricter than Mengantar's 90 min) and Mengantar's own minimum for reusing a reserved slot. */
+const PICKUP_LEAD_MINUTES = 120
+const MENGANTAR_MIN_LEAD_MS = 90 * 60_000
+
+/** `courier=all` rate keys that differ from the catalog service code (v2.0.0 answers `SAP`, books `Sap`). */
+const RATE_KEY_TO_SERVICE: Record<string, string> = { SAP: "Sap", SAPCargo: "SapCargo" }
 
 export type FrozenQuote = {
   shipment_slug: string
@@ -108,6 +131,8 @@ export type FrozenQuote = {
   assigned_gerai_discount_bps: number | null
   effective_gerai_cost_idr: number
   insurance_fee_idr: number | null
+  declared_value_idr: number
+  is_dangerous_goods: number
   cod_fee_idr: number
   cod_goods_amount_idr: number
   cod_collection_total_idr: number
@@ -155,7 +180,7 @@ export type TrackItem = {
 }
 
 export type SettingsView = {
-  profile: { name: string; whatsapp: string | null; openingHours: string | null; areaId: string | null; areaLabel: string | null; street: string | null; postalCode: string | null; logoMediaId: string | null } | null
+  profile: { name: string; whatsapp: string | null; openingHours: string | null; areaId: string | null; areaLabel: string | null; street: string | null; postalCode: string | null; logoMediaId: string | null; latitude: number | null; longitude: number | null } | null
   business: { entityType: string | null; legalName: string | null; brandName: string | null; nib: string | null; npwpMasked: string | null; registeredAddress: string | null; picName: string | null; picRole: string | null; picEmail: string | null; picPhone: string | null }
   receipt: { defaultLabelFormat: string; unboxingRemark: string; showCommission: boolean }
   packing: { items: Array<{ id: string | null; name: string; priceIdr: number; active: boolean }>; serviceFeeEnabled: boolean; serviceFeeIdr: number | null }
@@ -359,6 +384,39 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   // ---- Contacts (TASK-302) -----------------------------------------------------------------------------------------
 
+  /**
+   * Mengantar receiver score for one phone (DEC-238, getReceiverScoreByNumberUser), cached 24 h per phone in the
+   * object — a 403 (account not whitelisted) or 429 (daily limit) is cached too, so the counter never hammers it.
+   * The score covers every Mengantar seller; it only informs the COD risk badge, never blocks a shipment.
+   */
+  async receiverScore(tenantId: string, rawPhone: unknown, now: number = Date.now()): Promise<VaultResult<ReceiverScoreView>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const phone = normalizePhone08(rawPhone)
+    if (!phone) return { ok: true, value: { state: "invalid" } }
+    const sql = this.ctx.storage.sql
+    const view = (r: ReceiverScoreCacheRow): ReceiverScoreView =>
+      r.state === "ok" ? { state: "ok", grade: r.grade, approximate: r.approximate === 1, averageRate: r.average_rate_x10 === null ? null : r.average_rate_x10 / 10, total: r.total, delivered: r.delivered, rts: r.rts, fetchedAt: r.fetched_at } : { state: r.state }
+    const cached = sql.exec<ReceiverScoreCacheRow>("SELECT * FROM receiver_score_cache WHERE phone = ? AND fetched_at > ?", phone, now - RECEIVER_SCORE_TTL_MS).toArray()[0]
+    if (cached) return { ok: true, value: view(cached) }
+    const key = await this.sellerKey(tenantId)
+    if (!key) return { ok: true, value: { state: "unavailable" } }
+    let row: ReceiverScoreCacheRow
+    try {
+      const s = await publicClient(this.env, key.key, tenantId).receiverScore(phone)
+      row = { phone, state: "ok", grade: s.grade, approximate: s.approximate ? 1 : 0, average_rate_x10: s.averageRate === null ? null : Math.round(s.averageRate * 10), total: s.total, delivered: s.delivered, rts: s.rts, fetched_at: now }
+    } catch (err) {
+      const status = (err as { status?: number | null }).status
+      if (status !== 403 && status !== 429) return { ok: true, value: { state: "unavailable" } }
+      row = { phone, state: status === 403 ? "forbidden" : "limited", grade: null, approximate: 0, average_rate_x10: null, total: 0, delivered: 0, rts: 0, fetched_at: now }
+    }
+    sql.exec(
+      "INSERT OR REPLACE INTO receiver_score_cache (phone, state, grade, approximate, average_rate_x10, total, delivered, rts, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      row.phone, row.state, row.grade, row.approximate, row.average_rate_x10, row.total, row.delivered, row.rts, row.fetched_at,
+    )
+    return { ok: true, value: view(row) }
+  }
+
   async contacts(tenantId: string, op: ContactOp, actorId: string, now: number = Date.now()): Promise<VaultResult<ContactOpResult>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
@@ -535,7 +593,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
    */
   async estimateRates(
     tenantId: string,
-    q: { originId: string; destinationId: string; courier: Courier | "all"; weightKg: number; codAmountIdr?: number },
+    q: { originId: string; destinationId: string; courier: Courier | "all"; weightKg: number; codAmountIdr?: number; dangerousGoods?: boolean },
   ): Promise<{ ok: true; value: Record<string, ObservedRate> } | { ok: false; refused: VaultRefusal | "NO_KEY" | "PROVIDER_ERROR"; message?: string }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
@@ -543,14 +601,15 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!key) return { ok: false, refused: "NO_KEY" }
     let rates: Record<string, CourierRate>
     try {
-      rates = await publicClient(this.env, key.key, tenantId).estimate({ originId: q.originId, destinationId: q.destinationId, courier: q.courier, weightKg: q.weightKg, codAmountIdr: q.codAmountIdr })
+      rates = await publicClient(this.env, key.key, tenantId).estimate({ originId: q.originId, destinationId: q.destinationId, courier: q.courier, weightKg: q.weightKg, codAmountIdr: q.codAmountIdr, dangerousGoods: q.dangerousGoods })
     } catch (err) {
       return { ok: false, refused: "PROVIDER_ERROR", message: err instanceof Error ? err.message.slice(0, 200) : "estimate failed" }
     }
     const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null)
     const t = (v: unknown) => (typeof v === "string" ? v.slice(0, 40) : null)
     const value: Record<string, ObservedRate> = {}
-    for (const [k, r] of Object.entries(rates)) {
+    for (const [rawKey, r] of Object.entries(rates)) {
+      const k = RATE_KEY_TO_SERVICE[rawKey] ?? rawKey
       value[k] = {
         unsupported: r.unsupported === true,
         unsupportedCod: r.unsupported_cod === true,
@@ -558,14 +617,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
         price: n(r.price),
         discount: n(r.discount),
         discountPercent: n(r.discountPercent),
+        discountExtra: n(r.discountExtra),
+        discountExtraPercent: n(r.discountExtraPercent),
         codFee: n(r.codFee),
         estimatedPrice: n(r.estimatedPrice),
         estimatedSpecialPrice: n(r.estimatedSpecialPrice),
         cargoPrice: n(r.cargoPrice),
         cargoDiscount: n(r.cargoDiscount),
+        cargoDiscountExtra: n(r.cargoDiscountExtra),
         cargoEstimatedPrice: n(r.cargoEstimatedPrice),
         cargoEstimatedSpecialPrice: n(r.cargoEstimatedSpecialPrice),
         minimumWeightCargo: n(r.minimumWeightCargo),
+        dgSupported: typeof r.isDangerousGoodsSupported === "boolean" ? r.isDangerousGoodsSupported : null,
         eta: t(r.estimate_delivery) ?? t(r.estimatedDate),
       }
     }
@@ -580,18 +643,20 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: r ? { id: r.id, areaId: r.mengantar_area_id, name: r.name } : null }
   }
 
-  async upsertDefaultOutlet(tenantId: string, o: { name: string; picName?: string | null; picPhone?: string | null; areaId: string; areaLabel?: string | null; street?: string | null; postalCode?: string | null }, now: number = Date.now()): Promise<VaultResult<string>> {
+  async upsertDefaultOutlet(tenantId: string, o: { name: string; picName?: string | null; picPhone?: string | null; areaId: string; areaLabel?: string | null; street?: string | null; postalCode?: string | null; latitude?: number | null; longitude?: number | null }, now: number = Date.now()): Promise<VaultResult<string>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
     const cur = sql.exec<{ id: string }>("SELECT id FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
     const id = cur?.id ?? crypto.randomUUID()
     sql.exec(
-      `INSERT INTO tenant_outlets (id, tenant_id, name, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10)
+      `INSERT INTO tenant_outlets (id, tenant_id, name, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at, latitude, longitude)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10, ?11, ?12)
        ON CONFLICT(id) DO UPDATE SET name = ?3, pic_name = COALESCE(?4, pic_name), pic_phone = COALESCE(?5, pic_phone), mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9,
-         -- A moved pickup point must be registered again at Mengantar (never keep shipping from the old address).
-         mengantar_address_id = CASE WHEN mengantar_area_id IS ?6 AND street_address IS ?9 THEN mengantar_address_id ELSE NULL END, updated_at = ?10`,
+         -- A moved pickup point (area, street or pinpoint) must be registered again at Mengantar (never keep shipping
+         -- from the old address); ?13 = the caller sent coordinates (the profile form), else they are kept.
+         latitude = CASE WHEN ?13 THEN ?11 ELSE latitude END, longitude = CASE WHEN ?13 THEN ?12 ELSE longitude END,
+         mengantar_address_id = CASE WHEN mengantar_area_id IS ?6 AND street_address IS ?9 AND (NOT ?13 OR (latitude IS ?11 AND longitude IS ?12)) THEN mengantar_address_id ELSE NULL END, updated_at = ?10`,
       id,
       tenantId,
       o.name,
@@ -602,6 +667,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
       o.postalCode ?? null,
       o.street ?? null,
       now,
+      o.latitude ?? null,
+      o.longitude ?? null,
+      o.latitude !== undefined || o.longitude !== undefined ? 1 : 0,
     )
     return { ok: true, value: id }
   }
@@ -675,7 +743,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
   }
 
-  async setShipmentParties(tenantId: string, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown }): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+  async setShipmentParties(tenantId: string, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown; maskPreset?: unknown; quantity?: unknown; deliveryInstruction?: unknown }): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     let e: DispatchError | null = null
@@ -742,11 +810,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const sql = this.ctx.storage.sql
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: key.refused === "KEY_ROTATING" ? "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." : "Gerai belum terhubung ke Mengantar." } }
-    const pickup = await this.pickupFor(tenantId, ready.q.courier_code, key.key)
+    const pickup = await this.pickupFor(tenantId, ready.q, key.key, now)
     if (!pickup.ok) return { ok: false, error: pickup.error }
     const attempt = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM dispatch_journal WHERE slug = ? AND op = 'create_order'", slug).one().n + 1
     const idem = dispatchKey(slug, attempt)
-    const payload = orderPayload(ready.q, ready.sender, ready.recipient, String(ready.s.content_declaration_text), slug, pickup.value)
+    const payload = orderPayload(ready.q, ready.sender, ready.recipient, { content: String(ready.s.content_declaration_text), quantity: Number(ready.s.item_quantity ?? 1), instruction: (ready.s.delivery_instruction as string | null) ?? null }, slug, pickup.value)
     const preset = (ready.s.mask_preset ?? "standar_gerai") as MaskPreset
     const reseller = ready.sender.sender_kind === "reseller_dropship"
     const outlet = sql.exec<{ name: string; pic_phone: string | null; street_address: string | null; subdistrict_name: string | null }>("SELECT name, COALESCE(whatsapp, pic_phone) AS pic_phone, street_address, subdistrict_name FROM tenant_outlets WHERE id = ?", pickup.value.outletId).toArray()[0]
@@ -758,7 +826,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
       senderIsReseller: reseller,
     })
     // `Samarkan HP penerima untuk kiriman COD` (DEC-231): COD labels print the masked recipient phone under any preset.
-    if (ready.q.cod_fee_mode !== "none" && readSettings(sql, platform).maskRecipientOnCod) printed.recipientPhonePrinted = maskPhone(ready.recipient.phone)
+    const maskCfg = readSettings(sql, platform)
+    if (ready.q.cod_fee_mode !== "none" && maskCfg.maskRecipientOnCod) printed.recipientPhonePrinted = maskPhone(ready.recipient.phone)
+    // DEC-238 opt-in: a printed reseller brand is also sent to Mengantar as a saved dropshipper, so the courier's own
+    // label and tracking show the brand. A 403 (feature off on the seller account) falls back to the local label.
+    if (maskCfg.dropshipperSync && maskCfg.dropshipperState !== "disabled" && isSenderMasked(preset, reseller) && printed.sender.phone && printed.sender.name !== outlet?.name) {
+      const ds = await this.dropshipperFor(tenantId, key.key, ready.sender.id, printed.sender.name, printed.sender.phone)
+      if (ds) payload.orders[0]!.dropShipper = ds
+    }
     {
       const claim = this.ctx.storage.transactionSync((): ReturnType<typeof claimPreset> | { ok: false; status: number; code: string; message: string } => {
         // Re-checked at journal time: the INV is still the draft bound to the quote that built this payload.
@@ -784,6 +859,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       })
       if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, ...(claim.code === "QUOTE_CHANGED" || claim.code === "DAILY_CAP_REACHED" ? {} : { fields: { maskPreset: claim.message } }) } }
       let outcome: OrderOutcome
+      let posBlock: ReturnType<typeof posCodRefusal> = null
       try {
         const res = await publicClient(this.env, key.key, tenantId).createOrder(payload, idem)
         const item = res.data[0]
@@ -792,7 +868,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
         else outcome = { kind: item.cnote_no ? "issued" : "unpaid", item, batchId: res.batch_id ?? null, batchCode: res.batch ?? null }
       } catch (err) {
         const e = err as { ambiguous?: boolean; code?: string | null; message?: string; status?: number | null; idempotentReplayed?: boolean }
-        if (e.ambiguous || e.idempotentReplayed || e.code === "IDEMPOTENCY_REQUEST_UNRESOLVED") outcome = { kind: "ambiguous", reason: e.code ?? e.message ?? "unknown" }
+        const pos = ready.q.courier_code === "pos" && ready.q.cod_fee_mode !== "none" ? posCodRefusal(err) : null
+        if (pos) {
+          posBlock = pos
+          outcome = { kind: "rejected", code: "POS_COD_NOT_ELIGIBLE", message: posCodMessage(pos.status, pos.deliveredRate) }
+        } else if (e.status === 400 && /invalid pickup time/i.test(e.message ?? "") && pickup.value.type === "scheduledPickup") {
+          // Mengantar no longer honours the cached slot (taken, expired, or created on another account): forget it, so
+          // the next issue reserves a fresh `POST /time` instead of failing on the same `time_id` forever.
+          sql.exec("DELETE FROM pickup_time_slots WHERE time_id = ?", pickup.value.timeId)
+          outcome = { kind: "rejected", code: "PICKUP_TIME_REJECTED", message: "jadwal jemput ditolak. Tekan sekali lagi untuk memesan jadwal baru." }
+        } else if (e.ambiguous || e.idempotentReplayed || e.code === "IDEMPOTENCY_REQUEST_UNRESOLVED") outcome = { kind: "ambiguous", reason: e.code ?? e.message ?? "unknown" }
         else outcome = { kind: "rejected", code: e.code ?? `HTTP_${e.status ?? 0}`, message: (e.message ?? "Mengantar menolak kiriman.").slice(0, 200) }
       }
       // A rotation that started during the call makes the recorded outcome unsafe to trust: read back instead.
@@ -805,11 +890,26 @@ export class GeraiVaultDO extends DurableObject<Env> {
           releasePreset(sql, preset, reseller, now)
           releaseApiSpend(sql, slug)
         }
+        // Pos Indonesia refused COD for this account: hide COD Pos from quotes for 24 h (non-COD Pos stays on).
+        if (posBlock) {
+          sql.exec(
+            `INSERT INTO tenant_courier_prefs (tenant_id, courier_code, enabled, pickup_mode, updated_at, updated_by, cod_blocked_at, cod_blocked_status, cod_delivered_rate)
+             VALUES (?, 'pos', 1, 'scheduled_pickup', ?, 'system', ?, ?, ?)
+             ON CONFLICT(tenant_id, courier_code) DO UPDATE SET cod_blocked_at = excluded.cod_blocked_at, cod_blocked_status = excluded.cod_blocked_status, cod_delivered_rate = excluded.cod_delivered_rate`,
+            tenantId,
+            at,
+            at,
+            posBlock.status,
+            posBlock.deliveredRate === null ? null : Math.round(posBlock.deliveredRate),
+          )
+          this.audit(tenantId, at, "system", null, "courier.pos_cod_blocked", { status: posBlock.status, deliveredRate: posBlock.deliveredRate })
+        }
         else this.scheduleFinanceSync(at)
         this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind, preset })
       })
       await this.armOutbox()
       if (outcome.kind === "ambiguous") return this.reconcileNow(tenantId, slug, at)
+      if (posBlock) return { ok: false, error: { status: 422, code: "POS_COD_NOT_ELIGIBLE", message: posCodMessage(posBlock.status, posBlock.deliveredRate) } }
       if (outcome.kind === "rejected") return { ok: false, error: { status: 422, code: "PROVIDER_REJECTED", message: `Mengantar menolak kiriman: ${outcome.message}` } }
       const after = readShipment(sql, slug)!
       return { ok: true, value: { state: outcome.kind === "issued" ? "issued" : "provider_unpaid_hold", awb: after.awb_number } }
@@ -1062,22 +1162,99 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   /** Pickup address registered at Mengantar for the default outlet (created once), and the courier's pickup mode. */
-  private async pickupFor(tenantId: string, courierCode: string, apiKey: string): Promise<{ ok: true; value: { addressId: string; type: "scheduledPickup" | "dropOff"; outletId: string } } | { ok: false; error: DispatchError }> {
+  /**
+   * Pickup reference for one create-order (Mengantar v2.0.0, DEC-238): registers the outlet address once (with
+   * `PICKUP_PIC`/`PICKUP_PIC_PHONE`, and `pinpointData` when the outlet has coordinates); a `scheduledPickup` reuses or
+   * reserves a `POST /time` slot ≥ 120 min ahead in WIB (SPX: inside an open `pickupSchedule` window) and sends the
+   * vehicle `volume` from the billable weight. Pos Indonesia scheduled pickup needs the outlet coordinates.
+   */
+  private async pickupFor(tenantId: string, q: { courier_code: string; billable_weight_gram: number; origin_area_id: string; destination_area_id: string; provider_weight_kg_text: string }, apiKey: string, now: number): Promise<{ ok: true; value: PickupRef & { outletId: string } } | { ok: false; error: DispatchError }> {
     const sql = this.ctx.storage.sql
-    const o = sql.exec<{ id: string; name: string; pic_phone: string | null; whatsapp: string | null; mengantar_area_id: string | null; mengantar_address_id: string | null; street_address: string | null }>("SELECT id, name, pic_phone, whatsapp, mengantar_area_id, mengantar_address_id, street_address FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    const o = sql.exec<{ id: string; name: string; pic_name: string | null; pic_phone: string | null; whatsapp: string | null; mengantar_area_id: string | null; mengantar_address_id: string | null; street_address: string | null; latitude: number | null; longitude: number | null }>(
+      "SELECT id, name, pic_name, pic_phone, whatsapp, mengantar_area_id, mengantar_address_id, street_address, latitude, longitude FROM tenant_outlets WHERE is_default = 1 LIMIT 1",
+    ).toArray()[0]
     if (!o?.mengantar_area_id) return { ok: false, error: { status: 409, code: "NO_PICKUP_AREA", message: "Titik jemput gerai belum diatur." } }
+    // Mengantar requires PICKUP_PIC_PHONE and PICKUP_ADDRESS when the address is registered (v2.0.0 add-users-address).
+    if (!o.mengantar_address_id && (!(o.whatsapp ?? o.pic_phone) || !o.street_address)) {
+      return { ok: false, error: { status: 409, code: "PICKUP_CONTACT_REQUIRED", message: "Alamat lengkap dan nomor WhatsApp gerai belum diisi. Lengkapi di Pengaturan › Profil Gerai." } }
+    }
+    const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", q.courier_code).toArray()[0]
+    const type = pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup"
+    const pinpoint = typeof o.latitude === "number" && typeof o.longitude === "number" ? { lat: o.latitude, lng: o.longitude } : null
+    if (type === "scheduledPickup" && q.courier_code === "pos" && !pinpoint) {
+      return { ok: false, error: { status: 409, code: "PICKUP_PINPOINT_REQUIRED", message: "Penjemputan Pos Indonesia butuh titik koordinat gerai. Isi Latitude dan Longitude di Pengaturan › Profil Gerai." } }
+    }
+    const client = publicClient(this.env, apiKey, tenantId)
     let addressId = o.mengantar_address_id
     if (!addressId) {
       try {
-        addressId = await publicClient(this.env, apiKey, tenantId).saveAddress({ areaId: o.mengantar_area_id, name: o.name, phone: o.whatsapp ?? o.pic_phone ?? "", address: o.street_address ?? o.name })
+        addressId = await client.saveAddress({ areaId: o.mengantar_area_id, name: o.name, pic: o.pic_name ?? o.name, phone: o.whatsapp ?? o.pic_phone ?? "", address: o.street_address ?? o.name, pinpoint })
       } catch {
         return { ok: false, error: { status: 502, code: "PICKUP_ADDRESS_FAILED", message: "Alamat jemput gerai belum bisa didaftarkan ke Mengantar. Coba lagi." } }
       }
-      this.ctx.storage.sql.exec("UPDATE tenant_outlets SET mengantar_address_id = ?, updated_at = ? WHERE id = ?", addressId, Date.now(), o.id)
+      sql.exec("UPDATE tenant_outlets SET mengantar_address_id = ?, updated_at = ? WHERE id = ?", addressId, Date.now(), o.id)
     }
-    const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", courierCode).toArray()[0]
+    if (type === "dropOff") return { ok: true, value: { type, addressId, outletId: o.id } }
+    // SPX only books inside a slot it has open; the estimate tells which (absent → no SPX-specific narrowing).
+    let windows: Record<string, Array<{ start: string; end: string }>> | null = null
+    if (q.courier_code === "spx") {
+      const est = await client.estimate({ originId: q.origin_area_id, destinationId: q.destination_area_id, courier: "spx", weightKg: Number(q.provider_weight_kg_text) }).catch(() => null)
+      windows = est?.spx?.pickupSchedule ?? null
+    }
+    // Reuse the earliest slot already reserved for this address while it is still ≥ 90 min ahead (Mengantar's floor);
+    // only a NEW reservation needs our stricter 120 min lead. For SPX the slot must also sit in an open window.
+    const inWindow = (date: string, time: string) => {
+      if (!windows) return true
+      const [m, d, y] = date.split("-")
+      return (windows[`${y}-${m}-${d}`] ?? []).some((w) => w.start <= time && time < w.end)
+    }
+    const reused = sql
+      .exec<{ time_id: string; slot_date: string; slot_time: string }>("SELECT time_id, slot_date, slot_time FROM pickup_time_slots WHERE address_id = ? AND starts_at - ? >= ? ORDER BY starts_at", addressId, now, MENGANTAR_MIN_LEAD_MS)
+      .toArray()
+      .find((r) => inWindow(r.slot_date, r.slot_time))
+    if (reused) return { ok: true, value: { type, addressId, timeId: reused.time_id, volume: pickupVolume(q.billable_weight_gram), outletId: o.id } }
+    const slot = nextPickupSlot(now, PICKUP_LEAD_MINUTES, windows)
+    if (!slot) return { ok: false, error: { status: 409, code: "NO_PICKUP_SLOT", message: "Belum ada jadwal jemput yang tersedia untuk kurir ini. Coba lagi nanti atau pilih Antar ke Agen." } }
+    let timeId: string
+    {
+      try {
+        timeId = await client.reserveTime(addressId, slot.date, slot.time)
+      } catch (err) {
+        // `404 address not found`: the saved pickup address was deleted at Mengantar. Register it again once.
+        if ((err as { status?: number | null }).status !== 404) return { ok: false, error: { status: 502, code: "PICKUP_TIME_FAILED", message: "Jadwal jemput belum bisa dipesan ke Mengantar. Coba lagi." } }
+        try {
+          addressId = await client.saveAddress({ areaId: o.mengantar_area_id, name: o.name, pic: o.pic_name ?? o.name, phone: o.whatsapp ?? o.pic_phone ?? "", address: o.street_address ?? o.name, pinpoint })
+          sql.exec("UPDATE tenant_outlets SET mengantar_address_id = ?, updated_at = ? WHERE id = ?", addressId, Date.now(), o.id)
+          timeId = await client.reserveTime(addressId, slot.date, slot.time)
+        } catch {
+          return { ok: false, error: { status: 502, code: "PICKUP_TIME_FAILED", message: "Jadwal jemput belum bisa dipesan ke Mengantar. Coba lagi." } }
+        }
+      }
+      sql.exec("INSERT OR REPLACE INTO pickup_time_slots (address_id, slot_date, slot_time, time_id, starts_at, created_at) VALUES (?, ?, ?, ?, ?, ?)", addressId, slot.date, slot.time, timeId, slot.startsAtMs, Date.now())
+      sql.exec("DELETE FROM pickup_time_slots WHERE starts_at < ?", now - 86_400_000)
+    }
     void tenantId
-    return { ok: true, value: { addressId, type: pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup", outletId: o.id } }
+    return { ok: true, value: { type, addressId, timeId, volume: pickupVolume(q.billable_weight_gram), outletId: o.id } }
+  }
+
+  /** Saved Mengantar dropshipper for a sender brand (cached on the contact by exact name|phone), or null. */
+  private async dropshipperFor(tenantId: string, apiKey: string, senderId: string, name: string, phone: string): Promise<{ id: string; name: string; phone: string } | null> {
+    const sql = this.ctx.storage.sql
+    const n = name.slice(0, 30).trim()
+    const k = `${n}|${phone}`
+    const hit = sql.exec<{ mengantar_dropshipper_id: string | null; mengantar_dropshipper_key: string | null }>("SELECT mengantar_dropshipper_id, mengantar_dropshipper_key FROM sender_contacts WHERE id = ?", senderId).toArray()[0]
+    if (hit?.mengantar_dropshipper_id && hit.mengantar_dropshipper_key === k) return { id: hit.mengantar_dropshipper_id, name: n, phone }
+    try {
+      const d = await publicClient(this.env, apiKey, tenantId).saveDropshipper(n, phone)
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE sender_contacts SET mengantar_dropshipper_id = ?, mengantar_dropshipper_key = ? WHERE id = ?", d.id, k, senderId)
+        sql.exec("UPDATE tenant_settings SET mengantar_dropshipper_state = 'ok'")
+      })
+      return { id: d.id, name: d.name, phone: d.phone }
+    } catch (err) {
+      if ((err as { status?: number | null }).status === 403) sql.exec("UPDATE tenant_settings SET mengantar_dropshipper_state = 'disabled'")
+      return null
+    }
   }
 
   // ---- Shift drawer and sender COD payout (TASK-307) ------------------------------------------------------------
@@ -1414,6 +1591,34 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: r.status }
   }
 
+  /**
+   * Sandbox only (DEC-238): Mengantar `POST /order/simulation` for one issued INV of this gerai, then the answered
+   * status is recorded like a poll observation (the webhook Mengantar also sends is idempotent on its own key).
+   */
+  async simulateProviderStatus(tenantId: string, slug: string, status: "ON DELIVERY" | "DELIVERED" | "RTS", actorId: string): Promise<{ ok: true; value: { status: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (this.env.GX_ENV === "production") return { ok: false, error: { status: 404, code: "NOT_FOUND", message: "Alamat tidak ditemukan." } }
+    const sql = this.ctx.storage.sql
+    const s = sql.exec<{ courier_code: string | null; mengantar_order_code: string | null }>("SELECT courier_code, mengantar_order_code FROM shipments WHERE slug = ?", slug).toArray()[0]
+    if (!s?.mengantar_order_code || !s.courier_code) return { ok: false, error: { status: 409, code: "NOT_ISSUED", message: "Kiriman belum terbit di Mengantar." } }
+    const key = await this.sellerKey(tenantId)
+    if (!key) return { ok: false, error: { status: 409, code: "NOT_CONNECTED", message: "Gerai belum terhubung ke Mengantar." } }
+    try {
+      await publicClient(this.env, key.key, tenantId).simulateStatus(s.courier_code as Courier, s.mengantar_order_code, status)
+    } catch {
+      return { ok: false, error: { status: 502, code: "SIMULATION_FAILED", message: "Simulasi status ditolak Mengantar (hanya tersedia di sandbox)." } }
+    }
+    const now = Date.now()
+    const r = this.ctx.storage.transactionSync(() => {
+      const out = recordProviderObservation(sql, { slug, eventKey: `sim:${slug}:${status}:${now}`, source: "poll", rawCategory: status, mapped: mapMengantarCategory(status), eventAt: now, eventAtText: null }, now)
+      this.audit(tenantId, now, "user", actorId, "shipment.simulate_status", { slug, status })
+      return out
+    })
+    await this.armOutbox()
+    return { ok: true, value: { status: r.status } }
+  }
+
   /** `/keuangan` read model (owner only): summary cards + the five tabs. */
   /** Owner closes a Selisih Sync row after checking it at Mengantar (audited with the reason). */
   async resolveDiscrepancy(tenantId: string, id: string, actorId: string, reason: string, now: number = Date.now()): Promise<VaultResult<{ resolved: boolean }>> {
@@ -1710,7 +1915,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
-    const o = sql.exec<{ id: string; name: string; whatsapp: string | null; opening_hours: string | null; mengantar_area_id: string | null; subdistrict_name: string | null; street_address: string | null; postal_code: string | null; logo_media_id: string | null }>("SELECT * FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0] ?? null
+    const o = sql.exec<{ id: string; name: string; whatsapp: string | null; opening_hours: string | null; mengantar_area_id: string | null; subdistrict_name: string | null; street_address: string | null; postal_code: string | null; logo_media_id: string | null; latitude: number | null; longitude: number | null }>("SELECT * FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0] ?? null
     const st = sql.exec<{ default_label_format: string; unboxing_remark_text: string; show_commission_on_quick_check: number; counter_service_fee_enabled: number; counter_service_fee_default_idr: number | null; cashier_may_pay_sender_cod: number }>("SELECT * FROM tenant_settings LIMIT 1").toArray()[0]
     const bp = sql.exec<Record<string, string | null>>("SELECT * FROM tenant_business_profiles LIMIT 1").toArray()[0]
     let npwpMasked: string | null = null
@@ -1719,7 +1924,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return {
       ok: true,
       value: {
-        profile: o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, areaId: o.mengantar_area_id, areaLabel: o.subdistrict_name, street: o.street_address, postalCode: o.postal_code, logoMediaId: o.logo_media_id } : null,
+        profile: o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, areaId: o.mengantar_area_id, areaLabel: o.subdistrict_name, street: o.street_address, postalCode: o.postal_code, logoMediaId: o.logo_media_id, latitude: o.latitude, longitude: o.longitude } : null,
         business: { entityType: bp?.entity_type ?? null, legalName: bp?.legal_name ?? null, brandName: bp?.brand_name ?? null, nib: bp?.nib ?? null, npwpMasked, registeredAddress: bp?.registered_address ?? null, picName: bp?.pic_name ?? null, picRole: bp?.pic_role ?? null, picEmail: bp?.pic_email ?? null, picPhone: bp?.pic_phone ?? null },
         receipt: { defaultLabelFormat: st?.default_label_format ?? "label_10x15_with_stub", unboxingRemark: st?.unboxing_remark_text ?? "Rekam video saat buka paket untuk klaim", showCommission: st?.show_commission_on_quick_check === 1 },
         packing: { items: (items.length ? items : DEFAULT_PACKING.map((d) => ({ id: "", name: d.name, price_idr: d.priceIdr, is_active: 1 }))).map((i) => ({ id: i.id || null, name: i.name, priceIdr: i.price_idr, active: i.is_active === 1 })), serviceFeeEnabled: st?.counter_service_fee_enabled === 1, serviceFeeIdr: st?.counter_service_fee_default_idr ?? null },
@@ -1741,7 +1946,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       if (!r.ok) return invalid(r.errors)
       const v = r.value
       if (v.logoMediaId && !sql.exec("SELECT 1 FROM media_objects WHERE id = ? AND purpose = 'logo'", v.logoMediaId).toArray().length) return invalid({ logoMediaId: "Logo tidak ditemukan. Unggah ulang." })
-      await this.upsertDefaultOutlet(tenantId, { name: v.name, areaId: v.areaId, areaLabel: v.areaLabel, street: v.street, postalCode: v.postalCode }, now)
+      await this.upsertDefaultOutlet(tenantId, { name: v.name, areaId: v.areaId, areaLabel: v.areaLabel, street: v.street, postalCode: v.postalCode, latitude: v.latitude, longitude: v.longitude }, now)
       this.ctx.storage.transactionSync(() => {
         sql.exec("UPDATE tenant_outlets SET whatsapp = ?, opening_hours = ?, logo_media_id = ?, updated_at = ? WHERE is_default = 1", v.whatsapp, v.openingHours, v.logoMediaId, now)
         this.audit(tenantId, now, "user", actorId, "settings.profile", {})
@@ -2242,17 +2447,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------
 
-  async courierPrefs(tenantId: string): Promise<VaultResult<Array<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>>> {
+  async courierPrefs(tenantId: string): Promise<VaultResult<CourierPrefRow[]>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
-    return { ok: true, value: this.ctx.storage.sql.exec<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>("SELECT courier_code, enabled, pickup_mode, updated_at FROM tenant_courier_prefs").toArray() }
+    return { ok: true, value: this.ctx.storage.sql.exec<CourierPrefRow>("SELECT courier_code, enabled, pickup_mode, updated_at, cod_blocked_at, cod_blocked_status, cod_delivered_rate FROM tenant_courier_prefs").toArray() }
   }
 
   /** Upserts one courier preference (validated by the caller against the catalog) with a tenant audit row. */
   async setCourierPref(
     tenantId: string,
     p: { courierCode: string; enabled?: boolean; pickupMode?: "scheduled_pickup" | "drop_off_only"; defaultMode: "scheduled_pickup" | "drop_off_only"; actorId: string },
-  ): Promise<VaultResult<Array<{ courier_code: string; enabled: number; pickup_mode: "scheduled_pickup" | "drop_off_only"; updated_at: number }>>> {
+  ): Promise<VaultResult<CourierPrefRow[]>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const now = Date.now()

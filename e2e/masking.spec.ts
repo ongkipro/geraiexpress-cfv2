@@ -30,7 +30,7 @@ test("Masking: Label & Privasi → Dropship Toko di kasir → lihat pengirim asl
   await expect(page.getByRole("radio", { name: /Dropship Toko/ })).toHaveAttribute("aria-checked", "true")
   await expect(page.getByText("Tercetak di label:").locator("..")).toContainText("TOKO HIJAB NISA")
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
-  await page.getByLabel("Isi paket bukan barang terlarang atau berbahaya").check()
+  await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
   await page.getByRole("button", { name: /Tandai Lunas & Cetak · Rp/ }).click()
   await expect(page.getByText("Resi terbit").first()).toBeVisible()
   await page.getByRole("button", { name: "Lihat Pengirim Asli" }).click()

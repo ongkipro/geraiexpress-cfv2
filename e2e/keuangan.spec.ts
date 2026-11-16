@@ -23,7 +23,7 @@ test("Keuangan: sinkronkan mutasi Mengantar, Selisih Sync", async ({ page, conte
   await expect(page.getByText(/Sinkron selesai: \d+ mutasi baru\./)).toBeVisible()
   await expect(page.getByText("Saldo Mengantar (sync)")).toBeVisible()
   await page.getByRole("link", { name: "Mutasi Sync" }).click()
-  await expect(page.getByText(`INV ${slug.toUpperCase()}`).first()).toBeVisible()
+  await expect(page.getByText(`INV ${slug.toUpperCase()}`).filter({ visible: true }).first()).toBeVisible()
   await page.getByRole("link", { name: /Selisih Sync/ }).click()
   await expect(page.getByText("Tipe belum dikenali")).toBeVisible()
   await page.getByRole("button", { name: "Sinkronkan Sekarang" }).click()

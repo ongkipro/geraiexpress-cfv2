@@ -97,9 +97,9 @@ test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) →
   // TASK-206: courier toggles save instantly with a confirmation and survive a reload.
   await page.goto(`${APP}/pengaturan/ekspedisi`)
   await page.getByRole("switch", { name: "Aktifkan J&T Express" }).click()
-  await expect(page.getByRole("status").filter({ hasText: "J&T Express dinonaktifkan" })).toBeVisible()
+  await expect(page.getByText("J&T Express dinonaktifkan")).toBeVisible()
   await page.reload()
   await expect(page.getByRole("switch", { name: "Aktifkan J&T Express" })).not.toBeChecked()
   await page.getByRole("radio", { name: "Antar ke agen" }).first().click()
-  await expect(page.getByRole("status").filter({ hasText: "JNE: antar ke agen" })).toBeVisible()
+  await expect(page.getByText("JNE: antar ke agen")).toBeVisible()
 })

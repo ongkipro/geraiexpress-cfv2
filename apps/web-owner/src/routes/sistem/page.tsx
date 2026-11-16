@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
 import { api, ApiError } from "../../lib/api"
 import { useApi } from "../../lib/use-api"
+import { Textarea } from "@shared/components/ui/textarea"
 
 // Super Admin `Sistem & Audit` (visual 07 §3.3): integration & relay health, audit log, admin access, company profile.
 type Tab = "kesehatan" | "audit" | "admin" | "profil"
@@ -113,7 +114,7 @@ function RotateKey() {
       </Field>
       <Field>
         <FieldLabel htmlFor="rot-reason">Alasan (wajib, dicatat di log audit)</FieldLabel>
-        <Input id="rot-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+        <Textarea id="rot-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
       </Field>
       <div><Button type="submit" variant="destructive" disabled={pending || slug.trim().length < 3 || reason.trim().length < 5}>{pending ? "Memproses…" : "Rotasi Kunci Seller"}</Button></div>
       {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
@@ -250,7 +251,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
           <div className="sticky bottom-0 flex flex-col gap-3 border-t bg-card pt-4 sm:flex-row sm:items-end">
             <Field className="flex-1">
               <FieldLabel htmlFor="lp-reason">Alasan (wajib, dicatat di log audit)</FieldLabel>
-              <Input id="lp-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+              <Textarea id="lp-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
             </Field>
             <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           </div>

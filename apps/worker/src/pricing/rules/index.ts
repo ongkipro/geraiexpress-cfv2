@@ -2,8 +2,9 @@
 // sets `assigned_bps` per gerai × service within the courier band (platform fallback); the Mengantar team applies it;
 // a verifier compares it with the observed discount on estimates (+15/+60/+120 min, then daily, plus every quote).
 // Customers always pay the publish tariff; nothing here is exposed to a customer or cashier DTO.
-import { bandForCourier, isAssignedBpsAllowed, nextVerificationState, observedBpsFromDiscount, parseDiscountBand, verificationCheckAt, type DiscountBand, type VerificationState } from "@gx/domain/money"
+import { bandForCourier, isAssignedBpsAllowed, nextVerificationState, parseDiscountBand, verificationCheckAt, type DiscountBand, type VerificationState } from "@gx/domain/money"
 import type { ObservedRate } from "../../do/gerai-vault"
+import { observedCargoBps, observedRegularBps } from "../quote/engine"
 import { auditStatement } from "../../api/owner"
 import { AppError } from "../../http/envelope"
 import { sendAlert } from "../../telemetry/alerts"
@@ -204,14 +205,8 @@ export async function upsertCourierPolicy(env: Env, input: { courierCode: string
 }
 
 /** Observed discount per service class (regular: `discountPercent` or `discount/price`; cargo: `cargoDiscount/cargoPrice`). */
-export function observedBpsOf(serviceClass: "regular" | "cargo", rate: Pick<ObservedRate, "price" | "discount" | "discountPercent" | "cargoPrice" | "cargoDiscount">): number | null {
-  if (serviceClass === "cargo") {
-    if (typeof rate.cargoDiscount !== "number" || typeof rate.cargoPrice !== "number" || rate.cargoPrice <= 0) return null
-    return observedBpsFromDiscount(rate.cargoDiscount, rate.cargoPrice)
-  }
-  if (typeof rate.discount === "number" && typeof rate.price === "number" && rate.price > 0) return observedBpsFromDiscount(rate.discount, rate.price)
-  if (typeof rate.discountPercent === "number" && rate.discountPercent >= 0 && rate.discountPercent <= 100) return Math.round(rate.discountPercent * 100)
-  return null
+export function observedBpsOf(serviceClass: "regular" | "cargo", rate: Pick<ObservedRate, "price" | "discount" | "discountPercent" | "discountExtra" | "discountExtraPercent" | "cargoPrice" | "cargoDiscount" | "cargoDiscountExtra">): number | null {
+  return serviceClass === "cargo" ? observedCargoBps(rate) : observedRegularBps(rate)
 }
 
 /**

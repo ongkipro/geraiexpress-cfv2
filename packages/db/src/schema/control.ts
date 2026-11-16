@@ -342,6 +342,12 @@ export const courierServiceCatalog = sqliteTable(
     sortOrder: integer("sort_order").notNull(),
     note: text("note"),
     updatedAt: integer("updated_at").notNull(),
+    minCodIdr: integer("min_cod_idr"),
+    maxCodIdr: integer("max_cod_idr"),
+    minGoodsValueIdr: integer("min_goods_value_idr"),
+    maxGoodsValueIdr: integer("max_goods_value_idr"),
+    dgSupported: integer("dg_supported").notNull().default(0),
+    bookingEco: integer("booking_eco").notNull().default(0),
   },
   (t) => [index("courier_service_catalog_courier").on(t.courierCode, t.sortOrder)],
 )

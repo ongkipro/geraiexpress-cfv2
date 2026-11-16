@@ -6,10 +6,11 @@ import { FormAlert } from "../../../components/auth/auth-card"
 import { PRESET_LABEL, type MaskPreset } from "../../../components/masking/preset-picker"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState, LoadingState } from "../../../shell/states"
+import { ChoiceGroup } from "../../../components/admin/page"
 
 // Pengaturan › Label & Privasi (DEC-231, visual 08 §2.3): masking on/off, offered presets, default preset, mask
 // recipient phone on COD by default. Disabled with an explanation when the Super Admin kill-switch is off.
-interface Settings { platformEnabled: boolean; offered: boolean; presetsEnabled: MaskPreset[]; defaultPreset: MaskPreset; maskRecipientOnCod: boolean; dailyQuota: number | null }
+interface Settings { platformEnabled: boolean; offered: boolean; presetsEnabled: MaskPreset[]; defaultPreset: MaskPreset; maskRecipientOnCod: boolean; dropshipperSync: boolean; dropshipperState: "ok" | "disabled" | null; dailyQuota: number | null }
 const OPTIONAL: MaskPreset[] = ["dropship_toko", "privasi_penerima_cod", "full_nama_gerai"]
 
 export function LabelPrivasiPage() {
@@ -41,7 +42,7 @@ export function LabelPrivasiPage() {
     setPending(true)
     setMsg(null)
     try {
-      const s = await api<Settings>("/settings/masking", { body: { offered: form!.offered, presetsEnabled: form!.presetsEnabled, defaultPreset: form!.defaultPreset, maskRecipientOnCod: form!.maskRecipientOnCod } })
+      const s = await api<Settings>("/settings/masking", { body: { offered: form!.offered, presetsEnabled: form!.presetsEnabled, defaultPreset: form!.defaultPreset, maskRecipientOnCod: form!.maskRecipientOnCod, dropshipperSync: form!.dropshipperSync } })
       setSaved(s)
       setForm(s)
       setMsg({ tone: "safe", text: "Pengaturan label tersimpan." })
@@ -53,7 +54,6 @@ export function LabelPrivasiPage() {
   }
   return (
     <main className="mx-auto flex w-full max-w-[880px] flex-col gap-6 pb-24">
-      <nav aria-label="Breadcrumb" className="text-base text-muted-foreground"><span>Pengaturan</span> <span aria-hidden>›</span> <span className="text-foreground">Label & Privasi</span></nav>
       <div className="flex flex-col gap-2">
         <h2 className="text-[28px] leading-tight font-semibold">Label & Privasi</h2>
         <p className="text-base text-muted-foreground">Atur apa yang tercetak di label pengirim. Kurir selalu menjemput di alamat gerai, dan paket retur selalu kembali ke gerai.</p>
@@ -81,18 +81,25 @@ export function LabelPrivasiPage() {
           </fieldset>
           <fieldset className="flex flex-col gap-2" disabled={locked || !form.offered}>
             <legend className="mb-1 text-base font-medium">Preset bawaan</legend>
-            <div role="radiogroup" aria-label="Preset bawaan" className="flex flex-wrap gap-2">
-              {(["standar_gerai", ...form.presetsEnabled] as MaskPreset[]).map((p) => (
-                <button key={p} type="button" role="radio" aria-checked={form.defaultPreset === p} onClick={() => set({ defaultPreset: p })} className={`h-11 rounded-lg border px-4 text-base ${form.defaultPreset === p ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
-                  {PRESET_LABEL[p]}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup
+              label="Preset bawaan"
+              value={form.defaultPreset}
+              onValueChange={(p) => set({ defaultPreset: p })}
+              choices={(["standar_gerai", ...form.presetsEnabled] as MaskPreset[]).map((p) => ({ value: p, label: PRESET_LABEL[p], disabled: locked || !form.offered }))}
+            />
           </fieldset>
           <label className="flex min-h-11 items-center justify-between gap-3 text-base">
             Samarkan HP penerima untuk kiriman COD
             <Switch checked={form.maskRecipientOnCod} disabled={locked || !form.offered} onCheckedChange={(v) => set({ maskRecipientOnCod: v })} />
           </label>
+          <div className="flex flex-col gap-1 border-t pt-4">
+            <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+              Kirim nama toko reseller ke Mengantar (Dropshipper)
+              <Switch checked={form.dropshipperSync} disabled={locked || !form.offered} onCheckedChange={(v) => set({ dropshipperSync: v })} />
+            </label>
+            <p className="text-base text-muted-foreground">Nama dan HP toko juga tampil di resi dan pelacakan kurir. Fitur Dropshipper harus aktif di Seller Web Mengantar; bila belum, label gerai tetap memakai nama toko.</p>
+            {form.dropshipperSync && form.dropshipperState === "disabled" ? <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base">Mengantar menolak: fitur Dropshipper belum aktif di akun ini. Aktifkan di Seller Web Mengantar.</p> : null}
+          </div>
         </CardContent>
       </Card>
       {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}

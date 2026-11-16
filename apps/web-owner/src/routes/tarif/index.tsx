@@ -8,6 +8,8 @@ import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, PageHead, Section, StatusChip } from "../../components/page"
 import { api, ApiError } from "../../lib/api"
 import { useApi } from "../../lib/use-api"
+import { Textarea } from "@shared/components/ui/textarea"
+import { AnchorButton } from "@shared/components/admin/link-button"
 
 // Super Admin `Tarif & Kurir` (TASK-207, visual 07 §3.3): per-gerai discount/cashback matrix with verification
 // status, the request list for the Mengantar team, and the discount policy (platform + per courier).
@@ -95,7 +97,7 @@ function RequestList() {
     }
   }
   return (
-    <Section title="Belum diterapkan di Mengantar" aside={<a href="/api/owner/tarif/permintaan.csv" className="inline-flex h-11 items-center rounded-lg border px-4 text-base font-medium md:h-10">Unduh CSV</a>}>
+    <Section title="Belum diterapkan di Mengantar" aside={<AnchorButton variant="outline" href="/api/owner/tarif/permintaan.csv">Unduh CSV</AnchorButton>}>
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
         <EmptyBlock title="Semua diskon sudah sesuai" body="Tidak ada permintaan yang menunggu tim Mengantar." />
       ) : (
@@ -130,7 +132,7 @@ function RequestList() {
             <form onSubmit={mark} className="flex flex-col gap-3 border-t pt-4" noValidate>
               <Field>
                 <FieldLabel htmlFor="alasan-minta">Alasan (wajib, dicatat di log audit)</FieldLabel>
-                <Input id="alasan-minta" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+                <Textarea id="alasan-minta" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
                 <FieldDescription>Tandai {open.length} aturan sebagai sudah dikirim ke tim Mengantar.</FieldDescription>
               </Field>
               <div>
@@ -217,7 +219,7 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
       {sla !== undefined ? num("Waktu penerapan Mengantar", "sla", "menit") : null}
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor={`${path}-reason`}>Alasan (wajib, dicatat di log audit)</FieldLabel>
-        <Input id={`${path}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+        <Textarea id={`${path}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
         {error ? <FieldError>{error}</FieldError> : <FieldDescription>Perubahan batas tidak mengubah aturan gerai yang sudah ada.</FieldDescription>}
       </Field>
       <div>

@@ -8,9 +8,9 @@ export interface Platform {
   dailyQuota: number | null
 }
 
-export function readSettings(sql: SqlStorage, platform: Platform): MaskingSettings & { maskRecipientOnCod: boolean } {
-  const r = sql.exec<{ masking_offered: number; masking_presets_enabled: string; masking_default_preset: string; mask_recipient_phone_on_cod_default: number }>(
-    "SELECT masking_offered, masking_presets_enabled, masking_default_preset, mask_recipient_phone_on_cod_default FROM tenant_settings LIMIT 1",
+export function readSettings(sql: SqlStorage, platform: Platform): MaskingSettings & { maskRecipientOnCod: boolean; dropshipperSync: boolean; dropshipperState: "ok" | "disabled" | null } {
+  const r = sql.exec<{ masking_offered: number; masking_presets_enabled: string; masking_default_preset: string; mask_recipient_phone_on_cod_default: number; mengantar_dropshipper_sync: number; mengantar_dropshipper_state: "ok" | "disabled" | null }>(
+    "SELECT masking_offered, masking_presets_enabled, masking_default_preset, mask_recipient_phone_on_cod_default, mengantar_dropshipper_sync, mengantar_dropshipper_state FROM tenant_settings LIMIT 1",
   ).toArray()[0]
   let presets: MaskPreset[]
   try {
@@ -24,10 +24,12 @@ export function readSettings(sql: SqlStorage, platform: Platform): MaskingSettin
     presetsEnabled: presets,
     defaultPreset: ((MASK_PRESETS as readonly string[]).includes(r?.masking_default_preset ?? "") ? r!.masking_default_preset : "standar_gerai") as MaskPreset,
     maskRecipientOnCod: r?.mask_recipient_phone_on_cod_default === 1,
+    dropshipperSync: r?.mengantar_dropshipper_sync === 1,
+    dropshipperState: r?.mengantar_dropshipper_state ?? null,
   }
 }
 
-export type SettingsInput = { offered?: unknown; presetsEnabled?: unknown; defaultPreset?: unknown; maskRecipientOnCod?: unknown }
+export type SettingsInput = { offered?: unknown; presetsEnabled?: unknown; defaultPreset?: unknown; maskRecipientOnCod?: unknown; dropshipperSync?: unknown }
 
 /** Owner saves `Label & Privasi`; refuses a default that is not among the enabled presets. */
 export function writeSettings(sql: SqlStorage, tenantId: string, input: SettingsInput, actorId: string, now: number): { ok: true } | { ok: false; field: string; message: string } {
@@ -35,9 +37,10 @@ export function writeSettings(sql: SqlStorage, tenantId: string, input: Settings
   const def = (MASK_PRESETS as readonly string[]).includes(String(input.defaultPreset)) ? (input.defaultPreset as MaskPreset) : "standar_gerai"
   if (def !== "standar_gerai" && !presets.includes(def)) return { ok: false, field: "defaultPreset", message: "Preset bawaan harus salah satu preset yang diaktifkan." }
   sql.exec(
-    `INSERT INTO tenant_settings (tenant_id, masking_offered, masking_presets_enabled, masking_default_preset, mask_recipient_phone_on_cod_default, updated_at, updated_by)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-     ON CONFLICT(tenant_id) DO UPDATE SET masking_offered = ?2, masking_presets_enabled = ?3, masking_default_preset = ?4, mask_recipient_phone_on_cod_default = ?5, updated_at = ?6, updated_by = ?7`,
+    `INSERT INTO tenant_settings (tenant_id, masking_offered, masking_presets_enabled, masking_default_preset, mask_recipient_phone_on_cod_default, updated_at, updated_by, mengantar_dropshipper_sync)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+     ON CONFLICT(tenant_id) DO UPDATE SET masking_offered = ?2, masking_presets_enabled = ?3, masking_default_preset = ?4, mask_recipient_phone_on_cod_default = ?5, updated_at = ?6, updated_by = ?7,
+       mengantar_dropshipper_sync = ?8, mengantar_dropshipper_state = CASE WHEN ?8 THEN mengantar_dropshipper_state ELSE NULL END`,
     tenantId,
     input.offered === true ? 1 : 0,
     JSON.stringify(presets),
@@ -45,6 +48,7 @@ export function writeSettings(sql: SqlStorage, tenantId: string, input: Settings
     input.maskRecipientOnCod === true ? 1 : 0,
     now,
     actorId,
+    input.dropshipperSync === true ? 1 : 0,
   )
   return { ok: true }
 }

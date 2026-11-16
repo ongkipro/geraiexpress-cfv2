@@ -6,7 +6,7 @@ import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
 
 // Pengaturan › Profil Gerai (visual 08 §2.3): name, WhatsApp, opening hours, pickup address (Mengantar area).
-type Form = { name: string; whatsapp: string; openingHours: string; area: Area | null; street: string; postalCode: string }
+type Form = { name: string; whatsapp: string; openingHours: string; area: Area | null; street: string; postalCode: string; latitude: string; longitude: string }
 const pick = (s: SettingsView): Form => ({
   name: s.profile?.name ?? "",
   whatsapp: s.profile?.whatsapp ?? "",
@@ -14,8 +14,10 @@ const pick = (s: SettingsView): Form => ({
   area: s.profile?.areaId ? { id: s.profile.areaId, label: s.profile.areaLabel ?? "", postalCode: s.profile.postalCode } : null,
   street: s.profile?.street ?? "",
   postalCode: s.profile?.postalCode ?? "",
+  latitude: s.profile?.latitude == null ? "" : String(s.profile.latitude),
+  longitude: s.profile?.longitude == null ? "" : String(s.profile.longitude),
 })
-const toBody = (f: Form) => ({ name: f.name, whatsapp: f.whatsapp, openingHours: f.openingHours, areaId: f.area?.id ?? "", areaLabel: f.area?.label ?? "", street: f.street, postalCode: f.postalCode })
+const toBody = (f: Form) => ({ name: f.name, whatsapp: f.whatsapp, openingHours: f.openingHours, areaId: f.area?.id ?? "", areaLabel: f.area?.label ?? "", street: f.street, postalCode: f.postalCode, latitude: f.latitude, longitude: f.longitude })
 
 export function ProfilGeraiPage() {
   const s = useSettingsForm(pick, "profile", toBody)
@@ -46,6 +48,11 @@ export function ProfilGeraiPage() {
           <AreaPicker label="Kecamatan" value={f.area} onChange={(a) => set({ area: a, postalCode: a?.postalCode ?? f.postalCode })} error={s.fields.areaId} />
           {field("street", "Alamat lengkap")}
           {field("postalCode", "Kode pos", undefined, { inputMode: "numeric", className: "w-32 tabular-nums" })}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {field("latitude", "Latitude", "Contoh: -6.9456", { inputMode: "decimal", className: "tabular-nums" })}
+            {field("longitude", "Longitude", "Contoh: 107.5703", { inputMode: "decimal", className: "tabular-nums" })}
+          </div>
+          <p className="text-base text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
         </CardContent>
       </Card>
       <Notice msg={s.msg} />

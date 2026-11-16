@@ -65,8 +65,13 @@
 > effective gerai cost per INV), accounted in the tenant object (`api_key_spend`, tenant `0022`) in the same
 > transaction as the dispatch journal, pay-unpaid journal or bulk materialization: one reservation per INV, kept for
 > held and ambiguous orders, released only when non-issue is established (rejected, not found, cancelled). Audit rows written by a key carry
-> `actor_type = 'api_key'`. Not yet built: `part: stub_only` on labels (no stub-only renderer exists) and
-> `declared_item_value_idr` (no insurance input in the quote engine) — both ignored if sent.
+> `actor_type = 'api_key'`. Not yet built: `part: stub_only` on labels (no stub-only renderer exists) — ignored if sent.
+>
+> **DEC-238 (2026-11-17):** `POST /api/v1/quotes` and `POST /api/v1/shipments` accept `declared_value_idr` (Non-COD
+> goods value `0`–`10.000.000`, sent to Mengantar as `goodsValue`; replaces the unused `declared_item_value_idr`) and
+> `dangerous_goods` (boolean; only SiCepat / iDexpress quote); `POST /api/v1/shipments` also accepts `quantity`
+> (`1`–`999`) and `delivery_instruction` (≤ 120 chars). Courier limits (COD caps, goods-value bounds, 50 kg) surface
+> as unavailable cards with Indonesian reasons.
 
 ---
 

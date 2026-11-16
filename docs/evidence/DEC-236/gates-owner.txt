@@ -1,0 +1,13 @@
+owner:%2F :: dotuiux exit=0 summary: 0 fail · 1 warn · 3 allowed · 4 not checked · 32 pass :: geometry exit=0
+owner:%2Fgerai :: dotuiux exit=0 summary: 0 fail · 0 warn · 1 allowed · 6 not checked · 33 pass :: geometry exit=0
+owner:%2Fgerai%3Ftab%3Ddirektori :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 6 not checked · 32 pass :: geometry exit=0
+owner:%2Fgerai%3Ftab%3Ddomain :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 5 not checked · 33 pass :: geometry exit=0
+owner:%2Ftarif :: dotuiux exit=0 summary: 0 fail · 0 warn · 3 allowed · 6 not checked · 31 pass :: geometry exit=0
+owner:%2Ftarif%3Ftab%3Dkatalog :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 4 not checked · 34 pass :: geometry exit=0
+owner:%2Ftarif%3Ftab%3Dkebijakan :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 4 not checked · 34 pass :: geometry exit=0
+owner:%2Fpengawasan :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 6 not checked · 32 pass :: geometry exit=0
+owner:%2Fpengawasan%3Ftab%3Drisiko :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 5 not checked · 33 pass :: geometry exit=0
+owner:%2Fsistem :: dotuiux exit=0 summary: 0 fail · 0 warn · 3 allowed · 4 not checked · 33 pass :: geometry exit=0
+owner:%2Fsistem%3Ftab%3Daudit :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 5 not checked · 33 pass :: geometry exit=0
+owner:%2Fsistem%3Ftab%3Dakses :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 4 not checked · 34 pass :: geometry exit=0
+owner:%2Fsistem%3Ftab%3Dprofil :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 4 not checked · 34 pass :: geometry exit=0

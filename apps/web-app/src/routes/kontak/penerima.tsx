@@ -10,6 +10,7 @@ import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { RiskChip, type RiskBadge } from "./shared"
+import { Panel } from "../../components/admin/page"
 
 // Kontak › Penerima (visual 06 §2): address book with this gerai's own COD history badge.
 interface Recipient {
@@ -52,7 +53,7 @@ export function PenerimaPage() {
         </Button>
       </PageTitle>
       <Input aria-label="Cari nama, nomor HP atau kecamatan" placeholder="Cari nama, nomor HP atau kecamatan" value={q} onChange={(e) => setQ(e.target.value)} className="mb-4 lg:w-96" type="search" />
-      <section className="rounded-lg border bg-card">
+      <Panel className="p-0 md:p-0">
         {error ? <div className="p-4"><ErrorState message={error} onRetry={load} /></div> : !items ? <div className="p-4"><LoadingState label="Memuat penerima" /></div> : items.length === 0 ? (
           q ? (
             <EmptyState title="Tidak ada yang cocok" body="Coba kata kunci lain." action={<Button variant="outline" onClick={() => setQ("")}>Hapus filter</Button>} />
@@ -96,7 +97,7 @@ export function PenerimaPage() {
             </ul>
           </>
         )}
-      </section>
+      </Panel>
       <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
@@ -109,12 +110,12 @@ export function PenerimaPage() {
   )
 }
 
-function RecipientForm({ recipient, canArchive, onSaved }: { recipient: Recipient | null; canArchive: boolean; onSaved: () => void }) {
+export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: { recipient: Recipient | null; canArchive: boolean; onSaved: (saved?: { id: string }) => void; initialArea?: Area | null }) {
   const [name, setName] = useState(recipient?.name ?? "")
   const [phone, setPhone] = useState(recipient?.phone ?? "")
   const [street, setStreet] = useState(recipient?.street_address ?? "")
   const [note, setNote] = useState(recipient?.address_note ?? "")
-  const [area, setArea] = useState<Area | null>(recipient?.mengantar_area_id ? { id: recipient.mengantar_area_id, label: recipient.subdistrict_name ?? "", postalCode: recipient.postal_code } : null)
+  const [area, setArea] = useState<Area | null>(recipient?.mengantar_area_id ? { id: recipient.mengantar_area_id, label: recipient.subdistrict_name ?? "", postalCode: recipient.postal_code } : (initialArea ?? null))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -125,8 +126,8 @@ function RecipientForm({ recipient, canArchive, onSaved }: { recipient: Recipien
     setMsg(null)
     try {
       const body = { name, phone, street, note: note || null, areaId: area?.id ?? "", areaLabel: area?.label ?? "", postalCode: area?.postalCode ?? null }
-      await api(recipient ? `/contacts/recipients/${recipient.id}` : "/contacts/recipients", { body })
-      onSaved()
+      const r = await api<{ item: { id: string } }>(recipient ? `/contacts/recipients/${recipient.id}` : "/contacts/recipients", { body })
+      onSaved(r.item)
     } catch (err) {
       if (err instanceof ApiError) {
         setErrors(err.body.field_errors)

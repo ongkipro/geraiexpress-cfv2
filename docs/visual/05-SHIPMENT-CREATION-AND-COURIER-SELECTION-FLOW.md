@@ -6,12 +6,38 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 
 ## 1. Six-Stage Single-Screen Flow (Zero Page-Reload Friction)
 
+DEC-237: every stage runs on **one** screen, `Buat Pengiriman › Kiriman Satuan` (`/kasir`). At ≥ 1024 px the left
+60 % holds stages 1–4 as three `SectionCard`s and the right 40 % is the sticky `Ringkasan & Pembayaran` card (stage 5);
+below 1024 px it is one column with a sticky bottom checkout bar. The INV is allocated only when the primary is
+pressed (freeze → parties → payment → issue, one tap); `/kiriman/:slug` remains the page for existing drafts, QR
+pre-bookings and issued shipments.
+
 ```text
-[Click "+ Kiriman Baru"]  ──or──►  [Scan QR / Enter `INV` from `<slug>.geraimitra.com`]
+┌ Breadcrumb: Buat Pengiriman › Kiriman Satuan ───────────────────────────────────────────────────────┐
+│ [ Pindai QR pelanggan atau ketik INV ________________________ ] [Buka]                              │
+├──────────────────────────── 60 % ─────────────────────────┬──────────── 40 % (sticky) ──────────────┤
+│ 1. Tujuan & berat                                         │ Ringkasan & Pembayaran                  │
+│  [Non-COD|COD Barang|COD Ongkir]  Kecamatan tujuan        │  Ekspedisi            J&T Express       │
+│  Berat 1000 [gram|kg]  P×L×T   Nilai barang  [ ] DG       │  Berat ditagih        1 kg              │
+│  Packing ▾   [x] Biaya layanan loket   [Cek Ongkir]       │  Ongkir publish       Rp 12.500         │
+│ 2. Pilih ekspedisi  [Reguler (7)|Cargo ≥ 5 kg]  [👁]       │  Biaya layanan loket  Rp 2.000          │
+│  J&T Express  Rp 12.500  [Terpilih]                       │  Bayar di loket       Rp 14.500         │
+│  J&T ECO · Termurah  Rp 10.500  Ekonomis · tidak DG [Pilih│  (owner) Modal · Estimasi laba          │
+│ 3. Pengirim, label & penerima                             │  [QRIS|Tunai|Transfer|Bayar nanti]      │
+│  Pengirim: Ibu Siti · WA terverifikasi [Ganti] [+ baru]   │  Uang diterima ____  Kembalian Rp 5.500 │
+│  Label pengirim: (●) Standar Gerai ( ) Dropship Toko      │  [ 🖨 Tandai Lunas & Cetak · Rp 14.500 ] │
+│  Penerima: Rina K. · Tebet Barat  ● Riwayat baru · Skor B │                                         │
+│  Isi paket ____  Jumlah barang 1  Instruksi kurir ____    │                                         │
+│  [x] Isi paket bukan barang terlarang atau berbahaya      │                                         │
+└───────────────────────────────────────────────────────────┴─────────────────────────────────────────┘
+```
+
+```text
+[Open `Kiriman Satuan`]  ──or──►  [Scan QR / Enter `INV` from `<slug>.geraimitra.com`]
           │                                            │
           ▼                                            ▼
- Allocates short `slug` (`8k4m2p7`)            Loads existing `8k4m2p7` draft
- Opens `/kiriman/8k4m2p7` (`INV #8K4M2P7`)      (sender, recipient & mask pre-filled!)
+ Empty form (no INV yet)                       Claims the `8k4m2p7` pre-booking
+ or prefilled from `Cek Ongkir Cepat`          (sender, recipient, contents pre-filled)
           │                                            │
           └─────────────────────┬──────────────────────┘
                                 ▼
@@ -22,7 +48,11 @@ This document details the end-to-end UX of creating a shipment and choosing a co
  STAGE 2: Smart Courier Selector (`Reguler` vs `Cargo` — Cargo offered on `Non-COD` only at launch)
           • Medal highlights (`🥇 Termurah`, `⚡ Tercepat`, `💰 Cair COD Terbesar`)
           • Local outlet/network RTS % badge (`⚪ Riwayat Baru` when 0 prior parcels) + purple `Drop-off saja` warning (`tenant_courier_prefs.pickup_mode` + SiCepat `unsupportedPickup`)
-          • Reveals courier-specific required inputs only when needed (commodity / pinpoint / insurance)
+          • Courier-rule hints from Mengantar v2.0.0 (DEC-238): COD caps (Rp2.000.000 Sap/Anteraja/Pos,
+            Rp5.000.000 others), Lion COD min Rp10.000, 50 kg Anteraja/Pos/SPX/J&T, Pos COD ≥ 82 % delivered rate,
+            J&T ECO (economy, not with cargo or DG); a card outside a limit is unavailable with the reason
+          • `Nilai barang` is sent as `goodsValue` (required Rp1.000–Rp10.000.000 for Anteraja, Pos, SPX; insurance
+            prompt from Rp500.000); `Barang berbahaya (DG)` leaves only SiCepat (HALU) and iDexpress
                                 ▼
  STAGE 3: Sender (`Kontak > Pengirim`) + 1-Click 3-Way Masking Preset
                                 ▼

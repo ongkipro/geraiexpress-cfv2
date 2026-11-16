@@ -7,6 +7,7 @@ import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
+import { ChoiceGroup, Panel, ItemList } from "../../../components/admin/page"
 
 // `Meja Retur` (spec 04 §2, ADR-0005, visual 07 `/kiriman/retur/:awb`): scan arriving return → condition + photo →
 // true sender revealed (audited) → `Kirim Kode Ambil` via WhatsApp → handback by code (or owner ID check).
@@ -52,17 +53,17 @@ export function MejaRetur() {
       {d.incoming.length ? (
         <section aria-labelledby="dalam-jalan">
           <h3 id="dalam-jalan" className="mb-3 text-lg font-semibold">Retur dalam perjalanan ({d.incoming.length})</h3>
-          <ul className="divide-y rounded-lg border bg-card">
+          <ItemList>
             {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base tabular-nums">{i.courier_code} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
-          </ul>
+          </ItemList>
         </section>
       ) : null}
       {d.returned.length ? (
         <section aria-labelledby="selesai">
           <h3 id="selesai" className="mb-3 text-lg font-semibold">Sudah diserahkan (7 hari)</h3>
-          <ul className="divide-y rounded-lg border bg-card">
+          <ItemList>
             {d.returned.map((r) => <li key={r.slug} className="px-4 py-2 text-base tabular-nums">INV {r.slug.toUpperCase()} · {r.handback_at ? when(r.handback_at) : ""} · {r.handback_method === "code" ? "dengan Kode Ambil" : "cek identitas oleh pemilik"}</li>)}
-          </ul>
+          </ItemList>
         </section>
       ) : null}
     </div>
@@ -107,14 +108,12 @@ function IntakeForm({ onDone }: { onDone: (r: Intake) => void }) {
     }
   }
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6" noValidate>
+    <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
       <h3 className="text-lg font-semibold">Terima paket retur</h3>
       <Field><FieldLabel htmlFor="retur-code">Pindai resi atau INV</FieldLabel><Input id="retur-code" autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-base font-medium">Kondisi paket</legend>
-        <div role="radiogroup" aria-label="Kondisi paket" className="flex flex-wrap gap-2">
-          {CONDITION.map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={condition === id} onClick={() => setCondition(id)} className={`h-11 rounded-lg border px-4 text-base ${condition === id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{label}</button>)}
-        </div>
+        <ChoiceGroup label="Kondisi paket" value={condition} onValueChange={setCondition} choices={CONDITION.map(([id, label]) => ({ value: id, label }))} />
       </fieldset>
       <div className="flex flex-col gap-1">
         <label className="inline-flex h-11 w-fit cursor-pointer items-center gap-2 rounded-lg border px-4 text-base font-medium focus-within:ring-2 focus-within:ring-ring">
@@ -126,7 +125,7 @@ function IntakeForm({ onDone }: { onDone: (r: Intake) => void }) {
       <Field><FieldLabel htmlFor="retur-note">Catatan (opsional)</FieldLabel><Input id="retur-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} /></Field>
       {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
       <div><Button type="submit" size="lg" disabled={pending || !code.trim()}>Terima Paket Retur</Button></div>
-    </form>
+    </Panel>
   )
 }
 
@@ -177,7 +176,7 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
     }
   }
   return (
-    <li className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+    <Panel as="li" className="flex flex-col gap-3 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
         <span className="text-base text-muted-foreground tabular-nums">{r.courier_code} · {r.awb_number} · diterima {when(r.intake_at)}</span>
@@ -198,6 +197,6 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
         {owner ? <Button type="button" variant="ghost" onClick={() => setOverride((x) => !x)}>{override ? "Pakai Kode Ambil" : "Tanpa kode (cek KTP)"}</Button> : null}
       </form>
       {fieldErr ? <p role="alert" className="text-base font-medium text-danger">{fieldErr}</p> : null}
-    </li>
+    </Panel>
   )
 }

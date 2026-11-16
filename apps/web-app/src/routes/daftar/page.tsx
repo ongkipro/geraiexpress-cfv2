@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { api, ApiError } from "../../lib/api"
+import { CheckboxField } from "../../components/admin/page"
 
 interface Area {
   id: string
@@ -27,6 +28,8 @@ export function DaftarPage() {
   const [picName, setPicName] = useState("")
   const [picPhone, setPicPhone] = useState("")
   const [street, setStreet] = useState("")
+  const [lat, setLat] = useState("")
+  const [lng, setLng] = useState("")
   const [query, setQuery] = useState("")
   const [areas, setAreas] = useState<Area[]>([])
   const [area, setArea] = useState<Area | null>(null)
@@ -64,7 +67,7 @@ export function DaftarPage() {
           contactWhatsapp: whatsapp,
           sellerEmail,
           consentMengantar: consent,
-          outlet: { name: businessName, picName, picPhone, areaId: area?.id ?? "", areaLabel: area?.label ?? "", streetAddress: street, postalCode: area?.postalCode ?? null },
+          outlet: { name: businessName, picName, picPhone, areaId: area?.id ?? "", areaLabel: area?.label ?? "", streetAddress: street, postalCode: area?.postalCode ?? null, latitude: lat.trim() || null, longitude: lng.trim() || null },
         },
       })
       await navigate({ to: "/daftar/status" })
@@ -73,7 +76,7 @@ export function DaftarPage() {
       setError(ae?.body.message ?? "Terjadi kesalahan. Silakan coba lagi.")
       setFieldErrors(ae?.body.field_errors ?? {})
       if (ae?.body.field_errors?.slug || ae?.body.field_errors?.businessName || ae?.body.field_errors?.contactWhatsapp) setStep(3)
-      else if (ae?.body.field_errors?.areaId || ae?.body.field_errors?.picPhone) setStep(4)
+      else if (ae?.body.field_errors?.areaId || ae?.body.field_errors?.picPhone || ae?.body.field_errors?.latitude || ae?.body.field_errors?.longitude) setStep(4)
     } finally {
       setPending(false)
     }
@@ -110,6 +113,11 @@ export function DaftarPage() {
             </ul>
           ) : null}
           <TextField label="Alamat lengkap titik jemput" name="street" value={street} onChange={setStreet} hint="Nama jalan, nomor, RT/RW, patokan." required maxLength={300} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField label="Latitude (opsional)" name="latitude" inputMode="decimal" value={lat} onChange={setLat} error={fieldErrors.latitude} hint="Contoh: -6.9456" />
+            <TextField label="Longitude (opsional)" name="longitude" inputMode="decimal" value={lng} onChange={setLng} error={fieldErrors.longitude} hint="Contoh: 107.5703" />
+          </div>
+          <p className="text-base text-muted-foreground">Titik koordinat dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           <TextField label="Nama penanggung jawab" name="picName" value={picName} onChange={setPicName} required maxLength={80} />
           <TextField label="HP penanggung jawab" name="picPhone" inputMode="numeric" value={picPhone} onChange={setPicPhone} error={fieldErrors.picPhone} required />
           <Button type="submit" size="lg" disabled={!area}>Lanjut</Button>
@@ -123,10 +131,9 @@ export function DaftarPage() {
             <div><dt className="text-muted-foreground">Titik jemput</dt><dd>{street}, {area?.label}</dd></div>
             <div><dt className="text-muted-foreground">Akun Mengantar</dt><dd>{sellerEmail}</dd></div>
           </dl>
-          <label htmlFor={consentId} className="flex min-h-11 cursor-pointer items-start gap-3 text-base">
-            <input id={consentId} type="checkbox" className="mt-1 size-5" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+          <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
             <span>Saya setuju GeraiExpress membuat akun seller Mengantar atas nama gerai saya dengan email di atas, dan saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun Mengantar tersebut.</span>
-          </label>
+          </CheckboxField>
           <Button type="submit" size="lg" disabled={pending || !consent}>{pending ? "Mengirim…" : "Kirim Pengajuan"}</Button>
           <Button type="button" variant="outline" size="lg" onClick={() => setStep(4)} disabled={pending}>Kembali</Button>
         </form>

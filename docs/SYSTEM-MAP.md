@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-17 — **DEC-234/DEC-235**: tenant zone `gerai.cc` → `geraimitra.com` (platform stays `geraiexpress.com`); Partner relay co-hosted on `99ribu-prod` (`149.28.129.53`). M6 code complete; production steps and TASK-604 await the owner (`STATUS.md`).
+Updated: 2026-11-17 — **DEC-236/237/238**: one shadcn/ui `base-nova` admin kit for both consoles (`apps/web-app/src/components/admin/`), `Buat Pengiriman` sidebar tree + single-screen 60/40 POS on `/kasir`, Mengantar Public API v2.0.0 parity (pickup `time_id`/`volume`, `PICKUP_PIC`, pinpoint, `SAP`/`JTEco`, courier limits, Pos COD guard, `discountExtra`, receiver score, dropshippers, sandbox simulation). Earlier: DEC-234/235 (`geraimitra.com`, relay on `99ribu-prod`). Production steps and TASK-604 await the owner (`STATUS.md`).
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
@@ -11,11 +11,11 @@ Updated: 2026-11-17 — **DEC-234/DEC-235**: tenant zone `gerai.cc` → `geraimi
 |---|---|---|
 | `apps/worker/src` | the one Cloudflare Worker: host classifier, SPA serving, `/api/app`, `/api/owner`, `/api/v1` Partner API + API keys, MCP (outlet + public), `hooks.` ingest, auth + `Akun Saya`, email outbox, onboarding, couriers, pricing (rules + quote engine), labels, bulk queue, finance cron fan-out, analytics, mini-site + brand SSR, custom domains (Cloudflare for SaaS), Super Admin console APIs, ops (migrate, bootstrap, backup export/restore, alert drill), operator checks + telemetry, daily backups, `GeraiVaultDO`, `PartnerQuotaDO` | 94 · 14,199 |
 | `apps/worker/test` | Workers Vitest in `workerd`: host, auth, account, Super Admin, email, migrations/drift, slug, telemetry, isolation, onboarding, webhooks/status, key rotation, couriers, pricing/quote, contacts/media, dispatch/payment, masking, labels, shift/payout, bulk/Cek Resi, analytics, settings, listing, finance (sync, recovery, determinism), pickup, returns, exceptions, mini-site, brand, `/api/v1`, MCP, custom-domain lifecycle, backups, operator checks, CI route scan | 61 · 6,106 |
-| `apps/web-app/src` | Vite + React 19 SPA for `app.`: shell, Dashboard + `PeriodFilter`, Buat Pengiriman (5 tabs), `/kiriman` hub (list, Pickup & Manifest scan mode, Meja Retur, Kendala & Klaim, Riwayat Massal, Cetak Resi Massal, detail/checkout), Kontak, Keuangan (dual book), Pengaturan (10 pages incl. Mini-Site/Domain Sendiri and API & MCP), Akun Saya, Bantuan, print client | 82 · 9,692 |
+| `apps/web-app/src` | Vite + React 19 SPA for `app.`: shell, Dashboard + `PeriodFilter`, Buat Pengiriman (sidebar tree: 60/40 POS `Kiriman Satuan`, Paket Massal, Cek Ongkir Cepat, Cek Resi, Shift Loket), `/kiriman` hub (list, Pickup & Manifest scan mode, Meja Retur, Kendala & Klaim, Riwayat Massal, Cetak Resi Massal, detail/checkout), Kontak, Keuangan (dual book), Pengaturan (10 pages incl. Mini-Site/Domain Sendiri and API & MCP), Akun Saya, Bantuan, print client | 82 · 9,692 |
 | `apps/web-owner/src` | Vite + React 19 SPA for `owner.`: login, TOTP, console shell (5 menus), Ringkasan, Gerai (+ Domain Mitra, Pro toggle), Tarif & Kurir, Pengawasan, Sistem & Audit | 18 · 1,689 |
 | `packages/domain` | pure integer money / weight / INV slug / status combine / cashback / contacts / masking / bulk CSV / WIB period / courier claim windows | 21 · 1,833 |
 | `packages/db` | Drizzle schemas + forward-only SQL: `migrations/control` (D1), `migrations/tenant` (every `GeraiVaultDO`) | 38 · 2,394 |
-| `packages/mengantar-sdk` | Public API client (redacting transport, Zod passthrough, order/address/time) + Partner client (direct/relay, `maybe_sent`) | 7 · 701 |
+| `packages/mengantar-sdk` | Public API client v2.0.0 (redacting transport, Zod passthrough, order/address/time slots, receiver score, dropshippers, sandbox simulation, Pos COD refusal parser) + Partner client (direct/relay, `maybe_sent`) | 7 · 701 |
 | `packages/telemetry` | structured events, redaction, Public API anomaly evaluators | 2 · 294 |
 | `packages/thermal-print` | Code128 + QR (incl. SVG for the mini-site), exact-size label PDFs (10×15 with stub, 10×10, 10×15), 58 mm ESC/POS roll, A4 Surat Jalan | 13 · 945 |
 | `infra/partner-relay` | stateless static-egress relay (Node, 66-line core + 20-line server), digest-pinned Dockerfile, compose, `verify.mjs` (spec 10 §6) (DEC-219) | 6 · 288 |
@@ -23,9 +23,9 @@ Updated: 2026-11-17 — **DEC-234/DEC-235**: tenant zone `gerai.cc` → `geraimi
 | `e2e/` | Playwright (390/768/1280), 22 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 24 · 1,013 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 172 unit + 377 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
-… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`, `0017_retire_api_key_spend`; tenant (v22): `0001_baseline` … `0014_settings`,
-`0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`, `0022_rescan_and_api_spend`.
+Tests: 180 unit + 397 Workers cases + 23 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
+… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`, `0017_retire_api_key_spend`, `0018_courier_v2_limits`; tenant (v23): `0001_baseline` … `0014_settings`,
+`0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`, `0022_rescan_and_api_spend`, `0023_mengantar_v2`.
 
 ## 2. Runtime hosts and audiences (one Worker, `wrangler.jsonc`: local, `env.staging`, `env.production`)
 

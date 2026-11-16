@@ -86,7 +86,7 @@ export async function checkBatch(env: Env, tenantId: string, batchId: string, no
     const mode: CodFeeMode = r.cod_goods_idr > 0 ? (codFeeMode === "none" || codFeeMode === "dfod" ? "buyer_bears_fee" : (codFeeMode as CodFeeMode)) : "none"
     let check: RowCheck
     try {
-      const input = parseQuoteInput({ destinationAreaId: area.id, weightGram: r.weight_gram, lengthCm: r.length_cm, widthCm: r.width_cm, heightCm: r.height_cm, mode, codGoodsIdr: r.cod_goods_idr }, origin)
+      const input = parseQuoteInput({ destinationAreaId: area.id, weightGram: r.weight_gram, lengthCm: r.length_cm, widthCm: r.width_cm, heightCm: r.height_cm, mode, codGoodsIdr: r.cod_goods_idr, declaredValueIdr: r.declared_value_idr }, origin)
       const q = await runQuote(env, tenantId, input, now, { rateKey: `bulkquote:${tenantId}`, perMinute: 240, serviceCode })
       const card = q.cards.find((c) => c.serviceCode === serviceCode)
       if (!card || !card.available) check = { kind: "needs_fix", errors: [card?.unavailableReason?.replace(/\.$/, "") ?? "Kurir tidak melayani rute"] }

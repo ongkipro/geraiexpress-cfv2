@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { api } from "../../lib/api"
+import { ChoiceGroup } from "../../components/admin/page"
 
 // Preset picker for checkout step 3 (TASK-305, visual 04 priority #4): only presets the gerai offers, a preview of
 // what prints, and explicit states for an exhausted quota and the Super Admin kill-switch.
@@ -34,17 +35,16 @@ export function PresetPicker({ value, onChange, preview, reseller, cod }: { valu
       {s.presets.length === 1 ? (
         <p className="text-base text-muted-foreground">{s.killSwitchOff ? "Masking label dinonaktifkan GeraiExpress untuk gerai ini." : "Gerai mencetak label Standar Gerai."}</p>
       ) : (
-        <div role="radiogroup" aria-label="Preset label" className="grid gap-2 sm:grid-cols-2">
-          {s.presets.map((p) => {
+        <ChoiceGroup
+          label="Preset label"
+          layout="grid"
+          value={value}
+          onValueChange={onChange}
+          choices={s.presets.map((p) => {
             const blocked = s.quotaExhausted && senderMasked(p, reseller)
-            return (
-              <button key={p} type="button" role="radio" aria-checked={value === p} disabled={blocked} onClick={() => onChange(p)} className={`flex min-h-11 flex-col items-start rounded-lg border px-3 py-2 text-left text-base disabled:opacity-60 ${value === p ? "border-primary bg-primary/10" : "border-input"}`}>
-                <span className="font-medium">{PRESET_LABEL[p]}</span>
-                <span className="text-muted-foreground">{blocked ? "Kuota masking hari ini habis" : PRESET_HELP[p]}</span>
-              </button>
-            )
+            return { value: p, label: PRESET_LABEL[p], description: blocked ? "Kuota masking hari ini habis" : PRESET_HELP[p], disabled: blocked }
           })}
-        </div>
+        />
       )}
       {s.quotaLeft !== null && s.presets.length > 1 ? <p className="text-base text-muted-foreground tabular-nums">Sisa kuota masking hari ini: {s.quotaLeft}</p> : null}
       <div className="border-l-4 border-primary py-1 pl-3 text-base" aria-live="polite">

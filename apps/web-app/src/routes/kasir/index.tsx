@@ -1,25 +1,43 @@
-import { useState, type FormEvent } from "react"
-import { Link, useNavigate } from "@tanstack/react-router"
-import { QrCodeIcon } from "lucide-react"
+import { useEffect, useState, type FormEvent } from "react"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import { CheckCircle2Icon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
+import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
+import { Field, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
+import { Textarea } from "../../components/ui/textarea"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../components/ui/sheet"
+import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
-import { QuotePanel } from "./quote-panel"
+import { isOwner, useWorkspace } from "../../shell/workspace"
+import { CheckboxField, Panel, SectionCard } from "../../components/admin/page"
+import { PresetPicker, type MaskPreset } from "../../components/masking/preset-picker"
+import { PrintDrawer } from "../../print/drawer"
+import { AnchorButton } from "../../components/admin/link-button"
+import { PartyPicker, type Contact } from "../kiriman/detail"
+import { RecipientForm } from "../kontak/penerima"
+import { SenderForm } from "../kontak/pengirim"
+import { RiskChip, type RiskBadge } from "../kontak/shared"
+import { QuotePanel, rp, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
+import { LinkButton } from "../../components/admin/link-button"
 
-// `Buat Pengiriman` (visual 07 `/kasir`, visual 05 stages 1–2): quote, choose a courier → INV allocated with a frozen
-// quote; sender, recipient, payment and print follow on `/kiriman/:slug` (TASK-304).
-const TABS = [
-  { to: "/kasir", label: "Paket Reguler", active: true },
-  { to: "/kasir/multi", label: "Paket Massal" },
-  { to: "/kasir/cek-cepat", label: "Cek Ongkir Cepat" },
-  { to: "/kasir/cek-resi", label: "Cek Resi" },
-  { to: "/kasir/shift", label: "Shift Loket" },
-]
+// `Buat Pengiriman › Kiriman Satuan` (DEC-237, visual 05, DESIGN.md C4): one counter screen. Left 60 %: destination &
+// weight → courier cards → sender, label, recipient and contents. Right 40 % (sticky): the live summary and payment.
+// One primary freezes the quote (INV), attaches the parties, records the payment, issues at Mengantar and opens
+// printing — no page change. `/kiriman/:slug` keeps serving drafts, QR pre-bookings and issued shipments.
 
 interface Claim { slug: string; senderId: string; recipientId: string; destination: { id: string; label: string }; weightGram: number; cod: boolean; codGoodsIdr: number; content: string }
+type Method = "qris" | "tunai" | "transfer" | "later"
+type Recipient = Contact & { mengantar_area_id?: string | null }
+interface Score { state: "ok" | "forbidden" | "limited" | "unavailable" | "invalid"; grade?: string | null; approximate?: boolean; total?: number; rts?: number }
+interface Issued { slug: string; state: string; awb: string | null; courier: string; paid: boolean }
 
-/** `Scan QR`: a scanner types the QR URL or INV into this box; a mini-site pre-booking opens prefilled (TASK-501). */
+const newKey = () => crypto.randomUUID().replace(/-/g, "")
+/** Every customer-facing amount the operator confirms (counter due, recipient collection, sender COD payout). */
+const amountsOf = (c: QuoteCard) => [c.counterDueIdr, c.codCollectionTotalIdr, c.senderCodPayableIdr].join("|")
+
+/** `Pindai QR / buka INV`: a scanner types the QR URL or INV; a mini-site pre-booking prefills this screen (TASK-501). */
 function ScanBox({ onClaim }: { onClaim: (c: Claim) => void }) {
   const navigate = useNavigate()
   const [code, setCode] = useState("")
@@ -39,47 +57,411 @@ function ScanBox({ onClaim }: { onClaim: (c: Claim) => void }) {
     }
   }
   return (
-    <form onSubmit={go} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4" role="search">
+    <Panel as="form" onSubmit={go} className="flex flex-wrap items-end gap-2 md:p-4" role="search">
       <label className="flex min-w-0 flex-1 flex-col gap-1 text-base font-medium">Pindai QR pelanggan atau ketik INV
         <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="INV 8K4M2P7" autoComplete="off" />
       </label>
       <Button type="submit" variant="outline"><QrCodeIcon aria-hidden /> Buka</Button>
       {msg ? <p role="alert" className="w-full text-base text-danger">{msg}</p> : null}
-    </form>
+    </Panel>
+  )
+}
+
+/** Local COD history (this gerai) + Mengantar receiver score (all sellers, A..E-) for the chosen recipient. */
+function RecipientRisk({ phone }: { phone: string }) {
+  const [local, setLocal] = useState<{ badge: RiskBadge; delivered: number; rts: number; rtsBps: number | null } | null>(null)
+  const [score, setScore] = useState<Score | null>(null)
+  useEffect(() => {
+    let alive = true
+    api<{ badge: { badge: RiskBadge; delivered: number; rts: number; rtsBps: number | null } }>(`/contacts/risk-badge?phone=${encodeURIComponent(phone)}`).then((r) => alive && setLocal(r.badge)).catch(() => undefined)
+    api<Score>(`/contacts/receiver-score?phone=${encodeURIComponent(phone)}`).then((r) => alive && setScore(r)).catch(() => alive && setScore({ state: "unavailable" }))
+    return () => {
+      alive = false
+    }
+  }, [phone])
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {local ? <RiskChip badge={local.badge} delivered={local.delivered} rts={local.rts} rtsBps={local.rtsBps} /> : null}
+      {score?.state === "ok" ? (
+        <Badge variant="outline" className="h-auto gap-1.5 bg-card py-1 text-sm text-foreground">
+          Skor Mengantar <strong className="tabular-nums">{score.grade ? `${score.approximate ? "≈" : ""}${score.grade}` : "belum ada"}</strong>
+          {score.grade ? <span className="text-muted-foreground tabular-nums">· {score.total} COD, {score.rts} retur</span> : null}
+        </Badge>
+      ) : score?.state === "forbidden" ? (
+        <span className="text-sm text-muted-foreground">Skor Mengantar belum aktif untuk akun ini.</span>
+      ) : score?.state === "limited" ? (
+        <span className="text-sm text-muted-foreground">Batas cek skor Mengantar hari ini habis.</span>
+      ) : null}
+    </div>
+  )
+}
+
+/** The chosen contact as a provenance card (name, phone, WA / area check), with `Ganti`. */
+function ChosenParty({ c, kind, destinationId, onClear, onChange }: { c: Contact; kind: "senders" | "recipients"; destinationId: string | null; onClear: () => void; onChange: (c: Contact) => void }) {
+  const r = c as Recipient
+  const areaMismatch = kind === "recipients" && destinationId && r.mengantar_area_id && r.mengantar_area_id !== destinationId
+  const phone = c.true_phone ?? c.phone ?? ""
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col">
+          <span className="text-base font-medium">{c.display_brand_name ? `${c.display_brand_name} · ${c.true_name}` : (c.true_name ?? c.name)}</span>
+          <span className="text-base text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}</span>
+          {kind === "recipients" && c.street_address ? <span className="text-base text-muted-foreground">{c.street_address}</span> : null}
+        </div>
+        <Button type="button" variant="outline" onClick={onClear}>Ganti</Button>
+      </div>
+      {kind === "senders" ? (c.wa_verified_at ? <span className="text-sm text-safe">WhatsApp terverifikasi di loket</span> : <VerifySender c={c} onVerified={onChange} />) : null}
+      {areaMismatch ? <p role="alert" className="text-base font-medium text-danger">Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.</p> : null}
+      {kind === "recipients" && phone ? <RecipientRisk phone={phone} /> : null}
+    </div>
+  )
+}
+
+/** Counter WhatsApp check (spec 03 Path B step 2) without leaving the POS: test message → sender confirms. */
+function VerifySender({ c, onVerified }: { c: Contact; onVerified: (c: Contact) => void }) {
+  const [msg, setMsg] = useState<string | null>(null)
+  const phone = (c.true_phone ?? "").replace(/\D/g, "").replace(/^0/, "62")
+  async function verify() {
+    setMsg(null)
+    try {
+      onVerified((await api<{ item: Contact }>(`/contacts/senders/${c.id}/verify-wa`, { body: {} })).item)
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.body.message : "Verifikasi gagal. Coba lagi.")
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2 border-t pt-2">
+      <p className="text-base text-muted-foreground">WhatsApp belum diverifikasi (wajib untuk COD dan label masking). Kirim pesan uji, lalu tanyakan ke pengirim.</p>
+      <div className="flex flex-wrap gap-2">
+        <AnchorButton variant="outline" href={`https://wa.me/${phone}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer">
+          <MessageCircleIcon aria-hidden /> Kirim pesan uji
+        </AnchorButton>
+        <Button type="button" variant="outline" onClick={verify}>Pengirim sudah menerima</Button>
+      </div>
+      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+    </div>
+  )
+}
+
+function PartyStep({ kind, value, onPick, error, destination }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null }) {
+  const w = useWorkspace()
+  const [adding, setAdding] = useState(false)
+  const label = kind === "senders" ? "Pengirim" : "Penerima"
+  async function saved(item?: { id: string }) {
+    setAdding(false)
+    if (!item) return
+    const r = await api<{ item: Contact }>(`/contacts/${kind}/${item.id}`).catch(() => null)
+    if (r?.item) onPick(r.item)
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-base font-semibold">{label}</h4>
+        <Button type="button" variant="ghost" onClick={() => setAdding(true)}><PlusIcon aria-hidden /> {label} baru</Button>
+      </div>
+      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} /> : <PartyPicker kind={kind} value={value} onPick={onPick} />}
+      {error ? <p role="alert" className="text-base text-danger">{error}</p> : null}
+      <Sheet open={adding} onOpenChange={setAdding}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
+          <SheetHeader><SheetTitle>{label} baru</SheetTitle></SheetHeader>
+          {adding ? (kind === "senders" ? <SenderForm sender={null} owner={isOwner(w)} onSaved={saved} /> : <RecipientForm recipient={null} canArchive={false} onSaved={saved} />) : null}
+        </SheetContent>
+      </Sheet>
+    </div>
   )
 }
 
 export function KasirPage() {
-  const navigate = useNavigate()
+  const w = useWorkspace()
+  const owner = isOwner(w)
+  const search = useSearch({ strict: false }) as Record<string, unknown>
+  // `Buat Kiriman dari Tarif Ini` (Cek Ongkir Cepat) prefills the form and preselects the service.
+  const q = (k: string) => (search[k] === undefined ? undefined : String(search[k]))
+  const fromQuick: QuoteInitial | undefined = q("tujuan")
+    ? {
+        area: { id: q("tujuan")!, label: q("wilayah") ?? "", postalCode: null },
+        gram: Number(q("berat")) || 1000,
+        codGoodsIdr: Number(q("cod")) || 0,
+        mode: (q("mode") as Mode | undefined) ?? "none",
+        declaredValueIdr: Number(q("nilai")) || 0,
+        dangerousGoods: q("dg") === "1",
+        dims: q("dim") ? (([l, ww, h]) => ({ l: l!, w: ww!, h: h! }))(q("dim")!.split("x").map(Number)) : null,
+        packingName: q("packing") ?? "",
+        serviceFee: q("biaya") !== "0",
+      }
+    : undefined
   const [claim, setClaim] = useState<Claim | null>(null)
+  const [round, setRound] = useState(0)
+  const [sel, setSel] = useState<{ req: QuoteRequest; card: QuoteCard } | null>(null)
+  const [sender, setSender] = useState<Contact | null>(null)
+  const [recipient, setRecipient] = useState<Contact | null>(null)
+  const [content, setContent] = useState("")
+  const [qty, setQty] = useState("1")
+  const [note, setNote] = useState("")
+  const [ack, setAck] = useState(false)
+  const [preset, setPreset] = useState<MaskPreset>("standar_gerai")
+  const [method, setMethod] = useState<Method>("qris")
+  const [cash, setCash] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [msg, setMsg] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  // The INV this screen froze (kept across a failed attempt so a retry never allocates twice).
+  // `card` is the server's frozen card: once an INV exists it is the only source of the amounts on screen and paid.
+  const [frozen, setFrozen] = useState<{ slug: string; sig: string; paid: boolean; payKey: string; card: QuoteCard } | null>(null)
+  const [issued, setIssued] = useState<Issued | null>(null)
+  const [prints, setPrints] = useState(0)
+
+  // A QR pre-booking brings its parties and contents (the content is set where the claim is taken).
+  useEffect(() => {
+    if (!claim) return
+    api<{ item: Contact }>(`/contacts/senders/${claim.senderId}`).then((r) => setSender(r.item)).catch(() => undefined)
+    api<{ item: Contact }>(`/contacts/recipients/${claim.recipientId}`).then((r) => setRecipient(r.item)).catch(() => undefined)
+  }, [claim])
+
+  function reset() {
+    setClaim(null)
+    setSel(null)
+    setSender(null)
+    setRecipient(null)
+    setContent("")
+    setQty("1")
+    setNote("")
+    setAck(false)
+    setPreset("standar_gerai")
+    setMethod("qris")
+    setCash("")
+    setErrors({})
+    setMsg(null)
+    setFrozen(null)
+    setIssued(null)
+    setPrints(0)
+    setRound((n) => n + 1)
+  }
+
+  const card = sel?.card ?? null
+  const due = card?.counterDueIdr ?? 0
+  const cod = sel ? sel.req.mode !== "none" : false
+  const payNow = due > 0 && method !== "later"
+  const cashNum = Number(cash.replace(/\D/g, ""))
+  const sig = sel ? JSON.stringify([sel.req, sel.card.serviceCode]) : ""
+  const locked = !!frozen && (frozen.paid || !!claim) && frozen.sig !== sig
+
+  const priceChanged = (c: QuoteCard) =>
+    new ApiError(409, {
+      code: "PRICE_CHANGED",
+      message: `Ongkir yang terkunci berbeda: bayar di loket ${rp(c.counterDueIdr)}${c.codCollectionTotalIdr ? `, ditagih ke penerima ${rp(c.codCollectionTotalIdr)}, cair ke pengirim ${rp(c.senderCodPayableIdr)}` : ""}. Periksa ringkasan lalu tekan lagi.`,
+      field_errors: {},
+    })
+
+  async function submit() {
+    if (pending || !sel) return
+    setPending(true)
+    setErrors({})
+    setMsg(null)
+    let inv = frozen
+    try {
+      // COD and label masking need a counter-verified WhatsApp: say so before any money is recorded.
+      if (sender && !sender.wa_verified_at && (cod || preset !== "standar_gerai")) {
+        throw new ApiError(422, { code: "NOT_READY", message: "Verifikasi WhatsApp pengirim dulu (tombol di kartu pengirim).", field_errors: { senderId: "Kiriman COD atau label masking butuh WhatsApp pengirim yang sudah diverifikasi." } })
+      }
+      if (!inv || inv.sig !== sig) {
+        if (inv && (inv.paid || claim)) throw new ApiError(409, { code: "LOCKED", message: `Pembayaran atau kode QR sudah tercatat di INV ${inv.slug.toUpperCase()}. Lanjutkan di halaman kiriman.`, field_errors: {} })
+        const r = await api<{ slug: string; card: QuoteCard }>("/quotes/freeze", { body: { ...sel.req, serviceCode: sel.card.serviceCode, ...(claim ? { slug: claim.slug } : {}) } })
+        const nextSig = JSON.stringify([sel.req, r.card.serviceCode])
+        inv = { slug: r.slug, sig: nextSig, paid: false, payKey: newKey(), card: r.card }
+        setFrozen(inv)
+        setSel({ req: sel.req, card: r.card })
+        // The server re-priced at freeze: the frozen card is the truth. If any confirmed amount changed, show the new
+        // amounts and stop — the next press pays exactly what is on screen.
+        if (amountsOf(r.card) !== amountsOf(sel.card)) throw priceChanged(r.card)
+      } else {
+        // Same request and service as the frozen INV: what is on screen must be the frozen card (a re-selected or
+        // re-quoted card from before the freeze may differ) — otherwise restore it and ask again.
+        if (amountsOf(sel.card) !== amountsOf(inv.card)) {
+          setSel({ req: sel.req, card: inv.card })
+          throw priceChanged(inv.card)
+        }
+        // A retry after a lost response: the INV may already be issued or held — show it, never re-send parties.
+        const cur = await api<{ shipment: { dispatch_state: string; awb_number: string | null; counter_payment_status: string } }>(`/shipments/${inv.slug}`)
+        if (["issued", "provider_unpaid_hold", "issuing_in_flight", "reconciliation_needed"].includes(cur.shipment.dispatch_state)) {
+          const d = await api<{ state: string; awb: string | null }>(`/shipments/${inv.slug}/dispatch`, { body: {} })
+          setIssued({ slug: inv.slug, state: d.state, awb: d.awb, courier: sel.card.name, paid: cur.shipment.counter_payment_status === "paid" })
+          return
+        }
+        if (cur.shipment.counter_payment_status === "paid") inv = { ...inv, paid: true }
+      }
+      await api(`/shipments/${inv.slug}/parties`, { body: { senderId: sender?.id, recipientId: recipient?.id, content, prohibitedAck: ack, maskPreset: preset, quantity: Number(qty) || 1, deliveryInstruction: note } })
+      if (payNow && !inv.paid) {
+        const res = await fetch(`/api/app/shipments/${inv.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": inv.payKey }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? cashNum : undefined }) })
+        const j = (await res.json()) as { ok: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } }
+        if (!j.ok) throw new ApiError(res.status, { code: j.error!.code, message: j.error!.message, field_errors: j.error!.field_errors })
+        inv = { ...inv, paid: true }
+        setFrozen(inv)
+      }
+      const d = await api<{ state: string; awb: string | null }>(`/shipments/${inv.slug}/dispatch`, { body: {} })
+      setIssued({ slug: inv.slug, state: d.state, awb: d.awb, courier: sel.card.name, paid: inv.paid })
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrors(err.body.field_errors)
+        setMsg(err.body.message)
+      } else setMsg("Gagal memproses. Coba lagi.")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  if (issued) return <IssuedPanel issued={issued} prints={prints} onPrinted={() => setPrints((n) => n + 1)} onNew={reset} />
+
+  const primary = payNow ? `Tandai Lunas & Cetak · ${rp(due)}` : due > 0 ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
+  const disabled = pending || !sel || locked || (payNow && method === "tunai" && cashNum < due)
+  const initial = claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : fromQuick
+
+  return (
+    <div className="pb-28 lg:pb-0">
+      <PageTitle title="Kiriman Satuan" description="Satu layar: cek ongkir, pilih ekspedisi, isi pengirim & penerima, bayar, cetak." />
+      <div className="mb-6"><ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} /></div>
+      {claim ? (
+        <p role="status" className="mb-4 border-l-4 border-primary py-1 pl-3 text-base">Kiriman dari rumah <span className="font-medium tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
+      ) : null}
+      <div className="grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <QuotePanel
+            key={`${claim?.slug ?? "baru"}-${round}`}
+            initial={initial}
+            autoQuote={!claim && !!fromQuick}
+            select={{ selected: card?.serviceCode ?? null, onSelect: (req, c) => setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c }) }}
+            onStale={() => setSel(null)}
+            onQuoted={(req, cards) => {
+              const keep = cards.find((c) => c.available && c.serviceCode === (sel?.card.serviceCode ?? (!claim ? q("layanan") : undefined)))
+              setSel(keep ? { req, card: frozen && frozen.sig === JSON.stringify([req, keep.serviceCode]) ? frozen.card : keep } : null)
+            }}
+          />
+          <SectionCard id="pihak" title="3. Pengirim, label & penerima">
+            <div className="flex flex-col gap-6">
+              <PartyStep kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null} />
+              <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+              {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
+              <PartyStep kind="recipients" value={recipient} onPick={setRecipient} error={errors.recipientId} destination={sel?.req ?? null} />
+              <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+                <Field data-invalid={errors.content ? true : undefined}>
+                  <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
+                  <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
+                  {errors.content ? <FieldError>{errors.content}</FieldError> : null}
+                </Field>
+                <Field data-invalid={errors.quantity ? true : undefined}>
+                  <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
+                  <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
+                  {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
+                </Field>
+              </div>
+              <Field data-invalid={errors.deliveryInstruction ? true : undefined}>
+                <FieldLabel htmlFor="instruksi">Instruksi kurir / patokan (opsional)</FieldLabel>
+                <Textarea id="instruksi" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} placeholder="Contoh: Titip ke satpam, rumah pagar hijau" />
+                {errors.deliveryInstruction ? <FieldError>{errors.deliveryInstruction}</FieldError> : null}
+              </Field>
+              <CheckboxField checked={ack} onCheckedChange={setAck}>
+                Isi paket bukan barang terlarang atau berbahaya
+              </CheckboxField>
+              {errors.prohibitedAck ? <p role="alert" className="text-base text-danger">{errors.prohibitedAck}</p> : null}
+            </div>
+          </SectionCard>
+        </div>
+
+        <div className="flex flex-col gap-6 lg:sticky lg:top-20">
+          <SectionCard id="ringkasan" title="Ringkasan & Pembayaran">
+            {card && sel ? (
+              <div className="flex flex-col gap-4">
+                <dl className="flex flex-col gap-2 text-base tabular-nums">
+                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ekspedisi</dt><dd className="text-right">{card.name}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Berat ditagih</dt><dd>{(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ongkir publish</dt><dd>{rp(card.publishShippingIdr)}</dd></div>
+                  {sel.req.packingIdr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Packing</dt><dd>{rp(sel.req.packingIdr)}</dd></div> : null}
+                  {sel.req.serviceFeeIdr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Biaya layanan loket</dt><dd>{rp(sel.req.serviceFeeIdr)}</dd></div> : null}
+                  {cod ? (
+                    <>
+                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ditagih kurir ke penerima</dt><dd>{rp(card.codCollectionTotalIdr)}</dd></div>
+                      {sel.req.mode !== "dfod" ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Estimasi cair ke pengirim</dt><dd>{rp(card.senderCodPayableIdr)}</dd></div> : null}
+                    </>
+                  ) : null}
+                  <div className="flex justify-between gap-3 border-t pt-2 text-lg font-semibold"><dt>Bayar di loket</dt><dd>{rp(due)}</dd></div>
+                  {owner && card.providerNetShippingIdr !== undefined ? (
+                    <>
+                      <div className="flex justify-between gap-3 text-muted-foreground"><dt>Modal Mengantar</dt><dd>{rp(card.providerNetShippingIdr)}</dd></div>
+                      <div className="flex justify-between gap-3 text-muted-foreground"><dt>Estimasi laba</dt><dd>{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
+                    </>
+                  ) : null}
+                </dl>
+                {due > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="w-full flex-wrap">
+                      <ToggleGroupItem value="qris">QRIS gerai</ToggleGroupItem>
+                      <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
+                      <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
+                      <ToggleGroupItem value="later">Bayar nanti</ToggleGroupItem>
+                    </ToggleGroup>
+                    {method === "tunai" ? (
+                      <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
+                        <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
+                        <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
+                        {cashNum >= due ? <p className="text-base tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
+                        {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
+                      </Field>
+                    ) : null}
+                    {method === "qris" || method === "transfer" ? <p className="text-base text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
+                  </div>
+                ) : (
+                  <p className="text-base text-muted-foreground">Tidak ada yang dibayar di loket.</p>
+                )}
+                {frozen ? <p className="text-base text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
+                {locked ? <p role="alert" className="border-l-4 border-warn py-1 pl-3 text-base">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
+                {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+                <Button className="hidden lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
+                  <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-base text-muted-foreground">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
+            )}
+          </SectionCard>
+        </div>
+      </div>
+      {card ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card p-3 lg:hidden">
+          <span className="flex flex-col text-base tabular-nums"><span className="text-muted-foreground">Bayar di loket</span><strong>{rp(due)}</strong></span>
+          <Button className="flex-1" size="lg" onClick={submit} disabled={disabled}>
+            {pending ? "Memproses…" : payNow ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function IssuedPanel({ issued, prints, onPrinted, onNew }: { issued: Issued; prints: number; onPrinted: () => void; onNew: () => void }) {
+  const ok = issued.state === "issued"
   return (
     <div>
-      <PageTitle title="Buat Pengiriman" />
-      <nav aria-label="Bagian Buat Pengiriman" className="-mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
-          {TABS.map((t) => (
-            <li key={t.to}>
-              <Link to={t.to} aria-current={t.active ? "page" : undefined} className={`flex h-11 items-center rounded-md px-4 text-base md:h-10 ${t.active ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}>
-                {t.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <ScanBox onClaim={setClaim} />
-      {claim ? (
-        <p role="status" className="mb-4 border-l-4 border-primary py-1 pl-3 text-base">Kiriman dari rumah <span className="font-medium tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan dan berat sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
-      ) : null}
-      <QuotePanel
-        key={claim?.slug ?? "baru"}
-        initial={claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : undefined}
-        chooseLabel="Pilih & Lanjutkan"
-        onChoose={async (req, card) => {
-          const r = await api<{ slug: string }>("/quotes/freeze", { body: { ...req, serviceCode: card.serviceCode, ...(claim ? { slug: claim.slug } : {}) } })
-          if (claim) await api(`/shipments/${r.slug}/parties`, { body: { senderId: claim.senderId, recipientId: claim.recipientId, content: claim.content } })
-          await navigate({ to: "/kiriman/$slug", params: { slug: r.slug } })
-        }}
-      />
+      <PageTitle title="Kiriman Satuan" description={`INV ${issued.slug.toUpperCase()}`} />
+      <Panel className="flex max-w-2xl flex-col gap-4">
+        {ok ? (
+          <>
+            <p className="flex items-center gap-2 text-lg font-semibold text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
+            <p className="text-base tabular-nums">{issued.courier} · AWB <strong className="font-mono">{issued.awb}</strong></p>
+            <p className="text-base">{issued.paid ? "LUNAS" : "BELUM DIBAYAR"}</p>
+            <div><PrintDrawer slug={issued.slug} printCount={prints} firstPrintedAt={null} onPrinted={onPrinted} /></div>
+          </>
+        ) : (
+          <>
+            <p className="text-lg font-semibold text-warn">{issued.state === "provider_unpaid_hold" ? "Menunggu saldo Mengantar" : "Status penerbitan sedang dipastikan"}</p>
+            <p className="text-base">Kiriman sudah tercatat. Lanjutkan di halaman kiriman; jangan buat ulang kiriman ini.</p>
+          </>
+        )}
+        <div className="flex flex-wrap gap-2 border-t pt-4">
+          <Button onClick={onNew}><RotateCcwIcon aria-hidden /> Kiriman Baru</Button>
+          <LinkButton variant="outline" to={`/kiriman/${issued.slug}`}>Buka INV {issued.slug.toUpperCase()}</LinkButton>
+        </div>
+      </Panel>
     </div>
   )
 }

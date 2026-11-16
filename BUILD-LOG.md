@@ -743,3 +743,45 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   replacement — fixed); integrated run `DEC-234-R2` PASS 9/9. GPT-6.1 Sol: round 1 REQUEST_CHANGES (one P2: the relay
   IPv6-egress check could pass falsely — now requires `EnableIPv6=false` networks and a forced IPv6 connection that
   fails), round 2 APPROVE (`docs/review/dec-234-235/`).
+
+## 2026-11-17 — DEC-236 (unified admin UI), DEC-237 (sidebar tree + 60/40 POS), DEC-238 (Mengantar v2.0.0 parity)
+
+- DEC-236: one shadcn/ui `base-nova` kit in `apps/web-app/src/components/admin/` (shell, NavUser, breadcrumb-as-h1,
+  metric cards, chart with an sr-only table, responsive data table, status badge, callouts, states, `CheckboxField`,
+  `ChoiceGroup`, `Panel`, `ItemList`); Super Admin imports it via `@shared`. New primitives (chart, checkbox,
+  radio-group, textarea, dialog, alert-dialog, alert, sonner, collapsible) calibrated to the comfort contract; the
+  select chevron fixed (Base UI's default `▼` text sat at 10.66 px). Remaining hand-rolled cards, raw controls,
+  in-page breadcrumbs and the inline ekspedisi toast replaced; the owner reason dialog uses `Dialog` + `Textarea`.
+  `CheckboxField` boxes are 24 px (the 20 px box failed WCAG target size on `API & MCP`).
+- DEC-237: `Buat Pengiriman` is a Collapsible sidebar tree (5 tools, also in the phone Sheet); the `/kasir` tab bar is
+  gone. `/kasir` = `Kiriman Satuan`, a single-screen POS: quote panel (now with `Nilai barang`, DG, courier-rule
+  hints and a select mode) + pickers with `+ … baru` Sheets and provenance cards (WA state, area check, local COD badge
+  + Mengantar score) left; sticky summary + payment right; one primary freezes → parties → pays → issues and shows
+  `Resi terbit` + `Cetak Label`, reusing the INV and payment key on a retry. `Cek Ongkir Cepat` →
+  `Buat Kiriman dari Tarif Ini` prefills `/kasir`. e2e checkout/quote/minisite follow the new flow (< 45 s kept);
+  checkbox selectors use `getByRole("checkbox")` (Base UI renders a hidden native input under the same label).
+- DEC-238: SDK `client.ts` gains `discountExtra*`, SPX `pickupSchedule`, `nextPickupSlot` (WIB, 120 min lead, SPX
+  windows), `pickupVolume`, `posCodRefusal`, receiver score, dropshippers, simulation, `saveAddress` with
+  `PICKUP_PIC`/`PICKUP_PIC_PHONE` (bug: we sent `PICKUP_PHONE`) and `PUT /address/{id}`, strict `POST /time` format.
+  Bug fixed: `scheduledPickup` was sent without `time_id` and with a fixed `volumeMotor`. Control `0018`: courier
+  limits as catalog data, `JTEco` active, `SAPLite` inactive (not bookable). Tenant `0023`: declared value + DG on
+  quotes, quantity + instruction on shipments, `pickup_time_slots`, Pos COD block on prefs, receiver score cache,
+  dropshipper opt-in. The local mock now enforces the v2.0.0 create-order body rules, so a wrong payload fails in CI.
+  Preview found one more bug: a pickup address deleted at Mengantar (`POST /time` 404) blocked every issue — it is
+  now registered again once (test added).
+- Full e2e found three more issues, fixed: (1) the shared chart tooltip passed the series name to the date formatter
+  (`RangeError: Invalid time value` crashed Super Admin `Ringkasan` on hover) — the label now comes from the hovered
+  row; (2) Base UI `Button render={<Link/>}` stamps `role="button"` on anchors, so link actions were announced as
+  buttons — new `LinkButton`/`AnchorButton` keep real links; (3) a dev-seeded outlet without street/WhatsApp made
+  `POST /address` fail under the stricter v2.0.0 rules — dispatch now refuses with `PICKUP_CONTACT_REQUIRED` pointing
+  to `Profil Gerai`, and the seed fills both.
+- Verification: `pnpm check` green (unit 180, Workers 393); mutation proofs in `docs/evidence/DEC-238/mutations.md`;
+  UI gates 0 fail on every Gerai and Super Admin route; POS issue path driven in a real browser at 1366 and 390.
+- Review: GPT-6.1 Sol R1 REQUEST_CHANGES — stale POS selection after a failed/edited re-quote, frozen card ignored,
+  J&T ECO COD passes asked `courier=JT` (no ECO row), no sender WhatsApp verification on the POS (P1); lost-response
+  retry, quick-quote packing/fee handoff, cargo extra discount, 90-min slot reuse (P2). R2 REQUEST_CHANGES — a
+  superseded quote answer could restore the selection, re-selecting the pre-freeze card bypassed the frozen amount,
+  sender payout not compared (P1). All fixed (`e2e/pos-guards.spec.ts`, Worker regressions; mutations M7–M13 red).
+  R3 APPROVE. The preview then showed a cached `time_id` Mengantar refused (`invalid pickup time`) blocking every
+  issue: that refusal now drops the cached slot (test + mutation M14); R4 APPROVE. Integrated run `DEC-236-238` PASS 9/9 (e2e re-recorded on an unchanged tree after a doc edit during the
+  first run marked it UNVERIFIED). Archive `docs/review/dec-236-238/`.

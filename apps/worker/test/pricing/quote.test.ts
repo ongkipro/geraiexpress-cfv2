@@ -63,7 +63,7 @@ describe("five collection modes (mock: JT publish 12.500, 20 % discount → N 10
     const row = (codFee: number) => ({ unsupported: false, unsupportedCod: false, unsupportedPickup: false, price: 12000, discount: 2400, discountPercent: 20, codFee, estimatedPrice: 12000 + codFee, estimatedSpecialPrice: 9600 + codFee, cargoPrice: null, cargoDiscount: null, cargoEstimatedPrice: null, cargoEstimatedSpecialPrice: null, minimumWeightCargo: null, eta: "2 - 3 hari" })
     const p = priceOf("regular", row(5560))!
     expect(p).toMatchObject({ P: 12000, N: 9600, F: 5560, observedBps: 2000 })
-    const c = buildCard({ serviceCode: "JT", courierCode: "JT", courierName: "J&T", name: "J&T", serviceClass: "regular", billableWeightGram: 1000, providerWeightKg: 1, eta: null, dropOffOnly: false, available: true, unavailableReason: null }, p, { originAreaId: ORIGIN, destinationAreaId: DEST, mode: "buyer_bears_fee", actualWeightGram: 1000, dims: null, codGoodsIdr: 150000, packingIdr: 3000, serviceFeeIdr: 0, promoIdr: 0 }, 2000)
+    const c = buildCard({ serviceCode: "JT", courierCode: "JT", courierName: "J&T", name: "J&T", serviceClass: "regular", billableWeightGram: 1000, providerWeightKg: 1, eta: null, dropOffOnly: false, available: true, unavailableReason: null }, p, { originAreaId: ORIGIN, destinationAreaId: DEST, mode: "buyer_bears_fee", actualWeightGram: 1000, dims: null, codGoodsIdr: 150000, packingIdr: 3000, serviceFeeIdr: 0, promoIdr: 0, declaredValueIdr: 0, dangerousGoods: false }, 2000)
     // spec 02 §3.4 worked example row `buyer_bears_fee`.
     expect(c.flow).toMatchObject({ counterDueIdr: 3000, codCollectionTotalIdr: 167560, expectedProviderCodCreditIdr: 152400, senderCodPayableIdr: 150000, outletMarginIdr: 5400 })
   })
@@ -88,7 +88,7 @@ describe("cargo, coverage and preferences", () => {
     expect(card(codHeavy, "JNECargo").unavailableReason).toBe("Cargo hanya untuk kiriman Non-COD.")
     mockUnsupported.add("pos")
     await appPost("/settings/couriers/anteraja", t.cookie, { enabled: false })
-    const after = (await quote(t.cookie, { mode: "none" })).body.data.cards
+    const after = (await quote(t.cookie, { mode: "none", declaredValueIdr: 100000 })).body.data.cards
     expect(card(after, "pos")).toMatchObject({ available: false, unavailableReason: "Layanan tidak tersedia untuk rute ini." })
     expect(after.find((c) => c.serviceCode === "anteraja")).toBeUndefined()
     expect(after.find((c) => c.serviceCode === "ninja")).toBeUndefined()

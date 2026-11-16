@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { CheckCircle2Icon, PrinterIcon } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../components/ui/field"
@@ -11,6 +11,7 @@ import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "../kasir/quote-panel"
 import { PresetPicker, PRESET_LABEL, type MaskPreset } from "../../components/masking/preset-picker"
 import { PrintDrawer } from "../../print/drawer"
+import { CheckboxField, SectionCard, Panel } from "../../components/admin/page"
 
 // `/kiriman/:slug` checkout (visual 07 §3.2, visual 05 stages 3–6, DEC-220): sender → recipient & contents → locked
 // summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
@@ -59,9 +60,6 @@ export function KirimanDetailPage() {
   const done = ["issued", "provider_unpaid_hold", "cancelled"].includes(s.dispatch_state)
   return (
     <div className="pb-32 md:pb-0">
-      <nav aria-label="Breadcrumb" className="mb-2 text-base text-muted-foreground">
-        <Link to="/kiriman" className="text-primary underline-offset-4 hover:underline">Kiriman</Link> › INV {slug.toUpperCase()}
-      </nav>
       <PageTitle title={`INV ${slug.toUpperCase()}`} description={STATE_LABEL[s.dispatch_state] ?? s.status} />
       {done ? <IssuedView d={d} owner={owner} reload={load} /> : <CheckoutView d={d} owner={owner} reload={load} />}
     </div>
@@ -72,11 +70,14 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
   const s = d.shipment
   const cod = s.cod_fee_mode !== "none"
   return (
-    <section className="rounded-lg border bg-card p-4 md:p-6" aria-labelledby="ringkasan">
-      <h3 id="ringkasan" className="mb-3 text-lg font-semibold">Ringkasan (terkunci)</h3>
+    <SectionCard id="ringkasan" title="Ringkasan (terkunci)">
       <dl className="flex flex-col gap-2 text-base tabular-nums">
         <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ekspedisi</dt><dd>{s.courier_code} · {d.quote?.service_code}</dd></div>
         <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Berat ditagih</dt><dd>{((d.quote?.billable_weight_gram ?? 0) / 1000).toLocaleString("id-ID")} kg</dd></div>
+        {Number(s.item_quantity ?? 1) > 1 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Jumlah barang</dt><dd>{String(s.item_quantity)}</dd></div> : null}
+        {d.quote && Number(d.quote.declared_value_idr ?? 0) > 0 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Nilai barang</dt><dd>{rp(Number(d.quote.declared_value_idr))}</dd></div> : null}
+        {d.quote && Number(d.quote.is_dangerous_goods ?? 0) === 1 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Barang berbahaya</dt><dd>Ya (DG)</dd></div> : null}
+        {s.delivery_instruction ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Instruksi kurir</dt><dd className="text-right">{String(s.delivery_instruction)}</dd></div> : null}
         <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ongkir</dt><dd>{rp(s.publish_shipping_idr)}</dd></div>
         {s.packing_addon_idr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Packing</dt><dd>{rp(s.packing_addon_idr)}</dd></div> : null}
         {cod ? (
@@ -88,7 +89,7 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
         <div className="flex justify-between gap-3 border-t pt-2 text-lg font-semibold"><dt>Bayar di loket</dt><dd>{rp(s.counter_due_idr)}</dd></div>
         {owner && typeof s.estimated_profit_idr === "number" ? <div className="flex justify-between gap-3 text-muted-foreground"><dt>Estimasi laba</dt><dd>{rp(s.estimated_profit_idr)}</dd></div> : null}
       </dl>
-    </section>
+    </SectionCard>
   )
 }
 
@@ -170,15 +171,16 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
   return (
     <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
       <div className="flex flex-col gap-6">
-        <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="pengirim">
-          <h3 id="pengirim" className="text-lg font-semibold">3. Pengirim</h3>
+        <SectionCard id="pengirim" title="3. Pengirim">
+          <div className="flex flex-col gap-3">
           <PartyPicker kind="senders" value={sender} onPick={setSender} />
           {errors.senderId ? <p role="alert" className="text-base text-danger">{errors.senderId}</p> : null}
           <PresetPicker value={preset} onChange={setPreset} cod={s.cod_fee_mode !== "none"} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
-        </section>
-        <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="penerima">
-          <h3 id="penerima" className="text-lg font-semibold">4. Penerima & isi paket</h3>
+        </div>
+        </SectionCard>
+        <SectionCard id="penerima" title="4. Penerima & isi paket">
+          <div className="flex flex-col gap-3">
           <PartyPicker kind="recipients" value={recipient} onPick={setRecipient} />
           {errors.recipientId ? <p role="alert" className="text-base text-danger">{errors.recipientId}</p> : null}
           <Field data-invalid={errors.content ? true : undefined}>
@@ -186,17 +188,17 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
             <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
             {errors.content ? <FieldError>{errors.content}</FieldError> : null}
           </Field>
-          <label className="flex min-h-11 items-center gap-3 text-base">
-            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="size-5" />
+          <CheckboxField checked={ack} onCheckedChange={setAck}>
             Isi paket bukan barang terlarang atau berbahaya
-          </label>
+          </CheckboxField>
           {errors.prohibitedAck ? <p role="alert" className="text-base text-danger">{errors.prohibitedAck}</p> : null}
-        </section>
+        </div>
+        </SectionCard>
       </div>
       <div className="flex flex-col gap-6">
         <Summary d={d} owner={owner} />
-        <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="bayar">
-          <h3 id="bayar" className="text-lg font-semibold">5. Catat pembayaran</h3>
+        <SectionCard id="bayar" title="5. Catat pembayaran">
+          <div className="flex flex-col gap-3">
           {s.counter_payment_status === "not_required" ? (
             <p className="text-base text-muted-foreground">Tidak ada yang dibayar di loket.</p>
           ) : (
@@ -229,7 +231,8 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           <Button className="hidden md:inline-flex" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>
             <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
           </Button>
-        </section>
+        </div>
+        </SectionCard>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card p-3 md:hidden">
         <span className="flex flex-col text-base tabular-nums"><span className="text-muted-foreground">Total</span><strong>{rp(due)}</strong></span>
@@ -243,6 +246,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
 
 function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: () => void }) {
   const s = d.shipment
+  const w = useWorkspace()
   const [msg, setMsg] = useState<string | null>(null)
   const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
@@ -260,7 +264,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
   }
   return (
     <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-      <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 md:p-6">
+      <Panel className="flex flex-col gap-4">
         {s.dispatch_state === "issued" ? (
           <>
             <p className="flex items-center gap-2 text-lg font-semibold text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
@@ -269,6 +273,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
             {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
             {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
             <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
+            {owner && w.hints.sandboxTools ? <SimulateStatus slug={s.slug} reload={reload} /> : null}
           </>
         ) : s.dispatch_state === "provider_unpaid_hold" ? (
           <>
@@ -301,8 +306,37 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
             </div>
           </div>
         ) : null}
-      </section>
+      </Panel>
       <Summary d={d} owner={owner} />
+    </div>
+  )
+}
+
+/** Sandbox only (DEC-238): Mengantar `POST /order/simulation` moves this order without a real courier update. */
+function SimulateStatus({ slug, reload }: { slug: string; reload: () => void }) {
+  const [msg, setMsg] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const go = async (status: "ON DELIVERY" | "DELIVERED" | "RTS") => {
+    setPending(true)
+    setMsg(null)
+    try {
+      await api("/dev/simulate-status", { body: { slug, status } })
+      reload()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.body.message : "Simulasi gagal.")
+    } finally {
+      setPending(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
+      <p className="text-base font-medium">Simulasi status (sandbox)</p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" disabled={pending} onClick={() => go("ON DELIVERY")}>Sedang diantar</Button>
+        <Button variant="outline" disabled={pending} onClick={() => go("DELIVERED")}>Terkirim</Button>
+        <Button variant="outline" disabled={pending} onClick={() => go("RTS")}>Retur</Button>
+      </div>
+      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
     </div>
   )
 }

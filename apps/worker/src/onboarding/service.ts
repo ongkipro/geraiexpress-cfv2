@@ -6,6 +6,7 @@
 import { emit } from "@gx/telemetry"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { OnboardingState } from "../do/gerai-vault/connection"
+import { coordinate } from "../do/gerai-vault/settings"
 import { enqueueEmailStatement } from "../email/outbox"
 import { hostCache, platformHostOf } from "../host/lookup"
 import { AppError } from "../http/envelope"
@@ -78,8 +79,9 @@ export function validateApplication(input: ApplicationInput): { slug: string; bu
   if (input.consentMengantar !== true) {
     throw new AppError(422, "CONSENT_REQUIRED", "Setujui pembuatan akun Mengantar atas nama gerai Anda.", { consentMengantar: "Wajib disetujui." })
   }
-  const lat = typeof o.latitude === "number" && Number.isFinite(o.latitude) ? o.latitude : null
-  const lng = typeof o.longitude === "number" && Number.isFinite(o.longitude) ? o.longitude : null
+  const lat = coordinate(o.latitude, 90)
+  const lng = coordinate(o.longitude, 180)
+  if (lat === undefined || lng === undefined || (lat === null) !== (lng === null)) throw new AppError(422, "INVALID_PINPOINT", "Titik koordinat tidak valid. Isi latitude dan longitude sekaligus, atau kosongkan keduanya.", { [lat === undefined || (lat === null && lng !== null) ? "latitude" : "longitude"]: "Contoh: -6.9456 dan 107.5703." })
   return {
     slug,
     businessName,
@@ -93,8 +95,8 @@ export function validateApplication(input: ApplicationInput): { slug: string; bu
       areaLabel: str(o.areaLabel, "areaLabel", 200, "Wilayah"),
       streetAddress: str(o.streetAddress, "streetAddress", 300, "Alamat lengkap"),
       postalCode: typeof o.postalCode === "string" ? o.postalCode.slice(0, 10) : null,
-      latitude: lat,
-      longitude: lng,
+      latitude: lat ?? null,
+      longitude: lng ?? null,
     },
   }
 }
@@ -213,7 +215,7 @@ export async function approveApplication(env: Env, input: { applicationId: strin
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
   // The application's pickup point becomes the default outlet (quote origin, labels, pickup).
   const o = JSON.parse(a.outlet_json) as OutletInput
-  await vaultFor(env, a.tenant_id).upsertDefaultOutlet(a.tenant_id, { name: o.name, picName: o.picName, picPhone: o.picPhone, areaId: o.areaId, areaLabel: o.areaLabel, street: o.streetAddress, postalCode: o.postalCode ?? null }, input.now)
+  await vaultFor(env, a.tenant_id).upsertDefaultOutlet(a.tenant_id, { name: o.name, picName: o.picName, picPhone: o.picPhone, areaId: o.areaId, areaLabel: o.areaLabel, street: o.streetAddress, postalCode: o.postalCode ?? null, latitude: o.latitude ?? null, longitude: o.longitude ?? null }, input.now)
   const provisioning = await provisionSeller(env, { tenantId: a.tenant_id, name: a.business_name, email: a.seller_email, outlet: JSON.parse(a.outlet_json) as OutletInput, now: input.now })
   return { tenantId: a.tenant_id, slug: a.slug, provisioning }
 }
@@ -263,7 +265,7 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
   const migrated = await vault.migrate(input.tenantId)
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
   const hasOutlet = await vault.defaultOutlet(input.tenantId)
-  if (hasOutlet.ok && !hasOutlet.value) await vault.upsertDefaultOutlet(input.tenantId, { name: input.outlet.name, picName: input.outlet.picName, picPhone: input.outlet.picPhone, areaId: input.outlet.areaId, areaLabel: input.outlet.areaLabel, street: input.outlet.streetAddress, postalCode: input.outlet.postalCode ?? null }, input.now)
+  if (hasOutlet.ok && !hasOutlet.value) await vault.upsertDefaultOutlet(input.tenantId, { name: input.outlet.name, picName: input.outlet.picName, picPhone: input.outlet.picPhone, areaId: input.outlet.areaId, areaLabel: input.outlet.areaLabel, street: input.outlet.streetAddress, postalCode: input.outlet.postalCode ?? null, latitude: input.outlet.latitude ?? null, longitude: input.outlet.longitude ?? null }, input.now)
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"
   const record = async (state: OnboardingState, extra: { sellerId?: string | null; apiKey?: string | null } = {}, code: string | null = null) => {
     const r = await vault.recordOnboarding(input.tenantId, { environment, state, externalUserId: input.tenantId, ...extra })
