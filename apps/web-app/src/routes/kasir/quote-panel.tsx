@@ -44,7 +44,8 @@ export interface QuoteRequest {
 }
 interface QuoteResponse { cards: QuoteCard[]; medals: { termurah: string | null; tercepat: string | null; cairTerbesar: string | null } }
 
-export const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`
+/** `Rp 12.500`; negatives as `-Rp 2.500`; never `Rp -0`. */
+export const rp = (n: number) => (n < 0 ? `-Rp ${(-n).toLocaleString("id-ID")}` : `Rp ${(n === 0 ? 0 : n).toLocaleString("id-ID")}`)
 const COD_FEE_MODES: Array<{ id: Mode; label: string }> = [
   { id: "buyer_bears_fee", label: "Dibayar penerima" },
   { id: "sender_bears_fee", label: "Dipotong dari pengirim" },

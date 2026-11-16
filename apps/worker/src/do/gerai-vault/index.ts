@@ -15,6 +15,7 @@ import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, 
 import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
+import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -108,6 +109,13 @@ export interface ShipmentDetail {
   receipts: Receipt[]
   events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
 }
+
+export type ShiftView = {
+  shift: ShiftRow | null
+  totals: ShiftTotals | null
+  shifts: Array<ShiftRow & { totals: ShiftTotals }>
+}
+export type PayoutView = { id: string; amount_idr: number; method: string; shift_id: string | null; idempotency_key: string; shipment_slug: string; event: string; created_at: number }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -538,17 +546,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   async recordPayment(
     tenantId: string,
-    p: { op: "mark_paid" | "void_payment"; slug: string; method?: unknown; cashReceivedIdr?: unknown; note?: unknown; reason?: unknown; idempotencyKey: string; actorId: string; role: "gerai_admin" | "cashier"; shiftId: string | null },
+    p: { op: "mark_paid" | "void_payment"; slug: string; method?: unknown; cashReceivedIdr?: unknown; note?: unknown; reason?: unknown; idempotencyKey: string; actorId: string; role: "gerai_admin" | "cashier"; shiftId?: string | null },
   ): Promise<{ ok: true; value: Receipt; replayed: boolean } | { ok: false; refused?: VaultRefusal; error?: PaymentError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
-    let out: ReturnType<typeof markPaid> = { ok: false, error: { status: 500, code: "INTERNAL", message: "" } }
     const now = Date.now()
-    this.ctx.storage.transactionSync(() => {
-      out = p.op === "mark_paid" ? markPaid(this.ctx.storage.sql, tenantId, { ...p, method: p.method }, now) : voidPayment(this.ctx.storage.sql, tenantId, { ...p, reason: p.reason }, now)
-      if (out.ok && !out.replayed) this.audit(tenantId, now, "user", p.actorId, `payment.${p.op}`, { slug: p.slug, amount: out.value.amount_idr, method: out.value.method })
+    return this.ctx.storage.transactionSync(() => {
+      // Money counts in the actor's open shift (spec 03 §4.2); with no open shift the receipt is unattributed.
+      const shiftId = openShiftOf(this.ctx.storage.sql, p.actorId)?.id ?? null
+      const out = p.op === "mark_paid" ? markPaid(this.ctx.storage.sql, tenantId, { ...p, method: p.method, shiftId }, now) : voidPayment(this.ctx.storage.sql, tenantId, { ...p, reason: p.reason, shiftId }, now)
+      if (out.ok && !out.replayed) this.audit(tenantId, now, "user", p.actorId, `payment.${p.op}`, { slug: p.slug, amount: out.value.amount_idr, method: out.value.method, shiftId })
+      return out
     })
-    return out
   }
 
   /**
@@ -806,6 +815,84 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", courierCode).toArray()[0]
     void tenantId
     return { ok: true, value: { addressId, type: pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup", outletId: o.id } }
+  }
+
+  // ---- Shift drawer and sender COD payout (TASK-307) ------------------------------------------------------------
+
+  async shiftOp(
+    tenantId: string,
+    actor: { userId: string; role: "gerai_admin" | "cashier" },
+    op: { op: "current" } | { op: "open"; floatIdr: unknown } | { op: "close"; countedCashIdr: unknown; reasonCode?: unknown; note?: unknown } | { op: "list"; limit?: number },
+  ): Promise<{ ok: true; value: ShiftView } | { ok: false; refused?: VaultRefusal; error?: ShiftError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    return this.ctx.storage.transactionSync((): { ok: true; value: ShiftView } | { ok: false; error: ShiftError } => {
+      if (op.op === "current") {
+        const sh = openShiftOf(sql, actor.userId)
+        return { ok: true, value: { shift: sh, totals: sh ? shiftTotals(sql, sh) : null, shifts: [] } }
+      }
+      if (op.op === "open") {
+        const r = openShift(sql, tenantId, actor.userId, op.floatIdr, now)
+        if (r.ok) this.audit(tenantId, now, "user", actor.userId, "shift.open", { shiftId: r.value.id, float: r.value.opening_float_idr })
+        return r.ok ? { ok: true, value: { shift: r.value, totals: shiftTotals(sql, r.value), shifts: [] } } : r
+      }
+      if (op.op === "close") {
+        const r0 = closeShift(sql, actor.userId, op, now)
+        const r: { ok: true; value: ShiftView & { variance_idr: number | null; id: string; variance_reason_code: string | null; variance_note: string | null } } | { ok: false; error: ShiftError } = r0.ok
+          ? { ok: true, value: { shift: r0.value, totals: r0.value.totals, shifts: [], variance_idr: r0.value.variance_idr, id: r0.value.id, variance_reason_code: r0.value.variance_reason_code, variance_note: r0.value.variance_note } }
+          : r0
+        if (r.ok) this.audit(tenantId, now, "user", actor.userId, "shift.close", { shiftId: r.value.id, variance: r.value.variance_idr, reason: r.value.variance_reason_code })
+        // A non-zero variance is surfaced to the owner (Dashboard alert card + notification).
+        if (r.ok && r.value.variance_idr !== 0) {
+          sql.exec(
+            "INSERT INTO notifications (id, tenant_id, kind, audience, title, body, link, created_at) VALUES (?, ?, 'system', 'owner', ?, ?, '/kasir/shift', ?)",
+            crypto.randomUUID(),
+            tenantId,
+            `Selisih kas shift Rp ${Math.abs(r.value.variance_idr ?? 0).toLocaleString("id-ID")} (${(r.value.variance_idr ?? 0) > 0 ? "lebih" : "kurang"})`,
+            `${r.value.variance_reason_code}: ${r.value.variance_note}`.slice(0, 300),
+            now,
+          )
+        }
+        return r
+      }
+      // Owner sees every shift; a Kasir only their own.
+      const rows = sql
+        .exec<ShiftRow>(`SELECT * FROM cashier_shifts ${actor.role === "gerai_admin" ? "" : "WHERE cashier_user_id = ?"} ORDER BY opened_at DESC LIMIT ?`, ...(actor.role === "gerai_admin" ? [] : [actor.userId]), Math.min(100, op.limit ?? 30))
+        .toArray()
+      return { ok: true, value: { shift: null, totals: null, shifts: rows.map((r) => ({ ...r, totals: shiftTotals(sql, r) })) } }
+    })
+  }
+
+  async payoutOp(
+    tenantId: string,
+    actor: { userId: string; role: "gerai_admin" | "cashier" },
+    op: { op: "payout"; slug: string; amountIdr: unknown; method: unknown; override?: unknown; idempotencyKey: string } | { op: "void"; slug: string; receiptId: string; reason: unknown; idempotencyKey: string },
+  ): Promise<{ ok: true; value: { receipt: PayoutView; replayed: boolean; remaining?: number } } | { ok: false; refused?: VaultRefusal; error?: ShiftError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    const cashierMayPay = sql.exec<{ cashier_may_pay_sender_cod: number }>("SELECT cashier_may_pay_sender_cod FROM tenant_settings LIMIT 1").toArray()[0]?.cashier_may_pay_sender_cod === 1
+    return this.ctx.storage.transactionSync(() => {
+      const shiftId = openShiftOf(sql, actor.userId)?.id ?? null
+      if (op.op === "payout") {
+        const r = senderPayout(sql, tenantId, { slug: op.slug, amountIdr: op.amountIdr, method: op.method, idempotencyKey: op.idempotencyKey, actorId: actor.userId, role: actor.role, cashierMayPay, shiftId, override: op.override }, now)
+        if (r.ok && !r.replayed) this.audit(tenantId, now, "user", actor.userId, "cod.sender_payout", { slug: op.slug, amount: r.value.amount_idr, method: r.value.method, override: typeof op.override === "string" ? op.override : null })
+        return r.ok ? { ok: true as const, value: { receipt: r.value, replayed: r.replayed, remaining: r.remaining } } : r
+      }
+      const r = voidSenderPayout(sql, tenantId, { slug: op.slug, receiptId: op.receiptId, reason: op.reason, idempotencyKey: op.idempotencyKey, actorId: actor.userId, role: actor.role, shiftId }, now)
+      if (r.ok && !r.replayed) this.audit(tenantId, now, "user", actor.userId, "cod.sender_payout_void", { slug: op.slug, receiptId: op.receiptId })
+      return r.ok ? { ok: true as const, value: { receipt: r.value, replayed: r.replayed } } : r
+    })
+  }
+
+  /** Test/finance hook: records Mengantar's reconciled COD credit for an INV (TASK-401 writes this from /invoices). */
+  async setReconciledCodCredit(tenantId: string, slug: string, amountIdr: number): Promise<VaultResult<boolean>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
   }
 
   // ---- Printing (TASK-306) ---------------------------------------------------------------------------------------

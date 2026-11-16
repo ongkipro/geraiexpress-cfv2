@@ -18,7 +18,7 @@ import { projectFor } from "../dto/projection"
 import { escposBytes, labelsPdf, rollLines, rollText } from "@gx/thermal-print"
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
-import type { ContactOp } from "../do/gerai-vault"
+import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
@@ -321,6 +321,31 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   }
   r("GET", "/shipments/:slug", "app_member", "role", (c) => detail(c, slugParam(c)))
 
+  // Shift drawer and sender COD payout (TASK-307, spec 03 §1.2, §4). Never via API key or MCP (session routes only).
+  const actorOf = (c: AppCtx) => ({ userId: c.get("session").user.id, role: c.get("membership")!.role })
+  const shift = async (c: AppCtx, op: Parameters<GeraiVaultDO["shiftOp"]>[2]) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).shiftOp(m.tenantId, actorOf(c), op)
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, r.value))
+  }
+  r("GET", "/shift", "app_member", "role", (c) => shift(c, { op: "current" }))
+  r("GET", "/shifts", "app_member", "role", (c) => shift(c, { op: "list" }))
+  r("POST", "/shift/open", "app_member", "role", async (c) => shift(c, { op: "open", floatIdr: (await body(c)).openingFloatIdr }))
+  r("POST", "/shift/close", "app_member", "role", async (c) => {
+    const b = await body(c)
+    return shift(c, { op: "close", countedCashIdr: b.countedCashIdr, reasonCode: b.reasonCode, note: b.note })
+  })
+  r("POST", "/shipments/:slug/cod-payout", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const slug = slugParam(c)
+    const op = b.op === "void" ? { op: "void" as const, slug, receiptId: String(b.receiptId ?? ""), reason: b.reason, idempotencyKey: idemKey(c) } : { op: "payout" as const, slug, amountIdr: b.amountIdr, method: b.method, override: b.override, idempotencyKey: idemKey(c) }
+    const r = await vaultFor(c.env, m.tenantId).payoutOp(m.tenantId, actorOf(c), op)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+
   // Printing (TASK-306, DEC-224, DEC-229): exact-size PDFs (PC-first), 58 mm ESC/POS bytes, bulk ≤ 50. The first
   // print records `first_printed_at`; reprints need a reason (audited). Label data comes from immutable snapshots.
   const trackingHost = (c: AppCtx) => `${c.get("membership")!.tenantSlug}.${c.env.TENANT_ZONE}`
@@ -405,7 +430,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const b = await body(c)
     const op = b.op === "void_payment" ? "void_payment" : "mark_paid"
     // Kasir may void only within the same open shift (spec 03 §1.1); with no shift (TASK-307) the object refuses it.
-    const r = await vaultFor(c.env, m.tenantId).recordPayment(m.tenantId, { op, slug, method: b.method, cashReceivedIdr: b.cashReceivedIdr, note: b.note, reason: b.reason, idempotencyKey: idemKey(c), actorId: c.get("session").user.id, role: m.role, shiftId: null })
+    const r = await vaultFor(c.env, m.tenantId).recordPayment(m.tenantId, { op, slug, method: b.method, cashReceivedIdr: b.cashReceivedIdr, note: b.note, reason: b.reason, idempotencyKey: idemKey(c), actorId: c.get("session").user.id, role: m.role })
     if (!r.ok) return vaultErr(r)
     return ok({ receipt: r.value, replayed: r.replayed })
   })

@@ -13,7 +13,7 @@ export function DashboardPage() {
           <p className="text-base">Mulai kiriman baru dari tombol <strong>Kiriman Baru</strong> atau pindai QR pelanggan.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link to="/kasir" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Buat Pengiriman</Link>
-            <Link to="/kasir/$sub" params={{ sub: "shift" }} className="inline-flex h-11 items-center rounded-lg border px-4 text-base font-medium md:h-10">Shift Loket</Link>
+            <Link to="/kasir/shift" className="inline-flex h-11 items-center rounded-lg border px-4 text-base font-medium md:h-10">Shift Loket</Link>
           </div>
         </section>
       </div>

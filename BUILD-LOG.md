@@ -380,3 +380,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   the sorting pill — both fixed with tests.
 - Flaky e2e root cause: the drawer switched to reprint mode immediately after printing (correct duplicate guard), so the
   test's second click waited on a disabled button; the test now asserts that state instead.
+
+## 2026-11-16 — TASK-307 Shift drawer and sender COD payout (M3)
+
+- Shipped: cashier shifts in the tenant object (one open per cashier enforced by a partial unique index), shift
+  attribution of every receipt, live drawer totals, close with variance reason + owner notification, sender COD
+  payout and its owner-only reversal, `/kasir/shift`, payout section on the INV.
+- Evidence: Workers tests — open/tunai/QRIS/void → expected cash 150.000 and exact close; variance −5.500 needs code
+  + note and notifies the owner; Kasir sees own shifts, owner all; INV issued in shift A and paid in shift B counts in
+  B and cannot be voided by A's cashier; payout refused before settlement (owner override with reason works), tunai
+  needs a shift, partial 100.000 + 45.000 of 145.000 payable, over-payout 422, idempotent replay, transfer leaves the
+  drawer untouched, tunai reversal puts cash back; Kasir payout only with `Kasir boleh bayar COD`, never a reversal.
+  e2e at three viewports. Display fix: negative/zero money never renders as `Rp -0`.

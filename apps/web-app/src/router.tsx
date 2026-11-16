@@ -19,6 +19,7 @@ import { PengirimPage } from "./routes/kontak/pengirim"
 import { PenerimaPage } from "./routes/kontak/penerima"
 import { KasirPage } from "./routes/kasir/index"
 import { CekCepatPage } from "./routes/kasir/cek-cepat"
+import { ShiftPage } from "./routes/kasir/shift"
 import { KirimanDetailPage } from "./routes/kiriman/detail"
 import { LabelPrivasiPage } from "./routes/pengaturan/label-privasi/page"
 import { CetakMassalPage } from "./routes/kiriman/cetak-massal/page"
@@ -95,6 +96,7 @@ const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/k
 const cekCepatRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-cepat", component: CekCepatPage })
 const cetakMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/cetak-massal", component: CetakMassalPage })
 const kirimanDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/$slug", component: KirimanDetailPage })
+const shiftRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/shift", component: ShiftPage })
 const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: soonPage("Kiriman", "Daftar kiriman dengan pencarian, filter dan ekspor sedang disiapkan.", "TASK-311") })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
@@ -103,7 +105,7 @@ const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: 
 const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: soonPage("Pengaturan", "Menu pengaturan lengkap sedang disiapkan. Ekspedisi Aktif dan Mengantar sudah bisa dibuka.", "TASK-310") })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: soonPage("Akun Saya", "Profil, kata sandi dan sesi aktif sedang disiapkan.", "TASK-310") })
 const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: soonPage("Bantuan & Panduan", "Panduan penggunaan sedang disiapkan. Butuh bantuan sekarang? Hubungi bantuan@geraiexpress.com.", "TASK-310") })
-const comingSoonRoutes = [kasirRoute, cekCepatRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
+const comingSoonRoutes = [kasirRoute, cekCepatRoute, shiftRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })

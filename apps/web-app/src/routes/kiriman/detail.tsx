@@ -259,6 +259,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
             <p className="text-base tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
             <p className="text-base">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
             {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
+            {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
             <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
           </>
         ) : s.dispatch_state === "provider_unpaid_hold" ? (
@@ -309,5 +310,45 @@ function Reveal({ slug, preset }: { slug: string; preset: MaskPreset }) {
       </Field>
       <div className="flex gap-2"><Button type="submit" disabled={reason.trim().length < 5}>Buka</Button><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button></div>
     </form>
+  )
+}
+
+function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: () => void }) {
+  const s = d.shipment
+  const payable = Number(s.sender_cod_payable_idr ?? 0)
+  const paid = Number((s as Record<string, unknown>).sender_cod_paid_idr ?? 0)
+  const settled = (s as Record<string, unknown>).reconciled_provider_cod_credit_idr !== null && (s as Record<string, unknown>).reconciled_provider_cod_credit_idr !== undefined
+  const [amount, setAmount] = useState("")
+  const [method, setMethod] = useState<"tunai" | "transfer">("tunai")
+  const [override, setOverride] = useState("")
+  const [msg, setMsg] = useState<string | null>(null)
+  const [key] = useState(newKey)
+  const remaining = payable - paid
+  async function pay() {
+    setMsg(null)
+    const res = await fetch(`/api/app/shipments/${s.slug}/cod-payout`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ amountIdr: Number(amount.replace(/\D/g, "")), method, override: settled ? undefined : override }) })
+    const j = (await res.json()) as { ok: boolean; error?: { message: string } }
+    if (!j.ok) setMsg(j.error!.message)
+    else reload()
+  }
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <p className="text-base font-medium tabular-nums">Hak COD pengirim {rp(payable)} · sudah dibayar {rp(paid)} · sisa {rp(remaining)}</p>
+      {remaining > 0 ? (
+        <>
+          {!settled ? <p className="text-base text-muted-foreground">Dana COD belum masuk ke saldo Mengantar.{owner ? " Pemilik bisa bayar lebih dulu dengan alasan." : ""}</p> : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <Field><FieldLabel htmlFor="cair">Nominal pencairan</FieldLabel><Input id="cair" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="w-40 tabular-nums" /></Field>
+            <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as "tunai" | "transfer")} variant="outline" aria-label="Cara pencairan">
+              <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
+              <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          {!settled && owner ? <Field><FieldLabel htmlFor="lebih-dulu">Alasan bayar sebelum cair</FieldLabel><Input id="lebih-dulu" value={override} onChange={(e) => setOverride(e.target.value)} maxLength={200} /></Field> : null}
+          <div><Button variant="outline" onClick={pay} disabled={!amount}>Cairkan ke Pengirim</Button></div>
+        </>
+      ) : null}
+      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+    </div>
   )
 }

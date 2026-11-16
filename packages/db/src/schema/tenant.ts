@@ -1,5 +1,6 @@
 // GeraiVaultDO tenant tables (ADR-0006 §2). Mirrors packages/db/migrations/tenant/*.sql (drift test).
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 export const tenantSettings = sqliteTable("tenant_settings", {
   tenantId: text("tenant_id").primaryKey(),
@@ -191,6 +192,8 @@ export const shipments = sqliteTable(
     maskPreset: text("mask_preset", { enum: ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"] }).notNull().default("standar_gerai"),
     maskSnapshotJson: text("mask_snapshot_json"),
     pickupSnapshotJson: text("pickup_snapshot_json"),
+    senderCodPaidIdr: integer("sender_cod_paid_idr"),
+    reconciledProviderCodCreditIdr: integer("reconciled_provider_cod_credit_idr"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -417,3 +420,22 @@ export const maskingUsage = sqliteTable("masking_usage", {
   wibDay: text("wib_day").primaryKey(),
   count: integer("count").notNull(),
 })
+
+export const cashierShifts = sqliteTable(
+  "cashier_shifts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    cashierUserId: text("cashier_user_id").notNull(),
+    openedAt: integer("opened_at").notNull(),
+    openingFloatIdr: integer("opening_float_idr").notNull(),
+    closedAt: integer("closed_at"),
+    countedCashIdr: integer("counted_cash_idr"),
+    expectedCashIdr: integer("expected_cash_idr"),
+    varianceIdr: integer("variance_idr"),
+    varianceReasonCode: text("variance_reason_code", { enum: ["salah_kembalian", "uang_palsu", "lupa_catat", "pengeluaran_kecil", "selisih_lain"] }),
+    varianceNote: text("variance_note"),
+    state: text("state", { enum: ["open", "closed"] }).notNull(),
+  },
+  (t) => [uniqueIndex("cashier_shifts_one_open").on(t.cashierUserId).where(sql`state = 'open'`), index("cashier_shifts_opened").on(t.openedAt)],
+)
