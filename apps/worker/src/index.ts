@@ -15,6 +15,7 @@ import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
 import { handleMinisite } from "./minisite"
+import { handleBrand } from "./brand"
 import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -83,7 +84,9 @@ export default {
         return m ? handleMengantarWebhook(request, env, m[1]!) : new Response(null, { status: 404 })
       }
       case "MARKETING_APEX":
-        return notFoundHtml()
+        // Brand site (TASK-502). API families are foreign on the apex (ADR-0002); no cookies are set here.
+        if (isApiFamily(path)) return notFoundHtml()
+        return handleBrand(request, env, ctx.host)
     }
   },
   async queue(batch, env): Promise<void> {

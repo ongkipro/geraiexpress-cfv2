@@ -544,3 +544,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   Independent visual verdict not yet given → UNVERIFIED until the final review pass.
 - Changed older tests: routing test's write-method case on a tenant host is `PUT` (the mini-site now serves
   `POST /`); the placeholder-page test now covers the `sedang disiapkan` page.
+
+## 2026-11-16 — TASK-502 Brand site and POS sandbox (M5)
+
+- Shipped: seven-page SSR brand site on `geraiexpress.com` with a login-free counter simulation, sitemap/robots,
+  JSON-LD, and a legal footer that shows only filled company fields.
+- Evidence: every page 200 with `- GeraiExpress` titles, 120–155-char descriptions, canonical, one h1, and no
+  `Set-Cookie` even when an app cookie is sent; API families 404; sitemap lists exactly the 7 pages; footer empty →
+  no `NIB`/`PT`, filled → `PT Contoh Kirim Nusantara · NIB … · Jl. …` and `/ketentuan` names the operator; the demo
+  page contains no `fetch(`/`/api/`. e2e: demo receipt shows the chosen courier, `Daftar Gerai` → app sign-up, no
+  cookies on the apex. Lighthouse mobile 100 across four pages. Rendered narrow + wide, H1 shortened, nav wraps on
+  phones. Visual acceptance UNVERIFIED (independent verdict pending).

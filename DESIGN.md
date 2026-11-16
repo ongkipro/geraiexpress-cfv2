@@ -76,3 +76,17 @@ band; 6–8 px radius; no cards, no imagery (no owner photos exist yet — the o
 C1: SSR HTML + inline CSS < 35 KB; JavaScript only for the area search and the Turnstile widget.
 C2: one column ≤ 640 px for forms on every width; header and tabs span the 960 px frame.
 C3: anonymous tracking shows initials + district/city only; the 4-digit gate is the only way to the recipient name.
+
+## Direction — brand site `geraiexpress.com` (TASK-502)
+
+Picked-by: inherited direction A + visual 03 §2 (owner-approved wireframe); no separate owner pick → visual
+acceptance UNVERIFIED until the independent final pass.
+Surface/job: shop owners (konter pulsa, fotokopi, kelontong, agen) deciding "is this worth signing up for and does
+it fit my counter?"
+Sections: plain wordmark + 5-link nav → hero (one offer headline, one sentence, `Daftar Gerai` + `Coba Simulasi
+Kasir`) → three counter benefits (band) → money trust + free gerai page → existing-equipment note (band) → legal
+footer (filled fields only). `/simulasi-kasir` = static synthetic demo, no login, no API.
+### Composition contract
+C1: SSR, no client framework, no cookies on the apex; JS only on `/simulasi-kasir`.
+C2: no imagery until the owner supplies real counter photos (no invented customers, metrics or logos).
+C3: titles `Halaman - GeraiExpress`, meta descriptions 120–155 chars, single h1 per page.
