@@ -668,3 +668,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Test fix: the unit `10,000 slugs → 0 duplicates` case asserted zero raw collisions of the generator (p ≈ 0.23 % per
   run, seen once); it now bounds raw collisions at 2, while the TASK-108 guarantee (0 duplicates per tenant through
   the retrying allocator) stays proven by `apps/worker/test/slug/allocator.test.ts`.
+
+## 2026-11-16 — Integrated run on the review-fix tree (`e914563`)
+
+- `scripts/ci/integrated-gate.sh REVIEW-GATE`: typecheck, lint, unit, build, worker, migrations, isolation, security
+  (bundle audit + red fixtures + security-check) and e2e (every Playwright spec at 390/768/1280, incl. the Turnstile
+  auth pages and the POS service fee/packing controls) — all RECORDED PASS in `delivery-ledger`.
