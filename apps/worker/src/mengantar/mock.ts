@@ -14,7 +14,28 @@ export const mockUnsupported = new Set<string>()
 export const mockCodFeeUnstable = { on: false, n: 0 }
 
 /** Fault injection for tests: the next call to a route throws a timeout (after or before Mengantar applied it). */
-export const mockFaults: { regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"; apiKey?: "timeout" } = {}
+export const mockFaults: {
+  regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"
+  apiKey?: "timeout"
+  order?: "timeout_after_create" | "timeout_before_create" | "validation_error" | "replayed_5xx" | "unavailable"
+  deleteOrder?: "timeout_after_delete" | "refused"
+  readBack?: "timeout"
+} = {}
+
+/** Seller balance per mock key (IDR); an order the balance cannot cover is created unpaid (no AWB). */
+export const mockSeller = { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0 }
+type MockOrder = { _id: string; ORDER_ID: string; cnote_no: string | null; batch: string; batch_id: string; isPaid: boolean; status: string; statusCategory: string; destinationMark: string; DESTINATION_CODE: string | null; WEIGHT: string; COD_FEE: string; courier: string; cost: number; history: Array<{ date: string; statusCategory: string }> }
+/** Orders created through the mock `POST /order`, by ORDER_ID. */
+export const mockCreated = new Map<string, MockOrder>()
+const idempotent = new Map<string, { status: number; body: unknown }>()
+const hex24 = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("")
+const jakartaNow = () => {
+  const d = new Date(Date.now() + 7 * 3600_000)
+  const p2 = (n: number) => String(n).padStart(2, "0")
+  return `${p2(d.getUTCDate())}-${p2(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`
+}
+const digits = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => String(b % 10)).join("")
+const awbFor = (courier: string) => `${courier.toUpperCase().slice(0, 3)}${digits(10)}`
 
 const sellers = new Map<string, { sellerId: string; email: string; apiKey: string; callbackSecret?: string }>()
 const takenEmails = new Set(["sudahada@contoh.test"])
@@ -58,9 +79,99 @@ export const mockFetch: typeof fetch = async (input, init) => {
     return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey } })
   }
   if (/^\/api\/public\/[^/]+\/order$/.test(p) && (init?.method ?? "GET") === "GET") {
+    if (mockFaults.readBack === "timeout") {
+      delete mockFaults.readBack
+      throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
+    }
+    const kw = url.searchParams.get("keyword")
+    if (kw !== null) {
+      const hits = [...mockCreated.values()].filter((o) => o.destinationMark.toUpperCase() === kw.toUpperCase())
+      return json(200, { success: true, data: hits, nextCursor: null })
+    }
     const id = url.searchParams.get("tracking_id") ?? url.searchParams.get("order_id") ?? ""
+    const created = mockCreated.get(id) ?? [...mockCreated.values()].find((o) => o.cnote_no === id)
+    if (created) return json(200, { success: true, data: created })
     const o = mockOrders.get(id)
     return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })
+  }
+  if (/^\/api\/public\/[^/]+\/address$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: body._id ?? hex24() } })
+  if (/^\/api\/public\/[^/]+\/time$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: hex24(), date: body.date, time: body.time } })
+  if (/^\/api\/public\/[^/]+\/order$/.test(p) && init?.method === "POST") {
+    const headers = new Headers(init?.headers)
+    const key = headers.get("idempotencyKey") ?? headers.get("idempotencykey") ?? ""
+    const fault = mockFaults.order
+    delete mockFaults.order
+    if (fault === "timeout_before_create") throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
+    if (fault === "unavailable") return json(503, { success: false, code: "IDEMPOTENCY_UNAVAILABLE", message: "unavailable" })
+    const prior = idempotent.get(key)
+    if (prior) return new Response(JSON.stringify(prior.body), { status: prior.status, headers: { "content-type": "application/json", "idempotent-replayed": "true" } })
+    if (fault === "validation_error") return json(400, { success: false, code: "VALIDATION_ERROR", message: "customerPhone must be 10-15 digits" })
+    mockSeller.createCalls++
+    const o = body.orders?.[0] ?? {}
+    const courier = String(body.courier)
+    // The debit the mock charges: 10.000 per kg (deterministic, independent of the quote mock's tariffs).
+    const cost = 10_000 * Math.max(1, Math.ceil(Number(o.weight ?? 1)))
+    const paid = mockSeller.balanceIdr >= cost
+    if (paid) mockSeller.balanceIdr -= cost
+    const batch_id = hex24()
+    const order: MockOrder = {
+      _id: hex24(),
+      ORDER_ID: `MGT-${digits(8)}`,
+      cnote_no: paid ? awbFor(courier) : null,
+      batch: `B-${batch_id.slice(0, 6).toUpperCase()}`,
+      batch_id,
+      isPaid: paid,
+      status: paid ? "PENDING PICKUP" : "UNPAID",
+      statusCategory: paid ? "PENDING PICKUP" : "ACTIVE",
+      destinationMark: String(o.destinationMark ?? ""),
+      DESTINATION_CODE: "BDO-CBL02",
+      WEIGHT: String(o.weight),
+      COD_FEE: o.COD === undefined ? "0" : String(Math.ceil((Number(o.COD) * 0.028) / 1000) * 1000),
+      courier,
+      cost,
+      history: [{ date: jakartaNow(), statusCategory: paid ? "PENDING PICKUP" : "ACTIVE" }],
+    }
+    mockCreated.set(order.ORDER_ID, order)
+    const resBody = { success: true, data: [order], batch_id, batch: order.batch, errors: [] }
+    if (fault === "replayed_5xx") {
+      idempotent.set(key, { status: 502, body: { success: false, code: "UPSTREAM_ERROR", message: "partial" } })
+      return new Response(JSON.stringify({ success: false, code: "UPSTREAM_ERROR", message: "partial" }), { status: 502, headers: { "content-type": "application/json", "idempotent-replayed": "true" } })
+    }
+    idempotent.set(key, { status: 200, body: resBody })
+    if (fault === "timeout_after_create") throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
+    return json(200, resBody)
+  }
+  if (/^\/api\/public\/[^/]+\/order\/pay-unpaid$/.test(p)) {
+    mockSeller.payUnpaidCalls++
+    const hit = [...mockCreated.values()].filter((o) => o.batch_id === body.batch_id && !o.isPaid)
+    const need = hit.reduce((n, o) => n + o.cost, 0)
+    if (mockSeller.balanceIdr < need) return json(402, { success: false, code: "INSUFFICIENT_BALANCE", message: "Saldo tidak cukup" })
+    mockSeller.balanceIdr -= need
+    for (const o of hit) {
+      o.isPaid = true
+      o.cnote_no = awbFor(o.courier)
+      o.status = "PENDING PICKUP"
+      o.statusCategory = "PENDING PICKUP"
+      o.history.push({ date: jakartaNow(), statusCategory: "PENDING PICKUP" })
+    }
+    return json(200, { success: true, data: { count: hit.length, cnote_no: hit.map((o) => o.cnote_no) } })
+  }
+  if (/^\/api\/public\/[^/]+\/order$/.test(p) && init?.method === "DELETE") {
+    mockSeller.deleteCalls++
+    const fault = mockFaults.deleteOrder
+    delete mockFaults.deleteOrder
+    if (fault === "refused") return json(400, { success: false, code: "CANNOT_CANCEL", message: "Order sudah dijemput" })
+    for (const id of body.ids ?? []) {
+      const o = mockCreated.get(id) ?? [...mockCreated.values()].find((x) => x._id === id || x.cnote_no === id)
+      if (o && ["PENDING PICKUP", "ACTIVE", "UNPAID"].includes(o.status)) {
+        if (o.isPaid) mockSeller.balanceIdr += o.cost
+        o.status = "CANCELED"
+        o.statusCategory = "CANCELED"
+        o.history.push({ date: jakartaNow(), statusCategory: "CANCELED" })
+      }
+    }
+    if (fault === "timeout_after_delete") throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
+    return json(200, { success: true })
   }
   if (/^\/api\/public\/[^/]+\/order\/estimate$/.test(p)) {
     // Deterministic offline tariffs: price grows with weight; codFee = 2.8 % of COD_AMOUNT rounded up to Rp1.000
@@ -117,6 +228,9 @@ export function resetMock() {
   mockOrders.clear()
   mockDiscountBps.clear()
   mockUnsupported.clear()
+  mockCreated.clear()
+  idempotent.clear()
+  Object.assign(mockSeller, { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0 })
   mockCodFeeUnstable.on = false
   mockCodFeeUnstable.n = 0
   for (const k of Object.keys(mockFaults)) delete mockFaults[k as keyof typeof mockFaults]

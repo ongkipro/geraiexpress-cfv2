@@ -338,3 +338,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   frozen snapshot values, observed bps 1989 (lossy floor) and cargo 2500, per-tenant 429, Kasir projection; e2e at three
   viewports; UI gates 0 fail; mutation red.
 - Decision: `pricing/quote` is workspace code; the Super Admin source scan covers `pricing/rules` only.
+
+## 2026-11-16 — TASK-304 POS checkout, payment record, dispatch, cancellation (M3)
+
+- Shipped: checkout projection on `shipments`, write-ahead `dispatch_journal`, append-only `counter_receipts`, the
+  dispatch/payment/cancel flows in `GeraiVaultDO`, SDK `saveAddress`/`reserveTime`, a full offline Mengantar order
+  mock (idempotency replay, unpaid on low balance, pay-unpaid, delete, faults), checkout routes and screen.
+- Evidence (Workers): payment state machine (receipt, change, same-key replay, void with reason, Kasir void refused
+  outside its shift, key required); issue with destinationMark = INV; concurrent + repeated submit → one order;
+  timeout after create → read-back finds it, no resend; timeout + failed read-back → `reconciliation_needed` survives
+  restart, read-back → draft, re-issue with a new key; provider 4xx → failed → re-issue; low balance →
+  `provider_unpaid_hold` → 402 until top-up → `payUnpaid` → AWB; Indonesian readiness errors; cancel paths (draft,
+  void-first, courier refusal, timeout after delete, read-back down → `cancel_unknown` → resolved without resending
+  DELETE); issue/cancel 429; Kasir detail without cost/margin; `shipment_index` restart + lost-ack + stale version;
+  dispatch refused while the key rotates. e2e: scripted checkout 3–5 s per viewport (< 45 s).

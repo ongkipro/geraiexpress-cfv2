@@ -19,6 +19,7 @@ import { PengirimPage } from "./routes/kontak/pengirim"
 import { PenerimaPage } from "./routes/kontak/penerima"
 import { KasirPage } from "./routes/kasir/index"
 import { CekCepatPage } from "./routes/kasir/cek-cepat"
+import { KirimanDetailPage } from "./routes/kiriman/detail"
 
 // Route table for the app SPA. Feature tasks add their routes under src/routes/** and register them here.
 export interface Me {
@@ -89,7 +90,7 @@ const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => workspaceRo
 const soonPage = (title: string, body: string, task: string) => () => <ComingSoon title={title} body={body} task={task} />
 const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir", component: KasirPage })
 const cekCepatRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-cepat", component: CekCepatPage })
-const kirimanDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/$slug", component: soonPage("Kiriman", "Langkah pengirim, penerima, pembayaran dan cetak label sedang disiapkan. Ongkir untuk INV ini sudah dikunci.", "TASK-304") })
+const kirimanDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/$slug", component: KirimanDetailPage })
 const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: soonPage("Kiriman", "Daftar kiriman dengan pencarian, filter dan ekspor sedang disiapkan.", "TASK-311") })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })

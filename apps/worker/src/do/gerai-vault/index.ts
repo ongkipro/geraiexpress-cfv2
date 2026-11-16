@@ -9,13 +9,15 @@ import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, t
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
-import type { Courier, CourierRate } from "@gx/mengantar-sdk"
+import type { Courier, CourierRate, OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
 import { phoneHmac } from "../../admin/monitor"
+import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome } from "./dispatch"
+import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import type { MediaPurpose } from "../../media"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
-import { dueTimers, flagStuck, nextTimerAt, pollCandidates, recordProviderObservation, setTimer, findShipment, type TimerName } from "./status"
+import { dueTimers, flagStuck, nextTimerAt, pollCandidates, readShipment, recordProviderObservation, setDispatchStatus, setTimer, findShipment, type ShipmentRow, type TimerName } from "./status"
 
 export type ContactOp =
   | { op: "list_senders"; q?: string; filter?: "all" | "walk_in" | "reseller_dropship" }
@@ -92,6 +94,15 @@ export type FrozenQuote = {
   estimated_margin_idr: number
   quoted_at: number
   expires_at: number
+}
+
+export interface ShipmentDetail {
+  shipment: Record<string, SqlStorageValue>
+  quote: Record<string, SqlStorageValue> | null
+  sender: SenderRow | null
+  recipient: RecipientRow | null
+  receipts: Receipt[]
+  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
 }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
@@ -478,6 +489,302 @@ export class GeraiVaultDO extends DurableObject<Env> {
       ...cols.map((c) => snap[c] as SqlStorageValue),
     )
     return { ok: true, value: id }
+  }
+
+  // ---- Checkout, payment record, dispatch, cancellation (TASK-304, ADR-0004) -------------------------------------
+
+  private dispatching = new Set<string>()
+
+  /** Detail of one INV for the checkout screen (the API projects it per role). */
+  async shipmentDetail(tenantId: string, slug: string, actorId: string): Promise<VaultResult<ShipmentDetail | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    let draft: ShipmentRow | null = null
+    this.ctx.storage.transactionSync(() => {
+      const r = ensureDraft(sql, tenantId, slug, actorId, Date.now())
+      draft = r.ok ? r.value : null
+    })
+    if (!draft) return { ok: true, value: null }
+    const s = readShipment(sql, slug) as unknown as Record<string, SqlStorageValue>
+    const q = latestQuote(sql, slug)
+    return {
+      ok: true,
+      value: {
+        shipment: s,
+        quote: q as unknown as Record<string, SqlStorageValue> | null,
+        sender: s.sender_contact_id ? readSender(sql, String(s.sender_contact_id)) : null,
+        recipient: s.recipient_contact_id ? readRecipient(sql, String(s.recipient_contact_id)) : null,
+        receipts: receiptsFor(sql, slug),
+        events: sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>("SELECT source, raw_category, mapped_status, event_at FROM shipment_events WHERE slug = ? ORDER BY event_at DESC LIMIT 50", slug).toArray(),
+      },
+    }
+  }
+
+  async setShipmentParties(tenantId: string, slug: string, p: { senderId?: unknown; recipientId?: unknown; content?: unknown; prohibitedAck?: unknown }): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    let e: DispatchError | null = null
+    this.ctx.storage.transactionSync(() => {
+      const d = ensureDraft(this.ctx.storage.sql, tenantId, slug, "system", Date.now())
+      e = d.ok ? setParties(this.ctx.storage.sql, slug, p, Date.now()) : d.error
+    })
+    return e ? { ok: false, error: e } : { ok: true }
+  }
+
+  async recordPayment(
+    tenantId: string,
+    p: { op: "mark_paid" | "void_payment"; slug: string; method?: unknown; cashReceivedIdr?: unknown; note?: unknown; reason?: unknown; idempotencyKey: string; actorId: string; role: "gerai_admin" | "cashier"; shiftId: string | null },
+  ): Promise<{ ok: true; value: Receipt; replayed: boolean } | { ok: false; refused?: VaultRefusal; error?: PaymentError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    let out: ReturnType<typeof markPaid> = { ok: false, error: { status: 500, code: "INTERNAL", message: "" } }
+    const now = Date.now()
+    this.ctx.storage.transactionSync(() => {
+      out = p.op === "mark_paid" ? markPaid(this.ctx.storage.sql, tenantId, { ...p, method: p.method }, now) : voidPayment(this.ctx.storage.sql, tenantId, { ...p, reason: p.reason }, now)
+      if (out.ok && !out.replayed) this.audit(tenantId, now, "user", p.actorId, `payment.${p.op}`, { slug: p.slug, amount: out.value.amount_idr, method: out.value.method })
+    })
+    return out
+  }
+
+  /**
+   * Issue the INV at Mengantar (ADR-0004 §1): fence + journal before the call, one call with `idempotencyKey`, record
+   * the outcome; ambiguous → `reconciliation_needed` (read back, never re-send blindly). A second call while one is in
+   * flight returns `DISPATCH_IN_PROGRESS`; a call after issue returns the issued shipment (double submit → one order).
+   */
+  async dispatchShipment(tenantId: string, slug: string, actorId: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const cur = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
+    if (cur && ["issued", "provider_unpaid_hold", "cancelled"].includes(cur.dispatch_state)) return { ok: true, value: { state: cur.dispatch_state, awb: cur.awb_number } }
+    if (cur && cur.dispatch_state === "reconciliation_needed") return this.reconcileDispatch(tenantId, slug, now)
+    if (this.dispatching.has(slug) || cur?.dispatch_state === "issuing_in_flight") return { ok: false, error: { status: 409, code: "DISPATCH_IN_PROGRESS", message: "Kiriman sedang diproses. Tunggu sebentar." } }
+    if (!cur) this.ctx.storage.transactionSync(() => void ensureDraft(sql, tenantId, slug, actorId, now))
+    const ready = readyToDispatch(sql, slug, now)
+    if (!ready.ok) return { ok: false, error: ready.error }
+    // Per-tenant issue rate limit (spec 10 §4.4): 20 issues per minute.
+    if (!this.allowRate("issue", 20, now)) return { ok: false, error: { status: 429, code: "ISSUE_RATE_LIMITED", message: "Terlalu banyak kiriman diterbitkan dalam semenit. Coba lagi sebentar lagi." } }
+    const key = await this.keyForDispatch(tenantId)
+    if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: key.refused === "KEY_ROTATING" ? "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." : "Gerai belum terhubung ke Mengantar." } }
+    const pickup = await this.pickupFor(tenantId, ready.q.courier_code, key.key)
+    if (!pickup.ok) return { ok: false, error: pickup.error }
+    const attempt = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM dispatch_journal WHERE slug = ? AND op = 'create_order'", slug).one().n + 1
+    const idem = dispatchKey(slug, attempt)
+    const payload = orderPayload(ready.q, ready.sender, ready.recipient, String(ready.s.content_declaration_text), slug, pickup.value)
+    this.dispatching.add(slug)
+    try {
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'create_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify(payload), now, now)
+        setDispatchStatus(sql, slug, "issuing_in_flight", now, {
+          dispatch_state: "issuing_in_flight",
+          true_sender_json: JSON.stringify({ id: ready.sender.id, name: ready.sender.true_name, phone: ready.sender.true_phone, brand: ready.sender.display_brand_name }),
+          true_recipient_json: JSON.stringify({ id: ready.recipient.id, name: ready.recipient.name, phone: ready.recipient.phone, street: ready.recipient.street_address, area: ready.recipient.subdistrict_name }),
+          outlet_id: pickup.value.outletId,
+        })
+      })
+      let outcome: OrderOutcome
+      try {
+        const res = await publicClient(this.env, key.key).createOrder(payload, idem)
+        const item = res.data[0]
+        if (!res.success || !item) outcome = { kind: "rejected", code: "ORDER_REJECTED", message: "Mengantar menolak kiriman." }
+        else if (res.idempotentReplayed && !item.ORDER_ID) outcome = { kind: "ambiguous", reason: "replayed without order" }
+        else outcome = { kind: item.cnote_no ? "issued" : "unpaid", item, batchId: res.batch_id ?? null, batchCode: res.batch ?? null }
+      } catch (err) {
+        const e = err as { ambiguous?: boolean; code?: string | null; message?: string; status?: number | null; idempotentReplayed?: boolean }
+        if (e.ambiguous || e.idempotentReplayed || e.code === "IDEMPOTENCY_REQUEST_UNRESOLVED") outcome = { kind: "ambiguous", reason: e.code ?? e.message ?? "unknown" }
+        else outcome = { kind: "rejected", code: e.code ?? `HTTP_${e.status ?? 0}`, message: (e.message ?? "Mengantar menolak kiriman.").slice(0, 200) }
+      }
+      // A rotation that started during the call makes the recorded outcome unsafe to trust: read back instead.
+      if (!this.keyVersionCurrent(key.version) && outcome.kind !== "rejected") outcome = { kind: "ambiguous", reason: "key rotated during dispatch" }
+      const at = Date.now()
+      this.ctx.storage.transactionSync(() => {
+        recordOutcome(sql, slug, idem, outcome, ready.q.cod_fee_idr, at)
+        this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind })
+      })
+      await this.armOutbox()
+      if (outcome.kind === "ambiguous") return this.reconcileDispatch(tenantId, slug, at)
+      if (outcome.kind === "rejected") return { ok: false, error: { status: 422, code: "PROVIDER_REJECTED", message: `Mengantar menolak kiriman: ${outcome.message}` } }
+      const after = readShipment(sql, slug)!
+      return { ok: true, value: { state: outcome.kind === "issued" ? "issued" : "provider_unpaid_hold", awb: after.awb_number } }
+    } finally {
+      this.dispatching.delete(slug)
+    }
+  }
+
+  /** `reconciliation_needed` → read back by INV (`destinationMark`); found → record, absent → back to draft (safe to retry with a new key). */
+  async reconcileDispatch(tenantId: string, slug: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const key = await this.keyForDispatch(tenantId)
+    if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
+    const q = latestQuote(sql, slug)
+    let found: OrderItem | null = null
+    try {
+      const list = await publicClient(this.env, key.key).listOrders({ keyword: slug.toUpperCase(), size: 10 })
+      found = list.items.find((o) => (o.destinationMark ?? "").toUpperCase() === slug.toUpperCase()) ?? null
+    } catch {
+      return { ok: false, error: { status: 503, code: "RECONCILIATION_PENDING", message: "Status kiriman belum pasti. Sistem akan memeriksa lagi; jangan buat ulang kiriman ini." } }
+    }
+    const journal = sql.exec<{ idempotency_key: string }>("SELECT idempotency_key FROM dispatch_journal WHERE slug = ? AND op = 'create_order' ORDER BY created_at DESC LIMIT 1", slug).toArray()[0]
+    this.ctx.storage.transactionSync(() => {
+      if (found) recordOutcome(sql, slug, journal?.idempotency_key ?? "", { kind: found.cnote_no ? "issued" : "unpaid", item: found, batchId: found.batch_id ?? null, batchCode: found.batch ?? null }, q?.cod_fee_idr ?? 0, now)
+      else {
+        setDispatchStatus(sql, slug, "draft", now, { dispatch_state: "draft", dispatch_error: "Tidak ditemukan di Mengantar setelah diperiksa; aman untuk diterbitkan ulang." })
+        if (journal) sql.exec("UPDATE dispatch_journal SET state = 'failed', error = 'not found on read-back', updated_at = ? WHERE idempotency_key = ?", now, journal.idempotency_key)
+      }
+    })
+    await this.armOutbox()
+    const after = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
+    return { ok: true, value: { state: after?.dispatch_state ?? "draft", awb: after?.awb_number ?? null } }
+  }
+
+  /** `provider_unpaid_hold` → `POST /order/pay-unpaid` (shared primitive, journaled) → read back the AWB. */
+  async payUnpaid(tenantId: string, slug: string, actorId: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const s = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string; mengantar_batch_object_id: string | null; mengantar_order_code: string | null }) | null
+    if (!s) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
+    if (s.dispatch_state !== "provider_unpaid_hold" || !s.mengantar_batch_object_id) return { ok: false, error: { status: 409, code: "NOT_UNPAID_HOLD", message: "Kiriman ini tidak menunggu saldo." } }
+    const key = await this.keyForDispatch(tenantId)
+    if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
+    const idem = `gx-pay-${slug}-${now}`
+    this.ctx.storage.transactionSync(() => {
+      sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id }), now, now)
+    })
+    const client = publicClient(this.env, key.key)
+    let payError: string | null = null
+    try {
+      await client.payUnpaid(s.courier_code as Courier, s.mengantar_batch_object_id)
+    } catch (err) {
+      const e = err as { ambiguous?: boolean; code?: string | null; message?: string }
+      if (!e.ambiguous) {
+        this.ctx.storage.transactionSync(() => sql.exec("UPDATE dispatch_journal SET state = 'failed', error = ?, updated_at = ? WHERE idempotency_key = ?", `${e.code}: ${e.message}`.slice(0, 300), Date.now(), idem))
+        return { ok: false, error: { status: 402, code: e.code ?? "PAY_UNPAID_FAILED", message: e.code === "INSUFFICIENT_BALANCE" ? "Saldo Mengantar belum cukup. Isi saldo dulu, lalu coba lagi." : "Pembayaran ke Mengantar gagal." } }
+      }
+      payError = e.code ?? "ambiguous"
+    }
+    // Whatever happened, the truth is the order itself: read it back.
+    let item: OrderItem | null = null
+    try {
+      item = await client.getOrder({ orderId: String(s.mengantar_order_code) })
+    } catch {
+      item = null
+    }
+    const at = Date.now()
+    this.ctx.storage.transactionSync(() => {
+      if (item?.cnote_no) {
+        recordOutcome(sql, slug, idem, { kind: "issued", item, batchId: s.mengantar_batch_object_id, batchCode: item.batch ?? null }, latestQuote(sql, slug)?.cod_fee_idr ?? 0, at)
+        this.audit(tenantId, at, "user", actorId, "shipment.pay_unpaid", { slug })
+      } else sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", payError ? "unknown" : "failed", payError ?? "no AWB after pay-unpaid", at, idem)
+    })
+    await this.armOutbox()
+    const after = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
+    if (after?.dispatch_state !== "issued") return { ok: false, error: { status: 409, code: "STILL_UNPAID", message: "Resi belum terbit. Periksa saldo Mengantar lalu coba lagi." } }
+    return { ok: true, value: { state: "issued", awb: after.awb_number } }
+  }
+
+  /**
+   * Cancel before pickup (spec 03 §1.1): a paid INV needs its payment voided first; issued orders go through
+   * `DELETE /order` then a read-back (unknown outcome → `cancel_unknown`, resolved only by reading the order).
+   */
+  async cancelShipment(tenantId: string, slug: string, actorId: string, reason: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const s = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string; counter_payment_status: string; mengantar_order_code: string | null; mengantar_order_item_id: string | null }) | null
+    if (!s) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
+    if (s.dispatch_state === "cancelled") return { ok: true, value: { state: "cancelled" } }
+    if (s.counter_payment_status === "paid") return { ok: false, error: { status: 409, code: "VOID_PAYMENT_FIRST", message: "Batalkan pembayaran dulu, baru kiriman bisa dibatalkan." } }
+    if (["issuing_in_flight", "reconciliation_needed"].includes(s.dispatch_state)) return { ok: false, error: { status: 409, code: "DISPATCH_UNRESOLVED", message: "Status penerbitan belum pasti. Tunggu pemeriksaan selesai." } }
+    if (s.custody_stage !== "none" || !["draft", "failed", "issued", "provider_unpaid_hold", "cancel_unknown"].includes(s.dispatch_state) || (s.provider_status && !["ready_for_pickup"].includes(s.provider_status))) {
+      return { ok: false, error: { status: 409, code: "CANNOT_CANCEL", message: "Kiriman sudah dijemput atau diserahkan; tidak bisa dibatalkan di sini." } }
+    }
+    const finishCancel = (at: number) => {
+      this.ctx.storage.transactionSync(() => {
+        setDispatchStatus(sql, slug, "cancelled", at, { dispatch_state: "cancelled", cancelled_at: at, counter_payment_status: "voided", custody_stage: "cancelled_local", custody_at: at })
+        this.audit(tenantId, at, "user", actorId, "shipment.cancel", { slug, reason })
+      })
+    }
+    if (!s.mengantar_order_code) {
+      finishCancel(now)
+      await this.armOutbox()
+      return { ok: true, value: { state: "cancelled" } }
+    }
+    if (!this.allowRate("cancel", 20, now)) return { ok: false, error: { status: 429, code: "CANCEL_RATE_LIMITED", message: "Terlalu banyak pembatalan dalam semenit. Coba lagi sebentar lagi." } }
+    const key = await this.keyForDispatch(tenantId)
+    if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
+    const client = publicClient(this.env, key.key)
+    const idem = `gx-cancel-${slug}-${now}`
+    this.ctx.storage.transactionSync(() => {
+      sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'cancel_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ ids: [s.mengantar_order_item_id ?? s.mengantar_order_code] }), now, now)
+      setDispatchStatus(sql, slug, s.status, now, { dispatch_state: "cancel_in_flight" })
+    })
+    let refusedByProvider: string | null = null
+    if (s.dispatch_state !== "cancel_unknown") {
+      try {
+        await client.deleteOrders(s.courier_code as Courier, [String(s.mengantar_order_item_id ?? s.mengantar_order_code)])
+      } catch (err) {
+        const e = err as { ambiguous?: boolean; code?: string | null; message?: string }
+        if (!e.ambiguous) refusedByProvider = e.message ?? e.code ?? "refused"
+      }
+    }
+    // Read back: the order's status is the only truth after DELETE.
+    let item: OrderItem | null = null
+    try {
+      item = await client.getOrder({ orderId: String(s.mengantar_order_code) })
+    } catch {
+      item = null
+    }
+    const at = Date.now()
+    const cat = (item?.statusCategory ?? item?.status ?? "").toUpperCase()
+    if (item && (cat === "CANCELED" || cat === "CANCELLED")) {
+      this.ctx.storage.transactionSync(() => sql.exec("UPDATE dispatch_journal SET state = 'done', updated_at = ? WHERE idempotency_key = ?", at, idem))
+      finishCancel(at)
+      await this.armOutbox()
+      return { ok: true, value: { state: "cancelled" } }
+    }
+    this.ctx.storage.transactionSync(() => {
+      const known = item !== null
+      sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", known ? "failed" : "unknown", refusedByProvider ?? (known ? `still ${cat}` : "read-back failed"), at, idem)
+      setDispatchStatus(sql, slug, s.status, at, { dispatch_state: known ? s.dispatch_state : "cancel_unknown" })
+    })
+    if (!item) return { ok: false, error: { status: 503, code: "CANCEL_UNKNOWN", message: "Hasil pembatalan belum pasti. Sistem akan memeriksa ulang; jangan kirim paket ini dulu." } }
+    return { ok: false, error: { status: 409, code: "CANCEL_REFUSED", message: `Mengantar menolak pembatalan${refusedByProvider ? `: ${refusedByProvider}` : "."}` } }
+  }
+
+  /** Fixed one-minute window counter per operation, stored in the object (survives restarts). */
+  private allowRate(op: "issue" | "cancel", perMinute: number, now: number): boolean {
+    const sql = this.ctx.storage.sql
+    sql.exec("CREATE TABLE IF NOT EXISTS vault_rate (op TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL)")
+    const w = Math.floor(now / 60_000) * 60_000
+    const r = sql.exec<{ count: number }>(
+      "INSERT INTO vault_rate (op, window_start, count) VALUES (?, ?, 1) ON CONFLICT(op) DO UPDATE SET count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count",
+      op,
+      w,
+    ).one()
+    return r.count <= perMinute
+  }
+
+  /** Pickup address registered at Mengantar for the default outlet (created once), and the courier's pickup mode. */
+  private async pickupFor(tenantId: string, courierCode: string, apiKey: string): Promise<{ ok: true; value: { addressId: string; type: "scheduledPickup" | "dropOff"; outletId: string } } | { ok: false; error: DispatchError }> {
+    const sql = this.ctx.storage.sql
+    const o = sql.exec<{ id: string; name: string; pic_phone: string | null; mengantar_area_id: string | null; mengantar_address_id: string | null; street_address: string | null }>("SELECT id, name, pic_phone, mengantar_area_id, mengantar_address_id, street_address FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    if (!o?.mengantar_area_id) return { ok: false, error: { status: 409, code: "NO_PICKUP_AREA", message: "Titik jemput gerai belum diatur." } }
+    let addressId = o.mengantar_address_id
+    if (!addressId) {
+      try {
+        addressId = await publicClient(this.env, apiKey).saveAddress({ areaId: o.mengantar_area_id, name: o.name, phone: o.pic_phone ?? "", address: o.street_address ?? o.name })
+      } catch {
+        return { ok: false, error: { status: 502, code: "PICKUP_ADDRESS_FAILED", message: "Alamat jemput gerai belum bisa didaftarkan ke Mengantar. Coba lagi." } }
+      }
+      this.ctx.storage.sql.exec("UPDATE tenant_outlets SET mengantar_address_id = ?, updated_at = ? WHERE id = ?", addressId, Date.now(), o.id)
+    }
+    const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", courierCode).toArray()[0]
+    void tenantId
+    return { ok: true, value: { addressId, type: pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup", outletId: o.id } }
   }
 
   // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------

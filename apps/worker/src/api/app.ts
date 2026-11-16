@@ -292,6 +292,80 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(projectFor(m.role, { slug: slug.value, quoteId: frozen.value, card: view, expiresAt: q.expiresAt }), 201)
   })
 
+  // Checkout, payment record, dispatch, cancellation (TASK-304). All state changes run in the tenant object; the
+  // client sends an Idempotency-Key for money events. Kasir responses never contain cost or margin (projection).
+  const slugParam = (c: AppCtx) => {
+    const v = (c.req.param("slug") ?? "").toLowerCase()
+    if (!/^[0-9a-hjkmnp-tv-z]{7}$/.test(v)) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
+    return v
+  }
+  const vaultErr = (r: { refused?: string; error?: { status: number; code: string; message: string; fields?: Record<string, string> } }): never => {
+    if (r.error) throw new AppError(r.error.status, r.error.code, r.error.message, r.error.fields ?? {})
+    throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+  }
+  const detail = async (c: AppCtx, slug: string) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).shipmentDetail(m.tenantId, slug, c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    if (!r.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
+    const v = r.value
+    // Kasir: no cost/margin/discount; owner sees the frozen cost and estimated margin.
+    const shipment = { ...v.shipment, effective_gerai_cost_idr: v.quote?.effective_gerai_cost_idr, estimated_profit_idr: v.quote?.estimated_margin_idr }
+    return ok(projectFor(m.role, { shipment, quote: v.quote, sender: v.sender, recipient: v.recipient, receipts: v.receipts, events: v.events }))
+  }
+  const idemKey = (c: AppCtx) => {
+    const k = c.req.header("idempotency-key") ?? ""
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(k)) throw new AppError(400, "IDEMPOTENCY_KEY_REQUIRED", "Permintaan tidak lengkap. Muat ulang halaman lalu coba lagi.")
+    return k
+  }
+  r("GET", "/shipments/:slug", "app_member", "role", (c) => detail(c, slugParam(c)))
+  r("POST", "/shipments/:slug/parties", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const slug = slugParam(c)
+    const b = await body(c)
+    const r = await vaultFor(c.env, m.tenantId).setShipmentParties(m.tenantId, slug, { senderId: b.senderId, recipientId: b.recipientId, content: b.content, prohibitedAck: b.prohibitedAck })
+    if (!r.ok) return vaultErr(r)
+    return detail(c, slug)
+  })
+  r("POST", "/shipments/:slug/payment", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const slug = slugParam(c)
+    const b = await body(c)
+    const op = b.op === "void_payment" ? "void_payment" : "mark_paid"
+    // Kasir may void only within the same open shift (spec 03 §1.1); with no shift (TASK-307) the object refuses it.
+    const r = await vaultFor(c.env, m.tenantId).recordPayment(m.tenantId, { op, slug, method: b.method, cashReceivedIdr: b.cashReceivedIdr, note: b.note, reason: b.reason, idempotencyKey: idemKey(c), actorId: c.get("session").user.id, role: m.role, shiftId: null })
+    if (!r.ok) return vaultErr(r)
+    return ok({ receipt: r.value, replayed: r.replayed })
+  })
+  r("POST", "/shipments/:slug/dispatch", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const slug = slugParam(c)
+    const r = await vaultFor(c.env, m.tenantId).dispatchShipment(m.tenantId, slug, c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/shipments/:slug/reconcile", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).reconcileDispatch(m.tenantId, slugParam(c))
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/shipments/:slug/pay-unpaid", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).payUnpaid(m.tenantId, slugParam(c), c.get("session").user.id)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/shipments/:slug/cancel", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const reason = typeof b.reason === "string" ? b.reason.trim() : ""
+    if (reason.length < 3 || reason.length > 200) throw new AppError(422, "REASON_REQUIRED", "Tulis alasan pembatalan.", { reason: "Wajib diisi." })
+    const r = await vaultFor(c.env, m.tenantId).cancelShipment(m.tenantId, slugParam(c), c.get("session").user.id, reason)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+
   // Kontak › Pengirim / Penerima (TASK-302, DEC-212). Deposit is owner-only (projection); WA verification only by an
   // interactive counter action of a signed-in member (API keys never reach these routes).
   const contacts = async (c: AppCtx, op: ContactOp, status = 200) => {

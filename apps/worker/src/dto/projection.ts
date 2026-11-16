@@ -11,6 +11,12 @@ export const OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "gerai_shipping_cost_idr",
   "geraiShippingCostIdr",
   "effective_gerai_cost_idr",
+  "estimated_margin_idr",
+  "estimated_profit_idr",
+  "expected_provider_cod_credit_idr",
+  "provider_observed_discount_bps",
+  "assigned_gerai_discount_bps",
+  "raw_discount_percent",
   "provider_reconciled_cost_idr",
   "estimatedSpecialPrice",
   // discount / spread / margin

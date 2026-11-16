@@ -114,6 +114,7 @@ export const InvoicesSchema = z
   .passthrough()
 export type InvoicesResult = z.infer<typeof InvoicesSchema>
 
+export const SaveAddressSchema = z.object({ success: z.literal(true), _id: z.string().optional(), data: z.object({ _id: z.string() }).passthrough().optional() }).passthrough()
 export const PayUnpaidSchema = z.object({ success: z.literal(true), data: z.object({ count: num.optional(), cnote_no: z.array(z.string()).optional() }).passthrough().optional() }).passthrough()
 export const DeleteOrderSchema = z.object({ success: z.boolean() }).passthrough()
 
@@ -166,6 +167,28 @@ export class MengantarPublicClient {
     const data = parse(EstimateSchema, raw, "/order/estimate").data
     // Normalise to a map keyed by rate key.
     return ("price" in data || "unsupported" in data ? { [q.courier]: data as CourierRate } : (data as Record<string, CourierRate>)) as Record<string, CourierRate>
+  }
+
+  /** POST /address: registers (or updates with `_id`) a pickup address from an area id; returns the address `_id`. */
+  async saveAddress(input: { _id?: string; areaId: string; name: string; phone: string; address: string; pinpoint?: { lat: number; lng: number } }): Promise<string> {
+    const raw = await request(this.opts, {
+      method: "POST",
+      path: "/address",
+      body: { ...(input._id ? { _id: input._id } : {}), PICKUP_AUTOFILL: input.areaId, PICKUP_NAME: input.name, PICKUP_PHONE: input.phone, PICKUP_ADDRESS: input.address, ...(input.pinpoint ? { pinpointData: input.pinpoint } : {}) },
+    })
+    const out = parse(SaveAddressSchema, raw, "/address")
+    const id = out.data?._id ?? out._id
+    if (!id) throw new MengantarError("envelope", "/address", raw.status, "UNEXPECTED_SHAPE", "Alamat jemput tidak tersimpan di Mengantar.")
+    return id
+  }
+
+  /** POST /time: reserves one pickup slot (`date` mm-dd-yyyy, `time` "9:00".."18:00", ≥ 90 min ahead); returns its `_id`. */
+  async reserveTime(addressId: string, date: string, time: string): Promise<string> {
+    const raw = await request(this.opts, { method: "POST", path: "/time", body: { address_id: addressId, date, time } })
+    const out = parse(SaveAddressSchema, raw, "/time")
+    const id = out.data?._id ?? out._id
+    if (!id) throw new MengantarError("envelope", "/time", raw.status, "UNEXPECTED_SHAPE", "Slot penjemputan tidak tersedia.")
+    return id
   }
 
   /** POST /order with the mandatory idempotencyKey (1–50 chars). Replays are surfaced via `idempotentReplayed`. */

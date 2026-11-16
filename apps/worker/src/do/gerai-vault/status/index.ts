@@ -48,6 +48,7 @@ export function insertShipment(
   sql: SqlStorage,
   row: { tenantId: string; slug: string; courierCode: string | null; orderCode: string | null; awb: string | null; status?: EffectiveStatus | string },
   now: number,
+  opts: { poll?: boolean } = {},
 ): void {
   sql.exec(
     `INSERT INTO shipments (tenant_id, slug, courier_code, mengantar_order_code, awb_number, status, index_version, created_at, updated_at)
@@ -63,6 +64,36 @@ export function insertShipment(
   )
   publishIndex(sql, readShipment(sql, row.slug)!, now)
   // Polling floor: the first read-back within the hour (PR-02b); `pollStatus` reschedules itself.
+  if (opts.poll !== false) setTimer(sql, "status_poll", now + 3600_000, "earliest")
+}
+
+/**
+ * Pre-issue and dispatch states (ADR-0004: `draft`, `issuing_in_flight`, `reconciliation_needed`,
+ * `provider_unpaid_hold`, `cancelled`) are set explicitly; after issue the provider/custody combine owns `status`.
+ * Republishes `shipment_index` (versioned) when the effective status changes.
+ */
+export function setDispatchStatus(sql: SqlStorage, slug: string, status: string, now: number, extra: Record<string, SqlStorageValue> = {}): void {
+  const before = readShipment(sql, slug)
+  if (!before) return
+  const keys = Object.keys(extra)
+  const changed = before.status !== status
+  sql.exec(
+    `UPDATE shipments SET status = ?, index_version = index_version + ?, updated_at = ?${keys.map((k) => `, ${k} = ?`).join("")} WHERE slug = ?`,
+    status,
+    changed ? 1 : 0,
+    now,
+    ...keys.map((k) => extra[k]!),
+    slug,
+  )
+  if (changed || keys.includes("awb_number")) publishIndex(sql, readShipment(sql, slug)!, now)
+}
+
+/** After issue: the shipment joins the status projection (provider observations + custody decide `status`). */
+export function markIssued(sql: SqlStorage, slug: string, now: number): void {
+  const s = readShipment(sql, slug)
+  if (!s) return
+  sql.exec("UPDATE shipments SET status = 'ready_for_pickup', provider_status = COALESCE(provider_status, 'ready_for_pickup'), last_provider_event_at = COALESCE(last_provider_event_at, ?), last_provider_rank = COALESCE(last_provider_rank, 10), index_version = index_version + 1, updated_at = ? WHERE slug = ?", Math.floor(now / 60_000) * 60_000, now, slug)
+  publishIndex(sql, readShipment(sql, slug)!, now)
   setTimer(sql, "status_poll", now + 3600_000, "earliest")
 }
 
@@ -176,7 +207,7 @@ export function flagStuck(sql: SqlStorage, now: number): number {
 export function pollCandidates(sql: SqlStorage, limit: number): ShipmentRow[] {
   return sql
     .exec<ShipmentRow>(
-      `SELECT * FROM shipments WHERE status NOT IN ('delivered','cancelled','lost','rts_returned_to_sender') AND (awb_number IS NOT NULL OR mengantar_order_code IS NOT NULL)
+      `SELECT * FROM shipments WHERE status NOT IN ('delivered','cancelled','lost','rts_returned_to_sender','draft','issuing_in_flight','reconciliation_needed','provider_unpaid_hold') AND (awb_number IS NOT NULL OR mengantar_order_code IS NOT NULL)
        ORDER BY COALESCE(last_polled_at, 0) ASC LIMIT ?`,
       limit,
     )
