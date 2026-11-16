@@ -441,3 +441,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   owner-only keys and the CSV answers 403; recipient name/phone search; 2 + 1 keyset pages cover all rows; CSV header
   and row snapshot (WIB time `2026-11-14 10:00`, `INV …`, `'=HYPERLINK(...)` neutralised). e2e at three viewports.
   Shell fix: `SidebarInset` gets `min-w-0` so wide content scrolls inside its box instead of widening the page.
+
+## 2026-11-16 — TASK-399 M3 close
+
+- Integrated run (`scripts/ci/integrated-gate.sh TASK-399`): typecheck, lint, unit (153), build, worker (263),
+  migrations, isolation, security (bundle audit + red fixtures + `security-check .`), e2e (42 runs = 14 specs × 390/768/1280)
+  — all PASS, recorded in the ledger. The first run failed at e2e: `settings.spec.ts` matched the header `h1` that is
+  hidden at 768 px; the selector now targets the page `h2` and the re-run on a frozen tree passed.
+- DTO role-projection suite: `apps/worker/test/dto/projection.test.ts` now also sweeps 13 Kasir-reachable GETs (workspace,
+  dashboard, shipments list + detail, shift(s), bulk, print list, track, contacts, notifications, masking) for owner-only
+  keys, and the route-table check covers every money-bearing path (`/masking` and `/shipments/:slug/reveal-sender`
+  moved to the role projection; `/bulk/services` likewise).
+- Sub-45 s checkout: `e2e/checkout.spec.ts` asserts < 45 s from `/kasir` to the issued AWB at all three viewports.
+- `docs/SYSTEM-MAP.md` refreshed for M3. Awaiting owner: live sandbox `POST /order`, a real thermal print photo, counsel
+  answer before masking is advertised.

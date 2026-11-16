@@ -415,7 +415,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(projectFor(m.role, { batch: v.batch, sender: v.sender, rows, totals: v.totals }))
   }
   r("GET", "/bulk/template.csv", "app_member", "none", async () => new Response(templateCsv(), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="template-paket-massal.csv"', "cache-control": "no-store" } }))
-  r("GET", "/bulk/services", "app_member", "none", async (c) => {
+  r("GET", "/bulk/services", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const [cat, prefs] = await Promise.all([
       c.env.DB.prepare("SELECT service_code, courier_code, display_name, service_class, cod_supported FROM courier_service_catalog WHERE is_active = 1 ORDER BY sort_order").all<{ service_code: string; courier_code: string; display_name: string; service_class: string; cod_supported: number }>(),
@@ -622,11 +622,11 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const t = await c.env.DB.prepare("SELECT masking_enabled, masking_daily_quota FROM tenants WHERE id = ?").bind(c.get("membership")!.tenantId).first<{ masking_enabled: number; masking_daily_quota: number | null }>()
     return { maskingEnabled: t?.masking_enabled === 1, dailyQuota: t?.masking_daily_quota ?? null }
   }
-  r("GET", "/masking", "app_member", "self", async (c) => {
+  r("GET", "/masking", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).maskingState(m.tenantId, await platformMasking(c))
     if (!r.ok) return vaultErr(r)
-    return ok(r.value)
+    return ok(projectFor(m.role, r.value))
   })
   r("GET", "/settings/masking", "app_owner", "role", async (c) => {
     const m = c.get("membership")!
@@ -644,12 +644,12 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const s = await vaultFor(c.env, m.tenantId).maskingSettings(m.tenantId, platform)
     return ok(s.ok ? { ...s.value, dailyQuota: platform.dailyQuota } : null)
   })
-  r("POST", "/shipments/:slug/reveal-sender", "app_member", "self", async (c) => {
+  r("POST", "/shipments/:slug/reveal-sender", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const b = await body(c)
     const r = await vaultFor(c.env, m.tenantId).revealTrueSender(m.tenantId, slugParam(c), c.get("session").user.id, typeof b.reason === "string" ? b.reason : "")
     if (!r.ok) return vaultErr(r)
-    return ok(r.value)
+    return ok(projectFor(m.role, r.value))
   })
   r("POST", "/shipments/:slug/parties", "app_member", "role", async (c) => {
     const m = c.get("membership")!

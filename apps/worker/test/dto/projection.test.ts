@@ -46,9 +46,33 @@ describe("per-role DTOs on the wire", () => {
     expect(((await r.json()) as { error: { code: string } }).error.code).toBe("NO_MEMBERSHIP")
   })
 
-  it("every app route that returns money-bearing data declares the role projection", () => {
-    const moneyish = ROUTES.filter((r) => r.context === "app" && /settings|workspace|tarif|keuangan|kiriman|quote/.test(r.path))
-    expect(moneyish.length).toBeGreaterThan(0)
-    for (const r of moneyish) expect(r.projection, `${r.method} ${r.path}`).toBe("role")
+  it("every app route that returns money-bearing data declares the role projection (owner-only files excepted)", () => {
+    const moneyish = ROUTES.filter((r) => r.context === "app" && /settings|workspace|tarif|keuangan|kiriman|quote|shipment|shift|bulk|dashboard|print|track|members|masking|contacts/.test(r.path))
+    expect(moneyish.length).toBeGreaterThan(20)
+    for (const r of moneyish) {
+      // A non-JSON owner-only download (CSV, template) may skip the projection only when Kasir can never reach it.
+      if (r.projection !== "role") expect(r.auth === "app_owner" || r.path.endsWith("template.csv"), `${r.method} ${r.path}`).toBe(true)
+      else expect(r.projection).toBe("role")
+    }
+  })
+
+  it("M3 Kasir sweep: every list/detail GET a Kasir can reach carries no owner-only key", async () => {
+    const { checkoutGerai, post, readyInv } = await import("../dispatch/helpers")
+    const t = await checkoutGerai("sweepkasir")
+    const s = await readyInv(t, { mode: "sender_bears_fee", codGoodsIdr: 150000 })
+    await post(`/shipments/${s}/dispatch`, t.cookie, {})
+    const k = await appUser("kasir.sweep@contoh.test")
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'cashier', 'active', ?)").bind(t.tenantId, k.id, Date.now()),
+      env.DB.prepare("UPDATE sessions SET active_tenant_id = ? WHERE user_id = ?").bind(t.tenantId, k.id),
+    ])
+    const paths = ["/workspace", "/dashboard", "/shipments", `/shipments/${s}`, "/shift", "/shifts", "/bulk", "/print/list?status=semua", `/track?q=${s}`, "/contacts/senders", "/contacts/recipients", "/notifications", "/masking"]
+    for (const p of paths) {
+      const r = await appGet(p, k.cookie)
+      expect(r.status, p).toBe(200)
+      expect(ownerOnlyKeysIn(await r.json()), p).toEqual([])
+    }
+    // The same owner response does carry the money fields (the projection is doing the work).
+    expect(ownerOnlyKeysIn(await (await appGet(`/shipments/${s}`, t.cookie)).json()).length).toBeGreaterThan(0)
   })
 })

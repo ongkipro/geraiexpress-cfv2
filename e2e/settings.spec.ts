@@ -29,7 +29,7 @@ test("Pengaturan dan Akun Saya", async ({ page, context, request }) => {
   await expect(page.getByText("Perubahan tersimpan.")).toBeVisible()
 
   await page.goto(`${APP}/akun`)
-  await expect(page.getByRole("heading", { name: "Akun Saya" }).first()).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Akun Saya", level: 2 })).toBeVisible()
   await expect(page.getByText("· perangkat ini")).toBeVisible()
   await page.getByLabel("Kata sandi saat ini").first().fill("salah-sekali-1")
   await page.getByLabel("Kata sandi baru").fill("sandi-baru-kuat-9")
