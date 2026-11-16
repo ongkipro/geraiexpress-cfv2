@@ -23,6 +23,7 @@ import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
 import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type OwnerDashboard } from "../../analytics/queries"
 import { resolvePreset, type Period } from "@gx/domain/period"
 import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, parseReceipt } from "./settings"
+import { exportCsv, listShipments, tabCounts, type ListQuery, type ListRow, type Tab } from "./listing"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -922,6 +923,21 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
+  }
+
+  // ---- Kiriman list (TASK-311) -----------------------------------------------------------------------------------
+
+  async shipmentList(tenantId: string, q: ListQuery): Promise<VaultResult<{ items: ListRow[]; nextCursor: string | null; counts: Record<Tab, number> }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    return { ok: true, value: { ...listShipments(sql, q), counts: tabCounts(sql, q) } }
+  }
+
+  async shipmentCsv(tenantId: string, q: ListQuery): Promise<VaultResult<{ csv: string; rows: number; truncated: boolean }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: exportCsv(this.ctx.storage.sql, q) }
   }
 
   // ---- Settings pages (TASK-310) ---------------------------------------------------------------------------------

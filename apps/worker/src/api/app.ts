@@ -19,6 +19,7 @@ import { escposBytes, labelsPdf, rollLines, rollText } from "@gx/thermal-print"
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
+import { TABS, type ListQuery, type Tab } from "../do/gerai-vault/listing"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
@@ -348,6 +349,35 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).payoutOp(m.tenantId, actorOf(c), op)
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
+  })
+
+  // Kiriman list (TASK-311, DEC-213/220): tabs with counts, search, period (default 30 days, WIB), courier and print
+  // filters, keyset pages. Kasir rows lose cost/margin through the projection; the CSV is owner-only.
+  const listQuery = (c: AppCtx) => {
+    const t = now()
+    const dari = c.req.query("dari")
+    const sampai = c.req.query("sampai")
+    if (dari && sampai) {
+      const cst = resolveCustom(dari, sampai, t)
+      if (!cst.ok) throw new AppError(422, `PERIOD_${cst.error}`, cst.message, { periode: cst.message })
+    }
+    const period = c.req.query("periode") || (dari && sampai) ? periodFromParams({ periode: c.req.query("periode"), dari, sampai }, t) : resolvePreset("30d", t)
+    const tab = (TABS as readonly string[]).includes(c.req.query("tab") ?? "") ? (c.req.query("tab") as Tab) : "semua"
+    const printed = c.req.query("cetak") === "sudah" ? "sudah" : c.req.query("cetak") === "belum" ? "belum" : "semua"
+    const courier = /^[A-Za-z&]{2,20}$/.test(c.req.query("kurir") ?? "") ? c.req.query("kurir")! : null
+    return { tab, q: (c.req.query("q") ?? "").slice(0, 60), fromMs: period.fromMs, toMs: period.toMs, courier, printed, cursor: c.req.query("cursor") ?? null, limit: Number(c.req.query("limit") ?? 50) || 50 } satisfies ListQuery
+  }
+  r("GET", "/shipments", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).shipmentList(m.tenantId, listQuery(c))
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, r.value))
+  })
+  r("GET", "/shipments-export.csv", "app_owner", "none", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).shipmentCsv(m.tenantId, listQuery(c))
+    if (!r.ok) return vaultErr(r)
+    return new Response(r.value.csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="kiriman-${m.tenantSlug}.csv"`, "cache-control": "no-store", "x-rows": String(r.value.rows), "x-truncated": String(r.value.truncated) } })
   })
 
   // Dashboard (TASK-309, PR-18, DEC-213/221): the period comes from the URL (WIB presets or `dari`/`sampai`, max 180

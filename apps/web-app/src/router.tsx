@@ -24,6 +24,7 @@ import { PaketMassalPage } from "./routes/kasir/multi/page"
 import { CekResiPage } from "./routes/kasir/cek-resi/page"
 import { RiwayatMassalPage } from "./routes/kiriman/massal/history"
 import { BatchPage } from "./routes/kiriman/massal/batch"
+import { KirimanPage } from "./routes/kiriman/index/page"
 import { PengaturanIndexPage } from "./routes/pengaturan/index/shared"
 import { ProfilGeraiPage } from "./routes/pengaturan/profil/page"
 import { DataUsahaPage } from "./routes/pengaturan/data-usaha/page"
@@ -119,7 +120,7 @@ const printerRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "
 const packingRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/packing", component: ownerOnly(PackingPage) })
 const anggotaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/anggota", component: ownerOnly(AnggotaPage) })
 const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
-const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: soonPage("Kiriman", "Daftar kiriman dengan pencarian, filter dan ekspor sedang disiapkan.", "TASK-311") })
+const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: KirimanPage })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
 const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: PenerimaPage })
 const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(soonPage("Keuangan", "Saldo Mengantar, mutasi dan laba per INV sedang disiapkan.", "TASK-401")) })

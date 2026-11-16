@@ -145,7 +145,7 @@ export function AppShell() {
             </p>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-card px-2 md:px-4">
             <SidebarTrigger aria-label="Buka atau ciutkan menu" className="hidden md:inline-flex" />
             <Button variant="ghost" size="icon-lg" className="md:hidden" aria-label="Buka menu" onClick={() => setMore(true)}>

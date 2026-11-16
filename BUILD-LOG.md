@@ -431,3 +431,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   current password and signs out others; session handles never equal stored hashes, revoke one and all others, the
   current session cannot be revoked by handle. e2e: Save bar appears only when dirty, NPWP masked after save,
   printer default saved, wrong current password message, help search. Mutation red.
+
+## 2026-11-16 — TASK-311 `Kiriman` list, tabs, search and export (M3)
+
+- Shipped: the unified `Kiriman` hub list with tab counts, search, period/courier/print filters, keyset pages,
+  `Tandai Lunas` row action and the owner CSV.
+- Evidence: two tenants never see each other's INVs, even by exact INV or AWB search; tab counts `semua 2,
+  belum-dibayar 1, pickup 2` with a draft excluded; `Tandai Lunas` empties the Belum Dibayar tab; Kasir rows carry no
+  owner-only keys and the CSV answers 403; recipient name/phone search; 2 + 1 keyset pages cover all rows; CSV header
+  and row snapshot (WIB time `2026-11-14 10:00`, `INV …`, `'=HYPERLINK(...)` neutralised). e2e at three viewports.
+  Shell fix: `SidebarInset` gets `min-w-0` so wide content scrolls inside its box instead of widening the page.
