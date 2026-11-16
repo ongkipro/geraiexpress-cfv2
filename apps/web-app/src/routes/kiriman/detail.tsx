@@ -10,6 +10,7 @@ import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "../kasir/quote-panel"
 import { PresetPicker, PRESET_LABEL, type MaskPreset } from "../../components/masking/preset-picker"
+import { PrintDrawer } from "../../print/drawer"
 
 // `/kiriman/:slug` checkout (visual 07 §3.2, visual 05 stages 3–6, DEC-220): sender → recipient & contents → locked
 // summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
@@ -258,7 +259,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
             <p className="text-base tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
             <p className="text-base">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
             {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
-            <p className="text-base text-muted-foreground">Cetak label tersedia setelah modul cetak aktif.</p>
+            <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
           </>
         ) : s.dispatch_state === "provider_unpaid_hold" ? (
           <>

@@ -363,3 +363,20 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   422 with no Mengantar call and no silent downgrade, switching to Standar issues, preset not offered, verified WA,
   brand required, reveal reason + audit); e2e owner enables Dropship → checkout prints the brand → reveal; UI gates;
   mutation red.
+
+## 2026-11-16 — TASK-306 Printing: 100 mm PDFs (PC-first), 58 mm ESC/POS, bulk print (M3)
+
+- Shipped: `@gx/thermal-print` (Code 128, QR via `uqr`, exact-size vector PDF writer, three 100 mm layouts, 58 mm
+  32-column label + receipt, ESC/POS), label data from immutable snapshots, print records with reprint reason,
+  print drawer and `Cetak Resi Massal`.
+- Evidence ("printed sample scanned"): every 100 mm format for a COD Dropship and a Non-COD Standar INV is rendered by
+  Ghostscript at the thermal head's 203 dpi and decoded with zxing-cpp — Code 128 equals the AWB and every QR equals the
+  tracking URL (`packages/thermal-print/test/scan.test.ts`, renders in `docs/evidence/TASK-306/`). Photo of a physical
+  print on the outlet's printer stays an owner step (no thermal printer attached to the build machine).
+  Exact MediaBox per format, quiet zones measured on the drawn page, 32-column snapshots of both visual 04 specimens,
+  ESC/POS bytes, API tests (AWB required, record + reprint reason audited, preview never records, bulk ≤ 50, Dropship
+  never prints the outlet), e2e drawer → PDF → reprint reason → mass print list.
+- Found while reviewing renders: destination line overlapped the COD banner and a long subdistrict fallback overflowed
+  the sorting pill — both fixed with tests.
+- Flaky e2e root cause: the drawer switched to reprint mode immediately after printing (correct duplicate guard), so the
+  test's second click waited on a disabled button; the test now asserts that state instead.

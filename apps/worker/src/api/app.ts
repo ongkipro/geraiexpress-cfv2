@@ -15,6 +15,7 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
+import { escposBytes, labelsPdf, rollLines, rollText } from "@gx/thermal-print"
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp } from "../do/gerai-vault"
@@ -319,6 +320,42 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return k
   }
   r("GET", "/shipments/:slug", "app_member", "role", (c) => detail(c, slugParam(c)))
+
+  // Printing (TASK-306, DEC-224, DEC-229): exact-size PDFs (PC-first), 58 mm ESC/POS bytes, bulk ≤ 50. The first
+  // print records `first_printed_at`; reprints need a reason (audited). Label data comes from immutable snapshots.
+  const trackingHost = (c: AppCtx) => `${c.get("membership")!.tenantSlug}.${c.env.TENANT_ZONE}`
+  const FORMATS = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"] as const
+  r("GET", "/print/settings", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).printSettings(m.tenantId)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/print", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const slugs = Array.isArray(b.slugs) ? [...new Set((b.slugs as unknown[]).filter((x): x is string => typeof x === "string" && /^[0-9a-hjkmnp-tv-z]{7}$/.test(x)))] : []
+    const format = (FORMATS as readonly string[]).includes(String(b.format)) ? (b.format as (typeof FORMATS)[number]) : "label_10x15_with_stub"
+    const preview = b.preview === true
+    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: trackingHost(c), record: !preview })
+    if (!r.ok) return vaultErr(r)
+    if (r.value.items.length === 0) throw new AppError(409, r.value.refused[0]?.code ?? "NOTHING_TO_PRINT", r.value.refused[0]?.message ?? "Tidak ada label yang bisa dicetak.")
+    if (format === "roll_58mm") {
+      const bytes = new Uint8Array(r.value.items.flatMap((d) => [...escposBytes(rollLines(d), b.density === "tebal" ? "tebal" : "normal")]))
+      if (b.as === "text") return ok({ lines: r.value.items.map((d) => rollText(d)), refused: r.value.refused })
+      return new Response(bytes, { headers: { "content-type": "application/octet-stream", "cache-control": "no-store", "x-refused": String(r.value.refused.length) } })
+    }
+    const pdf = labelsPdf(r.value.items, format)
+    return new Response(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="label-${slugs.length === 1 ? slugs[0] : "massal"}.pdf"`, "cache-control": "no-store", "x-refused": String(r.value.refused.length) } })
+  })
+  r("GET", "/print/list", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const status = c.req.query("status") === "sudah" ? "sudah" : c.req.query("status") === "semua" ? "semua" : "belum"
+    const courier = c.req.query("courier") || null
+    const r = await vaultFor(c.env, m.tenantId).printableList(m.tenantId, { status, courier })
+    if (!r.ok) return vaultErr(r)
+    return ok({ items: r.value })
+  })
 
   // Masking (TASK-305, ADR-0005, DEC-231): counter state, owner settings, audited reveal.
   const platformMasking = async (c: AppCtx) => {

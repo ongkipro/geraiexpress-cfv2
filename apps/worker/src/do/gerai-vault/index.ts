@@ -17,6 +17,8 @@ import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, r
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
+import type { LabelData, LabelFormat } from "@gx/thermal-print"
+import { labelDataFrom } from "../../labels/build"
 import type { MediaPurpose } from "../../media"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, readShipment, recordProviderObservation, setDispatchStatus, setTimer, findShipment, type ShipmentRow, type TimerName } from "./status"
@@ -804,6 +806,80 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const pref = sql.exec<{ pickup_mode: string }>("SELECT pickup_mode FROM tenant_courier_prefs WHERE courier_code = ?", courierCode).toArray()[0]
     void tenantId
     return { ok: true, value: { addressId, type: pref?.pickup_mode === "drop_off_only" ? "dropOff" : "scheduledPickup", outletId: o.id } }
+  }
+
+  // ---- Printing (TASK-306) ---------------------------------------------------------------------------------------
+
+  /** Print settings for this gerai (default format, unboxing remark). */
+  async printSettings(tenantId: string): Promise<VaultResult<{ format: LabelFormat; remark: string }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const r = this.ctx.storage.sql.exec<{ default_label_format: LabelFormat; unboxing_remark_text: string }>("SELECT default_label_format, unboxing_remark_text FROM tenant_settings LIMIT 1").toArray()[0]
+    return { ok: true, value: { format: r?.default_label_format ?? "label_10x15_with_stub", remark: r?.unboxing_remark_text ?? "Rekam video saat buka paket untuk klaim" } }
+  }
+
+  /**
+   * Label data for issued INVs and a print record: the first print sets `first_printed_at`; any later print needs a
+   * reason (audited). Shipments without an AWB (unpaid hold, draft, cancelled) are refused per slug.
+   */
+  async preparePrint(tenantId: string, p: { slugs: string[]; reason?: string; actorId: string; trackingHost: string; record: boolean }): Promise<{ ok: true; value: { items: LabelData[]; refused: Array<{ slug: string; code: string; message: string }> } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (p.slugs.length === 0 || p.slugs.length > 50) return { ok: false, error: { status: 422, code: "BULK_LIMIT", message: "Pilih 1 sampai 50 kiriman untuk dicetak." } }
+    const sql = this.ctx.storage.sql
+    const settings = sql.exec<{ unboxing_remark_text: string }>("SELECT unboxing_remark_text FROM tenant_settings LIMIT 1").toArray()[0]
+    const remark = settings?.unboxing_remark_text ?? "Rekam video saat buka paket untuk klaim"
+    const now = Date.now()
+    const items: LabelData[] = []
+    const out: Array<{ slug: string; code: string; message: string }> = []
+    const reason = (p.reason ?? "").trim()
+    const reprints = p.slugs.filter((slug) => (sql.exec<{ print_count: number }>("SELECT print_count FROM shipments WHERE slug = ?", slug).toArray()[0]?.print_count ?? 0) > 0)
+    if (p.record && reprints.length && (reason.length < 3 || reason.length > 200)) return { ok: false, error: { status: 422, code: "REPRINT_REASON_REQUIRED", message: "Kiriman ini sudah pernah dicetak. Tulis alasan cetak ulang.", fields: { reason: "Wajib untuk cetak ulang." } } }
+    this.ctx.storage.transactionSync(() => {
+      for (const slug of p.slugs) {
+        const s = readShipment(sql, slug) as unknown as Record<string, SqlStorageValue> | null
+        if (!s) {
+          out.push({ slug, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." })
+          continue
+        }
+        if (s.dispatch_state !== "issued" || !s.awb_number) {
+          out.push({ slug, code: "NO_AWB", message: s.dispatch_state === "provider_unpaid_hold" ? "Resi belum terbit (menunggu saldo Mengantar)." : "Label hanya bisa dicetak setelah resi terbit." })
+          continue
+        }
+        const pay = sql.exec<Record<string, SqlStorageValue>>("SELECT * FROM counter_receipts WHERE shipment_slug = ? AND event = 'mark_paid' ORDER BY created_at DESC LIMIT 1", slug).toArray()[0] ?? null
+        const reprint = Number(s.print_count ?? 0) > 0
+        const d = labelDataFrom(s, { quote: (latestQuote(sql, slug) as unknown as Record<string, SqlStorageValue>) ?? null, lastPayment: pay, remark, trackingHost: p.trackingHost, now, reprint })
+        if (!d) {
+          out.push({ slug, code: "LABEL_DATA_MISSING", message: "Data label belum lengkap." })
+          continue
+        }
+        items.push(d)
+        if (p.record) {
+          sql.exec("UPDATE shipments SET print_count = print_count + 1, first_printed_at = COALESCE(first_printed_at, ?), updated_at = ? WHERE slug = ?", now, now, slug)
+          if (reprint) this.audit(tenantId, now, "user", p.actorId, "label.reprint", { slug, reason })
+        }
+      }
+    })
+    return { ok: true, value: { items, refused: out } }
+  }
+
+  /** INVs for `Cetak Resi Massal`: issued, optionally only never printed, newest first (max 200 listed). */
+  async printableList(tenantId: string, f: { status: "belum" | "sudah" | "semua"; courier?: string | null }): Promise<VaultResult<Array<{ slug: string; awb: string; courier: string; recipient: string; print_count: number; issued_at: number }>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const rows = this.ctx.storage.sql
+      .exec<{ slug: string; awb_number: string; courier_code: string; true_recipient_json: string | null; print_count: number; issued_at: number }>(
+        `SELECT slug, awb_number, courier_code, true_recipient_json, print_count, issued_at FROM shipments
+         WHERE dispatch_state = 'issued' AND awb_number IS NOT NULL AND (? = 'semua' OR (? = 'belum' AND print_count = 0) OR (? = 'sudah' AND print_count > 0)) AND (? IS NULL OR courier_code = ?)
+         ORDER BY issued_at DESC LIMIT 200`,
+        f.status,
+        f.status,
+        f.status,
+        f.courier ?? null,
+        f.courier ?? null,
+      )
+      .toArray()
+    return { ok: true, value: rows.map((r) => ({ slug: r.slug, awb: r.awb_number, courier: r.courier_code, recipient: (r.true_recipient_json ? (JSON.parse(r.true_recipient_json) as { name: string }).name : "—"), print_count: r.print_count, issued_at: r.issued_at })) }
   }
 
   // ---- Masking (TASK-305) -----------------------------------------------------------------------------------------
