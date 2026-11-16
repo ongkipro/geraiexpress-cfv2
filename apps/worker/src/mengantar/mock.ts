@@ -21,6 +21,8 @@ export const mockFaults: {
   deleteOrder?: "timeout_after_delete" | "refused"
   readBack?: "timeout"
   invoices?: "error"
+  /** Every Public API call answers `403 IP_NOT_ALLOWED` (DEC-232 alert drill). */
+  publicIpNotAllowed?: true
 } = {}
 
 /** Seller balance per mock key (IDR); an order the balance cannot cover is created unpaid (no AWB). */
@@ -48,6 +50,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
   const body = init?.body ? JSON.parse(String(init.body)) : {}
   const p = url.pathname
+  if (mockFaults.publicIpNotAllowed && p.startsWith("/api/public/")) return json(403, { success: false, code: "IP_NOT_ALLOWED", message: "IP not allowed" })
   if (p === "/api/partner/v1/sellers") {
     if (String(body.email).startsWith("timeout")) throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
     const existing = sellers.get(body.externalUserId)

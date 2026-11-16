@@ -449,3 +449,15 @@ export const apiKeyDailyUsage = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.keyId, t.wibDay] })],
 )
+
+export const publicApiEvents = sqliteTable(
+  "public_api_events",
+  {
+    tenantId: text("tenant_id").notNull(),
+    minute: integer("minute").notNull(),
+    outcome: text("outcome").notNull(),
+    route: text("route").notNull(),
+    count: integer("count").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.minute, t.outcome, t.route] }), index("public_api_events_minute").on(t.minute)],
+)

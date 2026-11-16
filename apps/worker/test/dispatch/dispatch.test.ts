@@ -191,6 +191,8 @@ describe("rate limits and projection", () => {
   it("per-tenant issue and cancel rate limits (20/min) in the object", async () => {
     const t = await checkoutGerai("lajusatu")
     const slug = await readyInv(t)
+    // The window is the wall-clock minute: start with ≥ 10 s left so the seeded window cannot roll over mid-test.
+    if (Date.now() % 60_000 > 50_000) await new Promise((r) => setTimeout(r, 60_000 - (Date.now() % 60_000) + 50))
     const w = Math.floor(Date.now() / 60_000) * 60_000
     await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => {
       s.storage.sql.exec("CREATE TABLE IF NOT EXISTS vault_rate (op TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL)")
@@ -202,6 +204,9 @@ describe("rate limits and projection", () => {
     expect(mockSeller.createCalls).toBe(0)
     await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec("UPDATE vault_rate SET count = 0 WHERE op = 'issue'"))
     await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    // Re-seed the cancel window for the current minute (the dispatch above may have taken a few seconds).
+    const w2 = Math.floor(Date.now() / 60_000) * 60_000
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec("UPDATE vault_rate SET window_start = ?, count = 20 WHERE op = 'cancel'", w2))
     const c = await post(`/shipments/${slug}/cancel`, t.cookie, { reason: "batal" })
     expect(((await c.json()) as { error: { code: string } }).error.code).toBe("CANCEL_RATE_LIMITED")
   })

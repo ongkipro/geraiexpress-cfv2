@@ -216,6 +216,18 @@ const IDENTITY_DDL = "CREATE TABLE IF NOT EXISTS vault_identity (id INTEGER PRIM
  * verified host or session. The object records its tenant id on the first `migrate` and refuses any other id, so a
  * mis-addressed stub can never read or write another tenant's rows.
  */
+export type HealthSnapshot = {
+  oldestInboxAgeMs: number | null
+  issues30m: number
+  reconciliation30m: number
+  failedStreak: boolean
+  financeLastOkAgeMs: number | null
+  financeEverRan: boolean
+  connected: boolean
+  issuesLastHour: number
+  issuesBaselineHourly: number
+}
+
 export class GeraiVaultDO extends DurableObject<Env> {
   private flushing: Promise<{ delivered: number; failed: number }> | null = null
 
@@ -506,7 +518,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!key) return { ok: false, refused: "NO_KEY" }
     let rates: Record<string, CourierRate>
     try {
-      rates = await publicClient(this.env, key.key).estimate({ originId: q.originId, destinationId: q.destinationId, courier: q.courier, weightKg: q.weightKg, codAmountIdr: q.codAmountIdr })
+      rates = await publicClient(this.env, key.key, tenantId).estimate({ originId: q.originId, destinationId: q.destinationId, courier: q.courier, weightKg: q.weightKg, codAmountIdr: q.codAmountIdr })
     } catch (err) {
       return { ok: false, refused: "PROVIDER_ERROR", message: err instanceof Error ? err.message.slice(0, 200) : "estimate failed" }
     }
@@ -694,7 +706,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, fields: { maskPreset: claim.message } } }
       let outcome: OrderOutcome
       try {
-        const res = await publicClient(this.env, key.key).createOrder(payload, idem)
+        const res = await publicClient(this.env, key.key, tenantId).createOrder(payload, idem)
         const item = res.data[0]
         if (!res.success || !item) outcome = { kind: "rejected", code: "ORDER_REJECTED", message: "Mengantar menolak kiriman." }
         else if (res.idempotentReplayed && !item.ORDER_ID) outcome = { kind: "ambiguous", reason: "replayed without order" }
@@ -734,7 +746,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const q = latestQuote(sql, slug)
     let found: OrderItem | null = null
     try {
-      const list = await publicClient(this.env, key.key).listOrders({ keyword: slug.toUpperCase(), size: 10 })
+      const list = await publicClient(this.env, key.key, tenantId).listOrders({ keyword: slug.toUpperCase(), size: 10 })
       found = list.items.find((o) => (o.destinationMark ?? "").toUpperCase() === slug.toUpperCase()) ?? null
     } catch {
       return { ok: false, error: { status: 503, code: "RECONCILIATION_PENDING", message: "Status kiriman belum pasti. Sistem akan memeriksa lagi; jangan buat ulang kiriman ini." } }
@@ -766,7 +778,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => {
       sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id }), now, now)
     })
-    const client = publicClient(this.env, key.key)
+    const client = publicClient(this.env, key.key, tenantId)
     let payError: string | null = null
     try {
       await client.payUnpaid(s.courier_code as Courier, s.mengantar_batch_object_id)
@@ -830,7 +842,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!this.allowRate("cancel", 20, now)) return { ok: false, error: { status: 429, code: "CANCEL_RATE_LIMITED", message: "Terlalu banyak pembatalan dalam semenit. Coba lagi sebentar lagi." } }
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
-    const client = publicClient(this.env, key.key)
+    const client = publicClient(this.env, key.key, tenantId)
     const idem = `gx-cancel-${slug}-${now}`
     this.ctx.storage.transactionSync(() => {
       sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'cancel_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ ids: [s.mengantar_order_item_id ?? s.mengantar_order_code] }), now, now)
@@ -1016,7 +1028,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       return result
     }
     sql.exec("UPDATE finance_sync_state SET running_since = ?, last_run_at = ?, last_trigger = ? WHERE id = 1", now, now, trigger)
-    const client = publicClient(this.env, key.key)
+    const client = publicClient(this.env, key.key, tenantId)
     try {
       if (trigger === "pending_rescan") {
         // Non-final rows older than the newest page: re-read by their creation date range (spec 09 §4).
@@ -1087,7 +1099,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const out = { resolved: 0, paid: 0, skipped: 0 }
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return out
-    const client = publicClient(this.env, key.key)
+    const client = publicClient(this.env, key.key, tenantId)
     // 1. Crash between call and record: the journal says in_flight/unknown; the order itself says whether it was paid.
     const stale = sql
       .exec<{ idempotency_key: string; slug: string }>("SELECT idempotency_key, slug FROM dispatch_journal WHERE op = 'pay_unpaid' AND state IN ('in_flight','unknown') AND updated_at < ?", now - 60_000)
@@ -1811,7 +1823,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       let history = this.trackCache.get(r.slug)
       if (key && r.awb_number && (!history || history.at < Date.now() - 5 * 60_000)) {
         try {
-          const o = await publicClient(this.env, key.key).getOrder({ trackingId: r.awb_number })
+          const o = await publicClient(this.env, key.key, tenantId).getOrder({ trackingId: r.awb_number })
           history = { at: Date.now(), history: (o?.history ?? []).map((h) => ({ date: h.date, status: typeof h.status === "string" ? h.status.slice(0, 200) : null, category: h.statusCategory ?? null })) }
           this.trackCache.set(r.slug, history)
         } catch {
@@ -2115,6 +2127,42 @@ export class GeraiVaultDO extends DurableObject<Env> {
   protected keyVersionCurrent(version: number): boolean {
     const row = readConnection(this.ctx.storage.sql)
     return !!row && row.rotation_state === "idle" && row.key_version === version
+  }
+
+  // ---- Operator health (TASK-602, OBSERVABILITY.md) --------------------------------------------------------------
+
+  /** Read-only counts for the 5-minute operator checks; no PII, no ids beyond this tenant. */
+  async healthSnapshot(tenantId: string, now: number = Date.now()): Promise<VaultResult<HealthSnapshot>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const one = <T extends Record<string, SqlStorageValue>>(q: string, ...a: SqlStorageValue[]) => sql.exec<T>(q, ...a).one()
+    const inbox = one<{ t: number | null }>("SELECT MIN(received_at) AS t FROM webhook_inbox WHERE state = 'received'")
+    const win = now - 30 * 60_000
+    const issues = one<{ total: number; recon: number }>(
+      "SELECT COUNT(*) AS total, COALESCE(SUM(state = 'unknown' OR (state = 'in_flight' AND updated_at < ?)), 0) AS recon FROM dispatch_journal WHERE op = 'create_order' AND created_at >= ?",
+      now - 5 * 60_000,
+      win,
+    )
+    const recentStates = sql.exec<{ state: string }>("SELECT state FROM dispatch_journal WHERE op = 'create_order' ORDER BY created_at DESC LIMIT 5").toArray().map((r) => r.state)
+    const fin = one<{ ok: number | null; run: number | null }>("SELECT last_ok_at AS ok, last_run_at AS run FROM finance_sync_state WHERE id = 1")
+    const conn = sql.exec<{ s: string }>("SELECT onboarding_state AS s FROM mengantar_connections LIMIT 1").toArray()[0]?.s ?? "not_connected"
+    const lastHour = one<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE issued_at >= ?", now - 3600_000).n
+    const week = one<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE issued_at >= ? AND issued_at < ?", now - 7 * 86_400_000 - 3600_000, now - 3600_000).n
+    return {
+      ok: true,
+      value: {
+        oldestInboxAgeMs: inbox.t === null ? null : now - inbox.t,
+        issues30m: issues.total,
+        reconciliation30m: issues.recon,
+        failedStreak: recentStates.length === 5 && recentStates.every((x) => x === "failed"),
+        financeLastOkAgeMs: fin.ok === null ? null : now - fin.ok,
+        financeEverRan: fin.run !== null,
+        connected: conn === "connected" || conn === "byok_connected",
+        issuesLastHour: lastHour,
+        issuesBaselineHourly: week / (7 * 24),
+      },
+    }
   }
 
   // ---- Backups (TASK-603, ADR-0006 §7) --------------------------------------------------------------------------
@@ -2483,7 +2531,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     let failed = 0
     const key = conn ? await this.sellerKey(tenantId) : null
     if (key && candidates.length > 0) {
-      const client = publicClient(this.env, key.key)
+      const client = publicClient(this.env, key.key, tenantId)
       for (const s of candidates) {
         try {
           const order = await client.getOrder(s.awb_number ? { trackingId: s.awb_number } : { orderId: s.mengantar_order_code! })

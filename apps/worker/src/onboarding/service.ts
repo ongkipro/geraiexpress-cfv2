@@ -7,7 +7,7 @@ import { emit } from "@gx/telemetry"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { OnboardingState } from "../do/gerai-vault/connection"
 import { enqueueEmailStatement } from "../email/outbox"
-import { hostCache } from "../host/lookup"
+import { hostCache, platformHostOf } from "../host/lookup"
 import { AppError } from "../http/envelope"
 import { partnerClient } from "../mengantar/factory"
 import { quotaFor } from "../do/partner-quota"
@@ -191,7 +191,7 @@ export async function approveApplication(env: Env, input: { applicationId: strin
       `INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, created_at, activated_at)
        SELECT ?1, ?2, 'platform_subdomain', 'primary', 'active', ?3, ?3 WHERE (SELECT decided_at FROM tenant_applications WHERE id = ?4) = ?3 AND (SELECT decided_by FROM tenant_applications WHERE id = ?4) = ?5
        ON CONFLICT(hostname) DO UPDATE SET state = 'active', activated_at = ?3`,
-    ).bind(`${a.slug}.${env.TENANT_ZONE}`, a.tenant_id, input.now, a.id, input.actorId),
+    ).bind(platformHostOf(env, a.slug), a.tenant_id, input.now, a.id, input.actorId),
     mail.statement,
     auditStmt(env, input.actorId, "tenant.approve", a.tenant_id, input.reason, input.now, a.id),
     // TASK-207: every active service starts at the courier default (20 %), `Belum diterapkan` (DEC-233).

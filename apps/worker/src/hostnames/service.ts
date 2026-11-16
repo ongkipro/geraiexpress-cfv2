@@ -4,7 +4,7 @@
 // Cloudflare says active+ssl active, the HMAC probe proves the host reaches this deployment → `active`, routing_version
 // bump, canonical host switches. Daily: reaper (7-day pending/failed, moved, removed) and quota snapshot (alert ≥ 80 %).
 import { emit } from "@gx/telemetry"
-import { hostCache } from "../host/lookup"
+import { hostCache, platformHostOf } from "../host/lookup"
 import { normalizeHost, probeSignature } from "../host/classify"
 import { AppError } from "../http/envelope"
 import { hit } from "../auth/throttle"
@@ -307,9 +307,9 @@ export async function consumeHostnameBatch(batch: MessageBatch<HostMessage>, env
 }
 
 /** The host canonical URLs, QR posters and receipts use: the custom primary only after its probe (step 6). */
-export async function primaryHost(env: Pick<Env, "DB" | "TENANT_ZONE">, tenantId: string, slug: string): Promise<string> {
+export async function primaryHost(env: Pick<Env, "DB" | "TENANT_ZONE" | "GX_ENV">, tenantId: string, slug: string): Promise<string> {
   const r = await env.DB.prepare("SELECT hostname FROM tenant_hostnames WHERE tenant_id = ? AND kind = 'custom' AND role = 'primary' AND state = 'active' AND probe_ok_at IS NOT NULL LIMIT 1").bind(tenantId).first<{ hostname: string }>()
-  return r?.hostname ?? `${slug}.${env.TENANT_ZONE}`
+  return r?.hostname ?? platformHostOf(env, slug)
 }
 
 /** Indonesian remedy for the owner page (spec 11 §5 remedies). */

@@ -628,3 +628,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Evidence: local container PASS 6/6 with hardened runtime flags and body-free logs (`docs/evidence/TASK-601/`);
   relay unit tests 8/8; `pnpm check` green (unit 159, Workers 318; one pool start flake "bad port" re-ran green).
 - Awaiting owner: every production step of the runbook (Reserved IPv4, deploy, DNS/WAF, Mengantar allowlist, §6 1–4).
+
+## 2026-11-16 — TASK-602 Production zones, SaaS setup, monitoring — prepared (M6)
+
+- Shipped: production/staging Worker routes in `wrangler.jsonc` (dry-run OK), `-stg` staging mini-site hosts, an
+  operator check for every OBSERVABILITY decision row, Public API outcome counters + immediate `IP_NOT_ALLOWED` alert,
+  an alert drill endpoint, and the zone runbook (spec 11 §2 steps 1–6, secrets, deploy, probes, drill, rollback).
+- Evidence: Workers `test/telemetry/operator-checks.test.ts` (7) — each alert fires on a synthetic breach and stays
+  quiet one step below; mutation red; local probes 5/5 PASS and drill over 15 keys (`docs/evidence/TASK-602/`);
+  `pnpm check` green (unit 159, Workers 325).
+- Awaiting owner: everything in `docs/runbooks/production-zones.md` (resources, secrets, zone steps, deploy, probes in
+  production, confirming each drill message arrives).
+- Test fix: `dispatch.test.ts` rate-limit case seeded the current wall-clock minute and failed when the run crossed a
+  minute boundary (seen once under machine load); it now starts with ≥ 10 s left and re-seeds the cancel window.

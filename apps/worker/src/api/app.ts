@@ -28,6 +28,7 @@ import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
 import { CNAME_TARGET, domainRows, primaryHost, purgeHost, refreshHost, remedyOf, requestDomain } from "../hostnames/service"
 import { CfError } from "../hostnames/cloudflare"
 import { hit } from "../auth/throttle"
+import { platformHostOf } from "../host/lookup"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
@@ -649,7 +650,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     ])
     return {
       pro: t?.custom_domain_enabled === 1,
-      platformHost: `${m.tenantSlug}.${c.env.TENANT_ZONE}`,
+      platformHost: platformHostOf(c.env, m.tenantSlug),
       cnameTarget: CNAME_TARGET(c.env),
       primaryHost: await primaryHost(c.env, m.tenantId, m.tenantSlug),
       domains: rows.map((r) => ({

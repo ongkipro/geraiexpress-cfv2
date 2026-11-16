@@ -19,6 +19,7 @@ import { handleBrand } from "./brand"
 import { handleApiV1 } from "./api-v1"
 import { exportAll } from "./cron/backup"
 import { handleBackupOps } from "./ops/backup"
+import { handleAlertDrill } from "./ops/alert-drill"
 import { checkQuota, consumeHostnameBatch, pollHosts, primaryHost, reapHosts, type HostMessage } from "./hostnames/service"
 import { handleOutletMcp } from "./mcp/outlet"
 import { handlePublicMcp } from "./mcp/public"
@@ -93,6 +94,7 @@ export default {
         if (path === "/internal/ops/do-migrate" && request.method === "POST") return handleDoMigrate(request, env)
         if (path === "/internal/dev/last-mail" && request.method === "GET") return handleDevLastMail(request, env)
         if (path === "/internal/ops/bootstrap-admin" && request.method === "POST") return handleBootstrapAdmin(request, env)
+        if (path === "/internal/ops/alert-drill" && request.method === "POST") return handleAlertDrill(request, env)
         if ((path === "/internal/ops/backup-export" || path === "/internal/ops/backup-restore") && request.method === "POST") return handleBackupOps(request, env, path)
         if (path === "/internal/dev/preview") return handleDevPreview(request, env, "owner")
         if (path.startsWith("/api/owner/")) return OWNER_API.fetch(request, env, exec)
@@ -127,6 +129,8 @@ export default {
     if (controller.cron === "0 19 * * *") ctx.waitUntil(reapHosts(env, Date.now()).then(() => checkQuota(env, Date.now())).then(() => undefined))
     // Daily per-object export to R2 (TASK-603, ADR-0006 §7).
     if (controller.cron === "0 19 * * *") ctx.waitUntil(exportAll(env, Date.now()).then(() => undefined))
+    // Public API outcome counters older than 2 days (TASK-602).
+    if (controller.cron === "0 19 * * *") ctx.waitUntil(env.DB.prepare("DELETE FROM public_api_events WHERE minute < ?").bind(Math.floor((Date.now() - 2 * 86_400_000) / 60_000)).run().then(() => undefined))
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil(dispatchDue(env).then(() => undefined))
       ctx.waitUntil(runChecks(env).then(() => undefined))

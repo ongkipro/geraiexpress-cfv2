@@ -4,7 +4,7 @@ import type { Hono } from "hono"
 import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { vaultFor } from "../../do/gerai-vault/stub"
-import { hostCache } from "../../host/lookup"
+import { hostCache, platformHostOf } from "../../host/lookup"
 import { purgeHost } from "../../hostnames/service"
 import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
@@ -53,7 +53,7 @@ export function registerGeraiAdmin(app: Hono<any>): void {
       .bind(c.req.param("id"))
       .first<Record<string, unknown> & { outlet_json: string; slug: string }>()
     if (!a) throw new AppError(404, "APPLICATION_NOT_FOUND", "Pengajuan tidak ditemukan.")
-    const hostTaken = await c.env.DB.prepare("SELECT tenant_id FROM tenant_hostnames WHERE hostname = ?").bind(`${a.slug}.${c.env.TENANT_ZONE}`).first<{ tenant_id: string }>()
+    const hostTaken = await c.env.DB.prepare("SELECT tenant_id FROM tenant_hostnames WHERE hostname = ?").bind(platformHostOf(c.env, a.slug)).first<{ tenant_id: string }>()
     const { outlet_json, ...rest } = a
     return ok({ ...rest, outlet: JSON.parse(outlet_json) as OutletInput, slugReady: !hostTaken || hostTaken.tenant_id === a.tenant_id, partnerTransport: c.env.PARTNER_TRANSPORT })
   })

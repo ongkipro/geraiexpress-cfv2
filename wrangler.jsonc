@@ -90,7 +90,15 @@
       "name": "geraiexpress-cfv2-staging",
       "workers_dev": false,
       "preview_urls": false,
-      "routes": [],
+      // spec 07 §7 / spec 11 §2: staging platform hosts as Custom Domains; mini-sites `<slug>-stg.gerai.cc` reach the staging
+      // Worker through the more specific `*-stg.gerai.cc/*` route (production keeps `*/*`).
+      "routes": [
+        { "pattern": "staging.geraiexpress.com", "custom_domain": true },
+        { "pattern": "app-staging.geraiexpress.com", "custom_domain": true },
+        { "pattern": "owner-staging.geraiexpress.com", "custom_domain": true },
+        { "pattern": "hooks-staging.geraiexpress.com", "custom_domain": true },
+        { "pattern": "*-stg.gerai.cc/*", "zone_name": "gerai.cc" }
+      ],
       "vars": {
         "GX_ENV": "staging",
         "PLATFORM_APEX": "geraiexpress.com",
@@ -148,13 +156,23 @@
       ],
       "triggers": { "crons": ["*/5 * * * *", "0 * * * *", "0 19 * * *"] }
     },
-    // Production: filled with real resource ids, routes and secrets by TASK-602 (owner-approved). Until then every id is
-    // a placeholder, so `wrangler deploy --env production` fails instead of provisioning anything.
+    // Production: routes per spec 11 §1–2 and spec 10 §5 (TASK-602). Platform hosts are explicit Custom Domains (never
+    // `*.geraiexpress.com/*`, so a Worker fetch to `relay.` reaches the VPS); the tenant zone takes `*/*` plus an explicit
+    // `cname.gerai.cc/*` (O2O safety). Resource ids below stay placeholders until the owner creates the resources, so
+    // `wrangler deploy --env production` fails instead of provisioning anything (runbook: docs/runbooks/production-zones.md).
     "production": {
       "name": "geraiexpress-cfv2-production",
       "workers_dev": false,
       "preview_urls": false,
-      "routes": [],
+      "routes": [
+        { "pattern": "geraiexpress.com", "custom_domain": true },
+        { "pattern": "www.geraiexpress.com", "custom_domain": true },
+        { "pattern": "app.geraiexpress.com", "custom_domain": true },
+        { "pattern": "owner.geraiexpress.com", "custom_domain": true },
+        { "pattern": "hooks.geraiexpress.com", "custom_domain": true },
+        { "pattern": "*/*", "zone_name": "gerai.cc" },
+        { "pattern": "cname.gerai.cc/*", "zone_name": "gerai.cc" }
+      ],
       "vars": {
         "GX_ENV": "production",
         "PLATFORM_APEX": "geraiexpress.com",

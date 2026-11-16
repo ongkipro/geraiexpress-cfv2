@@ -35,3 +35,11 @@ export const hostCache = new HostCache()
 export function hostNames(env: Pick<Env, "PLATFORM_APEX" | "TENANT_ZONE" | "GX_ENV">): HostNames {
   return { platformApex: env.PLATFORM_APEX, tenantZone: env.TENANT_ZONE, stagingLabels: env.GX_ENV === "staging" }
 }
+
+/**
+ * The gerai's platform subdomain (spec 07 §7, spec 11 §2): `<slug>.gerai.cc` in production, `<slug>-stg.gerai.cc` on
+ * staging (first-level label so Universal SSL covers it; `*-stg.gerai.cc/*` routes to the staging Worker).
+ */
+export function platformHostOf(env: Pick<Env, "TENANT_ZONE" | "GX_ENV">, slug: string): string {
+  return `${slug}${env.GX_ENV === "staging" ? "-stg" : ""}.${env.TENANT_ZONE}`
+}

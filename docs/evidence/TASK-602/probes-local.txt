@@ -1,0 +1,6 @@
+PASS brand-health http://geraiexpress.localhost:55190/healthz 200 76 ms
+PASS app-health http://app.geraiexpress.localhost:55190/healthz 200 11 ms
+PASS owner-health http://owner.geraiexpress.localhost:55190/healthz 200 13 ms
+PASS hooks-health http://hooks.geraiexpress.localhost:55190/healthz 200 11 ms
+PASS minisite-probe http://probe.gerai.localhost:55190/healthz 200 13 ms
+probes: PASS — 5 probe(s) on local

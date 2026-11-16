@@ -24,6 +24,8 @@ Run: `pnpm probes --env <local|staging|production> [--port 8787]` (exit 1 on any
 to `ALERT_WEBHOOK_URL` (the owner's chat incoming webhook) or prints it with `--alert-dry-run`; `--force-fail <name>`
 is the synthetic-breach drill.
 
+**Operator checks (TASK-602):** `apps/worker/src/telemetry/checks.ts` evaluates every row of the table below on the `*/5` cron from D1 and each tenant object's read-only `healthSnapshot` (≤ 200 tenants per tick); Public API outcomes are counted per tenant/minute in D1 `public_api_events` (no key or URL) and `IP_NOT_ALLOWED` alerts at once. Alert keys: `issue_reconciliation_rate`, `issue_failed_streak`, `webhook_inbox_age`, `finance_sync_age`, `public_api_ip_not_allowed`, `public_api_auth_spike`, `public_api_issue_volume_spike`, `relay_down`, `discount_overdue`, `discount_selisih.*`, `email_failure_rate`, `hostname_quota`, `hostname_probe.*`, `tenant_recovery`, `tenant_backup_failed`. Drill: `POST /internal/ops/alert-drill` (OPS_TOKEN) sends one `[DRILL]` message per key (`drill.` prefix, never suppresses a real alert).
+
 **Alert channel (TASK-110):** the Worker's `*/5` cron runs the operator checks in `apps/worker/src/telemetry/checks.ts`
 and sends each alert once per 30 min per key (`alert_state` in D1) to the `ALERT_WEBHOOK_URL` secret; without it the
 alert is only an `alert.fired` event in Workers Logs. Telemetry events are structured JSON with bounded labels and
