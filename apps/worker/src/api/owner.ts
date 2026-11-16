@@ -16,6 +16,10 @@ import { hostOrigin, ipHash } from "../http/request"
 import { register, type AuthLevel } from "./registry"
 import { registerGeraiAdmin } from "../admin/gerai/routes"
 import { registerPricingAdmin } from "../pricing/rules/routes"
+import { registerOverview } from "../admin/overview"
+import { registerMonitor } from "../admin/monitor"
+import { registerSystem } from "../admin/audit"
+import { registerLegal } from "../admin/legal"
 
 export const RECENT_TOTP_MS = 15 * 60_000
 const TOTP_MAX_WRONG = 5
@@ -209,6 +213,10 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
 
   registerGeraiAdmin(app)
   registerPricingAdmin(app)
+  registerOverview(app)
+  registerMonitor(app)
+  registerSystem(app)
+  registerLegal(app)
 
   return app
 }

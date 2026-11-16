@@ -6,7 +6,9 @@ import { ConsoleShell } from "./shell/console-shell"
 import { GeraiPage } from "./routes/gerai/index"
 import { PengajuanPage } from "./routes/gerai/pengajuan"
 import { GeraiDetailPage } from "./routes/gerai/detail"
-import { PlaceholderPage } from "./routes/placeholder"
+import { RingkasanPage } from "./routes/index/page"
+import { PengawasanPage } from "./routes/pengawasan/page"
+import { SistemPage } from "./routes/sistem/page"
 import { TarifPage } from "./routes/tarif/index"
 import { TarifGeraiPage } from "./routes/tarif/gerai"
 
@@ -54,7 +56,7 @@ const consoleRoute = createRoute({
   },
 })
 
-const indexRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/", component: () => <PlaceholderPage title="Ringkasan" body="Ringkasan jaringan (gerai aktif, kiriman, pengajuan, kesehatan sinkron dan relay)." /> })
+const indexRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/", component: RingkasanPage })
 const geraiRoute = createRoute({
   getParentRoute: () => consoleRoute,
   path: "/gerai",
@@ -65,8 +67,8 @@ const pengajuanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "
 const geraiDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/gerai/$slug", component: GeraiDetailPage })
 const tarifRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif", component: TarifPage })
 const tarifGeraiRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif/$tenantId", component: TarifGeraiPage })
-const pengawasanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/pengawasan", component: () => <PlaceholderPage title="Pengawasan" body="Pantauan kiriman dan sinkron lintas gerai, serta radar risiko COD." /> })
-const sistemRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/sistem", component: () => <PlaceholderPage title="Sistem & Audit" body="Kesehatan integrasi dan relay, log audit, akses admin, profil perusahaan." /> })
+const pengawasanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/pengawasan", component: PengawasanPage })
+const sistemRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/sistem", component: SistemPage })
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: OwnerMasukPage })
 const totpRoute = createRoute({

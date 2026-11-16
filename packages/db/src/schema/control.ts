@@ -262,6 +262,7 @@ export const superAdmins = sqliteTable("super_admins", {
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
+  riskReview: integer("risk_review").notNull().default(0),
 })
 
 export const tenantApplications = sqliteTable(
@@ -374,4 +375,17 @@ export const tenantDiscountRules = sqliteTable(
     updatedBy: text("updated_by"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.serviceCode] }), index("tenant_discount_rules_due").on(t.nextCheckAt), index("tenant_discount_rules_state").on(t.verificationState, t.requestedAt)],
+)
+
+export const recipientRiskIndex = sqliteTable(
+  "recipient_risk_index",
+  {
+    phoneHmac: text("phone_hmac").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    deliveredCount: integer("delivered_count").notNull(),
+    rtsCount: integer("rts_count").notNull(),
+    lastEventAt: integer("last_event_at").notNull(),
+    version: integer("version").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.phoneHmac, t.tenantId] })],
 )

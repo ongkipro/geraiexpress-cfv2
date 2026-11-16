@@ -18,7 +18,7 @@ export async function handleBootstrapAdmin(request: Request, env: Env): Promise<
   if (await env.DB.prepare("SELECT 1 FROM super_admins WHERE user_id = ?").bind(user.id).first()) return fail(409, "ALREADY_ADMIN", "Akun ini sudah Super Admin.")
   const now = Date.now()
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, enrolled_by, enrolled_at, status, created_at, updated_at) VALUES (?1, 'pending', 'bootstrap', ?2, 'active', ?2, ?2)").bind(user.id, now),
+    env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, enrolled_by, enrolled_at, status, risk_review, created_at, updated_at) VALUES (?1, 'pending', 'bootstrap', ?2, 'active', 1, ?2, ?2)").bind(user.id, now),
     env.DB.prepare("INSERT INTO audit_logs (id, at, actor_type, actor_id, action, target_type, target_id, reason) VALUES (?, ?, 'system', 'bootstrap', 'super_admin.bootstrap', 'user', ?, 'first Super Admin')").bind(crypto.randomUUID(), now, user.id),
   ])
   return ok({ userId: user.id, totp: "enrol" }, 201)

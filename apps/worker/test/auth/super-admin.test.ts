@@ -4,6 +4,7 @@ import { hashPassword } from "../../src/auth/password"
 import { hotp, stepAt } from "../../src/auth/totp"
 import { IMPERSONATION_PATTERNS } from "../../src/api/owner"
 import { ROUTES } from "../../src/api/registry"
+import { scanOwnerRoutes } from "../../../../scripts/ci/route-scan-lib.mjs"
 import { handleBootstrapAdmin } from "../../src/ops/bootstrap-admin"
 
 const OWNER = "http://owner.geraiexpress.localhost:8787"
@@ -140,9 +141,11 @@ describe("non-impersonation route scan (DEC-209)", () => {
   it("no /api/owner route can create, pay, edit, cancel or impersonate a gerai's shipments", () => {
     const owner = ROUTES.filter((r) => r.context === "owner")
     expect(owner.length).toBeGreaterThan(0)
-    for (const r of owner) {
+    // Read-only cross-tenant views (GET, e.g. `Pengawasan` search) are allowed; no mutating route may match.
+    for (const r of owner.filter((x) => x.method !== "GET")) {
       for (const re of IMPERSONATION_PATTERNS) expect(re.test(r.path), `${r.method} ${r.path} matches ${re}`).toBe(false)
     }
+    expect(scanOwnerRoutes(ROUTES)).toEqual([])
   })
   it("every /api/owner route except login requires aal1+ and every non-auth route requires aal2+", () => {
     for (const r of ROUTES.filter((x) => x.context === "owner")) {

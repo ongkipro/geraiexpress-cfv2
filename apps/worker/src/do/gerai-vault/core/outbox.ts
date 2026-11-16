@@ -60,6 +60,19 @@ export function d1UpsertStatement(db: D1Database, tenantId: string, row: OutboxR
            WHERE excluded.version > shipment_index.version`,
         )
         .bind(tenantId, row.entity_key, p.awb_number ?? null, p.courier_code ?? null, p.status, p.created_at, p.updated_at, row.version)
+    case "recipient_risk_index": {
+      // entity_key = phone_hmac (64 hex); counts are absolute for this tenant, applied only when newer.
+      if (!/^[0-9a-f]{64}$/.test(row.entity_key)) throw new Error("recipient_risk_index: entity_key must be a phone HMAC")
+      const n = (v: unknown) => (Number.isSafeInteger(v) && (v as number) >= 0 ? (v as number) : 0)
+      return db
+        .prepare(
+          `INSERT INTO recipient_risk_index (phone_hmac, tenant_id, delivered_count, rts_count, last_event_at, version) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+           ON CONFLICT(phone_hmac, tenant_id) DO UPDATE SET delivered_count = excluded.delivered_count, rts_count = excluded.rts_count,
+             last_event_at = excluded.last_event_at, version = excluded.version
+           WHERE excluded.version > recipient_risk_index.version`,
+        )
+        .bind(row.entity_key, tenantId, n(p.delivered_count), n(p.rts_count), n(p.last_event_at), row.version)
+    }
     default:
       throw new Error(`outbox topic ${row.topic} has no D1 applier yet`)
   }

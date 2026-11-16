@@ -271,3 +271,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   mark requested; owner sees assigned %, cashier 403, tenant host shows no discount.
 - Gotchas: an RPC return type built from a Zod passthrough schema (unknown index signature) collapses to the error
   branch in TypeScript — return a plain projection (`ObservedRate`); alert keys must match `[a-z0-9_.-]{1,80}`.
+
+## 2026-11-16 — TASK-208 Super Admin Ringkasan, Pengawasan, Sistem & Audit (M2)
+
+- Shipped: `admin/{overview,monitor,audit,legal}`, owner screens `/`, `/pengawasan`, `/sistem` (placeholder page
+  removed), `recipient_risk_index` + `risk_review`, outbox applier, relay health probe, rotation action, legal profile
+  editor, non-impersonation scanners (`scanOwnerRoutes`, `scanOwnerVaultCalls`) + Node source-scan test.
+- Evidence: KPI/series without PII; risk radar 403 without permission, 422 without reason or bad phone, totals from
+  hashed index, versioned upsert ignores stale, audit holds reason + HMAC prefix only; audit viewer filters + audits
+  its read; health response has no secrets; rotation needs a reason, bumps key version through the fence, audited;
+  risk_review self-grant refused; legal profile NULL then filled, NIB/email validation in Indonesian, NPWP encrypted and
+  masked, audit names fields only; owner host 404s for app and shipment paths.
+- Decision: the TASK-106 path scan now applies to mutating methods only; read-only cross-tenant GET views (search) are
+  the documented Super Admin job (spec 06 §4 `Pengawasan`).
+- Workers tests cannot read the repository filesystem; source scans run as Node unit tests (`scripts/ci/*.test.mjs`).

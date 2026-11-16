@@ -31,3 +31,43 @@ export function scanRoutes(routes) {
   }
   return problems
 }
+
+// Non-impersonation scan (DEC-209, AGENTS.md §3.4): Super Admin routes never create, pay, edit or cancel a gerai's
+// shipments. Two checks: (1) no owner route path names a shipment action; (2) owner-side source files never call a
+// tenant-object method that mutates shipments or money (allowlist of read/admin RPCs instead of a denylist guess).
+export const OWNER_FORBIDDEN_PATH = /\/(kiriman|shipments?|orders?|dispatch|bayar|pay|cancel|batal|labels?|resi|refund|topup)(\/|$)/i
+export const OWNER_ALLOWED_VAULT_CALLS = new Set([
+  "connectionView",
+  "migrate",
+  "schemaState",
+  "recordOnboarding",
+  "webhookStatus",
+  "courierPrefs",
+  "observeRates",
+  "beginKeyRotation",
+  "abortKeyRotation",
+  "markKeyRotationUnknown",
+  "pendingKeyRotation",
+  "resolveKeyRotation",
+  "completeKeyRotation",
+])
+
+/** Read-only cross-tenant views (GET) are allowed; any mutating method on a shipment/payment path is not. */
+export function scanOwnerRoutes(routes) {
+  return routes
+    .filter((r) => r.context === "owner" && r.method !== "GET" && OWNER_FORBIDDEN_PATH.test(r.path))
+    .map((r) => `owner ${r.method} ${r.path}: Super Admin route mutates a shipment/payment resource`)
+}
+
+/** `files` = [{ path, source }] of owner-side modules; returns vault method calls outside the allowlist. */
+export function scanOwnerVaultCalls(files) {
+  const problems = []
+  for (const f of files) {
+    const names = [...f.source.matchAll(/(?:const|let)\s+([A-Za-z_]\w*)\s*=\s*vaultFor\(/g)].map((m) => m[1])
+    const callee = names.length ? `(?:vaultFor\\([^)]*\\)|\\b(?:${names.join("|")}))` : "vaultFor\\([^)]*\\)"
+    for (const m of f.source.matchAll(new RegExp(`${callee}\\s*(?:\\)\\s*)?\\.\\s*([A-Za-z_]\\w*)\\s*\\(`, "g"))) {
+      if (!OWNER_ALLOWED_VAULT_CALLS.has(m[1])) problems.push(`${f.path}: Super Admin code calls vault.${m[1]}()`)
+    }
+  }
+  return problems
+}
