@@ -3,26 +3,30 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-16 — **M1 closed** (TASK-101..112, TASK-199; live steps listed in `STATUS.md`)
+Updated: 2026-11-16 — **M2 closed** (TASK-201..208, TASK-299; live steps listed in `STATUS.md`)
 
-## 1. Repository layout (real counts, ts/tsx/mjs/sql/sh)
+## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
 | Path | What | Files · lines |
 |---|---|---|
-| `apps/worker/src` | the one Cloudflare Worker: host classifier, SPA serving, `/api/app`, `/api/owner`, auth, email outbox, ops endpoints, telemetry checks, `GeraiVaultDO` | 36 · 2,537 |
-| `apps/worker/test` | Workers Vitest in `workerd`: host, routing, auth, Super Admin, email, migrations, slug, telemetry, isolation, CI route scan | 16 · 1,488 |
-| `apps/web-app/src` | Vite + React 19 SPA for `app.` (auth screens; workspace shell from TASK-301) + shared shadcn comfort primitives | 36 · 3,260 |
-| `apps/web-owner/src` | Vite + React 19 SPA for `owner.` (login, TOTP; console from TASK-203); primitives via `@shared` | 6 · 250 |
-| `packages/domain` | pure integer money / weight / INV slug math | 7 · 864 |
-| `packages/db` | Drizzle schemas + forward-only SQL: `migrations/control` (D1), `migrations/tenant` (every `GeraiVaultDO`) | 12 · 734 |
+| `apps/worker/src` | the one Cloudflare Worker: host classifier, SPA serving, `/api/app`, `/api/owner`, `hooks.` ingest, auth, email outbox, onboarding, couriers, pricing rules, Super Admin console APIs, ops, telemetry, `GeraiVaultDO`, `PartnerQuotaDO` | 55 · 5,231 |
+| `apps/worker/test` | Workers Vitest in `workerd`: host, auth, Super Admin, email, migrations/drift, slug, telemetry, isolation (incl. webhook tokens, no key in logs), onboarding, webhooks/status, key rotation, couriers, pricing, admin console, CI route scan | 28 · 2,703 |
+| `apps/web-app/src` | Vite + React 19 SPA for `app.`: auth, `/daftar` application, `/pengaturan/{mengantar,ekspedisi}`; shared shadcn comfort primitives | 40 · 3,788 |
+| `apps/web-owner/src` | Vite + React 19 SPA for `owner.`: login, TOTP, console shell (5 menus), Ringkasan, Gerai, Tarif & Kurir, Pengawasan, Sistem & Audit | 18 · 1,656 |
+| `packages/domain` | pure integer money / weight / INV slug / status combine / cashback math | 11 · 1,150 |
+| `packages/db` | Drizzle schemas + forward-only SQL: `migrations/control` (D1), `migrations/tenant` (every `GeraiVaultDO`) | 21 · 1,204 |
+| `packages/mengantar-sdk` | Public API client (redacting transport, Zod passthrough) + Partner client (direct/relay, `maybe_sent`) | 7 · 678 |
 | `packages/telemetry` | structured events, redaction, Public API anomaly evaluators | 2 · 294 |
-| `packages/mengantar-sdk`, `packages/thermal-print` | placeholders (TASK-201/202, TASK-306) | — |
-| `scripts/` | `ci/` (bundle audit, route scan, red fixtures, integrated gate), `do-migrate`, `probes`, `email` deliverability | 14 · 602 |
-| `e2e/` | Playwright (390/768/1280): accounts, Super Admin TOTP | 3 · 151 |
+| `packages/thermal-print` | placeholder (TASK-306) | — |
+| `infra/partner-relay` | stateless static-egress relay (Node, 66-line core), Dockerfile, compose (DEC-219) | 4 · 185 |
+| `scripts/` | `ci/` (bundle audit, route + non-impersonation scans, red fixtures, integrated gate), `do-migrate`, `probes`, `email` deliverability, `dev/seed-preview` | 17 · 719 |
+| `e2e/` | Playwright (390/768/1280): accounts, Super Admin TOTP, apply → approve → connected → webhook secret → courier toggles | 5 · 276 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 197 cases. Migrations — control: `0000_baseline`, `0001_alert_state`, `0002_email_outbox`, `0003_auth`,
-`0004_super_admin`; tenant: `0001_baseline`, `0002_inv_slugs`.
+Tests: 244 unit/Workers cases + 4 Playwright specs (12 runs over 3 viewports). Migrations — control: `0000_baseline`,
+`0001_alert_state`, `0002_email_outbox`, `0003_auth`, `0004_super_admin`, `0005_applications`, `0006_webhook_routes`,
+`0007_courier_catalog`, `0008_discount_rules`, `0009_risk_and_admin`; tenant (v6): `0001_baseline`, `0002_inv_slugs`,
+`0003_mengantar_connection`, `0004_webhooks_status`, `0005_key_rotation`, `0006_courier_prefs`.
 
 ## 2. Runtime hosts and audiences (one Worker, `wrangler.jsonc`: local, `env.staging`, `env.production`)
 
@@ -31,9 +35,9 @@ Tests: 197 cases. Migrations — control: `0000_baseline`, `0001_alert_state`, `
 | `geraiexpress.com` · `geraiexpress.localhost:8787` | `MARKETING_APEX` | public | `/healthz`; brand site at TASK-502 |
 | `app.geraiexpress.com` · `app.geraiexpress.localhost` | `GERAI_WORKSPACE` | owner, Kasir | SPA + `/api/app/*` |
 | `owner.geraiexpress.com` · `owner.geraiexpress.localhost` | `PLATFORM_OWNER` | Super Admin | SPA + `/api/owner/*` + `/internal/ops/*` |
-| `hooks.geraiexpress.com` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `/healthz`; webhooks at TASK-204 |
+| `hooks.geraiexpress.com` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `POST /webhooks/mengantar/:token` (bodiless 404 otherwise) |
 | `<slug>.gerai.cc` / custom · `<slug>.gerai.localhost` | `TENANT_MINISITE` | public | `GET /` placeholder; mini-site at TASK-501 |
-| `relay.geraiexpress.com` | — | Worker → VPS | never served by the Worker (404, also `/healthz`) |
+| `relay.geraiexpress.com` | — | Worker → VPS relay | never served by the Worker (404, also `/healthz`) |
 
 Request order (`apps/worker/src/index.ts`): `/healthz` on eligible hosts → `host/classify.ts` (normalise, shape, DCV,
 platform match, D1 `tenant_hostnames` ≤ 30 s cache, 404/403/503) → context router (foreign API families → 404).
@@ -42,11 +46,18 @@ platform match, D1 `tenant_hostnames` ≤ 30 s cache, 404/403/503) → context r
 
 | D1 control tables | Tenant object tables |
 |---|---|
-| `tenants`, `tenant_members`, `tenant_hostnames`, `tenant_schema_versions`, `audit_logs`, `shipment_index`, `alert_state`, `email_outbox`, `email_suppressions`, `platform_legal_profile`, `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins` | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`, `inv_slugs` (+ `schema_version`, `vault_identity`) |
+| identity: `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins` (+`risk_review`) · tenancy: `tenants`, `tenant_members`, `tenant_hostnames`, `tenant_schema_versions`, `tenant_applications`, `tenant_onboarding` · routing: `webhook_routes` · pricing: `courier_service_catalog`, `platform_pricing_policy`, `courier_discount_policy`, `tenant_discount_rules` · indexes: `shipment_index`, `recipient_risk_index` · ops: `audit_logs`, `alert_state`, `email_outbox`, `email_suppressions`, `platform_legal_profile` | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`, `inv_slugs`, `mengantar_connections` (encrypted key + webhook secret, rotation fence, previous token 24 h), `shipments` (status core), `shipment_events`, `webhook_inbox`, `vault_timers`, `tenant_courier_prefs` (+ `schema_version`, `vault_identity`) |
 
-`GeraiVaultDO` (`apps/worker/src/do/gerai-vault/`): only via `vaultFor(env, tenantId)` (`locationHint: apac`); RPCs
-`migrate`, `schemaState`, `allocateSlug`, `slugExists`, `flushOutbox`, `alarm`; refusals as data. DO → D1 via the
-versioned absolute-upsert `outbox`. `PartnerQuotaDO`: placeholder (TASK-202).
+`GeraiVaultDO` (`apps/worker/src/do/gerai-vault/`): only via `vaultFor(env, tenantId)` (`locationHint: apac`); binds its
+tenant on first `migrate`; refusals as data. RPC groups: core (`migrate`, `schemaState`, `flushOutbox`, `runTimers`,
+`alarm`), slugs, Mengantar connection (`connectionView`, `recordOnboarding`), webhooks/status (`ensureWebhookToken`,
+`saveWebhookSecret`, `webhookStatus`, `ingestWebhook`, `applyWebhook`, `sweepInbox`, `pollStatus`), key rotation fence
+(`beginKeyRotation` … `completeKeyRotation`, `resolveKeyRotation`, `probeDispatchFence`), couriers (`courierPrefs`,
+`setCourierPref`), discount observation (`observeRates`). One DO alarm serves the outbox and the named timers
+(`status_poll`, `inbox_sweep`, `key_rotation_check`). DO → D1 via the versioned absolute-upsert `outbox`
+(`shipment_index`, `recipient_risk_index`). `PartnerQuotaDO` (global): 60 calls/min, 1,000 registrations per WIB day.
+
+Status = provider maximum (terminal, minute bucket, rank) + monotone custody + `combine` (`@gx/domain/status`).
 
 ## 4. Routes in code
 
@@ -54,14 +65,21 @@ versioned absolute-upsert `outbox`. `PartnerQuotaDO`: placeholder (TASK-202).
 |---|---|---|
 | any eligible | `GET /healthz` | none, no storage |
 | tenant candidates | DCV `/.well-known/{acme-challenge,pki-validation}/*`; `GET /.well-known/geraiexpress-probe/:nonce` | none (HMAC probe) |
+| `hooks.` | `POST /webhooks/mengantar/:token` → token hash → tenant object verifies (token, HMAC, ±5 min, environment) and stores before 200 → Queue `gx-mengantar-webhooks` → `applyWebhook` | path token + signature |
 | `app.` | `POST /api/app/auth/{signup/request,signup/verify,signup/complete,login,password/forgot,password/reset}`, `GET /auth/invitations/:token`, `POST /auth/invitations/:token/accept` | public allowlist |
-| `app.` | `POST /auth/logout`, `GET /auth/me` · `POST /members/invitations` · local-only `POST /dev/seed-tenant` | `app_session` · `app_owner` |
-| `owner.` | `POST /api/owner/auth/login` · `/auth/totp/{enrol,verify}`, `/auth/logout` · `GET /auth/me` · `GET /audit`, `POST /admins`, `POST /admins/:id/totp-reset` | public · `owner_aal1` · `owner_aal2` · `owner_recent` |
-| `owner.` | `POST /internal/ops/do-migrate`, `POST /internal/ops/bootstrap-admin`, local-only `GET /internal/dev/last-mail` | Bearer `OPS_TOKEN` |
+| `app.` | `POST /auth/logout`, `GET /auth/me` · `GET /onboarding/areas`, `POST /onboarding/application`, `GET /onboarding/status` · `GET /areas` | `app_session` / `app_member` |
+| `app.` | `POST /members/invitations`, `POST /onboarding/byok`, `GET /settings/mengantar`, `POST /settings/mengantar/webhook-secret`, `GET /settings/couriers`, `POST /settings/couriers/:code` · local-only `POST /dev/seed-tenant` | `app_owner` |
+| `owner.` | `POST /api/owner/auth/login` · `/auth/totp/{enrol,verify}`, `/auth/logout` · `GET /auth/me` | public · `owner_aal1` |
+| `owner.` | reads: `/overview`, `/gerai/{summary,applications,applications/:id,directory,:slug}`, `/tarif/{gerai,gerai/:id,permintaan,permintaan.csv,kebijakan}`, `/pengawasan/{kiriman,antrean}`, `/sistem/{kesehatan,admin,profil-perusahaan}` | `owner_aal2` |
+| `owner.` | changes + sensitive reads: approve/reject/status/masking/retry, `/tarif/*` edits, `/pengawasan/risiko` (+`risk_review`), `/sistem/{audit,admin/:id/risk-review,rotasi-kunci/:slug,profil-perusahaan}`, `/audit`, `/admins*` | `owner_recent` (TOTP ≤ 15 min) + reason + audit |
+| `owner.` | `POST /internal/ops/do-migrate`, `POST /internal/ops/bootstrap-admin`; local-only `GET /internal/dev/last-mail`, `GET /internal/dev/preview` (also on `app.`) | Bearer / query `OPS_TOKEN` |
 | `app.` / `owner.` | `GET /*` (not `/api`, `/webhooks`, `/internal`, `/mcp`) | SPA shell + hashed assets |
 
-SPA routes — app: `/`, `/masuk`, `/daftar-akun`, `/lupa-sandi`, `/atur-sandi/:token`, `/undangan/:token`;
-owner: `/`, `/masuk`, `/totp`. Cron `*/5`: email dispatch + operator checks/alerts. Queues: declared, consumers ack.
+SPA routes — app: `/`, `/masuk`, `/daftar-akun`, `/daftar`, `/daftar/status`, `/lupa-sandi`, `/atur-sandi/:token`,
+`/undangan/:token`, `/pengaturan/mengantar`, `/pengaturan/ekspedisi`; owner: `/`, `/masuk`, `/totp`, `/gerai`,
+`/gerai/pengajuan/:id`, `/gerai/:slug`, `/tarif`, `/tarif/:tenantId`, `/pengawasan`, `/sistem`.
+Cron `*/5`: email dispatch, operator checks/alerts, discount verifier; `0 * * * *`: revoke rotated webhook routes.
+Queues: `gx-mengantar-webhooks` consumed; others declared, consumers ack (their tasks).
 
 ## 5. Scripts
 
@@ -69,8 +87,9 @@ owner: `/`, `/masuk`, `/totp`. Cron `*/5`: email dispatch + operator checks/aler
 |---|---|
 | `pnpm check` | typecheck → eslint → unit → build both SPAs → Workers tests → bundle audit |
 | `pnpm gate <TASK-x99>` | milestone integrated run, fail-fast, every gate recorded in `delivery-ledger` |
-| `pnpm e2e` | Playwright 390/768/1280 on a fresh local state |
+| `pnpm e2e` | Playwright 390/768/1280 on a fresh local state (per-test client IP) |
 | `pnpm dev` / `pnpm db:migrate:local` | local Worker + SPAs / apply D1 control migrations (`.wrangler/state-dev`) |
+| `node scripts/dev/seed-preview.mjs <port>` | local synthetic owner + application + Super Admin for rendering gates |
 | `pnpm do:migrate --env <env> [--dry-run]` | migrate every tenant object, stop at first failure |
 | `pnpm probes --env <env> [--force-fail <probe>] [--alert-dry-run]` | `OBSERVABILITY.md` probes + owner alert |
 | `pnpm ci:red-fixtures` | prove broken test / `.map` / secret literal / unprotected route each fail their gate |

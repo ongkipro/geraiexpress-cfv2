@@ -285,3 +285,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Decision: the TASK-106 path scan now applies to mutating methods only; read-only cross-tenant GET views (search) are
   the documented Super Admin job (spec 06 §4 `Pengawasan`).
 - Workers tests cannot read the repository filesystem; source scans run as Node unit tests (`scripts/ci/*.test.mjs`).
+
+## 2026-11-16 — TASK-299 M2 close
+
+- Integrated run (`scripts/ci/integrated-gate.sh TASK-299`): typecheck, lint, unit, build, worker, migrations,
+  isolation, security (bundle audit + red fixtures + `security-check .`), e2e — all PASS, recorded in the ledger.
+  (A first run was UNVERIFIED because `docs/SYSTEM-MAP.md` was edited while it ran; re-run on a frozen tree.)
+- Exit gate "zero raw key URLs in logs": `apps/worker/test/isolation/no-key-in-logs.test.ts` captures every console
+  line across all M2 Mengantar paths; mutation (log a keyed URL in `publicClient`) turns it red.
+- Sandbox onboarding end-to-end runs on the offline mock locally; the live sandbox run needs Partner sandbox
+  credentials → AWAITING_OWNER_ACTION. `docs/SYSTEM-MAP.md` refreshed for M2.
