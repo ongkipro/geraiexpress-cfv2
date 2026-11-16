@@ -352,6 +352,24 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(r.value)
   })
 
+  // Meja Retur (TASK-404, spec 04 §2, ADR-0005): Kasir and owner; ID override is owner-only (checked in the object).
+  const returns = async (c: AppCtx, op: Parameters<GeraiVaultDO["returnsOp"]>[2]) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).returnsOp(m.tenantId, { userId: c.get("session").user.id, role: m.role }, op)
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, r.value))
+  }
+  r("GET", "/returns", "app_member", "role", (c) => returns(c, { op: "desk" }))
+  r("POST", "/returns/intake", "app_member", "role", async (c) => {
+    const b = await body(c)
+    return returns(c, { op: "intake", code: String(b.code ?? "").slice(0, 60), condition: b.condition, photoId: typeof b.photoId === "string" ? b.photoId : null, note: b.note })
+  })
+  r("POST", "/returns/:slug/code", "app_member", "role", (c) => returns(c, { op: "code", slug: slugParam(c) }))
+  r("POST", "/returns/:slug/handback", "app_member", "role", async (c) => {
+    const b = await body(c)
+    return returns(c, { op: "handback", slug: slugParam(c), code: b.code, override: b.override && typeof b.override === "object" ? { reason: (b.override as { reason?: unknown }).reason } : undefined })
+  })
+
   // Pickup & Manifest / Surat Jalan (TASK-403, spec 04 §1): Kasir and owner; scans and handover run in the object.
   const pickup = async (c: AppCtx, op: Parameters<GeraiVaultDO["pickupOp"]>[2]) => {
     const m = c.get("membership")!
@@ -905,6 +923,16 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     balance -= 1_000
     push({ _id: `dev-${tag}-x`, inv_number: "INV-MGT-DEV-X", type: "typeMismatchP", status: "statusCleared", amount: -1_000, balanceAmount: balance, createdAt: at(), description: "Selisih" })
     return ok({ rows: mockInvoices.filter((i) => i._seller === seller).length }, 201)
+  })
+
+  // Local only (mock Mengantar): a provider status update for one INV, standing in for a webhook.
+  r("POST", "/dev/provider-status", "app_member", "none", async (c) => {
+    if (c.env.GX_ENV !== "local" || c.env.MENGANTAR_PUBLIC_ORIGIN !== "mock") return fail(404, "NOT_FOUND", "Alamat tidak ditemukan.")
+    const m = c.get("membership")!
+    const b = await body(c)
+    const r = await vaultFor(c.env, m.tenantId).devProviderStatus(m.tenantId, String(b.slug ?? ""), String(b.category ?? ""))
+    if (!r.ok) return vaultErr(r)
+    return ok({ status: r.value })
   })
 
   // Local only: add a synthetic notification to the caller's gerai (renders `/notifikasi` states).

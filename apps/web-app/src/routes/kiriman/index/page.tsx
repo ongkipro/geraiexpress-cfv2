@@ -10,6 +10,7 @@ import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
 import { rp } from "../../kasir/quote-panel"
 import { PickupQueue } from "../pickup/page"
+import { MejaRetur } from "../retur/page"
 
 // `Kiriman` (visual 06 §1, visual 07 `/kiriman`, DEC-213/220): tabs with counts → search + period + courier + print
 // filters → table (cards under 768 px) with `Pembayaran` and the `Tandai Lunas` row action. Specialist tabs
@@ -141,6 +142,7 @@ export function KirimanPage() {
         </div>
       </div>
       {tab === "pickup" ? <PickupQueue /> : null}
+      {tab === "retur" ? <MejaRetur /> : null}
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
         filtered ? (

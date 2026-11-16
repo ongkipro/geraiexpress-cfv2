@@ -631,3 +631,29 @@ export const pickupBatchItems = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.batchId, t.slug] }), uniqueIndex("pickup_batch_items_slug").on(t.slug)],
 )
+
+// TASK-404 Meja Retur.
+export const returnIntakes = sqliteTable(
+  "return_intakes",
+  {
+    slug: text("slug").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    condition: text("condition", { enum: ["baik", "penyok_rusak", "terbuka"] }).notNull(),
+    photoR2Key: text("photo_r2_key"),
+    note: text("note"),
+    intakeBy: text("intake_by").notNull(),
+    intakeAt: integer("intake_at").notNull(),
+    codeHash: text("code_hash"),
+    codeSalt: text("code_salt"),
+    codeIssuedAt: integer("code_issued_at"),
+    codeAttempts: integer("code_attempts").notNull().default(0),
+    codeLockedUntil: integer("code_locked_until"),
+    storageDeadlineAt: integer("storage_deadline_at").notNull(),
+    handbackAt: integer("handback_at"),
+    handbackBy: text("handback_by"),
+    handbackMethod: text("handback_method", { enum: ["code", "id_override"] }),
+    handbackReason: text("handback_reason"),
+    claimOffered: integer("claim_offered").notNull().default(0),
+  },
+  (t) => [index("return_intakes_open").on(t.handbackAt, t.intakeAt)],
+)

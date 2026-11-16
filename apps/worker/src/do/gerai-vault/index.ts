@@ -28,6 +28,7 @@ import { applyInvoice, FINAL_STATUSES, settleBalance } from "./finance"
 import { financeView, type FinanceView } from "./finance/view"
 import { balanceSufficient } from "./finance/reserve"
 import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
+import { desk as returnDesk, handback as returnHandback, intake as returnIntake, issueCode as issueReturnCode, type ReturnError } from "./returns"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -167,6 +168,12 @@ export type PickupValue =
   | { kind: "history"; batches: PickupBatchRow[] }
   | { kind: "batch"; batch: BatchView }
   | { kind: "scan"; scan: ScanResult; batch: BatchView }
+
+export type ReturnsValue =
+  | ({ kind: "desk" } & ReturnType<typeof returnDesk>)
+  | { kind: "intake"; slug: string; conflict: boolean; sender: { name: string; phone: string; brand: string | null } | null; awb: string | null }
+  | { kind: "code"; code: string }
+  | { kind: "handback"; method: "code" | "id_override" }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -1132,11 +1139,67 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: k && /^MOCK-|^KEY-/.test(k.key) ? k.key : null }
   }
 
+  /** Local mock only: apply a provider status observation (stands in for a Mengantar webhook in dev and e2e). */
+  async devProviderStatus(tenantId: string, slug: string, category: string): Promise<VaultResult<string | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (this.env.GX_ENV !== "local" || this.env.MENGANTAR_PUBLIC_ORIGIN !== "mock") return { ok: true, value: null }
+    const mapped = mapMengantarCategory(category)
+    if (!mapped) return { ok: true, value: null }
+    const now = Date.now()
+    const r = this.ctx.storage.transactionSync(() => recordProviderObservation(this.ctx.storage.sql, { slug, eventKey: `dev:${slug}:${category}:${now}`, source: "webhook", rawCategory: category, mapped, eventAt: now + 60_000, eventAtText: null }, now))
+    await this.armOutbox()
+    return { ok: true, value: r.status }
+  }
+
   /** `/keuangan` read model (owner only): summary cards + the five tabs. */
   async financeView(tenantId: string, now: number = Date.now()): Promise<VaultResult<FinanceView>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: financeView(this.ctx.storage.sql, now) }
+  }
+
+  // ---- Meja Retur (TASK-404) -------------------------------------------------------------------------------------
+
+  async returnsOp(
+    tenantId: string,
+    actor: { userId: string; role: "gerai_admin" | "cashier" },
+    op:
+      | { op: "desk" }
+      | { op: "intake"; code: string; condition: unknown; photoId: string | null; note: unknown }
+      | { op: "code"; slug: string }
+      | { op: "handback"; slug: string; code?: unknown; override?: { reason: unknown } },
+  ): Promise<{ ok: true; value: ReturnsValue } | { ok: false; refused?: VaultRefusal; error?: ReturnError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    if (op.op === "desk") return { ok: true, value: { kind: "desk", ...returnDesk(sql, now) } }
+    if (op.op === "intake") {
+      const photo = op.photoId && /^[0-9a-f-]{36}$/.test(op.photoId) ? (sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ? AND purpose IN ('return_photo','evidence')", op.photoId).toArray()[0]?.r2_key ?? null) : null
+      const r = this.ctx.storage.transactionSync(() => returnIntake(sql, tenantId, { code: op.code, condition: op.condition, photoKey: photo, note: op.note, actorId: actor.userId }, now))
+      if (!r.ok) return r
+      // The true sender is revealed for the WhatsApp notice: always audited (ADR-0005).
+      const s = sql.exec<{ true_sender_json: string | null; mask_preset: string | null; awb_number: string | null }>("SELECT true_sender_json, mask_preset, awb_number FROM shipments WHERE slug = ?", r.value.slug).one()
+      this.ctx.storage.transactionSync(() => {
+        this.audit(tenantId, now, "user", actor.userId, "return.intake", { slug: r.value.slug })
+        this.audit(tenantId, now, "user", actor.userId, "true_sender_reveal", { slug: r.value.slug, reason: "Meja Retur", preset: s.mask_preset })
+      })
+      await this.armOutbox()
+      const sender = s.true_sender_json ? (JSON.parse(s.true_sender_json) as { name: string; phone: string; brand?: string | null }) : null
+      return { ok: true, value: { kind: "intake", slug: r.value.slug, conflict: r.value.conflict, sender: sender ? { name: sender.name, phone: sender.phone, brand: sender.brand ?? null } : null, awb: s.awb_number } }
+    }
+    if (op.op === "code") {
+      const r = await issueReturnCode(sql, op.slug, now)
+      if (!r.ok) return r
+      this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", actor.userId, "return.code_issued", { slug: op.slug }))
+      return { ok: true, value: { kind: "code", code: r.value.code } }
+    }
+    const r = await returnHandback(sql, { slug: op.slug, code: op.code, override: op.override, role: actor.role, actorId: actor.userId }, now)
+    if (!r.ok) return r
+    this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", actor.userId, "return.handback", { slug: op.slug, method: r.value.method }))
+    await this.armOutbox()
+    return { ok: true, value: { kind: "handback", method: r.value.method } }
   }
 
   // ---- Pickup manifests / Surat Jalan (TASK-403) ------------------------------------------------------------------

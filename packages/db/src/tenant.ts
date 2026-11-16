@@ -16,6 +16,7 @@ import m0013 from "../migrations/tenant/0013_bulk.sql"
 import m0014 from "../migrations/tenant/0014_settings.sql"
 import m0015 from "../migrations/tenant/0015_finance.sql"
 import m0016 from "../migrations/tenant/0016_pickup.sql"
+import m0017 from "../migrations/tenant/0017_returns.sql"
 
 export interface TenantMigration {
   version: number
@@ -40,6 +41,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 14, name: "settings", sql: m0014 },
   { version: 15, name: "finance", sql: m0015 },
   { version: 16, name: "pickup", sql: m0016 },
+  { version: 17, name: "returns", sql: m0017 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length

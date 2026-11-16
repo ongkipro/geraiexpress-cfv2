@@ -493,3 +493,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   28 rows/page, footer on the last page only. e2e at three viewports. Mutation red.
 - Not done here (needs sandbox): `POST /time` pickup reservation lead time and timezone (spec 04 §1.2 says verify in
   the M4 sandbox); dispatch already reserves a slot for scheduled-pickup couriers (TASK-304).
+
+## 2026-11-16 — TASK-404 Meja Retur and verified handback (M4)
+
+- Shipped: return intake with condition + photo, audited true-sender reveal, hashed 4-digit `Kode Ambil` via a
+  prefilled WhatsApp link, verified handback (code or owner ID override), custody stages, conflict surfacing.
+- Evidence: damaged parcel without photo refused; intake → `rts_at_gerai`, sender returned, audit rows
+  `return.intake` + `true_sender_reveal`; handback before a code → `NO_CODE`; stored hash is 64 hex and differs from
+  the code; wrong code 400, right code → `rts_returned_to_sender`, code single use; 5 wrong → 429 even with the right
+  code; Kasir override → `OWNER_ONLY`, owner override needs ≥ 5 chars; provider `delivered` after intake keeps
+  `rts_at_gerai`, sets the conflict and the INV appears in `Kendala & Klaim`; an INV that never left → `NOT_SENT`.
+  e2e at three viewports reads the code from the WhatsApp link. Mutation red.
