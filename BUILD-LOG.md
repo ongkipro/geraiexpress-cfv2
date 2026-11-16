@@ -619,3 +619,12 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   checksums and the D1 control plane into a scratch D1 with identical counts (`docs/evidence/TASK-603/`);
   `pnpm check` green (unit 158, Workers 318).
 - Awaiting owner: the same drill in a staging scratch environment once TASK-109 staging resources exist.
+
+## 2026-11-16 — TASK-601 Partner relay in production — prepared (M6)
+
+- Prepared everything that does not touch production: digest-pinned image, `verify.mjs` for spec 10 §6, production
+  runbook. Found and fixed one defect while verifying the built container: an over-limit body was truncated and then
+  failed the signature (401) instead of answering 413; now 413 without buffering past 64 KB (test + mutation red).
+- Evidence: local container PASS 6/6 with hardened runtime flags and body-free logs (`docs/evidence/TASK-601/`);
+  relay unit tests 8/8; `pnpm check` green (unit 159, Workers 318; one pool start flake "bad port" re-ran green).
+- Awaiting owner: every production step of the runbook (Reserved IPv4, deploy, DNS/WAF, Mengantar allowlist, §6 1–4).

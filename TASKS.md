@@ -22,7 +22,7 @@ tenant B's record).
 
 ## In progress
 
-M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tooling done (live steps awaiting owner) — see STATUS.md. M2 CLOSED 2026-11-16: TASK-201..208, 299 DONE (live sandbox steps awaiting owner). M3 CLOSED 2026-11-16: TASK-301..311, 399 DONE (live print/sandbox steps awaiting owner). M4 CLOSED 2026-11-16: TASK-401..405, 499 DONE (sandbox verifications awaiting owner). M5 CLOSED 2026-11-16: TASK-501..505, 599 DONE (TASK-505 real staging domain awaiting owner). In progress: M6 — TASK-603 code + local drill DONE (remote drill awaiting owner); TASK-601/602 next.
+M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tooling done (live steps awaiting owner) — see STATUS.md. M2 CLOSED 2026-11-16: TASK-201..208, 299 DONE (live sandbox steps awaiting owner). M3 CLOSED 2026-11-16: TASK-301..311, 399 DONE (live print/sandbox steps awaiting owner). M4 CLOSED 2026-11-16: TASK-401..405, 499 DONE (sandbox verifications awaiting owner). M5 CLOSED 2026-11-16: TASK-501..505, 599 DONE (TASK-505 real staging domain awaiting owner). In progress: M6 — TASK-603 code + local drill DONE (remote drill awaiting owner); TASK-601 ready for owner (relay verified locally, runbook); TASK-602 next.
 
 ## Pending
 

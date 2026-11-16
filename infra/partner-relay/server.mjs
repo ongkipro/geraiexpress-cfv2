@@ -8,11 +8,13 @@ createServer((req, res) => {
   let size = 0
   req.on("data", (c) => {
     size += c.length
-    if (size <= 64 * 1024 + 1) chunks.push(c)
+    if (size <= 64 * 1024) chunks.push(c) // never buffer past the limit
   })
   req.on("end", async () => {
     const headers = Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]))
-    const out = await relay.handle(req.method, new URL(req.url, "http://relay").pathname, headers, Buffer.concat(chunks))
+    // Over the limit: hand the handler a body of limit + 1 bytes so it answers 413 before any signature check.
+    const body = size > 64 * 1024 ? Buffer.alloc(64 * 1024 + 1) : Buffer.concat(chunks)
+    const out = await relay.handle(req.method, new URL(req.url, "http://relay").pathname, headers, body)
     res.writeHead(out.status, out.headers).end(out.body)
   })
 }).listen(Number(process.env.PORT ?? 8080), "0.0.0.0")

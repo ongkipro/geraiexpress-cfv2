@@ -1,0 +1,10 @@
+PASS healthz — status 200
+PASS bad HMAC → 401 relay_auth_failed — 401 relay_auth_failed
+PASS timestamp older than 60 s → 401 relay_auth_failed — 401 relay_auth_failed
+PASS non-allowlisted target → 403 relay_target_denied — 403 relay_target_denied
+PASS path traversal target → 403 relay_target_denied — 403 relay_target_denied
+PASS body > 64 KB → 413 — 413 relay_body_too_large
+SKIP partner call and duplicate guard (no --partner-* flag; the guard is covered by relay.test.mjs)
+RELAY VERIFY PASS (6 checks)
+user=node readonly=true mem=134217728 caps_drop=[ALL] health={starting 0 []}
+--- container logs (must contain no bodies/headers):
