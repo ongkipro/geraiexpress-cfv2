@@ -306,3 +306,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   without Keuangan); UI gates 0 fail (one expected duplicate-href warning on `/notifikasi` with three items linking to
   `/kiriman`); mutation red.
 - Note: pages owned by later tasks render a `Segera hadir` state inside the shell (never a dead link or a 404).
+
+## 2026-11-16 — TASK-302 Contacts, WA verification, risk badge, media uploads (M3)
+
+- Shipped: sender/recipient address books in the tenant object, operator-confirmed WhatsApp verification, local COD
+  risk badge + cross-tenant risk index publication (absolute, versioned, phone HMAC), R2 media with tenant-prefixed
+  keys and tenant-bound signed URLs, `Kontak` screens, shared `AreaPicker`.
+- Evidence: Workers tests (Indonesian field errors, `+62` → `08`, verification reset on phone change only, search by
+  name/brand/any phone format, Kasir sees no deposit and cannot archive, risk badge 2/1 → kuning 3333 bps, D1 upsert
+  ignores older and same-version replays, no plain phone in D1, media 201/200/403/415 and Kasir logo 403); isolation
+  (A's signed URL with B's session 403, B-signed URL for A's id 404, foreign key prefix refused, contacts invisible);
+  e2e add reseller → verify WA → add recipient via area search; UI gates; mutation red.
+- Spec: risk badge thresholds made explicit in spec 03 §1 item 3 (were unstated).

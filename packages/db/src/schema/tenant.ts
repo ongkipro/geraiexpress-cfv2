@@ -215,3 +215,68 @@ export const notificationReads = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.notificationId, t.userId] })],
 )
+
+export const senderContacts = sqliteTable(
+  "sender_contacts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    senderKind: text("sender_kind", { enum: ["walk_in", "reseller_dropship"] }).notNull(),
+    trueName: text("true_name").notNull(),
+    truePhone: text("true_phone").notNull(),
+    waVerifiedAt: integer("wa_verified_at"),
+    waVerifiedBy: text("wa_verified_by"),
+    waVerifyMethod: text("wa_verify_method", { enum: ["operator_confirmed"] }),
+    trueStreet: text("true_street"),
+    trueAreaId: text("true_area_id"),
+    trueAreaLabel: text("true_area_label"),
+    truePostalCode: text("true_postal_code"),
+    displayBrandName: text("display_brand_name"),
+    displayBrandPhone: text("display_brand_phone"),
+    hideGeraiBranding: integer("hide_gerai_branding").notNull().default(0),
+    defaultMaskPreset: text("default_mask_preset"),
+    depositBalanceIdr: integer("deposit_balance_idr").notNull().default(0),
+    shipmentsCount: integer("shipments_count").notNull().default(0),
+    isArchived: integer("is_archived").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("sender_contacts_phone").on(t.truePhone), index("sender_contacts_name").on(t.trueName)],
+)
+
+export const recipientContacts = sqliteTable(
+  "recipient_contacts",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    linkedSenderId: text("linked_sender_id"),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    mengantarAreaId: text("mengantar_area_id"),
+    provinceName: text("province_name"),
+    cityName: text("city_name"),
+    districtName: text("district_name"),
+    subdistrictName: text("subdistrict_name"),
+    postalCode: text("postal_code"),
+    streetAddress: text("street_address").notNull(),
+    addressNote: text("address_note"),
+    codDeliveredCount: integer("cod_delivered_count").notNull().default(0),
+    codRtsCount: integer("cod_rts_count").notNull().default(0),
+    riskVersion: integer("risk_version").notNull().default(0),
+    isArchived: integer("is_archived").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("recipient_contacts_phone").on(t.phone), index("recipient_contacts_name").on(t.name)],
+)
+
+export const mediaObjects = sqliteTable("media_objects", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  r2Key: text("r2_key").notNull().unique(),
+  purpose: text("purpose", { enum: ["logo", "evidence", "return_photo", "claim", "signature"] }).notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  uploadedBy: text("uploaded_by").notNull(),
+  createdAt: integer("created_at").notNull(),
+})

@@ -11,8 +11,35 @@ import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
 import type { CourierRate } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
+import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
+import { phoneHmac } from "../../admin/monitor"
+import type { MediaPurpose } from "../../media"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, recordProviderObservation, setTimer, findShipment, type TimerName } from "./status"
+
+export type ContactOp =
+  | { op: "list_senders"; q?: string; filter?: "all" | "walk_in" | "reseller_dropship" }
+  | { op: "list_recipients"; q?: string }
+  | { op: "get_sender"; id: string }
+  | { op: "get_recipient"; id: string }
+  | { op: "create_sender"; input: SenderInput }
+  | { op: "update_sender"; id: string; input: SenderInput }
+  | { op: "create_recipient"; input: RecipientInput }
+  | { op: "update_recipient"; id: string; input: RecipientInput }
+  | { op: "verify_wa"; id: string }
+  | { op: "archive"; contact: "sender" | "recipient"; id: string }
+  | { op: "badge"; phone: string }
+
+type Risk = { badge: "baru" | "hijau" | "kuning" | "merah"; rtsBps: number | null }
+export type ContactOpResult =
+  | { kind: "none" }
+  | { kind: "senders"; items: SenderRow[]; counts: { all: number; reseller_dropship: number; walk_in: number } }
+  | { kind: "recipients"; items: Array<RecipientRow & { risk: Risk }> }
+  | { kind: "sender"; item: SenderRow | null }
+  | { kind: "recipient"; item: (RecipientRow & { risk: Risk }) | null }
+  | { kind: "errors"; errors: ContactError[] }
+  | { kind: "archived"; done: boolean }
+  | { kind: "badge"; badge: { phone: string | null; delivered: number; rts: number } & Risk }
 
 /** Discount-relevant fields of one estimate row (plain numbers, safe across RPC). */
 export interface ObservedRate {
@@ -156,6 +183,102 @@ export class GeraiVaultDO extends DurableObject<Env> {
     // Rotation fence (ADR-0004 §5): no Mengantar call with a key that may be replaced right now.
     if (!row?.encrypted_api_key || row.rotation_state !== "idle") return null
     return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
+  }
+
+  // ---- Contacts (TASK-302) -----------------------------------------------------------------------------------------
+
+  async contacts(tenantId: string, op: ContactOp, actorId: string, now: number = Date.now()): Promise<VaultResult<ContactOpResult>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    let out: ContactOpResult = { kind: "none" }
+    this.ctx.storage.transactionSync(() => {
+      switch (op.op) {
+        case "list_senders":
+          out = { kind: "senders", items: searchSenders(sql, op.q ?? "", op.filter ?? "all"), counts: senderCounts(sql) }
+          return
+        case "list_recipients":
+          out = { kind: "recipients", items: searchRecipients(sql, op.q ?? "").map((r) => ({ ...r, risk: badgeOf(r) })) }
+          return
+        case "get_sender":
+          out = { kind: "sender", item: readSender(sql, op.id) }
+          return
+        case "get_recipient": {
+          const r = readRecipient(sql, op.id)
+          out = { kind: "recipient", item: r ? { ...r, risk: badgeOf(r) } : null }
+          return
+        }
+        case "create_sender":
+        case "update_sender": {
+          const r = op.op === "create_sender" ? createSender(sql, tenantId, op.input, now) : updateSender(sql, op.id, op.input, now)
+          if (r.ok) this.audit(tenantId, now, "user", actorId, op.op === "create_sender" ? "contact.sender_create" : "contact.sender_update", { id: r.value.id })
+          out = r.ok ? { kind: "sender", item: r.value } : { kind: "errors", errors: r.errors }
+          return
+        }
+        case "create_recipient":
+        case "update_recipient": {
+          const r = op.op === "create_recipient" ? createRecipient(sql, tenantId, op.input, now) : updateRecipient(sql, op.id, op.input, now)
+          if (r.ok) this.audit(tenantId, now, "user", actorId, op.op === "create_recipient" ? "contact.recipient_create" : "contact.recipient_update", { id: r.value.id })
+          out = r.ok ? { kind: "recipient", item: { ...r.value, risk: badgeOf(r.value) } } : { kind: "errors", errors: r.errors }
+          return
+        }
+        case "verify_wa": {
+          const r = markWaVerified(sql, op.id, actorId, now)
+          if (r) this.audit(tenantId, now, "user", actorId, "contact.wa_verified", { id: op.id, method: "operator_confirmed" })
+          out = { kind: "sender", item: r }
+          return
+        }
+        case "archive": {
+          const done = archiveContact(sql, op.contact, op.id, now)
+          if (done) this.audit(tenantId, now, "user", actorId, "contact.archive", { id: op.id, contact: op.contact })
+          out = { kind: "archived", done }
+          return
+        }
+        case "badge":
+          out = { kind: "badge", badge: badgeForPhone(sql, op.phone) }
+          return
+      }
+    })
+    return { ok: true, value: out }
+  }
+
+  /**
+   * A terminal COD outcome for a recipient: bumps local counters and publishes the absolute, versioned counts to D1
+   * `recipient_risk_index` (phone HMAC only) in the same transaction (spec 01 §2.6).
+   */
+  async recordRecipientCodOutcome(tenantId: string, recipientId: string, outcome: "delivered" | "rts", now: number = Date.now()): Promise<VaultResult<{ delivered: number; rts: number; version: number } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const row = readRecipient(this.ctx.storage.sql, recipientId)
+    if (!row) return { ok: true, value: null }
+    const key = await phoneHmac(this.env.AUTH_SESSION_PEPPER, `62${row.phone.slice(1)}`)
+    let res: { delivered: number; rts: number; version: number } | null = null
+    this.ctx.storage.transactionSync(() => {
+      const r = recordCodOutcome(this.ctx.storage.sql, recipientId, outcome, now)
+      if (!r) return
+      enqueueOutbox(this.ctx.storage.sql, "recipient_risk_index", key, r.version, { delivered_count: r.delivered, rts_count: r.rts, last_event_at: now }, now)
+      res = { delivered: r.delivered, rts: r.rts, version: r.version }
+    })
+    await this.armOutbox()
+    return { ok: true, value: res }
+  }
+
+  // ---- Media (TASK-302): the object owns the index of this gerai's R2 keys ----------------------------------------
+
+  async registerMedia(tenantId: string, m: { key: string; purpose: MediaPurpose; contentType: string; sizeBytes: number; uploadedBy: string }, now: number = Date.now()): Promise<VaultResult<string>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (!m.key.startsWith(`t/${tenantId}/`)) return { ok: false, refused: "TENANT_MISMATCH" }
+    const id = crypto.randomUUID()
+    this.ctx.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, tenantId, m.key, m.purpose, m.contentType, m.sizeBytes, m.uploadedBy, now)
+    return { ok: true, value: id }
+  }
+
+  async mediaKey(tenantId: string, id: string): Promise<VaultResult<{ key: string; contentType: string } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const r = this.ctx.storage.sql.exec<{ r2_key: string; content_type: string }>("SELECT r2_key, content_type FROM media_objects WHERE id = ?", id).toArray()[0]
+    return { ok: true, value: r ? { key: r.r2_key, contentType: r.content_type } : null }
   }
 
   // ---- Notifications (TASK-301) -------------------------------------------------------------------------------------

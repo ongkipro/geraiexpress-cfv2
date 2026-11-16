@@ -15,6 +15,9 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
+import type { ContactOp } from "../do/gerai-vault"
+import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
+import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { vaultFor } from "../do/gerai-vault/stub"
 
@@ -246,6 +249,66 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).markNotificationsRead(m.tenantId, { userId: c.get("session").user.id, role: m.role }, ids)
     if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     return ok({ marked: r.value })
+  })
+
+  // Kontak › Pengirim / Penerima (TASK-302, DEC-212). Deposit is owner-only (projection); WA verification only by an
+  // interactive counter action of a signed-in member (API keys never reach these routes).
+  const contacts = async (c: AppCtx, op: ContactOp, status = 200) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).contacts(m.tenantId, op, c.get("session").user.id)
+    if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    const v = r.value
+    if (v.kind === "errors") throw new AppError(422, "INVALID_CONTACT", v.errors[0]!.message, Object.fromEntries(v.errors.map((e) => [e.field, e.message])))
+    if ((v.kind === "sender" || v.kind === "recipient") && !v.item) throw new AppError(404, "CONTACT_NOT_FOUND", "Kontak tidak ditemukan.")
+    return ok(projectFor(m.role, v), status)
+  }
+  const filterOf = (x: string | undefined) => (x === "walk_in" || x === "reseller_dropship" ? x : "all")
+  r("GET", "/contacts/senders", "app_member", "role", (c) => contacts(c, { op: "list_senders", q: (c.req.query("q") ?? "").slice(0, 60), filter: filterOf(c.req.query("jenis")) }))
+  r("GET", "/contacts/senders/:id", "app_member", "role", (c) => contacts(c, { op: "get_sender", id: c.req.param("id") ?? "" }))
+  r("POST", "/contacts/senders", "app_member", "role", async (c) => contacts(c, { op: "create_sender", input: (await body(c)) as SenderInput }, 201))
+  r("POST", "/contacts/senders/:id", "app_member", "role", async (c) => contacts(c, { op: "update_sender", id: c.req.param("id") ?? "", input: (await body(c)) as SenderInput }))
+  r("POST", "/contacts/senders/:id/verify-wa", "app_member", "role", (c) => contacts(c, { op: "verify_wa", id: c.req.param("id") ?? "" }))
+  r("POST", "/contacts/senders/:id/archive", "app_owner", "role", (c) => contacts(c, { op: "archive", contact: "sender", id: c.req.param("id") ?? "" }))
+  r("GET", "/contacts/recipients", "app_member", "role", (c) => contacts(c, { op: "list_recipients", q: (c.req.query("q") ?? "").slice(0, 60) }))
+  r("GET", "/contacts/recipients/:id", "app_member", "role", (c) => contacts(c, { op: "get_recipient", id: c.req.param("id") ?? "" }))
+  r("POST", "/contacts/recipients", "app_member", "role", async (c) => contacts(c, { op: "create_recipient", input: (await body(c)) as RecipientInput }, 201))
+  r("POST", "/contacts/recipients/:id", "app_member", "role", async (c) => contacts(c, { op: "update_recipient", id: c.req.param("id") ?? "", input: (await body(c)) as RecipientInput }))
+  r("POST", "/contacts/recipients/:id/archive", "app_owner", "role", (c) => contacts(c, { op: "archive", contact: "recipient", id: c.req.param("id") ?? "" }))
+  r("GET", "/contacts/risk-badge", "app_member", "role", (c) => contacts(c, { op: "badge", phone: c.req.query("phone") ?? "" }))
+
+  // Media (TASK-302): upload into `t/<tenant>/…`, read through a short-lived signed URL bound to the tenant.
+  r("POST", "/media", "app_member", "self", async (c) => {
+    const m = c.get("membership")!
+    const purpose = c.req.query("purpose") as MediaPurpose
+    if (!MEDIA_PURPOSES.includes(purpose)) throw new AppError(422, "INVALID_PURPOSE", "Jenis berkas tidak dikenal.")
+    if (purpose === "logo" && m.role !== "gerai_admin") throw new AppError(403, "FORBIDDEN", "Logo gerai hanya bisa diganti pemilik.")
+    const declared = Number(c.req.header("content-length") ?? "0")
+    if (declared > MEDIA_MAX_BYTES) throw new AppError(413, "FILE_TOO_LARGE", "Ukuran berkas maksimal 5 MB.")
+    const bytes = new Uint8Array(await c.req.arrayBuffer())
+    if (bytes.byteLength === 0) throw new AppError(422, "EMPTY_FILE", "Berkas kosong.")
+    if (bytes.byteLength > MEDIA_MAX_BYTES) throw new AppError(413, "FILE_TOO_LARGE", "Ukuran berkas maksimal 5 MB.")
+    const type = sniffType(bytes)
+    if (!type) throw new AppError(415, "UNSUPPORTED_FILE", "Hanya foto JPG, PNG, WEBP atau PDF.")
+    const id = crypto.randomUUID()
+    const key = mediaKeyFor(m.tenantId, purpose, id, MEDIA_TYPES[type]!)
+    await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { tenant: m.tenantId } })
+    const reg = await vaultFor(c.env, m.tenantId).registerMedia(m.tenantId, { key, purpose, contentType: type, sizeBytes: bytes.byteLength, uploadedBy: c.get("session").user.id })
+    if (!reg.ok) {
+      await c.env.BUCKET.delete(key)
+      throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    }
+    return ok({ id: reg.value, url: await signMediaUrl(c.env.KEK_SECRET, m.tenantId, reg.value, now()) }, 201)
+  })
+  r("GET", "/media/:id", "app_member", "self", async (c) => {
+    const m = c.get("membership")!
+    const id = c.req.param("id") ?? ""
+    const valid = await verifyMediaSignature(c.env.KEK_SECRET, m.tenantId, id, Number(c.req.query("exp")), c.req.query("sig") ?? "", now())
+    if (!valid) throw new AppError(403, "MEDIA_LINK_EXPIRED", "Tautan berkas sudah kedaluwarsa. Muat ulang halaman.")
+    const k = await vaultFor(c.env, m.tenantId).mediaKey(m.tenantId, id)
+    if (!k.ok || !k.value || !k.value.key.startsWith(`t/${m.tenantId}/`)) throw new AppError(404, "NOT_FOUND", "Berkas tidak ditemukan.")
+    const obj = await c.env.BUCKET.get(k.value.key)
+    if (!obj) throw new AppError(404, "NOT_FOUND", "Berkas tidak ditemukan.")
+    return new Response(obj.body, { headers: { "content-type": k.value.contentType, "cache-control": "private, max-age=300", "x-content-type-options": "nosniff", "content-disposition": "inline" } })
   })
 
   // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223): instant-save toggles and pickup mode.

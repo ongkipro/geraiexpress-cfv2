@@ -15,6 +15,8 @@ import { ComingSoon, ErrorState, Forbidden } from "./shell/states"
 import { useWorkspace, WorkspaceContext, type Workspace } from "./shell/workspace"
 import { DashboardPage } from "./routes/index/page"
 import { NotifikasiPage } from "./routes/notifikasi/page"
+import { PengirimPage } from "./routes/kontak/pengirim"
+import { PenerimaPage } from "./routes/kontak/penerima"
 
 // Route table for the app SPA. Feature tasks add their routes under src/routes/** and register them here.
 export interface Me {
@@ -86,8 +88,8 @@ const soonPage = (title: string, body: string, task: string) => () => <ComingSoo
 const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir", component: soonPage("Buat Pengiriman", "Kasir, cek ongkir cepat, paket massal, cek resi dan shift loket sedang disiapkan.", "TASK-303/304/307/308") })
 const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: soonPage("Kiriman", "Daftar kiriman dengan pencarian, filter dan ekspor sedang disiapkan.", "TASK-311") })
-const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: soonPage("Kontak › Pengirim", "Daftar pengirim sedang disiapkan.", "TASK-302") })
-const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: soonPage("Kontak › Penerima", "Daftar penerima sedang disiapkan.", "TASK-302") })
+const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
+const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: PenerimaPage })
 const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(soonPage("Keuangan", "Saldo Mengantar, mutasi dan laba per INV sedang disiapkan.", "TASK-401")) })
 const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: soonPage("Pengaturan", "Menu pengaturan lengkap sedang disiapkan. Ekspedisi Aktif dan Mengantar sudah bisa dibuka.", "TASK-310") })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: soonPage("Akun Saya", "Profil, kata sandi dan sesi aktif sedang disiapkan.", "TASK-310") })

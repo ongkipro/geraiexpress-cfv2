@@ -8,7 +8,8 @@
     "./weight": "./src/weight/index.ts",
     "./slug": "./src/slug/index.ts",
     "./status": "./src/status/index.ts",
-    "./cashback": "./src/cashback/index.ts"
+    "./cashback": "./src/cashback/index.ts",
+    "./contacts": "./src/contacts/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

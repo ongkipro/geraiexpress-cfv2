@@ -31,6 +31,9 @@ export const OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "cashback_bps",
   "cashbackBps",
   "cashback_idr",
+  // reseller deposit (visual 07 `/kontak/pengirim`: deposit column owner only)
+  "deposit_balance_idr",
+  "depositBalanceIdr",
   // Mengantar account balance
   "synced_balance_idr",
   "syncedBalanceIdr",
