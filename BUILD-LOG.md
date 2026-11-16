@@ -418,3 +418,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   once and updates the URL, back restores, typed custom range with `Terapkan`, 180-day error. Mutation red.
 - Dependency note: `react-day-picker` and `date-fns` arrive through the shadcn `calendar` component (visual 08 §1.5
   names it); both pinned exactly.
+
+## 2026-11-16 — TASK-310 Settings pages, account page, help (M3)
+
+- Shipped: `Pengaturan` sub-menu with Profil Gerai, Data Usaha, Printer & Struk, Packing & Biaya and Anggota;
+  `Akun Saya`; `Bantuan & Panduan`.
+- Evidence: Kasir gets `Menu ini hanya untuk pemilik gerai.` (403) on `/settings*` and `/members*`, 200 on the printer
+  read; NPWP stored as `v1.` ciphertext, responses and audit never contain the digits, masked `•••…1234`, omitted
+  keeps / empty clears; form validation messages; Kasir revoke ends the Kasir's session and the owner cannot revoke
+  self. Account: email change sends the code only to the new address, wrong code 400, right code switches and signs
+  out the other session, replay refused, 5 wrong → 429, taken address gets no email; password change needs the
+  current password and signs out others; session handles never equal stored hashes, revoke one and all others, the
+  current session cannot be revoked by handle. e2e: Save bar appears only when dirty, NPWP masked after save,
+  printer default saved, wrong current password message, help search. Mutation red.

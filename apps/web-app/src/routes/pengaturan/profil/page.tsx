@@ -1,0 +1,55 @@
+import { AreaPicker, type Area } from "../../../components/area-picker"
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
+import { Input } from "../../../components/ui/input"
+import { ErrorState, LoadingState } from "../../../shell/states"
+import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
+
+// Pengaturan › Profil Gerai (visual 08 §2.3): name, WhatsApp, opening hours, pickup address (Mengantar area).
+type Form = { name: string; whatsapp: string; openingHours: string; area: Area | null; street: string; postalCode: string }
+const pick = (s: SettingsView): Form => ({
+  name: s.profile?.name ?? "",
+  whatsapp: s.profile?.whatsapp ?? "",
+  openingHours: s.profile?.openingHours ?? "",
+  area: s.profile?.areaId ? { id: s.profile.areaId, label: s.profile.areaLabel ?? "", postalCode: s.profile.postalCode } : null,
+  street: s.profile?.street ?? "",
+  postalCode: s.profile?.postalCode ?? "",
+})
+const toBody = (f: Form) => ({ name: f.name, whatsapp: f.whatsapp, openingHours: f.openingHours, areaId: f.area?.id ?? "", areaLabel: f.area?.label ?? "", street: f.street, postalCode: f.postalCode })
+
+export function ProfilGeraiPage() {
+  const s = useSettingsForm(pick, "profile", toBody)
+  if (s.error) return <SettingsLayout title="Profil Gerai"><ErrorState message={s.error} onRetry={s.load} /></SettingsLayout>
+  if (!s.form) return <SettingsLayout title="Profil Gerai"><LoadingState label="Memuat profil" /></SettingsLayout>
+  const f = s.form
+  const set = (p: Partial<Form>) => s.setForm({ ...f, ...p })
+  const field = (id: keyof Form & string, label: string, help?: string, props: Record<string, unknown> = {}) => (
+    <Field data-invalid={s.fields[id] ? true : undefined}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input id={id} value={f[id] as string} onChange={(e) => set({ [id]: e.target.value } as Partial<Form>)} aria-invalid={s.fields[id] ? true : undefined} {...props} />
+      {s.fields[id] ? <FieldError>{s.fields[id]}</FieldError> : help ? <FieldDescription>{help}</FieldDescription> : null}
+    </Field>
+  )
+  return (
+    <SettingsLayout title="Profil Gerai" description="Nama dan alamat ini dipakai untuk penjemputan kurir dan struk pelanggan.">
+      <Card>
+        <CardHeader><CardTitle className="text-lg">Identitas</CardTitle></CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {field("name", "Nama gerai")}
+          {field("whatsapp", "WhatsApp gerai", "Tampil di struk bila pelanggan perlu menghubungi gerai.", { inputMode: "tel" })}
+          {field("openingHours", "Jam buka", "Contoh: Senin–Sabtu 08.00–21.00")}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-lg">Alamat jemput</CardTitle></CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <AreaPicker label="Kecamatan" value={f.area} onChange={(a) => set({ area: a, postalCode: a?.postalCode ?? f.postalCode })} error={s.fields.areaId} />
+          {field("street", "Alamat lengkap")}
+          {field("postalCode", "Kode pos", undefined, { inputMode: "numeric", className: "w-32 tabular-nums" })}
+        </CardContent>
+      </Card>
+      <Notice msg={s.msg} />
+      <SaveBar dirty={s.dirty} pending={s.pending} onCancel={s.cancel} onSave={s.save} />
+    </SettingsLayout>
+  )
+}

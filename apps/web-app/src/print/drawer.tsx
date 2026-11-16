@@ -6,14 +6,14 @@ import { Input } from "../components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet"
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group"
 import { api } from "../lib/api"
-import { FORMAT_LABEL, PAPER_HINT, fetchPrint, printBluetooth, printPdf, PrintError, type Format } from "./print"
+import { deviceDensity, FORMAT_LABEL, PAPER_HINT, fetchPrint, printBluetooth, printPdf, PrintError, type Format } from "./print"
 
 // Print drawer (visual 04 §5): format, density, duplicate guard (`Cetak Ulang Label (sudah dicetak n×)` + reason),
 // preview of the exact PDF, PDF/system print fallback when Bluetooth is unavailable or fails.
 export function PrintDrawer({ slug, printCount, firstPrintedAt, onPrinted }: { slug: string; printCount: number; firstPrintedAt: number | null; onPrinted: () => void }) {
   const [open, setOpen] = useState(false)
   const [format, setFormat] = useState<Format>("label_10x15_with_stub")
-  const [density, setDensity] = useState<"normal" | "tebal">("normal")
+  const [density, setDensity] = useState<"normal" | "tebal">(deviceDensity)
   const [reason, setReason] = useState("")
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

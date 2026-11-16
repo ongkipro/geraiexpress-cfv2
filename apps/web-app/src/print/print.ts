@@ -5,6 +5,22 @@ export type Format = "label_10x15_with_stub" | "label_10x10" | "label_10x15" | "
 export const FORMAT_LABEL: Record<Format, string> = { label_10x15_with_stub: "10×15 · Paket + Bukti", label_10x10: "10×10 · Paket saja", label_10x15: "10×15 · Paket saja", roll_58mm: "Roll 58 mm" }
 export const PAPER_HINT: Record<Format, string> = { label_10x15_with_stub: "Pakai kertas thermal 100×150 mm", label_10x10: "Pakai kertas thermal 100×100 mm", label_10x15: "Pakai kertas thermal 100×150 mm", roll_58mm: "Pakai roll thermal 58 mm" }
 
+/** This device's print density (device-local per spec 01 §2.4; Kasir may change it). */
+export function deviceDensity(): "normal" | "tebal" {
+  try {
+    return localStorage.getItem("gx-print-density") === "tebal" ? "tebal" : "normal"
+  } catch {
+    return "normal"
+  }
+}
+export function setDeviceDensity(d: "normal" | "tebal"): void {
+  try {
+    localStorage.setItem("gx-print-density", d)
+  } catch {
+    // storage unavailable: the choice lasts for this page only
+  }
+}
+
 export class PrintError extends Error {
   constructor(
     readonly code: string,

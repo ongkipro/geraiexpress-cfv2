@@ -13,6 +13,7 @@ import m0010 from "../migrations/tenant/0010_dispatch.sql"
 import m0011 from "../migrations/tenant/0011_masking.sql"
 import m0012 from "../migrations/tenant/0012_shifts.sql"
 import m0013 from "../migrations/tenant/0013_bulk.sql"
+import m0014 from "../migrations/tenant/0014_settings.sql"
 
 export interface TenantMigration {
   version: number
@@ -34,6 +35,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 11, name: "masking", sql: m0011 },
   { version: 12, name: "shifts", sql: m0012 },
   { version: 13, name: "bulk", sql: m0013 },
+  { version: 14, name: "settings", sql: m0014 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length

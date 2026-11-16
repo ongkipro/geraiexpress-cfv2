@@ -51,6 +51,9 @@ export const tenantOutlets = sqliteTable("tenant_outlets", {
   streetAddress: text("street_address"),
   latitude: real("latitude"),
   longitude: real("longitude"),
+  whatsapp: text("whatsapp"),
+  openingHours: text("opening_hours"),
+  logoMediaId: text("logo_media_id"),
   isDefault: integer("is_default").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -508,3 +511,13 @@ export const bulkImportRows = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.batchId, t.rowNo] }), index("bulk_import_rows_slug").on(t.shipmentSlug)],
 )
+
+// TASK-310 packing add-on catalogue.
+export const packingItems = sqliteTable("packing_items", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  priceIdr: integer("price_idr").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+})

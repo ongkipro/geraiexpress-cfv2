@@ -22,6 +22,7 @@ import { normalizePhone08 } from "@gx/domain/contacts"
 import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
 import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type OwnerDashboard } from "../../analytics/queries"
 import { resolvePreset, type Period } from "@gx/domain/period"
+import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, parseReceipt } from "./settings"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -135,6 +136,14 @@ export type TrackItem = {
   createdAt: number
   history: Array<{ date: string; status: string | null; category: string | null }> | null
   events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
+}
+
+export type SettingsView = {
+  profile: { name: string; whatsapp: string | null; openingHours: string | null; areaId: string | null; areaLabel: string | null; street: string | null; postalCode: string | null; logoMediaId: string | null } | null
+  business: { entityType: string | null; legalName: string | null; brandName: string | null; nib: string | null; npwpMasked: string | null; registeredAddress: string | null; picName: string | null; picRole: string | null; picEmail: string | null; picPhone: string | null }
+  receipt: { defaultLabelFormat: string; unboxingRemark: string; showCommission: boolean }
+  packing: { items: Array<{ id: string | null; name: string; priceIdr: number; active: boolean }>; serviceFeeEnabled: boolean; serviceFeeIdr: number | null }
+  cashierMayPay: boolean
 }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
@@ -913,6 +922,126 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
+  }
+
+  // ---- Settings pages (TASK-310) ---------------------------------------------------------------------------------
+
+  /** Reads every settings section the owner pages need (NPWP masked). */
+  async settingsView(tenantId: string): Promise<VaultResult<SettingsView>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const o = sql.exec<{ id: string; name: string; whatsapp: string | null; opening_hours: string | null; mengantar_area_id: string | null; subdistrict_name: string | null; street_address: string | null; postal_code: string | null; logo_media_id: string | null }>("SELECT * FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0] ?? null
+    const st = sql.exec<{ default_label_format: string; unboxing_remark_text: string; show_commission_on_quick_check: number; counter_service_fee_enabled: number; counter_service_fee_default_idr: number | null; cashier_may_pay_sender_cod: number }>("SELECT * FROM tenant_settings LIMIT 1").toArray()[0]
+    const bp = sql.exec<Record<string, string | null>>("SELECT * FROM tenant_business_profiles LIMIT 1").toArray()[0]
+    let npwpMasked: string | null = null
+    if (bp?.encrypted_npwp) npwpMasked = maskNpwp(await decryptString(this.env.KEK_SECRET, bp.encrypted_npwp, `npwp:${tenantId}`))
+    const items = sql.exec<{ id: string; name: string; price_idr: number; is_active: number }>("SELECT id, name, price_idr, is_active FROM packing_items ORDER BY sort_order, name").toArray()
+    return {
+      ok: true,
+      value: {
+        profile: o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, areaId: o.mengantar_area_id, areaLabel: o.subdistrict_name, street: o.street_address, postalCode: o.postal_code, logoMediaId: o.logo_media_id } : null,
+        business: { entityType: bp?.entity_type ?? null, legalName: bp?.legal_name ?? null, brandName: bp?.brand_name ?? null, nib: bp?.nib ?? null, npwpMasked, registeredAddress: bp?.registered_address ?? null, picName: bp?.pic_name ?? null, picRole: bp?.pic_role ?? null, picEmail: bp?.pic_email ?? null, picPhone: bp?.pic_phone ?? null },
+        receipt: { defaultLabelFormat: st?.default_label_format ?? "label_10x15_with_stub", unboxingRemark: st?.unboxing_remark_text ?? "Rekam video saat buka paket untuk klaim", showCommission: st?.show_commission_on_quick_check === 1 },
+        packing: { items: (items.length ? items : DEFAULT_PACKING.map((d) => ({ id: "", name: d.name, price_idr: d.priceIdr, is_active: 1 }))).map((i) => ({ id: i.id || null, name: i.name, priceIdr: i.price_idr, active: i.is_active === 1 })), serviceFeeEnabled: st?.counter_service_fee_enabled === 1, serviceFeeIdr: st?.counter_service_fee_default_idr ?? null },
+        cashierMayPay: st?.cashier_may_pay_sender_cod === 1,
+      },
+    }
+  }
+
+  /** Writes one settings form (owner only — the API refuses Kasir before this call). Audited. */
+  async settingsWrite(tenantId: string, actorId: string, form: "profile" | "business" | "receipt" | "packing" | "cashier_payout", b: Record<string, unknown>): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: { status: number; code: string; message: string; fields?: Record<string, string> } }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    const invalid = (errors: Record<string, string>) => ({ ok: false as const, error: { status: 422, code: "INVALID_SETTINGS", message: Object.values(errors)[0]!, fields: errors } })
+    const ensureSettings = () => sql.exec("INSERT INTO tenant_settings (tenant_id, updated_at) VALUES (?, ?) ON CONFLICT(tenant_id) DO NOTHING", tenantId, now)
+    if (form === "profile") {
+      const r = parseProfile(b)
+      if (!r.ok) return invalid(r.errors)
+      const v = r.value
+      if (v.logoMediaId && !sql.exec("SELECT 1 FROM media_objects WHERE id = ? AND purpose = 'logo'", v.logoMediaId).toArray().length) return invalid({ logoMediaId: "Logo tidak ditemukan. Unggah ulang." })
+      await this.upsertDefaultOutlet(tenantId, { name: v.name, areaId: v.areaId, areaLabel: v.areaLabel, street: v.street, postalCode: v.postalCode }, now)
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE tenant_outlets SET whatsapp = ?, opening_hours = ?, logo_media_id = ?, updated_at = ? WHERE is_default = 1", v.whatsapp, v.openingHours, v.logoMediaId, now)
+        this.audit(tenantId, now, "user", actorId, "settings.profile", {})
+      })
+      return { ok: true }
+    }
+    if (form === "business") {
+      const r = parseBusiness(b)
+      if (!r.ok) return invalid(r.errors)
+      const v = r.value
+      const enc = typeof v.npwp === "string" ? await encryptString(this.env.KEK_SECRET, v.npwp, `npwp:${tenantId}`) : v.npwp
+      this.ctx.storage.transactionSync(() => {
+        sql.exec(
+          `INSERT INTO tenant_business_profiles (tenant_id, entity_type, legal_name, brand_name, nib, encrypted_npwp, registered_address, pic_name, pic_role, pic_email, pic_phone, updated_by, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+           ON CONFLICT(tenant_id) DO UPDATE SET entity_type = ?2, legal_name = ?3, brand_name = ?4, nib = ?5, encrypted_npwp = CASE WHEN ?14 THEN encrypted_npwp ELSE ?6 END,
+             registered_address = ?7, pic_name = ?8, pic_role = ?9, pic_email = ?10, pic_phone = ?11, updated_by = ?12, updated_at = ?13`,
+          tenantId,
+          v.entityType,
+          v.legalName,
+          v.brandName,
+          v.nib,
+          enc ?? null,
+          v.registeredAddress,
+          v.picName,
+          v.picRole,
+          v.picEmail,
+          v.picPhone,
+          actorId,
+          now,
+          enc === undefined ? 1 : 0,
+        )
+        // Audit records that the NPWP changed, never its value.
+        this.audit(tenantId, now, "user", actorId, "settings.business", { npwp: enc === undefined ? "kept" : enc === null ? "cleared" : "set" })
+      })
+      return { ok: true }
+    }
+    if (form === "receipt") {
+      const r = parseReceipt(b)
+      if (!r.ok) return invalid(r.errors)
+      this.ctx.storage.transactionSync(() => {
+        ensureSettings()
+        sql.exec("UPDATE tenant_settings SET default_label_format = ?, unboxing_remark_text = ?, show_commission_on_quick_check = ?, updated_at = ?, updated_by = ?", r.value.defaultLabelFormat, r.value.unboxingRemark, r.value.showCommission ? 1 : 0, now, actorId)
+        this.audit(tenantId, now, "user", actorId, "settings.receipt", { format: r.value.defaultLabelFormat })
+      })
+      return { ok: true }
+    }
+    if (form === "packing") {
+      const r = parsePacking(b)
+      if (!r.ok) return invalid(r.errors)
+      this.ctx.storage.transactionSync(() => {
+        ensureSettings()
+        const keep = new Set<string>()
+        r.value.items.forEach((it, i) => {
+          const id = it.id ?? crypto.randomUUID()
+          keep.add(id)
+          sql.exec(
+            "INSERT INTO packing_items (id, name, price_idr, is_active, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, price_idr = excluded.price_idr, is_active = excluded.is_active, sort_order = excluded.sort_order, updated_at = excluded.updated_at",
+            id,
+            it.name,
+            it.priceIdr,
+            it.active ? 1 : 0,
+            i,
+            now,
+          )
+        })
+        for (const row of sql.exec<{ id: string }>("SELECT id FROM packing_items").toArray()) if (!keep.has(row.id)) sql.exec("DELETE FROM packing_items WHERE id = ?", row.id)
+        sql.exec("UPDATE tenant_settings SET counter_service_fee_enabled = ?, counter_service_fee_default_idr = ?, updated_at = ?, updated_by = ?", r.value.serviceFeeEnabled ? 1 : 0, r.value.serviceFeeIdr, now, actorId)
+        this.audit(tenantId, now, "user", actorId, "settings.packing", { items: r.value.items.length, serviceFee: r.value.serviceFeeEnabled })
+      })
+      return { ok: true }
+    }
+    // `Kasir boleh bayar COD` (instant switch on Anggota).
+    this.ctx.storage.transactionSync(() => {
+      ensureSettings()
+      sql.exec("UPDATE tenant_settings SET cashier_may_pay_sender_cod = ?, updated_at = ?, updated_by = ?", b.enabled === true ? 1 : 0, now, actorId)
+      this.audit(tenantId, now, "user", actorId, "settings.cashier_payout", { enabled: b.enabled === true })
+    })
+    return { ok: true }
   }
 
   // ---- Dashboard (TASK-309) ----------------------------------------------------------------------------------------

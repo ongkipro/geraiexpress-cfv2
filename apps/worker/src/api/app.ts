@@ -23,6 +23,7 @@ import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
+import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
 import { vaultFor } from "../do/gerai-vault/stub"
@@ -479,6 +480,81 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   // print records `first_printed_at`; reprints need a reason (audited). Label data comes from immutable snapshots.
   const trackingHost = (c: AppCtx) => `${c.get("membership")!.tenantSlug}.${c.env.TENANT_ZONE}`
   const FORMATS = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"] as const
+  // Bantuan (TASK-310): platform support contact set by the Super Admin (`Sistem › Profil Legal`).
+  r("GET", "/support", "app_session", "none", async (c) => {
+    const p = await c.env.DB.prepare("SELECT support_whatsapp FROM platform_legal_profile WHERE id = 1").first<{ support_whatsapp: string | null }>()
+    const wa = p?.support_whatsapp ? p.support_whatsapp.replace(/\D/g, "").replace(/^0/, "62") : null
+    return ok({ whatsapp: wa, email: "bantuan@geraiexpress.com" })
+  })
+
+  // Akun Saya (TASK-310, DEC-229): every signed-in user, own account only.
+  r("GET", "/account", "app_session", "self", async (c) => {
+    const s = c.get("session")
+    const u = await c.env.DB.prepare("SELECT name, email, phone FROM users WHERE id = ?").bind(s.user.id).first<{ name: string; email: string; phone: string | null }>()
+    return ok({ profile: u, sessions: await listSessions(c.env, s.user.id, s.row.token_hash, now()) })
+  })
+  r("POST", "/account/profile", "app_session", "self", async (c) => ok(await updateProfile(c.env, c.get("session").user.id, await body(c), now())))
+  r("POST", "/account/password", "app_session", "self", async (c) => {
+    const s = c.get("session")
+    await changePassword(c.env, s.user.id, s.row.token_hash, await body(c), now())
+    return ok({ changed: true })
+  })
+  r("POST", "/account/email/request", "app_session", "self", async (c) => {
+    const r = await requestEmailChange(c.env, c.get("session").user.id, await body(c), await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), now())
+    c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
+    return ok(r)
+  })
+  r("POST", "/account/email/confirm", "app_session", "self", async (c) => {
+    const s = c.get("session")
+    return ok(await confirmEmailChange(c.env, s.user.id, s.row.token_hash, await body(c), now()))
+  })
+  r("POST", "/account/sessions/revoke", "app_session", "self", async (c) => {
+    const s = c.get("session")
+    return ok(await revokeSessions(c.env, s.user.id, s.row.token_hash, await body(c), now()))
+  })
+
+  // Pengaturan (TASK-310, visual 08 §2.3, DEC-223): owner forms; Kasir reaches only the printer page, which reads
+  // `/print/settings` and keeps the device part locally.
+  const settings = async (c: AppCtx) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).settingsView(m.tenantId)
+    if (!r.ok) return vaultErr(r)
+    return r.value
+  }
+  r("GET", "/settings", "app_owner", "role", async (c) => ok(await settings(c)))
+  for (const form of ["profile", "business", "receipt", "packing", "cashier_payout"] as const) {
+    r("POST", `/settings/${form.replace("_", "-")}`, "app_owner", "role", async (c) => {
+      const m = c.get("membership")!
+      const r = await vaultFor(c.env, m.tenantId).settingsWrite(m.tenantId, c.get("session").user.id, form, await body(c))
+      if (!r.ok) return vaultErr(r)
+      return ok(await settings(c))
+    })
+  }
+  r("GET", "/members", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const [members, invites] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT u.id, u.name, u.email, m.role, m.status, m.created_at, (SELECT MAX(last_seen_at) FROM sessions s WHERE s.user_id = u.id AND s.active_tenant_id = m.tenant_id) AS last_seen_at
+         FROM tenant_members m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = ? AND m.status = 'active' ORDER BY m.role DESC, u.name`,
+      ).bind(m.tenantId).all<{ id: string; name: string; email: string; role: string; status: string; created_at: number; last_seen_at: number | null }>(),
+      c.env.DB.prepare("SELECT email, role, expires_at, created_at FROM invitations WHERE tenant_id = ? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC").bind(m.tenantId, now()).all<{ email: string; role: string; expires_at: number; created_at: number }>(),
+    ])
+    return ok({ members: members.results, invitations: invites.results })
+  })
+  r("POST", "/members/:userId/revoke", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const userId = c.req.param("userId") ?? ""
+    if (userId === c.get("session").user.id) throw new AppError(422, "CANNOT_REVOKE_SELF", "Anda tidak bisa mencabut akses akun sendiri.")
+    const t = now()
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE tenant_members SET status = 'revoked', revoked_at = ? WHERE tenant_id = ? AND user_id = ? AND role = 'cashier' AND status = 'active'").bind(t, m.tenantId, userId),
+      // The Kasir's sessions on this gerai end now (the next request has no membership).
+      c.env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND active_tenant_id = ? AND revoked_at IS NULL AND changes() > 0").bind(t, userId, m.tenantId),
+    ])
+    if ((res[0]?.meta.changes ?? 0) === 0) throw new AppError(404, "MEMBER_NOT_FOUND", "Anggota tidak ditemukan atau sudah dicabut.")
+    return ok({ revoked: true })
+  })
+
   r("GET", "/print/settings", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).printSettings(m.tenantId)
