@@ -711,3 +711,8 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Fixed: lagging-but-readable siblings keep a paid batch read-back-only; reserved bulk drafts cannot be re-quoted;
   bulk rows refused before the journal release their reservation; control 0017 fails closed on live spend; single
   sub-item refunds keep the description fallback. Each with a mutation-proven test.
+
+## 2026-11-16 — Sol delta round 4
+
+- Sol round 4 over `d50c664..14c16a0`: R3-1..R3-5 verified FIXED; one P2 in the new test (a race with the queued
+  bulk dispatch) fixed by materializing through the object directly. No open product finding from any Sol round.

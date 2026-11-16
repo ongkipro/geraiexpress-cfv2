@@ -237,7 +237,8 @@ describe("/api/v1", () => {
     const k = await key(t.cookie, ["shipments:issue"], { dailyIssueCapIdr: 100_000 })
     const id = ((await (await v1("/bulk-imports", k.token, { method: "POST", body: { sender_id: t.sender, service_code: "JT", csv } })).json()) as { data: { id: string } }).data.id
     for (let i = 0; i < 3 && (await checkBatch(env, t.tenantId, id)).more; i++);
-    expect((await v1(`/bulk-imports/${id}/commit`, k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `g-${id}` } })).status).toBe(200)
+    // Materialize through the object directly with the key's spend context (no queued dispatch can race the expiry).
+    expect(await t.vault.bulkMaterialize(t.tenantId, id, `apikey:${k.id}`, true, { keyId: k.id, capIdr: 100_000 })).toMatchObject({ ok: true })
     expect((await spent(t.vault, k.id)).c).toBe(1)
     await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec("UPDATE quote_snapshots SET expires_at = 1"))
     await t.vault.bulkDispatch(t.tenantId, id, { maskingEnabled: false, dailyQuota: null })

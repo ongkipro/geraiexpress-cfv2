@@ -67,3 +67,11 @@ Control `0015_api_key_spend_items` is superseded by `0017_retire_api_key_spend` 
 | R3-3 | P2 | Bulk rows refused before the journal kept their reservation | released in the same transaction that records the row's definitive pre-journal failure | `api-v1.test.ts` (expired quote) |
 | R3-4 | P1 | 0017 dropped populated D1 counters | 0017 aborts on any outstanding reservation or today's spend (no environment has written them yet) | `migrations/control-retire.test.ts` |
 | R3-5 | P2 | Refund with one amount-only sub-item lost the description fallback | a single sub-item may use the invoice's own reference or description token | `finance.test.ts` |
+
+## Round 4 (Sol, `d50c664..14c16a0`): R3-1..R3-5 all FIXED; one new P2 (test only)
+
+| # | Sev | Finding | Fix |
+|---|---|---|---|
+| R4-1 | P2 | The expired-quote regression test raced the queued bulk dispatch | the test materializes through the object directly with the key's spend context (no queue), then expires and dispatches explicitly |
+
+No product-code finding remains open from any Sol round. The R4-1 fix is test-only and changes no runtime path.
