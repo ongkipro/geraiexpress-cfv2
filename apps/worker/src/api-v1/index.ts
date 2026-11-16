@@ -11,6 +11,7 @@ import { vaultFor } from "../do/gerai-vault/stub"
 import { escposBytes, labelsPdf, rollLines } from "@gx/thermal-print"
 import { platformOf, enqueue } from "../bulk/service"
 import { rowsFromCsv, validateRow } from "@gx/domain/bulk"
+import { primaryHost } from "../hostnames/service"
 import { periodFromParams, previousOf, resolvePreset } from "@gx/domain/period"
 import { authenticate, releaseDailySpend, reserveDailySpend, type ApiKeyPrincipal, type Scope } from "./keys"
 
@@ -109,7 +110,7 @@ export const ROUTES: Route[] = [
         const p = await vault.setShipmentParties(c.key.tenantId, s.value, { senderId: b.sender_id, recipientId: b.recipient_id, content: b.content })
         if (!p.ok) return vaultErr(p)
       }
-      const host = `${c.key.tenantSlug}.${c.env.TENANT_ZONE}`
+      const host = await primaryHost(c.env, c.key.tenantId, c.key.tenantSlug)
       return ok(project(c.key, { slug: s.value, inv: `INV ${s.value.toUpperCase()}`, expires_at: q.expiresAt, card: cashierCard(card), counter_url: `https://${host}/lacak?q=${s.value.toUpperCase()}` }), 201)
     },
   },
@@ -402,7 +403,7 @@ async function contacts(c: Ctx, op: Parameters<ReturnType<typeof vaultFor>["cont
 
 async function labels(c: Ctx, slugs: string[]): Promise<Response> {
   const b = c.body as z.infer<typeof LabelBody>
-  const r = await vaultFor(c.env, c.key.tenantId).preparePrint(c.key.tenantId, { slugs, reason: b.reprint_reason, actorId: c.actor, trackingHost: `${c.key.tenantSlug}.${c.env.TENANT_ZONE}`, record: true })
+  const r = await vaultFor(c.env, c.key.tenantId).preparePrint(c.key.tenantId, { slugs, reason: b.reprint_reason, actorId: c.actor, trackingHost: await primaryHost(c.env, c.key.tenantId, c.key.tenantSlug), record: true })
   if (!r.ok) return vaultErr(r)
   if (r.value.items.length === 0) {
     const first = r.value.refused[0]

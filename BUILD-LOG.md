@@ -581,3 +581,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Evidence: official `@modelcontextprotocol/sdk` 1.32.2 client (Streamable HTTP transport) connected to both dev
   servers, listed tools with annotations and called one (`docs/evidence/TASK-504/*.txt`); Workers `test/mcp` (5);
   mutations red; Redocly still valid after the REST twins; `pnpm check` green (unit 158, Workers 304).
+
+## 2026-11-16 — TASK-505 Custom domains (staging) (M5)
+
+- Shipped: Pro custom-domain lifecycle on Cloudflare for SaaS (create before CNAME via Queue, 10-min poll, HMAC
+  probe before routing, 7-day reaper with Cloudflare DELETE, daily quota alert at 80 %), root/www branches with a 301
+  twin, canonical host switch, owner `Domain Sendiri` page and Super Admin `Domain Mitra`/Pro toggle.
+- Safety: no routing without our own HMAC echoed by the host; pending hosts answer only the probe; another gerai's
+  host is refused; a duplicate custom hostname from a racing delivery is deleted at once; outside local the client
+  refuses to run without a real zone id + token (no silent fake).
+- Evidence: Workers `test/hostnames` (9) + `test/isolation/custom-domain-isolation.test.ts`; dev server: queue
+  consumer created the hostname on the fake and the page showed the ownership TXT; e2e at 390/768/1280; dotuiux
+  0 fail/0 warn; mutations red; `pnpm check` green (unit 158, Workers 314).
+- Awaiting owner: a team test zone with Cloudflare for SaaS, `CF_SAAS_ZONE_ID` + zone-scoped token on staging, one
+  real test domain through the lifecycle (spec 11 §2 step 5 staging note).

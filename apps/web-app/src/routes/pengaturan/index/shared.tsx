@@ -13,6 +13,7 @@ export const SETTINGS_GROUPS: Array<{ label: string; items: Array<{ to: string; 
     label: "Gerai",
     items: [
       { to: "/pengaturan/profil", label: "Profil Gerai", owner: true },
+      { to: "/pengaturan/mini-site", label: "Mini-Site", owner: true },
       { to: "/pengaturan/data-usaha", label: "Data Usaha", owner: true },
     ],
   },

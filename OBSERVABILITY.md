@@ -45,7 +45,7 @@ hosts of spec 07 §7.
 | Is the Partner relay usable? | relay `/healthz`, Partner call outcome by route, `409 relay_duplicate`, `403 IP_NOT_ALLOWED` | any `IP_NOT_ALLOWED`, or relay down 5 min |
 | Are discounts applied at Mengantar? | rules by `verification_state` (`belum_diterapkan`, `sesuai`, `selisih`) and age (DEC-230) | `belum_diterapkan` older than 2 × `apply_sla_minutes` (default 2 h) becomes `selisih`; any `selisih` → Super Admin |
 | Can people sign up and log in? | `email_outbox` sent/failed/expired counts, delivery latency, OTP verify success rate | failed or expired > 5 % per hour; bounce > 5 % per day (spec 12 §7) |
-| Are custom domains healthy? | hostnames by state, quota `used/allocated`, probe failures | quota ≥ 80 %; a previously active host fails its probe |
+| Are custom domains healthy? | hostnames by state, quota `used/allocated`, probe failures (`hostname.lifecycle` events; D1 `custom_hostname_quota`, `tenant_hostnames.probe_failures`) | quota ≥ 80 % (`hostname_quota`, daily 02:00 WIB); an active host fails its probe 3 polls in a row (`hostname_probe.<host>`, 10-min poll) |
 | Is a tenant object unhealthy? | DO RPC error rate and `overloaded` errors, tenants in `recovery` | any tenant in `recovery` |
 
 Telemetry is diagnostic and may be sampled; it is never the audit trail (`audit_logs` in D1 and the tenant object are).

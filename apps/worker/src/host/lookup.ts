@@ -6,7 +6,7 @@ export function d1HostLookup(db: D1Database): HostLookup {
   return async (hostname) => {
     const row = await db
       .prepare(
-        `SELECT h.hostname, h.tenant_id, t.slug AS tenant_slug, h.state AS host_state, t.status AS tenant_status, t.routing_version,
+        `SELECT h.hostname, h.tenant_id, h.role, t.slug AS tenant_slug, h.state AS host_state, t.status AS tenant_status, t.routing_version,
                 COALESCE(v.state, 'ok') AS schema_state
          FROM tenant_hostnames h
          JOIN tenants t ON t.id = h.tenant_id
@@ -14,7 +14,7 @@ export function d1HostLookup(db: D1Database): HostLookup {
          WHERE h.hostname = ?`,
       )
       .bind(hostname)
-      .first<{ hostname: string; tenant_id: string; tenant_slug: string; host_state: HostRow["hostState"]; tenant_status: HostRow["tenantStatus"]; routing_version: number; schema_state: HostRow["schemaState"] }>()
+      .first<{ hostname: string; tenant_id: string; role: "primary" | "redirect"; tenant_slug: string; host_state: HostRow["hostState"]; tenant_status: HostRow["tenantStatus"]; routing_version: number; schema_state: HostRow["schemaState"] }>()
     if (!row) return null
     return {
       hostname: row.hostname,
@@ -24,6 +24,7 @@ export function d1HostLookup(db: D1Database): HostLookup {
       tenantStatus: row.tenant_status,
       schemaState: row.schema_state,
       routingVersion: row.routing_version,
+      role: row.role,
     }
   }
 }

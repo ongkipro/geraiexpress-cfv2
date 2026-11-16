@@ -4,6 +4,7 @@ import { Input } from "@shared/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@shared/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
+import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
 
 type Tab = "pengajuan" | "direktori" | "domain"
@@ -123,10 +124,37 @@ function Directory() {
   )
 }
 
+interface DomainItem { hostname: string; role: string; state: string; cf_status: string | null; cf_ssl_status: string | null; created_at: number; last_checked_at: number | null; probe_ok_at: number | null; probe_failures: number; slug: string; name: string }
+const DOMAIN_STATE: Record<string, { label: string; tone: "safe" | "warn" | "danger" }> = { pending: { label: "Menunggu DNS", tone: "warn" }, active: { label: "Aktif", tone: "safe" }, failed: { label: "Gagal", tone: "danger" }, moved: { label: "DNS berubah", tone: "danger" }, suspended: { label: "Dibekukan", tone: "danger" } }
+
+// `Gerai › Domain Mitra` (spec 11 §7): every custom hostname, Cloudflare status, last probe, `Hapus` (TOTP + reason).
 function Domains() {
+  const { data, error, loading, reload } = useApi<{ items: DomainItem[]; quota: { used: number; allocated: number; checked_at: number } | null }>("/domains")
+  const quota = data?.quota ? `Kuota Cloudflare ${data.quota.used}/${data.quota.allocated} · dicek ${formatDate(data.quota.checked_at)}` : "Kuota belum dicek"
   return (
-    <Section title="Domain Mitra">
-      <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.gerai.cc. Domain sendiri (Pro) tampil di sini setelah fitur Domain Sendiri aktif." />
+    <Section title="Domain Mitra" aside={<span className="text-base text-muted-foreground tabular-nums">{quota}</span>}>
+      {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
+        <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.gerai.cc. Domain sendiri gerai Pro tampil di sini." />
+      ) : (
+        <ul className="flex flex-col divide-y">
+          {data.items.map((d) => {
+            const st = DOMAIN_STATE[d.state] ?? { label: d.state, tone: "warn" as const }
+            return (
+              <li key={d.hostname} className="flex flex-col gap-2 py-3 text-base">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono break-all">{d.hostname}</span>
+                  <StatusChip tone={st.tone}>{st.label}</StatusChip>
+                  {d.role === "redirect" ? <span className="text-muted-foreground">www → domain utama</span> : null}
+                </div>
+                <p className="text-muted-foreground">
+                  <Link to="/gerai/$slug" params={{ slug: d.slug }} className="text-primary underline-offset-4 hover:underline">{d.name}</Link> · Cloudflare {d.cf_status ?? "—"} / SSL {d.cf_ssl_status ?? "—"} · probe terakhir {formatDate(d.probe_ok_at)}{d.probe_failures ? ` · gagal ${d.probe_failures}×` : ""}
+                </p>
+                <div><ReasonAction label="Hapus" confirmLabel="Hapus domain" variant="destructive" path={`/domains/${encodeURIComponent(d.hostname)}/delete`} onDone={reload} hint="Menghapus custom hostname di Cloudflare (berhenti ditagih). Mini-site gerai kembali ke alamat bawaan." /></div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </Section>
   )
 }

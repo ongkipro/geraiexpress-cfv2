@@ -25,6 +25,9 @@ import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
 import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
+import { CNAME_TARGET, domainRows, primaryHost, purgeHost, refreshHost, remedyOf, requestDomain } from "../hostnames/service"
+import { CfError } from "../hostnames/cloudflare"
+import { hit } from "../auth/throttle"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
@@ -228,16 +231,17 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const status = await c.env.DB.prepare("SELECT status FROM tenants WHERE id = ?").bind(m.tenantId).first<{ status: string }>()
     if (status?.status !== "active") throw new AppError(403, "NO_MEMBERSHIP", "Gerai Anda belum aktif.")
     const vault = vaultFor(c.env, m.tenantId)
-    const [notes, webhook, memberships] = await Promise.all([
+    const [notes, webhook, memberships, miniSiteHost] = await Promise.all([
       vault.listNotifications(m.tenantId, { userId: s.user.id, role: m.role }, 1),
       m.role === "gerai_admin" ? vault.webhookStatus(m.tenantId) : Promise.resolve(null),
       c.env.DB.prepare("SELECT t.id, t.name, t.slug FROM tenant_members tm JOIN tenants t ON t.id = tm.tenant_id WHERE tm.user_id = ? AND tm.status = 'active' AND t.status = 'active' ORDER BY t.name").bind(s.user.id).all<{ id: string; name: string; slug: string }>(),
+      primaryHost(c.env, m.tenantId, m.tenantSlug),
     ])
     const menus = ["dashboard", "buat-pengiriman", "kiriman", "kontak", ...(m.role === "gerai_admin" ? ["keuangan"] : []), "pengaturan"]
     return ok(
       projectFor(m.role, {
         user: { id: s.user.id, name: s.user.name, email: s.user.email },
-        tenant: { id: m.tenantId, name: m.tenantName, slug: m.tenantSlug, miniSiteHost: `${m.tenantSlug}.${c.env.TENANT_ZONE}` },
+        tenant: { id: m.tenantId, name: m.tenantName, slug: m.tenantSlug, miniSiteHost },
         role: m.role,
         menus,
         badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
@@ -633,8 +637,73 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
 
   // Printing (TASK-306, DEC-224, DEC-229): exact-size PDFs (PC-first), 58 mm ESC/POS bytes, bulk ≤ 50. The first
   // print records `first_printed_at`; reprints need a reason (audited). Label data comes from immutable snapshots.
-  const trackingHost = (c: AppCtx) => `${c.get("membership")!.tenantSlug}.${c.env.TENANT_ZONE}`
+  const trackingHost = (c: AppCtx) => primaryHost(c.env, c.get("membership")!.tenantId, c.get("membership")!.tenantSlug)
   const FORMATS = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"] as const
+  // Pengaturan › Mini-Site › Domain Sendiri (TASK-505, spec 11 §5–6): owner-only; Cloudflare calls happen in the
+  // queue/cron, never inline in this request (except `Periksa Lagi`, one PATCH/GET for this gerai's own host).
+  const domainView = async (c: AppCtx) => {
+    const m = c.get("membership")!
+    const [t, rows] = await Promise.all([
+      c.env.DB.prepare("SELECT custom_domain_enabled FROM tenants WHERE id = ?").bind(m.tenantId).first<{ custom_domain_enabled: number }>(),
+      domainRows(c.env, m.tenantId),
+    ])
+    return {
+      pro: t?.custom_domain_enabled === 1,
+      platformHost: `${m.tenantSlug}.${c.env.TENANT_ZONE}`,
+      cnameTarget: CNAME_TARGET(c.env),
+      primaryHost: await primaryHost(c.env, m.tenantId, m.tenantSlug),
+      domains: rows.map((r) => ({
+        hostname: r.hostname,
+        role: r.role,
+        state: r.state,
+        branch: r.dns_branch,
+        sslMethod: r.ssl_method,
+        cfStatus: r.cf_status,
+        sslStatus: r.cf_ssl_status,
+        records: r.dns_records_json ? (JSON.parse(r.dns_records_json) as unknown) : null,
+        remedy: remedyOf(r),
+        createdAt: r.created_at,
+        lastCheckedAt: r.last_checked_at,
+        activatedAt: r.activated_at,
+      })),
+    }
+  }
+  r("GET", "/custom-domain", "app_owner", "role", async (c) => ok(await domainView(c)))
+  r("POST", "/custom-domain", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    await requestDomain(c.env, m.tenantId, b.hostname, b.rootChoice, now())
+    return ok(await domainView(c), 201)
+  })
+  r("POST", "/custom-domain/check", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const lim = await hit(c.env.DB, `cd-check:${m.tenantId}`, 6, 60_000, now())
+    if (!lim.allowed) throw new AppError(429, "CHECK_RATE_LIMITED", "Tunggu sebentar sebelum memeriksa lagi.")
+    const method = b.method === "txt" || b.method === "http" ? b.method : undefined
+    try {
+      for (const d of await domainRows(c.env, m.tenantId)) await refreshHost(c.env, d.hostname, now(), { restart: true, method, probeFetch: (u) => fetch(u, { redirect: "manual", signal: AbortSignal.timeout(10_000) }) })
+    } catch (e) {
+      if (e instanceof CfError) throw new AppError(503, "CF_UNAVAILABLE", "Pemeriksaan domain sedang tidak tersedia. Coba lagi beberapa menit lagi.")
+      throw e
+    }
+    return ok(await domainView(c))
+  })
+  r("POST", "/custom-domain/remove", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const rows = await domainRows(c.env, m.tenantId)
+    if (!rows.length) throw new AppError(404, "NO_DOMAIN", "Belum ada domain sendiri.")
+    if (b.confirm !== rows.find((x) => x.role === "primary")?.hostname) throw new AppError(422, "CONFIRM_REQUIRED", "Ketik nama domain untuk konfirmasi.", { confirm: "Ketik nama domain persis." })
+    try {
+      for (const d of rows) await purgeHost(c.env, d.hostname, now())
+    } catch (e) {
+      if (e instanceof CfError) throw new AppError(503, "CF_UNAVAILABLE", "Domain belum bisa dihapus sekarang. Coba lagi beberapa menit lagi.")
+      throw e
+    }
+    return ok(await domainView(c))
+  })
+
   // Pengaturan › API & MCP (TASK-503, spec 08 §2): owner-only key management; the token is shown once.
   r("GET", "/api-keys", "app_owner", "role", async (c) => {
     const m = c.get("membership")!
@@ -755,7 +824,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const slugs = Array.isArray(b.slugs) ? [...new Set((b.slugs as unknown[]).filter((x): x is string => typeof x === "string" && /^[0-9a-hjkmnp-tv-z]{7}$/.test(x)))] : []
     const format = (FORMATS as readonly string[]).includes(String(b.format)) ? (b.format as (typeof FORMATS)[number]) : "label_10x15_with_stub"
     const preview = b.preview === true
-    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: trackingHost(c), record: !preview })
+    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: await trackingHost(c), record: !preview })
     if (!r.ok) return vaultErr(r)
     if (r.value.items.length === 0) throw new AppError(409, r.value.refused[0]?.code ?? "NOTHING_TO_PRINT", r.value.refused[0]?.message ?? "Tidak ada label yang bisa dicetak.")
     if (format === "roll_58mm") {
@@ -950,6 +1019,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const vault = vaultFor(c.env, id)
     await vault.migrate(id)
     if (b.masking === true) await c.env.DB.prepare("UPDATE tenants SET masking_enabled = 1, masking_daily_quota = 20 WHERE id = ?").bind(id).run()
+    if (b.pro === true) await c.env.DB.prepare("UPDATE tenants SET custom_domain_enabled = 1 WHERE id = ?").bind(id).run()
     if (b.connect === true) {
       // Local only: a connected seller on the offline Mengantar mock, a pickup outlet and 20 % rules.
       const reg = await partnerClient(c.env).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })

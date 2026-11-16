@@ -15,6 +15,7 @@ export const tenants = sqliteTable("tenants", {
   maskingEnabled: integer("masking_enabled").notNull().default(0),
   maskingDailyQuota: integer("masking_daily_quota"),
   tierCode: text("tier_code", { enum: ["silver", "gold", "platinum", "titanium"] }).notNull().default("silver"),
+  customDomainEnabled: integer("custom_domain_enabled").notNull().default(0),
   ownerUserId: text("owner_user_id"),
   createdAt: integer("created_at").notNull(),
   approvedAt: integer("approved_at"),
@@ -60,9 +61,21 @@ export const tenantHostnames = sqliteTable(
     lastCheckedAt: integer("last_checked_at"),
     probeOkAt: integer("probe_ok_at"),
     deletedAt: integer("deleted_at"),
+    sslMethod: text("ssl_method", { enum: ["http", "txt"] }),
+    dnsRecordsJson: text("dns_records_json"),
+    stateChangedAt: integer("state_changed_at"),
+    probeFailures: integer("probe_failures").notNull().default(0),
   },
-  (t) => [index("tenant_hostnames_tenant").on(t.tenantId)],
+  (t) => [index("tenant_hostnames_tenant").on(t.tenantId), index("tenant_hostnames_state").on(t.kind, t.state, t.lastCheckedAt)],
 )
+
+export const customHostnameQuota = sqliteTable("custom_hostname_quota", {
+  id: integer("id").primaryKey(),
+  used: integer("used").notNull(),
+  allocated: integer("allocated").notNull(),
+  hardCap: integer("hard_cap"),
+  checkedAt: integer("checked_at").notNull(),
+})
 
 export const auditLogs = sqliteTable(
   "audit_logs",

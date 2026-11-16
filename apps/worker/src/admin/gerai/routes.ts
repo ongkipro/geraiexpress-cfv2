@@ -5,6 +5,8 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { vaultFor } from "../../do/gerai-vault/stub"
 import { hostCache } from "../../host/lookup"
+import { purgeHost } from "../../hostnames/service"
+import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
 import { hostOrigin } from "../../http/request"
 import { approveApplication, provisionSeller, reconcileRegistration, rejectApplication, type OutletInput } from "../../onboarding/service"
@@ -82,7 +84,7 @@ export function registerGeraiAdmin(app: Hono<any>): void {
 
   r("GET", "/gerai/:slug", "owner_aal2", async (c) => {
     const t = await c.env.DB.prepare(
-      `SELECT t.id, t.slug, t.name, t.status, t.masking_enabled, t.masking_daily_quota, t.routing_version, t.approved_at, o.onboarding_state, o.seller_id, o.last_error_code
+      `SELECT t.id, t.slug, t.name, t.status, t.masking_enabled, t.masking_daily_quota, t.custom_domain_enabled, t.routing_version, t.approved_at, o.onboarding_state, o.seller_id, o.last_error_code
        FROM tenants t LEFT JOIN tenant_onboarding o ON o.tenant_id = t.id WHERE t.slug = ?`,
     )
       .bind(c.req.param("slug"))
@@ -126,6 +128,51 @@ export function registerGeraiAdmin(app: Hono<any>): void {
       auditStatement(c.env, { actorId: c.get("session").user.id, action: "tenant.masking", targetType: "tenant", targetId: t.id, tenantId: t.id, reason, metadata: { enabled, quota }, now }),
     ])
     return ok({ maskingEnabled: enabled === 1, dailyQuota: quota })
+  })
+
+  // Pro custom-domain entitlement (spec 11 §5 step 1): TOTP + reason. Turning it off never deletes an existing domain;
+  // `Hapus` below does (stops billing).
+  r("POST", "/gerai/:slug/custom-domain", "owner_recent", async (c) => {
+    const b = await body(c)
+    const reason = requireReason(b.reason)
+    const enabled = b.enabled === true ? 1 : b.enabled === false ? 0 : null
+    if (enabled === null) throw new AppError(422, "INVALID_FIELD", "Pilih aktif atau nonaktif.")
+    const t = await c.env.DB.prepare("SELECT id FROM tenants WHERE slug = ?").bind(c.req.param("slug")).first<{ id: string }>()
+    if (!t) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
+    const now = Date.now()
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE tenants SET custom_domain_enabled = ?1, updated_at = ?2 WHERE id = ?3").bind(enabled, now, t.id),
+      auditStatement(c.env, { actorId: c.get("session").user.id, action: "tenant.custom_domain", targetType: "tenant", targetId: t.id, tenantId: t.id, reason, metadata: { enabled }, now }),
+    ])
+    return ok({ customDomainEnabled: enabled === 1 })
+  })
+
+  // `Gerai › Domain Mitra` (spec 11 §7): every custom hostname with state, Cloudflare status and last probe.
+  r("GET", "/domains", "owner_aal2", async (c) => {
+    const [rows, quota] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT h.hostname, h.role, h.state, h.cf_status, h.cf_ssl_status, h.dns_branch, h.created_at, h.last_checked_at, h.probe_ok_at, h.probe_failures, t.slug, t.name
+         FROM tenant_hostnames h JOIN tenants t ON t.id = h.tenant_id WHERE h.kind = 'custom' AND h.state != 'purged' ORDER BY h.state, h.created_at DESC LIMIT 500`,
+      ).all(),
+      c.env.DB.prepare("SELECT used, allocated, hard_cap, checked_at FROM custom_hostname_quota WHERE id = 1").first(),
+    ])
+    return ok({ items: rows.results, quota })
+  })
+  r("POST", "/domains/:hostname/delete", "owner_recent", async (c) => {
+    const b = await body(c)
+    const reason = requireReason(b.reason)
+    const host = c.req.param("hostname") ?? ""
+    const row = await c.env.DB.prepare("SELECT tenant_id FROM tenant_hostnames WHERE hostname = ? AND kind = 'custom' AND state != 'purged'").bind(host).first<{ tenant_id: string }>()
+    if (!row) throw new AppError(404, "DOMAIN_NOT_FOUND", "Domain tidak ditemukan.")
+    const now = Date.now()
+    try {
+      await purgeHost(c.env, host, now)
+    } catch (e) {
+      if (e instanceof CfError) throw new AppError(503, "CF_UNAVAILABLE", "Cloudflare belum bisa dihubungi. Coba lagi nanti.")
+      throw e
+    }
+    await auditStatement(c.env, { actorId: c.get("session").user.id, action: "hostname.delete", targetType: "hostname", targetId: host, tenantId: row.tenant_id, reason, now }).run()
+    return ok({ deleted: true })
   })
 
   // Retry provisioning / resolve registration_unknown by read-back (never a blind re-register).

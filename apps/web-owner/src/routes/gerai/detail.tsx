@@ -10,6 +10,7 @@ interface GeraiDetail {
   status: "active" | "suspended"
   masking_enabled: number
   masking_daily_quota: number | null
+  custom_domain_enabled: number
   approved_at: number | null
   onboarding_state: string | null
   last_error_code: string | null
@@ -48,6 +49,10 @@ export function GeraiDetailPage() {
             <div className="flex flex-col gap-2">
               <p className="text-base">Masking label: <strong>{data.masking_enabled ? "Aktif" : "Nonaktif"}</strong> · Kuota harian: <strong className="tabular-nums">{data.masking_daily_quota ?? "Tanpa batas"}</strong></p>
               <ReasonAction label={data.masking_enabled ? "Nonaktifkan masking" : "Aktifkan masking"} confirmLabel="Simpan" variant="outline" path={`/gerai/${data.slug}/masking`} extra={{ enabled: !data.masking_enabled, dailyQuota: data.masking_daily_quota }} onDone={reload} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <p className="text-base">Domain sendiri (Pro): <strong>{data.custom_domain_enabled ? "Diizinkan" : "Tidak"}</strong></p>
+              <ReasonAction label={data.custom_domain_enabled ? "Cabut izin domain sendiri" : "Izinkan domain sendiri"} confirmLabel="Simpan" variant="outline" path={`/gerai/${data.slug}/custom-domain`} extra={{ enabled: !data.custom_domain_enabled }} onDone={reload} hint="Mencabut izin tidak menghapus domain yang sudah aktif; hapus lewat tab Domain Mitra." />
             </div>
             <div className="flex flex-col gap-2">
               <p className="text-base">Membekukan gerai menutup mini-site (403) dan akses ruang kerja dalam 30 detik.</p>

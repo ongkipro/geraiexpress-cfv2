@@ -17,6 +17,7 @@ import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
 import { handleMinisite } from "./minisite"
 import { handleBrand } from "./brand"
 import { handleApiV1 } from "./api-v1"
+import { checkQuota, consumeHostnameBatch, pollHosts, primaryHost, reapHosts, type HostMessage } from "./hostnames/service"
 import { handleOutletMcp } from "./mcp/outlet"
 import { handlePublicMcp } from "./mcp/public"
 import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
@@ -25,6 +26,10 @@ export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
 
 const APP_API = appApi()
+
+// Activation/health probe of a custom hostname (spec 11 §5 step 5). `global_fetch_strictly_public` is not enabled, so
+// the request is routed like an Internet request only for hosts outside this Worker's zones (customer domains are).
+const probeFetch = (url: string) => fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "user-agent": "GeraiExpress-Probe/1.0" } })
 const OWNER_API = ownerApi()
 
 // Path families that belong to exactly one context; on any other context they are a neutral 404 (ADR-0002).
@@ -66,7 +71,12 @@ export default {
       // Mini-site (TASK-501): API families are foreign on tenant hosts (ADR-0002) — except the public MCP (TASK-504).
       if (path === "/mcp") return handlePublicMcp(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
       if (isApiFamily(path)) return notFoundHtml()
-      return handleMinisite(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
+      // `www` twin of a root custom domain: permanent redirect to the primary (spec 11 §6 root_primary).
+      if (ctx.role === "redirect" && (request.method === "GET" || request.method === "HEAD")) {
+        const primary = await primaryHost(env, ctx.tenantId, ctx.tenantSlug)
+        if (primary !== ctx.host) return new Response(null, { status: 301, headers: { location: `https://${primary}${url.pathname}${url.search}`, "cache-control": "public, max-age=3600" } })
+      }
+      return handleMinisite(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host, canonicalHost: await primaryHost(env, ctx.tenantId, ctx.tenantSlug) })
     }
     switch (ctx.context) {
       case "GERAI_WORKSPACE":
@@ -99,6 +109,7 @@ export default {
     if (batch.queue.startsWith("gx-mengantar-webhooks")) return consumeWebhookBatch(batch as MessageBatch<WebhookMessage>, env)
     if (batch.queue.startsWith("gx-bulk")) return consumeBulkBatch(batch as MessageBatch<BulkMessage>, env)
     if (batch.queue.startsWith("gx-mengantar-finance-sync")) return consumeFinanceBatch(batch as MessageBatch<FinanceMessage>, env)
+    if (batch.queue.startsWith("gx-hostnames")) return consumeHostnameBatch(batch as MessageBatch<HostMessage>, env, probeFetch)
     // Other consumers arrive with their tasks: acknowledge so nothing is redelivered into a missing handler.
     batch.ackAll()
   },
@@ -108,6 +119,9 @@ export default {
     // Finance sync (spec 09 §4): every 15 min fan out one message per connected gerai; daily pending-row rescan.
     if (controller.cron === "*/5 * * * *" && new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) ctx.waitUntil(enqueueFinanceSync(env, "cron").then(() => undefined))
     if (controller.cron === "0 19 * * *") ctx.waitUntil(enqueueFinanceSync(env, "pending_rescan").then(() => undefined))
+    // Custom domains (spec 11 §5, §7): status poll every 10 min; daily reaper + quota check at 02:00 WIB.
+    if (controller.cron === "*/5 * * * *" && new Date(controller.scheduledTime).getUTCMinutes() % 10 === 0) ctx.waitUntil(pollHosts(env, Date.now(), probeFetch).then(() => undefined))
+    if (controller.cron === "0 19 * * *") ctx.waitUntil(reapHosts(env, Date.now()).then(() => checkQuota(env, Date.now())).then(() => undefined))
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil(dispatchDue(env).then(() => undefined))
       ctx.waitUntil(runChecks(env).then(() => undefined))

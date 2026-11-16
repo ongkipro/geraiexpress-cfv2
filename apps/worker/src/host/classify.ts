@@ -8,7 +8,7 @@ import { hmacSha256Hex } from "../crypto"
 export type PlatformContext = "MARKETING_APEX" | "GERAI_WORKSPACE" | "PLATFORM_OWNER" | "WEBHOOK_INGEST"
 export type HostContext =
   | { kind: "platform"; context: PlatformContext; host: string }
-  | { kind: "tenant"; context: "TENANT_MINISITE"; host: string; tenantId: string; tenantSlug: string; routingVersion: number }
+  | { kind: "tenant"; context: "TENANT_MINISITE"; host: string; tenantId: string; tenantSlug: string; routingVersion: number; role?: "primary" | "redirect" }
 
 export type Classified =
   | { outcome: "ok"; ctx: HostContext }
@@ -37,6 +37,8 @@ export interface HostRow {
   /** `tenant_schema_versions.state`; `recovery` → 503 (ADR-0006 §4). */
   schemaState: "ok" | "migrating" | "recovery"
   routingVersion: number
+  /** `redirect` = the `www` twin of a root custom domain (301 to the primary once active, spec 11 §6). */
+  role?: "primary" | "redirect"
 }
 
 export type HostLookup = (hostname: string) => Promise<HostRow | null>
@@ -188,7 +190,7 @@ export async function classify(
   if (row.tenantStatus !== "active" || row.hostState !== "active") return { outcome: "not_found" }
   return {
     outcome: "ok",
-    ctx: { kind: "tenant", context: "TENANT_MINISITE", host, tenantId: row.tenantId, tenantSlug: row.tenantSlug, routingVersion: row.routingVersion },
+    ctx: { kind: "tenant", context: "TENANT_MINISITE", host, tenantId: row.tenantId, tenantSlug: row.tenantSlug, routingVersion: row.routingVersion, role: row.role ?? "primary" },
   }
 }
 

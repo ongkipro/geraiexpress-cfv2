@@ -18,7 +18,8 @@ import { AppError } from "../http/envelope"
 import { parseQuoteInput, runQuote } from "../pricing/quote/service"
 import { AREA_SCRIPT, page, rp, turnstile, TURNSTILE_SCRIPT, wa, type Shell } from "./html"
 
-type Ctx = { tenantId: string; tenantSlug: string; host: string }
+// `canonicalHost` = the gerai's custom domain once active and probed, else `<slug>.<zone>` (spec 11 §5 step 6).
+type Ctx = { tenantId: string; tenantSlug: string; host: string; canonicalHost?: string }
 
 const html = (body: string, status = 200, cache = "no-store") => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": cache, "x-robots-tag": status === 200 ? "all" : "noindex" } })
 
@@ -50,7 +51,7 @@ async function shell(env: Env, c: Ctx, tab: Shell["tab"], title: string, descrip
     tab,
     title: `${title} - ${p.value.name}`,
     description,
-    canonical: `https://${c.host}${path}`,
+    canonical: `https://${c.canonicalHost ?? c.host}${path}`,
     noindex,
     // Locally with Cloudflare's always-pass test keys the widget adds nothing: render a dev token instead, so the
     // pages work offline and in e2e (whose per-client header breaks the third-party script's CORS preflight).
@@ -173,9 +174,9 @@ async function kirimCard(env: Env, c: Ctx, slug: string): Promise<Response> {
   const t = await vaultFor(env, c.tenantId).minisiteTrack(c.tenantId, slug)
   if (!t.ok || !t.value) return notFoundHtml()
   const inv = slug.toUpperCase()
-  const share = `Kode kiriman saya di ${s.outlet.name}: INV ${inv}. Lacak: https://${c.host}/lacak?q=${inv}`
+  const share = `Kode kiriman saya di ${s.outlet.name}: INV ${inv}. Lacak: https://${c.canonicalHost ?? c.host}/lacak?q=${inv}`
   const body = `<h2>Kode QR kiriman Anda</h2><p class="inv">INV ${e(inv)}</p>
-<div class="qr">${qrSvg(`https://${c.host}/kirim/${slug}`, { title: `QR INV ${inv}` })}</div>
+<div class="qr">${qrSvg(`https://${c.canonicalHost ?? c.host}/kirim/${slug}`, { title: `QR INV ${inv}` })}</div>
 <p>Tunjukkan QR <strong>INV ${e(inv)}</strong> ini ke kasir ${e(s.outlet.name)} dalam 48 jam. Tidak perlu antre mengetik alamat — kode yang sama dipakai untuk struk dan lacak paket Anda.</p>
 <div class="row"><a class="cta" href="${e(wa("", "").replace(/62$/, ""))}${encodeURIComponent(share)}" rel="noopener">Kirim ke WA Saya</a><a class="cta ghost" href="/lacak?q=${e(inv)}">Lacak Paket</a></div>
 <p class="hint">Simpan gambar: tekan lama pada QR lalu pilih Simpan, atau ambil tangkapan layar.</p>`
@@ -253,8 +254,8 @@ export async function handleMinisite(request: Request, env: Env, c: Ctx): Promis
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/+$/, "") || "/"
   const m = request.method
-  if (path === "/robots.txt" && m === "GET") return new Response(`User-agent: *\nAllow: /\nDisallow: /lacak\nDisallow: /kirim/\nSitemap: https://${c.host}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } })
-  if (path === "/sitemap.xml" && m === "GET") return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://${c.host}/</loc></url><url><loc>https://${c.host}/kirim</loc></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } })
+  if (path === "/robots.txt" && m === "GET") return new Response(`User-agent: *\nAllow: /\nDisallow: /lacak\nDisallow: /kirim/\nSitemap: https://${c.canonicalHost ?? c.host}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } })
+  if (path === "/sitemap.xml" && m === "GET") return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://${c.canonicalHost ?? c.host}/</loc></url><url><loc>https://${c.canonicalHost ?? c.host}/kirim</loc></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } })
   if (path === "/area" && m === "GET") {
     const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
     const lim = await hit(env.DB, `ms-area:${ip}`, 60, 60_000, Date.now())

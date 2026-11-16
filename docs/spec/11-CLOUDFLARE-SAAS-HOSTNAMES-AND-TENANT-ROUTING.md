@@ -102,6 +102,16 @@ Services / Let's Encrypt in CAA; `Blocked` → owner releases the zone hold, the
   `Hapus` action (TOTP + reason).
 - Purge cache by hostname when a gerai's domain or mini-site content changes.
 
+> **Implementation note (TASK-505, 2026-11-16):** `apps/worker/src/hostnames/` (`cloudflare.ts` client + local fake,
+> `service.ts` lifecycle). Pro entitlement = `tenants.custom_domain_enabled` (Super Admin, TOTP + reason). Request
+> writes `pending` rows and enqueues `gx-hostnames`; the consumer creates at Cloudflare (D1-throttled 15/min; a lost
+> race deletes its duplicate) and re-reads DCV records 30 s later. Cron: poll every 10 min (`*/5` tick, minute % 10),
+> reaper + quota at `0 19 * * *`. Probe fetch uses `redirect: manual` and a 10 s timeout. `www` of `root_primary`
+> answers 301 to the root once the root is active; canonical/QR/receipt/API hosts read `primaryHost()` (custom only
+> after a probe). Without a 32-hex `CF_SAAS_ZONE_ID` + token outside local, every Cloudflare call fails closed.
+> Not built: purge cache by hostname (no edge cache is used for mini-site HTML yet); `.my.id`-style suffixes beyond the
+> built-in list are treated as subdomains.
+
 ## 8. Tests (merge-blocking from M5)
 
 Tenant A's session, IDs, API key, webhook secret and cookies against tenant B's host and the platform hosts — refused
