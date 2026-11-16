@@ -79,4 +79,4 @@ export function printedIdentity(
 }
 
 /** WIB calendar day of an instant (`YYYY-MM-DD`), the quota window. */
-export const wibDay = (ms: number) => new Date(ms + 7 * 3600_000).toISOString().slice(0, 10)
+export { wibDay } from "../period"

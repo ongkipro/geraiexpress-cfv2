@@ -389,3 +389,19 @@ export const recipientRiskIndex = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.phoneHmac, t.tenantId] })],
 )
+
+// TASK-309 daily counters pushed from each tenant object's outbox.
+export const tenantDailyStats = sqliteTable(
+  "tenant_daily_stats",
+  {
+    tenantId: text("tenant_id").notNull(),
+    day: text("day").notNull(),
+    shipments: integer("shipments").notNull(),
+    codShipments: integer("cod_shipments").notNull(),
+    counterPaidIdr: integer("counter_paid_idr").notNull(),
+    cancelled: integer("cancelled").notNull(),
+    version: integer("version").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.day] }), index("tenant_daily_stats_day").on(t.day)],
+)

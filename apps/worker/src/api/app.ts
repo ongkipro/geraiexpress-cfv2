@@ -24,6 +24,7 @@ import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
 import { templateCsv } from "@gx/domain/bulk"
+import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
 import { vaultFor } from "../do/gerai-vault/stub"
 
 export interface Membership {
@@ -346,6 +347,23 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).payoutOp(m.tenantId, actorOf(c), op)
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
+  })
+
+  // Dashboard (TASK-309, PR-18, DEC-213/221): the period comes from the URL (WIB presets or `dari`/`sampai`, max 180
+  // days, default 7 days). Owner → KPIs/charts; Kasir → counter tasks only (no money; the projection strips the rest).
+  r("GET", "/dashboard", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const t = now()
+    const dari = c.req.query("dari")
+    const sampai = c.req.query("sampai")
+    if (dari && sampai) {
+      const cst = resolveCustom(dari, sampai, t)
+      if (!cst.ok) throw new AppError(422, `PERIOD_${cst.error}`, cst.message, { periode: cst.message })
+    }
+    const period = periodFromParams({ periode: c.req.query("periode"), dari, sampai }, t)
+    const r = await vaultFor(c.env, m.tenantId).dashboard(m.tenantId, { role: m.role, userId: c.get("session").user.id, period, previous: previousOf(period), today: resolvePreset("today", t) })
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, { ...r.value, period }))
   })
 
   // Paket Massal, Riwayat Massal, Cek Resi (TASK-308, spec 03 §1.3–1.4, DEC-229). Rows are re-validated here; area

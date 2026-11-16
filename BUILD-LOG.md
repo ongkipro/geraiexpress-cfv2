@@ -405,3 +405,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   on its row and is not retried; cancel-unissued cancels only the INV without AWB; foreign AWB → `Resi ini bukan
   kiriman gerai Anda`. e2e at three viewports; mutation red.
 - Note: `runQuote` gained an optional per-call rate key/limit and a single-service filter for bulk rows.
+
+## 2026-11-16 — TASK-309 Owner dashboard, Kasir home, period filter (M3)
+
+- Shipped: role-tailored `/` (owner analytics, Kasir counter tasks), the shared WIB `PeriodFilter`, and daily
+  counters pushed to D1 `tenant_daily_stats` through the outbox.
+- Evidence: period tests (default 7 days; WIB midnight flip; last month across a year; swap, future, 180-day limit;
+  URL round-trip and fallback; previous period; 24 hourly / 7 daily buckets). Workers tests: issued-only counts,
+  paid vs unpaid with tunai split, Estimasi Laba > 0 while Laba Kas stays 0 until reconciled AND counter-settled
+  (COD fixture 147.500 − 145.000 + 3.000 = 5.500), invalid range → `Maksimal 180 hari`, Kasir response has no
+  `_idr`/margin/balance keys, daily stats row lands in D1 and a stale version is ignored. e2e: preset applies at
+  once and updates the URL, back restores, typed custom range with `Terapkan`, 180-day error. Mutation red.
+- Dependency note: `react-day-picker` and `date-fns` arrive through the shadcn `calendar` component (visual 08 §1.5
+  names it); both pinned exactly.

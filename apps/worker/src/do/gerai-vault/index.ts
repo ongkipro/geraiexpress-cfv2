@@ -20,6 +20,8 @@ import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBa
 import type { ValidRow } from "@gx/domain/bulk"
 import { normalizePhone08 } from "@gx/domain/contacts"
 import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
+import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type OwnerDashboard } from "../../analytics/queries"
+import { resolvePreset, type Period } from "@gx/domain/period"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -913,6 +915,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
   }
 
+  // ---- Dashboard (TASK-309) ----------------------------------------------------------------------------------------
+
+  async dashboard(tenantId: string, q: { role: "gerai_admin" | "cashier"; userId: string; period: Period; previous: Period; today: Period }): Promise<VaultResult<{ kind: "owner"; data: OwnerDashboard } | { kind: "counter"; data: CounterHome }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    if (q.role === "gerai_admin") return { ok: true, value: { kind: "owner", data: ownerDashboard(sql, q.period, q.previous, now) } }
+    return { ok: true, value: { kind: "counter", data: counterHome(sql, q.userId, q.today, now) } }
+  }
+
   // ---- Paket Massal, Riwayat Massal, Cek Resi (TASK-308) ---------------------------------------------------------
 
   async bulkCreate(tenantId: string, p: { senderId: string; source: "manual" | "csv"; fileName: string | null; maskPreset: string; codFeeMode: string; serviceCode: string; actorId: string }, rows: Array<{ raw: Record<string, string>; valid: ValidRow | null; errors: string[] }>): Promise<{ ok: true; value: { id: string } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
@@ -1504,7 +1517,19 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   /** Arms the single DO alarm at the earliest of the outbox and the named timers. */
+  /** Absolute counters for yesterday and today (WIB) into the outbox → D1 `tenant_daily_stats` (version = push time). */
+  private pushDailyStats(tenantId: string, now: number): void {
+    const sql = this.ctx.storage.sql
+    this.ctx.storage.transactionSync(() => {
+      for (const p of [resolvePreset("yesterday", now), resolvePreset("today", now)]) enqueueOutbox(sql, "tenant_daily_stats", p.from, now, { ...dailyStatsOf(sql, p), updated_at: now }, now)
+      sql.exec("DELETE FROM vault_timers WHERE name = 'daily_stats'")
+    })
+    void tenantId
+  }
+
   protected async armOutbox(): Promise<void> {
+    // Money/volume changed recently: re-push the daily counters within 5 minutes (debounced, never per event).
+    if (tableExists(this.ctx.storage, "vault_timers") && tableExists(this.ctx.storage, "cashier_shifts")) setTimer(this.ctx.storage.sql, "daily_stats", Date.now() + 300_000, "earliest")
     if (!tableExists(this.ctx.storage, "outbox")) return
     const o = nextOutboxAt(this.ctx.storage.sql)
     const t = tableExists(this.ctx.storage, "vault_timers") ? nextTimerAt(this.ctx.storage.sql) : null
@@ -1567,6 +1592,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!tenantId || !tableExists(this.ctx.storage, "vault_timers") || this.refusal(tenantId)) return []
     const due = dueTimers(this.ctx.storage.sql, now)
     for (const name of due) {
+      if (name === "daily_stats") this.pushDailyStats(tenantId, now)
       if (name === "status_poll") await this.pollStatus(tenantId, now)
       if (name === "inbox_sweep") await this.sweepInbox(tenantId, now)
       if (name === "key_rotation_check") {

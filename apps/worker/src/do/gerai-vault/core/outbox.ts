@@ -73,6 +73,19 @@ export function d1UpsertStatement(db: D1Database, tenantId: string, row: OutboxR
         )
         .bind(row.entity_key, tenantId, n(p.delivered_count), n(p.rts_count), n(p.last_event_at), row.version)
     }
+    case "tenant_daily_stats": {
+      // entity_key = WIB day `YYYY-MM-DD`; absolute counters, applied only when newer.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(row.entity_key)) throw new Error("tenant_daily_stats: entity_key must be a day")
+      const n = (v: unknown) => (Number.isSafeInteger(v) ? (v as number) : 0)
+      return db
+        .prepare(
+          `INSERT INTO tenant_daily_stats (tenant_id, day, shipments, cod_shipments, counter_paid_idr, cancelled, version, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+           ON CONFLICT(tenant_id, day) DO UPDATE SET shipments = excluded.shipments, cod_shipments = excluded.cod_shipments, counter_paid_idr = excluded.counter_paid_idr,
+             cancelled = excluded.cancelled, version = excluded.version, updated_at = excluded.updated_at
+           WHERE excluded.version > tenant_daily_stats.version`,
+        )
+        .bind(tenantId, row.entity_key, Math.max(0, n(p.shipments)), Math.max(0, n(p.cod_shipments)), n(p.counter_paid_idr), Math.max(0, n(p.cancelled)), row.version, n(p.updated_at))
+    }
     default:
       throw new Error(`outbox topic ${row.topic} has no D1 applier yet`)
   }
