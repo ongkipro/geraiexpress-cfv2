@@ -32,6 +32,19 @@ export function scanRoutes(routes) {
   return problems
 }
 
+// Partner API scan (TASK-503, spec 08 §2): every `/api/v1` route declares a known scope and none exposes a counter
+// payment/payout mutation (those stay POS-only).
+export const V1_FORBIDDEN_PATH = /\/(payments?|payouts?|cod-payout|mark-paid|void|refund|shift)(\/|$)/i
+export function scanApiV1(routes, scopes) {
+  const problems = []
+  for (const r of routes) {
+    const id = `v1 ${r.method} ${r.path}`
+    if (!scopes.includes(r.scope)) problems.push(`${id}: missing or unknown scope`)
+    if (V1_FORBIDDEN_PATH.test(r.path)) problems.push(`${id}: counter payment is POS-only`)
+  }
+  return problems
+}
+
 // Non-impersonation scan (DEC-209, AGENTS.md §3.4): Super Admin routes never create, pay, edit or cancel a gerai's
 // shipments. Two checks: (1) no owner route path names a shipment action; (2) owner-side source files never call a
 // tenant-object method that mutates shipments or money (allowlist of read/admin RPCs instead of a denylist guess).

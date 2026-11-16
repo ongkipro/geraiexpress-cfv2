@@ -16,6 +16,7 @@ import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from
 import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
 import { handleMinisite } from "./minisite"
 import { handleBrand } from "./brand"
+import { handleApiV1 } from "./api-v1"
 import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
@@ -68,7 +69,8 @@ export default {
       case "GERAI_WORKSPACE":
         if (path.startsWith("/api/app/")) return APP_API.fetch(request, env, exec)
         if (path === "/internal/dev/preview") return handleDevPreview(request, env, "app")
-        // `/api/v1/*` and `/mcp` are added by their tasks; every other API family is foreign here.
+        // Partner API (TASK-503): Bearer only; `/mcp` arrives with TASK-504; every other API family is foreign here.
+        if (path === "/api/v1" || path.startsWith("/api/v1/")) return handleApiV1(request, env, exec)
         if (isApiFamily(path)) return notFoundHtml()
         return serveSpa(request, env.ASSETS, "app")
       case "PLATFORM_OWNER":

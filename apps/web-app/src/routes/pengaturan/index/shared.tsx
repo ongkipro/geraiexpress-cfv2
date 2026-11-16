@@ -30,6 +30,7 @@ export const SETTINGS_GROUPS: Array<{ label: string; items: Array<{ to: string; 
     items: [
       { to: "/pengaturan/anggota", label: "Anggota", owner: true },
       { to: "/pengaturan/mengantar", label: "Mengantar", owner: true },
+      { to: "/pengaturan/api-mcp", label: "API & MCP", owner: true },
     ],
   },
 ]

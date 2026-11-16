@@ -405,3 +405,34 @@ export const tenantDailyStats = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.day] }), index("tenant_daily_stats_day").on(t.day)],
 )
+
+// TASK-503 API keys.
+export const tenantApiKeys = sqliteTable(
+  "tenant_api_keys",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    tokenPrefix: text("token_prefix").notNull(),
+    scopesJson: text("scopes_json").notNull(),
+    dailyIssueCapIdr: integer("daily_issue_cap_idr"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    lastUsedAt: integer("last_used_at"),
+    revokedAt: integer("revoked_at"),
+    revokedBy: text("revoked_by"),
+  },
+  (t) => [index("tenant_api_keys_tenant").on(t.tenantId, t.revokedAt)],
+)
+
+export const apiKeyDailyUsage = sqliteTable(
+  "api_key_daily_usage",
+  {
+    keyId: text("key_id").notNull(),
+    wibDay: text("wib_day").notNull(),
+    issuedIdr: integer("issued_idr").notNull().default(0),
+    issuedCount: integer("issued_count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.keyId, t.wibDay] })],
+)

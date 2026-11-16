@@ -24,6 +24,7 @@ import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
+import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
@@ -634,6 +635,39 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   // print records `first_printed_at`; reprints need a reason (audited). Label data comes from immutable snapshots.
   const trackingHost = (c: AppCtx) => `${c.get("membership")!.tenantSlug}.${c.env.TENANT_ZONE}`
   const FORMATS = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"] as const
+  // Pengaturan › API & MCP (TASK-503, spec 08 §2): owner-only key management; the token is shown once.
+  r("GET", "/api-keys", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const rows = await c.env.DB.prepare("SELECT id, name, token_prefix, scopes_json, daily_issue_cap_idr, created_at, last_used_at, revoked_at FROM tenant_api_keys WHERE tenant_id = ? ORDER BY revoked_at IS NOT NULL, created_at DESC").bind(m.tenantId).all<{ id: string; name: string; token_prefix: string; scopes_json: string; daily_issue_cap_idr: number | null; created_at: number; last_used_at: number | null; revoked_at: number | null }>()
+    return ok({ items: rows.results.map((r) => ({ ...r, scopes: JSON.parse(r.scopes_json) as string[], scopes_json: undefined })), scopes: SCOPES })
+  })
+  r("POST", "/api-keys", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const name = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim() : ""
+    const scopes = parseScopes(b.scopes)
+    const fields: Record<string, string> = {}
+    if (name.length < 2 || name.length > 60) fields.name = "Nama kunci 2–60 huruf."
+    if (!scopes) fields.scopes = "Pilih minimal satu izin."
+    const cap = b.dailyIssueCapIdr === null || b.dailyIssueCapIdr === undefined || b.dailyIssueCapIdr === "" ? null : Number(b.dailyIssueCapIdr)
+    if (scopes?.includes("shipments:issue") && (cap === null || !Number.isSafeInteger(cap) || cap < 10_000 || cap > 100_000_000)) fields.dailyIssueCapIdr = "Batas harian Rp10.000–Rp100.000.000 wajib untuk izin terbitkan resi."
+    if (Object.keys(fields).length) throw new AppError(422, "INVALID_API_KEY", Object.values(fields)[0]!, fields)
+    const live = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM tenant_api_keys WHERE tenant_id = ? AND revoked_at IS NULL").bind(m.tenantId).first<{ n: number }>()
+    if ((live?.n ?? 0) >= 10) throw new AppError(409, "TOO_MANY_KEYS", "Maksimal 10 kunci aktif. Cabut kunci yang tidak dipakai.")
+    const token = newApiToken()
+    const id = crypto.randomUUID()
+    await c.env.DB.prepare("INSERT INTO tenant_api_keys (id, tenant_id, name, token_hash, token_prefix, scopes_json, daily_issue_cap_idr, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, m.tenantId, name, await hashApiToken(c.env.AUTH_SESSION_PEPPER, token), token.slice(0, 12), JSON.stringify(scopes), scopes!.includes("shipments:issue") ? cap : null, c.get("session").user.id, now())
+      .run()
+    return ok({ id, token, prefix: token.slice(0, 12) }, 201)
+  })
+  r("POST", "/api-keys/:id/revoke", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const res = await c.env.DB.prepare("UPDATE tenant_api_keys SET revoked_at = ?, revoked_by = ? WHERE id = ? AND tenant_id = ? AND revoked_at IS NULL").bind(now(), c.get("session").user.id, c.req.param("id") ?? "", m.tenantId).run()
+    if (!res.meta.changes) throw new AppError(404, "API_KEY_NOT_FOUND", "Kunci tidak ditemukan atau sudah dicabut.")
+    return ok({ revoked: true })
+  })
+
   // Bantuan (TASK-310): platform support contact set by the Super Admin (`Sistem › Profil Legal`).
   r("GET", "/support", "app_session", "none", async (c) => {
     const p = await c.env.DB.prepare("SELECT support_whatsapp FROM platform_legal_profile WHERE id = 1").first<{ support_whatsapp: string | null }>()

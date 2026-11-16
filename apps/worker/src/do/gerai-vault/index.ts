@@ -2126,12 +2126,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   private audit(tenantId: string, at: number, actorType: "user" | "system", actorId: string | null, action: string, meta: Record<string, unknown>): void {
+    // `apikey:<id>` / `mcp:<id>` actors come from `/api/v1` and `/mcp` (spec 08 §5): recorded as their own actor type.
+    const kind = actorId?.startsWith("apikey:") ? "api_key" : actorId?.startsWith("mcp:") ? "mcp_client" : actorType
     this.ctx.storage.sql.exec(
       "INSERT INTO audit_logs (id, tenant_id, at, actor_type, actor_id, action, target_type, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       crypto.randomUUID(),
       tenantId,
       at,
-      actorType,
+      kind,
       actorId,
       action,
       action.startsWith("courier.") ? "courier_pref" : "mengantar_connection",

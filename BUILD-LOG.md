@@ -555,3 +555,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   page contains no `fetch(`/`/api/`. e2e: demo receipt shows the chosen courier, `Daftar Gerai` → app sign-up, no
   cookies on the apex. Lighthouse mobile 100 across four pages. Rendered narrow + wide, H1 shortened, nav wraps on
   phones. Visual acceptance UNVERIFIED (independent verdict pending).
+
+## 2026-11-16 — TASK-503 OpenAPI `/api/v1` and API keys (M5)
+
+- Shipped: Partner API on `app.` with owner-managed scoped keys; one route table is the source for validation,
+  scope checks and the OpenAPI 3.1 document; Scalar reference page; `Pengaturan › API & MCP`.
+- Security: Bearer only (cookies never authenticate `/api/v1`); peppered hash at rest; token shown once; revoke is
+  immediate; suspended gerai → 401; other hosts 404; `shipments:issue` requires `Idempotency-Key` and a daily Rupiah
+  cap (conditional upsert, released on dispatch failure, never charged twice for an already issued INV); counter
+  payment/payout stays POS-only (route scan + 404 test).
+- Evidence: Workers `test/api-v1` (5) + `test/isolation/api-keys-isolation.test.ts`; Redocly lint "valid" on the
+  generated document (`docs/evidence/TASK-503/`); e2e create → call → revoke → 401 at 390/768/1280; dotuiux 0 fail,
+  admin-geometry 0; mutation (scope check disabled) turned the scope-denial test red; `pnpm check` green (unit 158,
+  Workers 299).
+- Gaps: `labels.part = stub_only` and `declared_item_value_idr` not implemented (recorded in spec 08).

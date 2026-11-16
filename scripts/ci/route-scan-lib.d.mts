@@ -11,3 +11,5 @@ export declare const OWNER_FORBIDDEN_PATH: RegExp
 export declare const OWNER_ALLOWED_VAULT_CALLS: Set<string>
 export declare function scanOwnerRoutes(routes: ReadonlyArray<{ context: string; method: string; path: string }>): string[]
 export declare function scanOwnerVaultCalls(files: ReadonlyArray<{ path: string; source: string }>): string[]
+export const V1_FORBIDDEN_PATH: RegExp
+export function scanApiV1(routes: ReadonlyArray<{ method: string; path: string; scope: string }>, scopes: readonly string[]): string[]
