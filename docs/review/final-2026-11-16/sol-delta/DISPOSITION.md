@@ -75,3 +75,5 @@ Control `0015_api_key_spend_items` is superseded by `0017_retire_api_key_spend` 
 | R4-1 | P2 | The expired-quote regression test raced the queued bulk dispatch | the test materializes through the object directly with the key's spend context (no queue), then expires and dispatches explicitly |
 
 No product-code finding remains open from any Sol round. The R4-1 fix is test-only and changes no runtime path.
+
+## Round 5 (Sol, `14c16a0..9d5e2c1`): APPROVE — R4-1 FIXED, no new P0–P2.

@@ -716,3 +716,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 
 - Sol round 4 over `d50c664..14c16a0`: R3-1..R3-5 verified FIXED; one P2 in the new test (a race with the queued
   bulk dispatch) fixed by materializing through the object directly. No open product finding from any Sol round.
+
+## 2026-11-16 — Sol round 5 APPROVE; final integrated run
+
+- Sol round 5 over `14c16a0..9d5e2c1`: APPROVE (R4-1 fixed, no new P0–P2). Review archived in `sol-delta/R5-sol.md`.
+- Integrated run REVIEW-GATE-5 on `9d5e2c1`: typecheck, lint, unit (166), build, worker (377), migrations, isolation,
+  security, e2e — all RECORDED PASS (e2e re-recorded after removing an orphaned e2e server left by a killed run).

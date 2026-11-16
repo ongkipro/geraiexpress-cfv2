@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass and of the GPT-6.1 Sol delta re-review fixed, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
+Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass and of the GPT-6.1 Sol delta re-reviews fixed, Sol round 5 APPROVE, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
@@ -23,7 +23,7 @@ Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 o
 | `e2e/` | Playwright (390/768/1280), 22 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 24 · 1,013 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 166 unit + 366 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
+Tests: 166 unit + 377 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
 … `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`, `0017_retire_api_key_spend`; tenant (v22): `0001_baseline` … `0014_settings`,
 `0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`, `0022_rescan_and_api_spend`.
 
