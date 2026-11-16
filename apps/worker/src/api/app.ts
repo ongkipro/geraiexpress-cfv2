@@ -15,7 +15,7 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
-import { escposBytes, labelsPdf, rollLines, rollText } from "@gx/thermal-print"
+import { escposBytes, initials, labelsPdf, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
@@ -92,6 +92,7 @@ async function body(c: AppCtx): Promise<Record<string, unknown>> {
 }
 
 const now = () => Date.now()
+const COURIER_NAMES: Record<string, string> = { JT: "J&T", JNE: "JNE", SiCepat: "SiCepat", Sap: "SAP Express", iDexpress: "iDexpress", lion: "Lion Parcel", anteraja: "Anteraja", pos: "Pos Indonesia", spx: "SPX", ninja: "Ninja Xpress" }
 
 export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   const app = new Hono<{ Bindings: Env; Variables: Vars }>().basePath("/api/app")
@@ -349,6 +350,47 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).payoutOp(m.tenantId, actorOf(c), op)
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
+  })
+
+  // Pickup & Manifest / Surat Jalan (TASK-403, spec 04 §1): Kasir and owner; scans and handover run in the object.
+  const pickup = async (c: AppCtx, op: Parameters<GeraiVaultDO["pickupOp"]>[2]) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).pickupOp(m.tenantId, c.get("session").user.id, op)
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, r.value))
+  }
+  const batchId = (c: AppCtx) => {
+    const v = c.req.param("batch") ?? ""
+    if (!/^[0-9a-f-]{36}$/.test(v)) throw new AppError(404, "BATCH_NOT_FOUND", "Manifest tidak ditemukan.")
+    return v
+  }
+  r("GET", "/pickup", "app_member", "role", (c) => pickup(c, { op: "queue" }))
+  r("GET", "/pickup/history", "app_member", "role", (c) => pickup(c, { op: "history" }))
+  r("POST", "/pickup/open", "app_member", "role", async (c) => pickup(c, { op: "open", courier: String((await body(c)).courier ?? "").slice(0, 20) }))
+  r("GET", "/pickup/:batch", "app_member", "role", (c) => pickup(c, { op: "view", batchId: batchId(c) }))
+  r("POST", "/pickup/:batch/scan", "app_member", "role", async (c) => pickup(c, { op: "scan", batchId: batchId(c), code: String((await body(c)).code ?? "").slice(0, 60) }))
+  r("POST", "/pickup/:batch/unscan", "app_member", "role", async (c) => pickup(c, { op: "unscan", batchId: batchId(c), slug: String((await body(c)).slug ?? "").slice(0, 7) }))
+  r("POST", "/pickup/:batch/handover", "app_member", "role", async (c) => {
+    const b = await body(c)
+    return pickup(c, { op: "handover", batchId: batchId(c), driverName: b.driverName, driverPhone: b.driverPhone, vehicleNo: b.vehicleNo, signatureId: typeof b.signatureId === "string" ? b.signatureId : null, photoId: typeof b.photoId === "string" ? b.photoId : null, mode: b.mode === "dropped_at_branch" ? "dropped_at_branch" : "handed_over" })
+  })
+  r("GET", "/pickup/:batch/surat-jalan.pdf", "app_member", "none", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).manifestData(m.tenantId, batchId(c))
+    if (!r.ok) return vaultErr(r)
+    if (!r.value) throw new AppError(404, "BATCH_NOT_FOUND", "Manifest tidak ditemukan.")
+    const v = r.value.batch
+    const fmt = (ms: number) => `${new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms)} WIB`
+    const pdf = suratJalanPdf({
+      outlet: r.value.outlet,
+      courierName: COURIER_NAMES[v.courier_code] ?? v.courier_code,
+      batchId: v.id,
+      handedOverAt: fmt(v.handed_over_at ?? Date.now()),
+      driver: { name: v.driver_name, phone: v.driver_phone, vehicleNo: v.driver_vehicle_no },
+      mode: v.status === "dropped_at_branch" ? "dropped_at_branch" : "handed_over",
+      items: v.items.map((i) => ({ inv: i.slug, awb: i.awb ?? "-", recipientInitials: initials(i.recipient), weightGram: i.weight_gram })),
+    })
+    return new Response(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="surat-jalan-${v.courier_code}.pdf"`, "cache-control": "no-store" } })
   })
 
   // Keuangan (TASK-401, spec 09): owner only; manual sync limited to 1 per 30 s inside the tenant object.

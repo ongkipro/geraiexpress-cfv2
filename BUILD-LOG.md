@@ -480,3 +480,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   paid once; reserve = P + N + 2.000 adjustment, released to 2.000 when the return debit syncs; Kasir sees
   `{ balance_sufficient: false }` only and 403 on `/finance`. e2e held → top-up → `Sinkronkan Sekarang` → AWB.
   Two mutations red. Independent R4 review deferred to the final pass (ledger BLOCKED, not approved).
+
+## 2026-11-16 — TASK-403 Pickup manifest and Surat Jalan (M4)
+
+- Shipped: per-courier pickup queue, scan-into-manifest guard, driver handover with signature, custody
+  `handed_to_courier`, and the A4 Surat Jalan PDF.
+- Evidence: J&T batch adds the J&T AWB, dedupes a re-scan, warns (not blocks) on a counter-unpaid INV, blocks
+  SiCepat / cancelled / unpaid-hold / unknown codes; empty batch refused; driver fields and signature errors in
+  Indonesian; plate normalised to `D 1234 ABC`, phone to `0812…`; custody + status `handed_to_courier`; closed batch
+  refuses scans; the handed INV is blocked in the next batch; PDF has `SURAT JALAN`, driver name, no recipient name;
+  branch drop-off records custody without driver fields. PDF snapshot: A4 MediaBox, rows with initials, total weight,
+  28 rows/page, footer on the last page only. e2e at three viewports. Mutation red.
+- Not done here (needs sandbox): `POST /time` pickup reservation lead time and timezone (spec 04 §1.2 says verify in
+  the M4 sandbox); dispatch already reserves a slot for scheduled-pickup couriers (TASK-304).

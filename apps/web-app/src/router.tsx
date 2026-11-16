@@ -25,6 +25,7 @@ import { CekResiPage } from "./routes/kasir/cek-resi/page"
 import { RiwayatMassalPage } from "./routes/kiriman/massal/history"
 import { BatchPage } from "./routes/kiriman/massal/batch"
 import { KirimanPage } from "./routes/kiriman/index/page"
+import { ManifestPage } from "./routes/kiriman/pickup/page"
 import { KeuanganPage } from "./routes/keuangan/page"
 import { PengaturanIndexPage } from "./routes/pengaturan/index/shared"
 import { ProfilGeraiPage } from "./routes/pengaturan/profil/page"
@@ -120,6 +121,7 @@ const dataUsahaRoute = createRoute({ getParentRoute: () => workspaceRoute, path:
 const printerRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/printer", component: PrinterPage })
 const packingRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/packing", component: ownerOnly(PackingPage) })
 const anggotaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/anggota", component: ownerOnly(AnggotaPage) })
+const manifestRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/pickup/$batch", component: ManifestPage })
 const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/$sub", component: soonPage("Buat Pengiriman", "Bagian ini sedang disiapkan.", "TASK-303..308") })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: KirimanPage })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
@@ -128,7 +130,7 @@ const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: 
 const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: PengaturanIndexPage })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: AkunPage })
 const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: BantuanPage })
-const comingSoonRoutes = [profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
+const comingSoonRoutes = [manifestRoute, profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })

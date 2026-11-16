@@ -200,6 +200,7 @@ export const shipments = sqliteTable(
     bulkBatchId: text("bulk_batch_id"),
     providerReconciledCostIdr: integer("provider_reconciled_cost_idr"),
     reconciledExtraAdjustmentIdr: integer("reconciled_extra_adjustment_idr"),
+    pickupBatchId: text("pickup_batch_id"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -594,3 +595,39 @@ export const financeSyncState = sqliteTable("finance_sync_state", {
   lastPendingRescanAt: integer("last_pending_rescan_at"),
   runningSince: integer("running_since"),
 })
+
+// TASK-403 pickup manifests (Surat Jalan).
+export const pickupBatches = sqliteTable(
+  "pickup_batches",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    outletId: text("outlet_id"),
+    courierCode: text("courier_code").notNull(),
+    status: text("status", { enum: ["open", "handed_over", "dropped_at_branch", "cancelled"] }).notNull(),
+    driverName: text("driver_name"),
+    driverPhone: text("driver_phone"),
+    driverVehicleNo: text("driver_vehicle_no"),
+    signatureR2Key: text("signature_r2_key"),
+    signedManifestPhotoR2Key: text("signed_manifest_photo_r2_key"),
+    scannedCount: integer("scanned_count").notNull().default(0),
+    handedOverAt: integer("handed_over_at"),
+    handedOverBy: text("handed_over_by"),
+    suratJalanPdfR2Key: text("surat_jalan_pdf_r2_key"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("pickup_batches_one_open").on(t.courierCode).where(sql`status = 'open'`)],
+)
+
+export const pickupBatchItems = sqliteTable(
+  "pickup_batch_items",
+  {
+    batchId: text("batch_id").notNull(),
+    slug: text("slug").notNull(),
+    scannedAt: integer("scanned_at").notNull(),
+    scannedBy: text("scanned_by").notNull(),
+    unpaidWarning: integer("unpaid_warning").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.batchId, t.slug] }), uniqueIndex("pickup_batch_items_slug").on(t.slug)],
+)

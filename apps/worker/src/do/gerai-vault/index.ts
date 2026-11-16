@@ -27,6 +27,7 @@ import { exportCsv, listShipments, tabCounts, type ListQuery, type ListRow, type
 import { applyInvoice, FINAL_STATUSES, settleBalance } from "./finance"
 import { financeView, type FinanceView } from "./finance/view"
 import { balanceSufficient } from "./finance/reserve"
+import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -160,6 +161,12 @@ function preflightOf(sql: SqlStorage, s: Record<string, SqlStorageValue>, q: Quo
   const b = balanceSufficient(sql, debit)
   return { balance_sufficient: b.sufficient, synced_balance_idr: b.balance, estimated_debit_idr: debit }
 }
+
+export type PickupValue =
+  | { kind: "queue"; groups: QueueGroup[] }
+  | { kind: "history"; batches: PickupBatchRow[] }
+  | { kind: "batch"; batch: BatchView }
+  | { kind: "scan"; scan: ScanResult; batch: BatchView }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -1130,6 +1137,74 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: financeView(this.ctx.storage.sql, now) }
+  }
+
+  // ---- Pickup manifests / Surat Jalan (TASK-403) ------------------------------------------------------------------
+
+  async pickupOp(
+    tenantId: string,
+    actorId: string,
+    op:
+      | { op: "queue" }
+      | { op: "open"; courier: string }
+      | { op: "view"; batchId: string }
+      | { op: "scan"; batchId: string; code: string }
+      | { op: "unscan"; batchId: string; slug: string }
+      | { op: "handover"; batchId: string; driverName: unknown; driverPhone: unknown; vehicleNo: unknown; signatureId: string | null; photoId: string | null; mode: "handed_over" | "dropped_at_branch" }
+      | { op: "history" },
+  ): Promise<{ ok: true; value: PickupValue } | { ok: false; refused?: VaultRefusal; error?: PickupError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    const media = (id: string | null, purpose: string) => (id && /^[0-9a-f-]{36}$/.test(id) ? (sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ? AND purpose = ?", id, purpose).toArray()[0]?.r2_key ?? null) : null)
+    return this.ctx.storage.transactionSync((): { ok: true; value: PickupValue } | { ok: false; error: PickupError } => {
+      switch (op.op) {
+        case "queue":
+          return { ok: true, value: { kind: "queue", groups: pickupQueue(sql) } }
+        case "history":
+          return { ok: true, value: { kind: "history", batches: listPickupBatches(sql) } }
+        case "open": {
+          const exists = sql.exec("SELECT 1 FROM shipments WHERE courier_code = ? LIMIT 1", op.courier).toArray().length
+          if (!exists) return { ok: false, error: { status: 404, code: "COURIER_NOT_FOUND", message: "Belum ada kiriman untuk ekspedisi ini." } }
+          const b = openPickupBatch(sql, tenantId, op.courier, actorId, now)
+          return { ok: true, value: { kind: "batch", batch: batchView(sql, b.id)! } }
+        }
+        case "view": {
+          const v = batchView(sql, op.batchId)
+          return v ? { ok: true, value: { kind: "batch", batch: v } } : { ok: false, error: { status: 404, code: "BATCH_NOT_FOUND", message: "Manifest tidak ditemukan." } }
+        }
+        case "scan": {
+          const r = scanParcel(sql, op.batchId, op.code, actorId, now)
+          if (!r.ok) return r
+          if (r.value.result === "blocked") this.audit(tenantId, now, "user", actorId, "pickup.scan_blocked", { batchId: op.batchId, code: r.value.code, slug: r.value.slug })
+          return { ok: true, value: { kind: "scan", scan: r.value, batch: batchView(sql, op.batchId)! } }
+        }
+        case "unscan": {
+          const r = unscanParcel(sql, op.batchId, op.slug)
+          return r.ok ? { ok: true, value: { kind: "batch", batch: batchView(sql, op.batchId)! } } : r
+        }
+        case "handover": {
+          const sig = media(op.signatureId, "signature")
+          const photo = media(op.photoId, "evidence")
+          const r = handoverBatch(sql, op.batchId, { driverName: op.driverName, driverPhone: op.driverPhone, vehicleNo: op.vehicleNo, signatureKey: sig, photoKey: photo, mode: op.mode, actorId }, now)
+          if (!r.ok) return r
+          this.audit(tenantId, now, "user", actorId, `pickup.${op.mode}`, { batchId: op.batchId, handed: r.value.handed })
+          return { ok: true, value: { kind: "batch", batch: batchView(sql, op.batchId)! } }
+        }
+      }
+    })
+  }
+
+  /** Surat Jalan data for the PDF (recipient initials only). */
+  async manifestData(tenantId: string, batchId: string): Promise<VaultResult<{ batch: BatchView; outlet: { name: string; address: string | null; phone: string | null } } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const v = batchView(sql, batchId)
+    if (!v) return { ok: true, value: null }
+    const o = sql.exec<{ name: string; street_address: string | null; subdistrict_name: string | null; whatsapp: string | null; pic_phone: string | null }>("SELECT name, street_address, subdistrict_name, whatsapp, pic_phone FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    return { ok: true, value: { batch: v, outlet: { name: o?.name ?? "Gerai", address: [o?.street_address, o?.subdistrict_name].filter(Boolean).join(", ") || null, phone: o?.whatsapp ?? o?.pic_phone ?? null } } }
   }
 
   // ---- Kiriman list (TASK-311) -----------------------------------------------------------------------------------
