@@ -5,6 +5,9 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 /** Order read-back fixtures keyed by AWB or ORDER_ID (`history[].date` is Asia/Jakarta `DD-MM-YYYY HH:mm`). */
 export const mockOrders = new Map<string, { cnote_no: string; ORDER_ID: string; statusCategory: string; history: Array<{ date: string; statusCategory: string }> }>()
 
+/** Discount Mengantar currently gives this mock seller, per rate key, in bps (default 2000 regular, 2000 cargo). */
+export const mockDiscountBps = new Map<string, number>()
+
 /** Fault injection for tests: the next call to a route throws a timeout (after or before Mengantar applied it). */
 export const mockFaults: { regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"; apiKey?: "timeout" } = {}
 
@@ -54,6 +57,19 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const o = mockOrders.get(id)
     return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })
   }
+  if (/^\/api\/public\/[^/]+\/order\/estimate$/.test(p)) {
+    const keys = ["JNE", "JNECargo", "SiCepat", "SiCepatCargo", "Sap", "SapCargo", "iDexpress", "iDexpressCargo", "JT", "lion", "anteraja", "pos", "spx"]
+    const data: Record<string, unknown> = {}
+    for (const k of keys) {
+      const bps = mockDiscountBps.get(k) ?? 2000
+      const price = 12000
+      const discount = Math.floor((price * bps) / 10000)
+      data[k] = k.endsWith("Cargo")
+        ? { unsupported: false, unsupported_cod: true, price: 60000, discountPercent: 0, discount: 0, cargoPrice: 60000, cargoDiscount: Math.floor((60000 * bps) / 10000), cargoEstimatedPrice: 60000, cargoEstimatedSpecialPrice: 60000 - Math.floor((60000 * bps) / 10000), minimumWeightCargo: 5 }
+        : { unsupported: false, unsupported_cod: false, price, discountPercent: bps / 100, discount, codFee: 0, estimatedPrice: price, estimatedSpecialPrice: price - discount }
+    }
+    return json(200, { success: true, data })
+  }
   if (p.endsWith("/address/search")) {
     const kw = (url.searchParams.get("keyword") ?? "").toLowerCase()
     const areas = [
@@ -69,5 +85,6 @@ export const mockFetch: typeof fetch = async (input, init) => {
 export function resetMock() {
   sellers.clear()
   mockOrders.clear()
+  mockDiscountBps.clear()
   for (const k of Object.keys(mockFaults)) delete mockFaults[k as keyof typeof mockFaults]
 }

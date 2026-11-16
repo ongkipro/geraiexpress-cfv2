@@ -257,3 +257,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   unsupported mode in Indonesian, unknown/inactive courier, cashier 403, cache miss → hit → skip); e2e; UI gates.
 - Fixed before commit: catalog notes are user-facing, so they are plain Indonesian (no spec references or field names).
 - No toast dependency: a fixed `aria-live` region shows the confirmation (DEC-223 "instant save + toast").
+
+## 2026-11-16 — TASK-207 Discount and cashback matrix (`Tarif & Kurir`) (M2)
+
+- Shipped: `pricing/rules` (policy, bands, seeding, edit, request list + CSV, verifier, observation recording),
+  owner routes and `/tarif` + `/tarif/:tenantId` screens, `observeRates` vault RPC (seller key stays in the object),
+  mock `courier=all` estimate with per-key discount, `@gx/domain/cashback`, `verificationCheckAt`/`parseDiscountBand`
+  next to the existing TASK-107 state machine (reused, not duplicated).
+- Evidence: 20 % seeding for every active service; 1999/3001 rejected with Indonesian band message; reason required;
+  edit resets to `Belum diterapkan` with an old/new audit row; per-courier band change without code (JT 22–35 %) and two
+  couriers with different bands; fake-clock +15 (`Sesuai` / still `Belum`), +60, +120 (`Selisih` + alert, next check
+  daily); 2000 vs 1999 → `Sesuai`, drift to 1000 → `Selisih`, back → `Sesuai`; cargo verifies on cargo fields; CSV +
+  mark requested; owner sees assigned %, cashier 403, tenant host shows no discount.
+- Gotchas: an RPC return type built from a Zod passthrough schema (unknown index signature) collapses to the error
+  branch in TypeScript — return a plain projection (`ObservedRate`); alert keys must match `[a-z0-9_.-]{1,80}`.

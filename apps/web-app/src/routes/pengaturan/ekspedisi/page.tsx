@@ -15,9 +15,12 @@ interface CourierRow {
   enabled: boolean
   pickupMode: PickupMode
   pickupOptions: PickupMode[]
-  services: Array<{ serviceCode: string; name: string; serviceClass: "regular" | "cargo"; cod: boolean }>
+  services: Array<{ serviceCode: string; name: string; serviceClass: "regular" | "cargo"; cod: boolean; discount: { assignedBps: number; state: "belum_diterapkan" | "sesuai" | "selisih" } | null }>
   note: string | null
 }
+
+const DISCOUNT_STATE: Record<string, string> = { belum_diterapkan: "belum diterapkan", sesuai: "sesuai", selisih: "selisih" }
+const pct = (bps: number) => `${(bps / 100).toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`
 
 const MODE_LABEL: Record<PickupMode, string> = { scheduled_pickup: "Dijemput kurir", drop_off_only: "Antar ke agen" }
 
@@ -66,7 +69,7 @@ export function PengaturanEkspedisiPage() {
       </nav>
       <div className="flex flex-col gap-2">
         <h1 className="text-[28px] leading-tight font-semibold">Ekspedisi Aktif</h1>
-        <p className="text-base text-muted-foreground">Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan.</p>
+        <p className="text-base text-muted-foreground">Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.</p>
       </div>
 
       {error ? <FormAlert>{error}</FormAlert> : null}
@@ -98,6 +101,7 @@ export function PengaturanEkspedisiPage() {
                             <Badge key={s.serviceCode} variant="outline" className="h-7 px-2 text-sm font-normal">
                               {s.serviceClass === "cargo" ? "Cargo" : "Reguler"}
                               {s.cod ? " · COD" : ""}
+                              {s.discount ? <span className="tabular-nums">{` · diskon ${pct(s.discount.assignedBps)} (${DISCOUNT_STATE[s.discount.state]})`}</span> : null}
                             </Badge>
                           ))}
                         </span>

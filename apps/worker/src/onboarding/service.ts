@@ -11,6 +11,7 @@ import { hostCache } from "../host/lookup"
 import { AppError } from "../http/envelope"
 import { partnerClient } from "../mengantar/factory"
 import { quotaFor } from "../do/partner-quota"
+import { platformPolicy, seedRulesOnApproval } from "../pricing/rules"
 
 export const RESERVED_SLUGS = new Set([
   "www", "app", "api", "owner", "admin", "hq", "hooks", "relay", "custom", "mcp", "docs", "mail", "mengantar",
@@ -182,6 +183,7 @@ export async function approveApplication(env: Env, input: { applicationId: strin
     now: input.now,
     onlyIf: thisCall,
   })
+  const policy = await platformPolicy(env.DB)
   const res = await env.DB.batch([
     env.DB.prepare("UPDATE tenant_applications SET state = 'approved', decided_at = ?1, decided_by = ?2, decision_reason = ?3, updated_at = ?1 WHERE id = ?4 AND state = 'submitted'").bind(input.now, input.actorId, input.reason, a.id),
     env.DB.prepare("UPDATE tenants SET status = 'active', approved_at = ?1, masking_daily_quota = COALESCE(masking_daily_quota, 20), routing_version = routing_version + 1, updated_at = ?1 WHERE id = ?2 AND (SELECT decided_at FROM tenant_applications WHERE id = ?3) = ?1 AND (SELECT decided_by FROM tenant_applications WHERE id = ?3) = ?4").bind(input.now, a.tenant_id, a.id, input.actorId),
@@ -192,6 +194,8 @@ export async function approveApplication(env: Env, input: { applicationId: strin
     ).bind(`${a.slug}.${env.TENANT_ZONE}`, a.tenant_id, input.now, a.id, input.actorId),
     mail.statement,
     auditStmt(env, input.actorId, "tenant.approve", a.tenant_id, input.reason, input.now, a.id),
+    // TASK-207: every active service starts at the courier default (20 %), `Belum diterapkan` (DEC-233).
+    seedRulesOnApproval(env, { tenantId: a.tenant_id, applicationId: a.id, actorId: input.actorId, now: input.now, defaultBps: policy.defaultBps }),
   ])
   if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
   hostCache.clear()

@@ -9,8 +9,19 @@ import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, t
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
+import type { CourierRate } from "@gx/mengantar-sdk"
 import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from "../../webhooks/verify"
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, recordProviderObservation, setTimer, findShipment, type TimerName } from "./status"
+
+/** Discount-relevant fields of one estimate row (plain numbers, safe across RPC). */
+export interface ObservedRate {
+  unsupported: boolean
+  price: number | null
+  discount: number | null
+  discountPercent: number | null
+  cargoPrice: number | null
+  cargoDiscount: number | null
+}
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -144,6 +155,23 @@ export class GeraiVaultDO extends DurableObject<Env> {
     // Rotation fence (ADR-0004 §5): no Mengantar call with a key that may be replaced right now.
     if (!row?.encrypted_api_key || row.rotation_state !== "idle") return null
     return { key: await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`), version: row.key_version }
+  }
+
+  // ---- Discount verification (TASK-207) -----------------------------------------------------------------------------
+
+  /** One `courier=all` estimate (1 kg, origin = destination = the outlet area) for the discount verifier. */
+  async observeRates(tenantId: string, areaId: string): Promise<{ ok: true; value: Record<string, ObservedRate> } | { ok: false; refused: VaultRefusal | "NO_KEY" }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const key = await this.sellerKey(tenantId)
+    if (!key) return { ok: false, refused: "NO_KEY" }
+    const rates = await publicClient(this.env, key.key).estimate({ originId: areaId, destinationId: areaId, courier: "all", weightKg: 1 })
+    const n = (v: unknown) => (typeof v === "number" ? v : null)
+    const value: Record<string, ObservedRate> = {}
+    for (const [k, r] of Object.entries(rates as Record<string, CourierRate>)) {
+      value[k] = { unsupported: r.unsupported === true, price: n(r.price), discount: n(r.discount), discountPercent: n(r.discountPercent), cargoPrice: n(r.cargoPrice), cargoDiscount: n(r.cargoDiscount) }
+    }
+    return { ok: true, value }
   }
 
   // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------

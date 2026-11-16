@@ -10,6 +10,7 @@ import { handleDoMigrate } from "./ops/do-migrate"
 import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
+import { runDiscountVerifier } from "./pricing/rules"
 import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 
@@ -97,6 +98,7 @@ export default {
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil(dispatchDue(env).then(() => undefined))
       ctx.waitUntil(runChecks(env).then(() => undefined))
+      ctx.waitUntil(runDiscountVerifier(env, Date.now()).then(() => undefined))
     }
   },
 } satisfies ExportedHandler<Env>

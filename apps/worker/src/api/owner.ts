@@ -15,6 +15,7 @@ import { AppError, fail, fromError, ok } from "../http/envelope"
 import { hostOrigin, ipHash } from "../http/request"
 import { register, type AuthLevel } from "./registry"
 import { registerGeraiAdmin } from "../admin/gerai/routes"
+import { registerPricingAdmin } from "../pricing/rules/routes"
 
 export const RECENT_TOTP_MS = 15 * 60_000
 const TOTP_MAX_WRONG = 5
@@ -207,6 +208,7 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
 
   registerGeraiAdmin(app)
+  registerPricingAdmin(app)
 
   return app
 }

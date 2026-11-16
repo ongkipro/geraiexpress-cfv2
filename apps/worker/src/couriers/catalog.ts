@@ -32,7 +32,7 @@ export interface CourierRow {
   enabled: boolean
   pickupMode: PickupMode
   pickupOptions: PickupMode[]
-  services: Array<{ serviceCode: string; name: string; serviceClass: "regular" | "cargo"; cod: boolean }>
+  services: Array<{ serviceCode: string; name: string; serviceClass: "regular" | "cargo"; cod: boolean; discount?: { assignedBps: number; state: "belum_diterapkan" | "sesuai" | "selisih" } | null }>
   note: string | null
 }
 
@@ -76,10 +76,16 @@ const refused = (): never => {
   throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
 }
 
+/** Owner view: also the assigned discount and its verification state per service (read-only, set by Super Admin). */
 export async function listCouriers(env: Env, tenantId: string): Promise<CourierRow[]> {
-  const [catalog, prefs] = await Promise.all([activeCatalog(env.DB), vaultFor(env, tenantId).courierPrefs(tenantId)])
+  const [catalog, prefs, rules] = await Promise.all([
+    activeCatalog(env.DB),
+    vaultFor(env, tenantId).courierPrefs(tenantId),
+    env.DB.prepare("SELECT service_code, assigned_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ?").bind(tenantId).all<{ service_code: string; assigned_bps: number; verification_state: "belum_diterapkan" | "sesuai" | "selisih" }>(),
+  ])
   if (!prefs.ok) return refused()
-  return mergeCouriers(catalog, prefs.value)
+  const ruleOf = new Map(rules.results.map((r) => [r.service_code, { assignedBps: r.assigned_bps, state: r.verification_state }]))
+  return mergeCouriers(catalog, prefs.value).map((c) => ({ ...c, services: c.services.map((s) => ({ ...s, discount: ruleOf.get(s.serviceCode) ?? null })) }))
 }
 
 /** Instant-save toggle / pickup mode (DEC-223). Validates against the catalog; returns the updated row. */

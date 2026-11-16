@@ -7,6 +7,8 @@ import { GeraiPage } from "./routes/gerai/index"
 import { PengajuanPage } from "./routes/gerai/pengajuan"
 import { GeraiDetailPage } from "./routes/gerai/detail"
 import { PlaceholderPage } from "./routes/placeholder"
+import { TarifPage } from "./routes/tarif/index"
+import { TarifGeraiPage } from "./routes/tarif/gerai"
 
 export interface OwnerMe {
   user: { id: string; name: string; email: string }
@@ -61,7 +63,8 @@ const geraiRoute = createRoute({
 })
 const pengajuanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/gerai/pengajuan/$id", component: PengajuanPage })
 const geraiDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/gerai/$slug", component: GeraiDetailPage })
-const tarifRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif", component: () => <PlaceholderPage title="Tarif & Kurir" body="Diskon dan cashback per gerai × kurir, katalog kurir, dan kebijakan diskon." /> })
+const tarifRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif", component: TarifPage })
+const tarifGeraiRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif/$tenantId", component: TarifGeraiPage })
 const pengawasanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/pengawasan", component: () => <PlaceholderPage title="Pengawasan" body="Pantauan kiriman dan sinkron lintas gerai, serta radar risiko COD." /> })
 const sistemRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/sistem", component: () => <PlaceholderPage title="Sistem & Audit" body="Kesehatan integrasi dan relay, log audit, akses admin, profil perusahaan." /> })
 
@@ -74,7 +77,7 @@ const totpRoute = createRoute({
 })
 
 export const routeTree = rootRoute.addChildren([
-  consoleRoute.addChildren([indexRoute, geraiRoute, pengajuanRoute, geraiDetailRoute, tarifRoute, pengawasanRoute, sistemRoute]),
+  consoleRoute.addChildren([indexRoute, geraiRoute, pengajuanRoute, geraiDetailRoute, tarifRoute, tarifGeraiRoute, pengawasanRoute, sistemRoute]),
   masukRoute,
   totpRoute,
 ])

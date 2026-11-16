@@ -329,3 +329,49 @@ export const courierServiceCatalog = sqliteTable(
   },
   (t) => [index("courier_service_catalog_courier").on(t.courierCode, t.sortOrder)],
 )
+
+export const platformPricingPolicy = sqliteTable("platform_pricing_policy", {
+  id: integer("id").primaryKey(),
+  defaultDiscountBps: integer("default_discount_bps").notNull(),
+  minDiscountBps: integer("min_discount_bps").notNull(),
+  maxDiscountBps: integer("max_discount_bps").notNull(),
+  applySlaMinutes: integer("apply_sla_minutes").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+})
+
+export const courierDiscountPolicy = sqliteTable("courier_discount_policy", {
+  courierCode: text("courier_code").primaryKey(),
+  defaultDiscountBps: integer("default_discount_bps").notNull(),
+  minDiscountBps: integer("min_discount_bps").notNull(),
+  maxDiscountBps: integer("max_discount_bps").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+})
+
+export const tenantDiscountRules = sqliteTable(
+  "tenant_discount_rules",
+  {
+    tenantId: text("tenant_id").notNull(),
+    serviceCode: text("service_code").notNull(),
+    courierCode: text("courier_code").notNull(),
+    serviceClass: text("service_class", { enum: ["regular", "cargo"] }).notNull(),
+    assignedBps: integer("assigned_bps").notNull(),
+    cashbackBps: integer("cashback_bps").notNull().default(0),
+    effectiveFrom: integer("effective_from").notNull(),
+    applyChannel: text("apply_channel", { enum: ["mengantar_team", "partner_api"] }).notNull().default("mengantar_team"),
+    requestedAt: integer("requested_at").notNull(),
+    requestSentAt: integer("request_sent_at"),
+    appliedAt: integer("applied_at"),
+    verifiedAt: integer("verified_at"),
+    verificationState: text("verification_state", { enum: ["belum_diterapkan", "sesuai", "selisih"] }).notNull().default("belum_diterapkan"),
+    observedBps: integer("observed_bps"),
+    observedAt: integer("observed_at"),
+    nextCheckAt: integer("next_check_at"),
+    checkStep: integer("check_step").notNull().default(0),
+    alertedAt: integer("alerted_at"),
+    updatedAt: integer("updated_at").notNull(),
+    updatedBy: text("updated_by"),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.serviceCode] }), index("tenant_discount_rules_due").on(t.nextCheckAt), index("tenant_discount_rules_state").on(t.verificationState, t.requestedAt)],
+)

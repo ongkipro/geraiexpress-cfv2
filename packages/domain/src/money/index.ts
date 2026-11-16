@@ -174,6 +174,20 @@ export function verificationCheckTimes(requestedAt: number): number[] {
   return [15, 60, 120].map((m) => requestedAt + m * 60_000)
 }
 
+/** The `step`-th scheduled check (0-based): +15, +60, +120 min, then every 24 h after the last one. */
+export function verificationCheckAt(requestedAt: number, step: number): number {
+  const fixed = verificationCheckTimes(requestedAt)
+  return step < fixed.length ? fixed[step]! : fixed.at(-1)! + (step - fixed.length + 1) * 24 * 3600_000
+}
+
+/** A band is valid when min <= default <= max, all integers in 0..10000. */
+export function parseDiscountBand(b: { defaultBps: unknown; minBps: unknown; maxBps: unknown }): DiscountBand | null {
+  const v = [b.defaultBps, b.minBps, b.maxBps]
+  if (!v.every((x) => typeof x === "number" && Number.isSafeInteger(x) && x >= 0 && x <= 10_000)) return null
+  const [d, mn, mx] = v as [number, number, number]
+  return mn <= d && d <= mx ? { defaultBps: d, minBps: mn, maxBps: mx } : null
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Collection modes and exact flows (spec 02 §3)
 
