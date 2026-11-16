@@ -25,6 +25,7 @@ import { CekResiPage } from "./routes/kasir/cek-resi/page"
 import { RiwayatMassalPage } from "./routes/kiriman/massal/history"
 import { BatchPage } from "./routes/kiriman/massal/batch"
 import { KirimanPage } from "./routes/kiriman/index/page"
+import { KeuanganPage } from "./routes/keuangan/page"
 import { PengaturanIndexPage } from "./routes/pengaturan/index/shared"
 import { ProfilGeraiPage } from "./routes/pengaturan/profil/page"
 import { DataUsahaPage } from "./routes/pengaturan/data-usaha/page"
@@ -123,7 +124,7 @@ const kasirSubRoute = createRoute({ getParentRoute: () => workspaceRoute, path: 
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: KirimanPage })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
 const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: PenerimaPage })
-const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(soonPage("Keuangan", "Saldo Mengantar, mutasi dan laba per INV sedang disiapkan.", "TASK-401")) })
+const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(KeuanganPage) })
 const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: PengaturanIndexPage })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: AkunPage })
 const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: BantuanPage })

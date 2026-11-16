@@ -2,6 +2,7 @@
 // tables; the caller passes WIB-resolved bounds `[fromMs, toMs)`. A shipment counts on its issue time; drafts and
 // cancelled INVs never count. `Estimasi Laba` and `Laba Kas` are separate numbers, never summed.
 import { bucketOf, bucketsOf, type Period } from "@gx/domain/period"
+import { CASH_PROFIT_SQL } from "../do/gerai-vault/finance/view"
 
 const ISSUED = "dispatch_state IN ('issued','provider_unpaid_hold') AND issued_at IS NOT NULL"
 
@@ -56,13 +57,11 @@ export function ownerDashboard(sql: SqlStorage, p: Period, prev: Period, now: nu
   const est = sql
     .exec<{ s: number }>(`SELECT SUM(q.estimated_margin_idr) AS s FROM shipments s JOIN quote_snapshots q ON q.id = s.quote_snapshot_id WHERE s.${ISSUED.replace(/ AND /g, " AND s.")} AND s.issued_at >= ? AND s.issued_at < ?`, p.fromMs, p.toMs)
     .one()
-  // Laba Kas (spec 02 §3.5): counter paid/not required AND provider side reconciled. COD rows reconcile from the COD
-  // credit; Non-COD rows wait for the invoice sync (TASK-401) and count as pending until then.
+  // Laba Kas (spec 02 §3.5): counter paid/not required AND provider side reconciled (`/invoices`, TASK-401).
   const cash = sql
     .exec<{ s: number; pending: number }>(
-      `SELECT SUM(CASE WHEN cod_fee_mode != 'none' AND reconciled_provider_cod_credit_idr IS NOT NULL THEN reconciled_provider_cod_credit_idr - sender_cod_payable_idr + packing_addon_idr + COALESCE(counter_service_fee_idr, 0) - COALESCE(promo_discount_idr, 0) ELSE 0 END) AS s,
-              SUM(NOT (cod_fee_mode != 'none' AND reconciled_provider_cod_credit_idr IS NOT NULL)) AS pending
-       FROM shipments WHERE ${ISSUED} AND counter_payment_status IN ('paid','not_required') AND issued_at >= ? AND issued_at < ?`,
+      `SELECT SUM(${CASH_PROFIT_SQL}) AS s, SUM((${CASH_PROFIT_SQL}) IS NULL) AS pending
+       FROM shipments s WHERE s.dispatch_state IN ('issued','provider_unpaid_hold') AND s.issued_at IS NOT NULL AND s.counter_payment_status IN ('paid','not_required') AND s.issued_at >= ? AND s.issued_at < ?`,
       p.fromMs,
       p.toMs,
     )

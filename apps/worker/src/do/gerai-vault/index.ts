@@ -24,6 +24,8 @@ import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type Owner
 import { resolvePreset, type Period } from "@gx/domain/period"
 import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, parseReceipt } from "./settings"
 import { exportCsv, listShipments, tabCounts, type ListQuery, type ListRow, type Tab } from "./listing"
+import { applyInvoice, FINAL_STATUSES, settleBalance } from "./finance"
+import { financeView, type FinanceView } from "./finance/view"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -146,6 +148,8 @@ export type SettingsView = {
   packing: { items: Array<{ id: string | null; name: string; priceIdr: number; active: boolean }>; serviceFeeEnabled: boolean; serviceFeeIdr: number | null }
   cashierMayPay: boolean
 }
+
+export type FinanceRun = { trigger: string; pages: number; rows: number; newRows: number; linked: number; unlinked: number; balance: number | null; gaps: number; capped: boolean; error: string | null }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -660,6 +664,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         recordOutcome(sql, slug, idem, outcome, ready.q.cod_fee_idr, at)
         // A rejected issue never happened: give the masking slot back.
         if (outcome.kind === "rejected") releasePreset(sql, preset, reseller, now)
+        else this.scheduleFinanceSync(at)
         this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind, preset })
       })
       await this.armOutbox()
@@ -740,6 +745,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         this.audit(tenantId, at, "user", actorId, "shipment.pay_unpaid", { slug })
       } else sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", payError ? "unknown" : "failed", payError ?? "no AWB after pay-unpaid", at, idem)
     })
+    this.scheduleFinanceSync(Date.now())
     await this.armOutbox()
     const after = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string }) | null
     if (after?.dispatch_state !== "issued") return { ok: false, error: { status: 409, code: "STILL_UNPAID", message: "Resi belum terbit. Periksa saldo Mengantar lalu coba lagi." } }
@@ -764,6 +770,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
     const finishCancel = (at: number) => {
       this.ctx.storage.transactionSync(() => {
+        this.scheduleFinanceSync(at)
         setDispatchStatus(sql, slug, "cancelled", at, { dispatch_state: "cancelled", cancelled_at: at, counter_payment_status: "voided", custody_stage: "cancelled_local", custody_at: at })
         this.audit(tenantId, at, "user", actorId, "shipment.cancel", { slug, reason })
       })
@@ -923,6 +930,132 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
+  }
+
+  // ---- Finance sync, dual book (TASK-401, spec 09) ----------------------------------------------------------------
+
+  private financeRunning: Promise<unknown> | null = null
+
+  /**
+   * One bounded `/invoices` sync (spec 09 §4): newest first, size 50, at most 5 pages, stop at the first page whose
+   * rows are all already final in the mirror. Serialized per tenant; a run already in flight is joined.
+   * `pending_rescan` re-reads non-final mirror rows by date range (daily). Manual runs: 1 per 30 s.
+   */
+  async financeSync(tenantId: string, trigger: "cron" | "mutation" | "manual" | "pending_rescan", now: number = Date.now()): Promise<{ ok: true; value: FinanceRun } | { ok: false; refused?: VaultRefusal; error?: { status: number; code: string; message: string } }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const st = sql.exec<{ last_manual_at: number | null }>("SELECT last_manual_at FROM finance_sync_state WHERE id = 1").one()
+    if (trigger === "manual" && st.last_manual_at !== null && now - st.last_manual_at < 30_000) {
+      return { ok: false, error: { status: 429, code: "SYNC_RATE_LIMITED", message: "Sinkronisasi baru saja dijalankan. Coba lagi dalam 30 detik." } }
+    }
+    if (trigger === "manual") sql.exec("UPDATE finance_sync_state SET last_manual_at = ? WHERE id = 1", now)
+    if (this.financeRunning) return { ok: true, value: (await this.financeRunning) as FinanceRun }
+    const run = this.financeRun(tenantId, trigger, now)
+    this.financeRunning = run
+    try {
+      return { ok: true, value: await run }
+    } finally {
+      this.financeRunning = null
+    }
+  }
+
+  private async financeRun(tenantId: string, trigger: string, now: number): Promise<FinanceRun> {
+    const sql = this.ctx.storage.sql
+    const key = await this.sellerKey(tenantId)
+    const result: FinanceRun = { trigger, pages: 0, rows: 0, newRows: 0, linked: 0, unlinked: 0, balance: null, gaps: 0, capped: false, error: null }
+    if (!key) {
+      result.error = "NO_KEY"
+      return result
+    }
+    sql.exec("UPDATE finance_sync_state SET running_since = ?, last_run_at = ?, last_trigger = ? WHERE id = 1", now, now, trigger)
+    const client = publicClient(this.env, key.key)
+    try {
+      if (trigger === "pending_rescan") {
+        // Non-final rows older than the newest page: re-read by their creation date range (spec 09 §4).
+        const oldest = sql.exec<{ t: number | null }>("SELECT MIN(provider_created_at) AS t FROM mengantar_invoice_mirror WHERE status IS NULL OR status NOT IN ('statusCleared','statusExpired')").one().t
+        if (oldest !== null) {
+          const day = (t: number) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10)
+          let cursor: string | null = null
+          do {
+            const page = await client.invoices({ cursor, size: 50, dateRange: { startDate: day(oldest), endDate: day(now) } })
+            result.pages++
+            this.ctx.storage.transactionSync(() => {
+              for (const item of page.data) this.tallyInvoice(result, applyInvoice(sql, item as Record<string, unknown>, now))
+            })
+            cursor = page.nextCursor ?? null
+          } while (cursor && result.pages < 5)
+          result.capped = !!cursor
+        }
+        sql.exec("UPDATE finance_sync_state SET last_pending_rescan_at = ? WHERE id = 1", now)
+      } else {
+        let cursor: string | null = null
+        for (;;) {
+          const page = await client.invoices({ cursor, size: 50 })
+          result.pages++
+          let allKnownFinal = page.data.length > 0
+          this.ctx.storage.transactionSync(() => {
+            for (const item of page.data) {
+              const prior = sql.exec<{ status: string | null }>("SELECT status FROM mengantar_invoice_mirror WHERE invoice_id = ?", String((item as { _id?: string })._id ?? "")).toArray()[0]
+              const o = applyInvoice(sql, item as Record<string, unknown>, now)
+              this.tallyInvoice(result, o)
+              if (!prior || !FINAL_STATUSES.has(prior.status ?? "")) allKnownFinal = false
+            }
+          })
+          cursor = page.nextCursor ?? null
+          if (!cursor || allKnownFinal) break
+          if (result.pages >= 5) {
+            result.capped = true
+            break
+          }
+        }
+      }
+      const settled = this.ctx.storage.transactionSync(() => {
+        const b = settleBalance(sql, now)
+        if (b.balance !== null) sql.exec("UPDATE mengantar_connections SET synced_balance_idr = ?, last_invoice_synced_at = ?, last_sync_status = 'ok'", b.balance, now)
+        else sql.exec("UPDATE mengantar_connections SET last_invoice_synced_at = ?, last_sync_status = 'ok'", now)
+        if (result.capped) sql.exec("INSERT INTO finance_discrepancies (id, invoice_id, kind, shipment_slug, detail, created_at) VALUES (?, 'sync', 'balance_gap', '', 'Mutasi lebih dari 5 halaman; sisanya diperiksa pada sinkronisasi berikutnya.', ?) ON CONFLICT(invoice_id, kind, shipment_slug) DO NOTHING", crypto.randomUUID(), now)
+        sql.exec("UPDATE finance_sync_state SET running_since = NULL, last_ok_at = ?, last_pages = ?, last_error = NULL WHERE id = 1", now, result.pages)
+        return b
+      })
+      result.balance = settled.balance
+      result.gaps = settled.gaps
+    } catch (err) {
+      result.error = err instanceof Error ? err.message.slice(0, 160) : "sync failed"
+      sql.exec("UPDATE finance_sync_state SET running_since = NULL, last_error = ? WHERE id = 1", result.error)
+      sql.exec("UPDATE mengantar_connections SET last_sync_status = 'error'")
+    }
+    await this.armOutbox()
+    return result
+  }
+
+  private tallyInvoice(r: FinanceRun, o: ReturnType<typeof applyInvoice>): void {
+    if (!o) return
+    r.rows++
+    if (o.isNew) r.newRows++
+    r.linked += o.linked
+    r.unlinked += o.unlinked
+  }
+
+  /** Arms `finance_sync` 60 s after a balance-affecting mutation (debounced: an earlier timer is kept). */
+  private scheduleFinanceSync(now: number): void {
+    if (tableExists(this.ctx.storage, "finance_sync_state")) setTimer(this.ctx.storage.sql, "finance_sync", now + 60_000, "earliest")
+  }
+
+  /** Local mock only: the mock seller key, so dev fixtures can be tagged to this gerai. Never a real key. */
+  async devMockSellerKey(tenantId: string): Promise<VaultResult<string | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (this.env.GX_ENV !== "local" || this.env.MENGANTAR_PUBLIC_ORIGIN !== "mock") return { ok: true, value: null }
+    const k = await this.sellerKey(tenantId)
+    return { ok: true, value: k && /^MOCK-|^KEY-/.test(k.key) ? k.key : null }
+  }
+
+  /** `/keuangan` read model (owner only): summary cards + the five tabs. */
+  async financeView(tenantId: string, now: number = Date.now()): Promise<VaultResult<FinanceView>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: financeView(this.ctx.storage.sql, now) }
   }
 
   // ---- Kiriman list (TASK-311) -----------------------------------------------------------------------------------
@@ -1738,6 +1871,10 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const due = dueTimers(this.ctx.storage.sql, now)
     for (const name of due) {
       if (name === "daily_stats") this.pushDailyStats(tenantId, now)
+      if (name === "finance_sync") {
+        this.ctx.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'finance_sync'")
+        await this.financeSync(tenantId, "mutation", now)
+      }
       if (name === "status_poll") await this.pollStatus(tenantId, now)
       if (name === "inbox_sweep") await this.sweepInbox(tenantId, now)
       if (name === "key_rotation_check") {
@@ -1908,6 +2045,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       sql.exec("UPDATE webhook_inbox SET state = 'applied', applied_at = ? WHERE event_key = ?", now, eventKey)
       out = { state: "applied", status: r.status }
     })
+    this.scheduleFinanceSync(now)
     await this.armOutbox()
     return { ok: true, value: out }
   }

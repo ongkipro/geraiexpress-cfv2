@@ -351,6 +351,20 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok(r.value)
   })
 
+  // Keuangan (TASK-401, spec 09): owner only; manual sync limited to 1 per 30 s inside the tenant object.
+  r("GET", "/finance", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).financeView(m.tenantId)
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/finance/sync", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).financeSync(m.tenantId, "manual")
+    if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+
   // Kiriman list (TASK-311, DEC-213/220): tabs with counts, search, period (default 30 days, WIB), courier and print
   // filters, keyset pages. Kasir rows lose cost/margin through the projection; the CSV is owner-only.
   const listQuery = (c: AppCtx) => {
@@ -804,6 +818,38 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     }
     return ok({ tenantId: id, slug }, 201)
   })
+  // Local only (mock Mengantar): synthesize `/invoices` rows for this gerai's issued INVs — a top-up, one Non-COD
+  // batch payment or COD payout per INV, and one unknown type — so `/keuangan` can be rendered and e2e-tested.
+  r("POST", "/dev/mock-invoices", "app_owner", "none", async (c) => {
+    if (c.env.GX_ENV !== "local" || c.env.MENGANTAR_PUBLIC_ORIGIN !== "mock") return fail(404, "NOT_FOUND", "Alamat tidak ditemukan.")
+    const m = c.get("membership")!
+    const list = await vaultFor(c.env, m.tenantId).shipmentList(m.tenantId, { tab: "semua", q: "", fromMs: 0, toMs: Date.now() + 1, courier: null, printed: "semua", cursor: null, limit: 50 })
+    if (!list.ok) return vaultErr(list)
+    const { mockInvoices } = await import("../mengantar/mock")
+    const key = await vaultFor(c.env, m.tenantId).devMockSellerKey(m.tenantId)
+    const seller = key.ok ? key.value : null
+    if (!seller) return fail(409, "NOT_CONNECTED", "Gerai belum terhubung ke Mengantar.")
+    let balance = 500_000
+    let t = Date.now() - 3600_000
+    const at = () => new Date((t += 60_000)).toISOString()
+    const tag = m.tenantId.slice(0, 6)
+    const push = (row: Record<string, unknown>) => mockInvoices.push({ ...row, _seller: seller })
+    push({ _id: `dev-${tag}-top`, inv_number: "INV-MGT-DEV-1", type: "typeAddBalance", status: "statusCleared", amount: 500_000, balanceAmount: balance, createdAt: at(), description: "Top up saldo" })
+    for (const row of list.value.items.filter((x) => x.awb_number)) {
+      if (row.cod_fee_mode === "none") {
+        balance -= 10_000
+        push({ _id: `dev-${tag}-${row.slug}`, inv_number: `INV-MGT-${row.slug.toUpperCase()}`, type: "typePayment", status: "statusCleared", amount: -10_000, balanceAmount: balance, createdAt: at(), description: "Payment for Non-COD batch", subItems: [{ cnote_no: row.awb_number, amount: -10_000 }] })
+      } else {
+        const credit = row.cod_collection_total_idr - 10_000
+        balance += credit
+        push({ _id: `dev-${tag}-${row.slug}`, inv_number: `INV-MGT-${row.slug.toUpperCase()}`, type: "typeReconciliation", status: "statusCleared", amount: credit, balanceAmount: balance, createdAt: at(), subItems: [{ cnote_no: row.awb_number, amount: credit }] })
+      }
+    }
+    balance -= 1_000
+    push({ _id: `dev-${tag}-x`, inv_number: "INV-MGT-DEV-X", type: "typeMismatchP", status: "statusCleared", amount: -1_000, balanceAmount: balance, createdAt: at(), description: "Selisih" })
+    return ok({ rows: mockInvoices.filter((i) => i._seller === seller).length }, 201)
+  })
+
   // Local only: add a synthetic notification to the caller's gerai (renders `/notifikasi` states).
   r("POST", "/dev/notify", "app_member", "none", async (c) => {
     if (c.env.GX_ENV !== "local") return fail(404, "NOT_FOUND", "Alamat tidak ditemukan.")

@@ -20,10 +20,14 @@ export const mockFaults: {
   order?: "timeout_after_create" | "timeout_before_create" | "validation_error" | "replayed_5xx" | "unavailable"
   deleteOrder?: "timeout_after_delete" | "refused"
   readBack?: "timeout"
+  invoices?: "error"
 } = {}
 
 /** Seller balance per mock key (IDR); an order the balance cannot cover is created unpaid (no AWB). */
-export const mockSeller = { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0 }
+export const mockSeller = { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0, invoiceCalls: 0 }
+/** `/invoices` rows this mock seller returns (newest first by `createdAt`); tests push fixtures here. */
+export const mockInvoices: Array<Record<string, unknown>> = []
+
 type MockOrder = { _id: string; ORDER_ID: string; cnote_no: string | null; batch: string; batch_id: string; isPaid: boolean; status: string; statusCategory: string; destinationMark: string; DESTINATION_CODE: string | null; WEIGHT: string; COD_FEE: string; courier: string; cost: number; history: Array<{ date: string; statusCategory: string }> }
 /** Orders created through the mock `POST /order`, by ORDER_ID. */
 export const mockCreated = new Map<string, MockOrder>()
@@ -141,6 +145,29 @@ export const mockFetch: typeof fetch = async (input, init) => {
     if (fault === "timeout_after_create") throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
     return json(200, resBody)
   }
+  if (/^\/api\/public\/[^/]+\/invoices$/.test(p)) {
+    mockSeller.invoiceCalls++
+    if (mockFaults.invoices === "error") {
+      delete mockFaults.invoices
+      return json(503, { success: false, code: "UPSTREAM_ERROR", message: "unavailable" })
+    }
+    // Newest first; cursor = index of the next item; optional dateRange filters on createdAt (WIB day).
+    const size = Math.min(50, Number(url.searchParams.get("size") ?? "50"))
+    const start = Number(url.searchParams.get("cursor") ?? "0")
+    const range = url.searchParams.get("dateRange")
+    // Per seller: rows tagged with `_seller` belong only to that key (a shared dev server serves many gerai).
+    const sellerKey = decodeURIComponent(p.split("/")[3] ?? "")
+    let list = mockInvoices.filter((i) => i._seller === undefined || i._seller === sellerKey).map(({ _seller: _s, ...rest }) => rest).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    if (range) {
+      const r = JSON.parse(range) as { startDate: string; endDate: string }
+      const day = (s: unknown) => new Date(Date.parse(String(s)) + 7 * 3600_000).toISOString().slice(0, 10)
+      list = list.filter((i) => day(i.createdAt) >= r.startDate && day(i.createdAt) <= r.endDate)
+    }
+    const page = list.slice(start, start + size)
+    const next = start + size < list.length ? String(start + size) : null
+    const newestCleared = list.find((i) => i.status === "statusCleared")
+    return json(200, { success: true, data: page, balance: (newestCleared?.balanceAmount as number | undefined) ?? null, nextCursor: next })
+  }
   if (/^\/api\/public\/[^/]+\/order\/pay-unpaid$/.test(p)) {
     mockSeller.payUnpaidCalls++
     const hit = [...mockCreated.values()].filter((o) => o.batch_id === body.batch_id && !o.isPaid)
@@ -230,7 +257,8 @@ export function resetMock() {
   mockUnsupported.clear()
   mockCreated.clear()
   idempotent.clear()
-  Object.assign(mockSeller, { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0 })
+  Object.assign(mockSeller, { balanceIdr: 1_000_000, createCalls: 0, payUnpaidCalls: 0, deleteCalls: 0, invoiceCalls: 0 })
+  mockInvoices.length = 0
   mockCodFeeUnstable.on = false
   mockCodFeeUnstable.n = 0
   for (const k of Object.keys(mockFaults)) delete mockFaults[k as keyof typeof mockFaults]

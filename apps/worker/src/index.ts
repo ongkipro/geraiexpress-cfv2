@@ -14,6 +14,7 @@ import { runDiscountVerifier } from "./pricing/rules"
 import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
 import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
+import { consumeFinanceBatch, enqueueFinanceSync, type FinanceMessage } from "./cron/finance"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
@@ -91,12 +92,16 @@ export default {
   async queue(batch, env): Promise<void> {
     if (batch.queue.startsWith("gx-mengantar-webhooks")) return consumeWebhookBatch(batch as MessageBatch<WebhookMessage>, env)
     if (batch.queue.startsWith("gx-bulk")) return consumeBulkBatch(batch as MessageBatch<BulkMessage>, env)
+    if (batch.queue.startsWith("gx-mengantar-finance-sync")) return consumeFinanceBatch(batch as MessageBatch<FinanceMessage>, env)
     // Other consumers arrive with their tasks: acknowledge so nothing is redelivered into a missing handler.
     batch.ackAll()
   },
   async scheduled(controller, env, ctx): Promise<void> {
     // Every 5 min: email outbox retries/expiry (TASK-104) and operator checks with owner alerts (TASK-110).
     if (controller.cron === "0 * * * *") ctx.waitUntil(revokeExpiredRoutes(env, Date.now()).then(() => undefined))
+    // Finance sync (spec 09 §4): every 15 min fan out one message per connected gerai; daily pending-row rescan.
+    if (controller.cron === "*/5 * * * *" && new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) ctx.waitUntil(enqueueFinanceSync(env, "cron").then(() => undefined))
+    if (controller.cron === "0 19 * * *") ctx.waitUntil(enqueueFinanceSync(env, "pending_rescan").then(() => undefined))
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil(dispatchDue(env).then(() => undefined))
       ctx.waitUntil(runChecks(env).then(() => undefined))

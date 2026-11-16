@@ -198,6 +198,8 @@ export const shipments = sqliteTable(
     senderCodPaidIdr: integer("sender_cod_paid_idr"),
     reconciledProviderCodCreditIdr: integer("reconciled_provider_cod_credit_idr"),
     bulkBatchId: text("bulk_batch_id"),
+    providerReconciledCostIdr: integer("provider_reconciled_cost_idr"),
+    reconciledExtraAdjustmentIdr: integer("reconciled_extra_adjustment_idr"),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
 )
@@ -520,4 +522,75 @@ export const packingItems = sqliteTable("packing_items", {
   isActive: integer("is_active").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   updatedAt: integer("updated_at").notNull(),
+})
+
+// TASK-401 Book 2 — Mengantar seller mirror (spec 09).
+export const mengantarInvoiceMirror = sqliteTable(
+  "mengantar_invoice_mirror",
+  {
+    invoiceId: text("invoice_id").primaryKey(),
+    invNumber: text("inv_number"),
+    type: text("type").notNull(),
+    status: text("status"),
+    courier: text("courier"),
+    orderCode: text("order_code"),
+    awbNumber: text("awb_number"),
+    amountIdr: integer("amount_idr"),
+    totalIdr: integer("total_idr"),
+    balanceAmountIdr: integer("balance_amount_idr"),
+    description: text("description"),
+    providerCreatedAt: integer("provider_created_at"),
+    providerUpdatedAt: integer("provider_updated_at"),
+    rawJson: text("raw_json").notNull(),
+    linkState: text("link_state", { enum: ["linked", "partial", "unlinked", "not_applicable", "unknown_type"] }).notNull(),
+    firstSeenAt: integer("first_seen_at").notNull(),
+    lastSeenAt: integer("last_seen_at").notNull(),
+  },
+  (t) => [index("mengantar_invoice_mirror_created").on(t.providerCreatedAt), index("mengantar_invoice_mirror_state").on(t.linkState)],
+)
+
+export const mengantarInvoiceSubitems = sqliteTable(
+  "mengantar_invoice_subitems",
+  {
+    invoiceId: text("invoice_id").notNull(),
+    idx: integer("idx").notNull(),
+    awbNumber: text("awb_number"),
+    orderCode: text("order_code"),
+    batchCode: text("batch_code"),
+    amountIdr: integer("amount_idr"),
+    codAmountIdr: integer("cod_amount_idr"),
+    estimatedPriceIdr: integer("estimated_price_idr"),
+    estimatedSpecialPriceIdr: integer("estimated_special_price_idr"),
+    codFeeRawText: text("cod_fee_raw_text"),
+    shipmentSlug: text("shipment_slug"),
+  },
+  (t) => [primaryKey({ columns: [t.invoiceId, t.idx] }), index("mengantar_invoice_subitems_slug").on(t.shipmentSlug)],
+)
+
+export const financeDiscrepancies = sqliteTable(
+  "finance_discrepancies",
+  {
+    id: text("id").primaryKey(),
+    invoiceId: text("invoice_id").notNull(),
+    kind: text("kind", { enum: ["unknown_type", "unmatched", "cod_credit_differs", "debit_differs", "adjustment", "balance_gap"] }).notNull(),
+    shipmentSlug: text("shipment_slug"),
+    expectedIdr: integer("expected_idr"),
+    actualIdr: integer("actual_idr"),
+    detail: text("detail"),
+    resolvedAt: integer("resolved_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("finance_discrepancies_key").on(t.invoiceId, t.kind, t.shipmentSlug)],
+)
+
+export const financeSyncState = sqliteTable("finance_sync_state", {
+  id: integer("id").primaryKey(),
+  lastRunAt: integer("last_run_at"),
+  lastOkAt: integer("last_ok_at"),
+  lastTrigger: text("last_trigger"),
+  lastPages: integer("last_pages"),
+  lastError: text("last_error"),
+  lastManualAt: integer("last_manual_at"),
+  lastPendingRescanAt: integer("last_pending_rescan_at"),
+  runningSince: integer("running_since"),
 })

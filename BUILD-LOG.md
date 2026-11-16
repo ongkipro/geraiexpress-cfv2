@@ -455,3 +455,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sub-45 s checkout: `e2e/checkout.spec.ts` asserts < 45 s from `/kasir` to the issued AWB at all three viewports.
 - `docs/SYSTEM-MAP.md` refreshed for M3. Awaiting owner: live sandbox `POST /order`, a real thermal print photo, counsel
   answer before masking is advertised.
+
+## 2026-11-16 — TASK-401 `/invoices` sync, dual book, Laba Kas (M4)
+
+- Shipped: Book 2 mirror of Mengantar `/invoices` inside each tenant object, per-type reconciliation onto INVs,
+  `Selisih Sync`, bounded/serialized sync with four triggers, the owner `/keuangan` screen, and Laba Kas from
+  reconciled amounts (dashboard shares the same SQL).
+- Evidence: fixture with all five observed types + `typeMismatchP` + a pending top-up: Non-COD cost 10.000, COD credit
+  140.000, return debit 14.000, refund linked, unknown type and an unmatched COD sub-item in `Selisih Sync`, receiver
+  name/phone/goods absent from the mirror, `COD_FEE` 4995.5 kept as text, balance 599.000 = newest cleared
+  `balanceAmount`, running balance consistent; a wrong `balanceAmount` is flagged; Laba Kas = due − 10.000 for Non-COD
+  and 140.000 − 145.000 + 3.000 for COD only after sync; 400 rows → 5 pages and `capped`, next run reads one page;
+  manual 429 within 30 s, timer at +60 s after dispatch runs a sync, pending rescan clears a top-up, cron fan-out,
+  Kasir 403. Mutation (add instead of set on re-read) red. One `pnpm check` run hit 5 s test timeouts while another
+  project's suite loaded the machine; the re-run passed (153 unit, 268 Workers).
