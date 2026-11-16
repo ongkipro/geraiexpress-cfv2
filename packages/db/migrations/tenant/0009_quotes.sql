@@ -1,0 +1,38 @@
+-- TASK-303 frozen quotes (spec 01 §2.3, spec 02 §3.3). Every number is recomputed on the server from the final
+-- estimate whose COD_AMOUNT equals the create-order COD; create-order sends these values unchanged (TASK-304).
+CREATE TABLE quote_snapshots (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  shipment_slug TEXT NOT NULL,
+  origin_area_id TEXT NOT NULL,
+  destination_area_id TEXT NOT NULL,
+  cod_fee_mode TEXT NOT NULL CHECK (cod_fee_mode IN ('none','buyer_bears_fee','sender_bears_fee','cod_all_in','dfod')),
+  actual_weight_gram INTEGER NOT NULL,
+  length_cm INTEGER,
+  width_cm INTEGER,
+  height_cm INTEGER,
+  volumetric_divisor INTEGER NOT NULL,
+  billable_weight_gram INTEGER NOT NULL,
+  provider_weight_kg_text TEXT NOT NULL,
+  courier_code TEXT NOT NULL,
+  service_code TEXT NOT NULL,
+  service_class TEXT NOT NULL CHECK (service_class IN ('regular','cargo')),
+  publish_shipping_idr INTEGER NOT NULL,
+  provider_net_shipping_idr INTEGER NOT NULL,
+  raw_discount_percent TEXT,
+  provider_observed_discount_bps INTEGER,
+  assigned_gerai_discount_bps INTEGER,
+  effective_gerai_cost_idr INTEGER NOT NULL,
+  insurance_fee_idr INTEGER,
+  cod_fee_idr INTEGER NOT NULL,
+  cod_goods_amount_idr INTEGER NOT NULL,
+  cod_collection_total_idr INTEGER NOT NULL,
+  counter_due_idr INTEGER NOT NULL,
+  sender_cod_payable_idr INTEGER NOT NULL,
+  expected_provider_cod_credit_idr INTEGER NOT NULL,
+  packing_addon_idr INTEGER NOT NULL DEFAULT 0,
+  estimated_margin_idr INTEGER NOT NULL,
+  quoted_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX quote_snapshots_slug ON quote_snapshots(shipment_slug, quoted_at);

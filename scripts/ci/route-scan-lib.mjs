@@ -41,6 +41,8 @@ export const OWNER_ALLOWED_VAULT_CALLS = new Set([
   "migrate",
   "schemaState",
   "recordOnboarding",
+  // approval provisions the gerai's own pickup outlet from the owner's application (no shipment, no money)
+  "upsertDefaultOutlet",
   "webhookStatus",
   "courierPrefs",
   "observeRates",

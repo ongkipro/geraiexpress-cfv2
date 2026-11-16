@@ -15,6 +15,8 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
+import { partnerClient } from "../mengantar/factory"
+import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp } from "../do/gerai-vault"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
@@ -251,6 +253,45 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok({ marked: r.value })
   })
 
+  // Quotes (TASK-303). `POST /quotes` is `Cek Ongkir Cepat`: no slug, no draft, nothing stored except the discount
+  // observations. `POST /quotes/freeze` re-runs the quote on the server, allocates the INV slug and freezes the
+  // chosen card (create-order sends those values unchanged, TASK-304). Kasir responses carry customer prices only.
+  const quoteOrigin = async (c: AppCtx) => {
+    const m = c.get("membership")!
+    const vault = vaultFor(c.env, m.tenantId)
+    const o = await vault.defaultOutlet(m.tenantId)
+    if (!o.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    if (o.value?.areaId) return o.value.areaId
+    // Gerai approved before the default outlet existed: take the pickup point from the approved application once.
+    const a = await c.env.DB.prepare("SELECT outlet_json FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY decided_at DESC LIMIT 1").bind(m.tenantId).first<{ outlet_json: string }>()
+    const out = a ? (JSON.parse(a.outlet_json) as { name?: string; picName?: string; picPhone?: string; areaId?: string; areaLabel?: string; streetAddress?: string; postalCode?: string | null }) : null
+    if (!out?.areaId) throw new AppError(409, "NO_PICKUP_AREA", "Titik jemput gerai belum diatur.")
+    await vault.upsertDefaultOutlet(m.tenantId, { name: out.name ?? m.tenantName, picName: out.picName, picPhone: out.picPhone, areaId: out.areaId, areaLabel: out.areaLabel, street: out.streetAddress, postalCode: out.postalCode ?? null })
+    return out.areaId
+  }
+  r("POST", "/quotes", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const input = parseQuoteInput(await body(c), await quoteOrigin(c))
+    const q = await runQuote(c.env, m.tenantId, input, now())
+    const view = m.role === "gerai_admin" ? q.cards.map(ownerCard) : q.cards.map(cashierCard)
+    return ok(projectFor(m.role, { cards: view, medals: q.medals, quotedAt: q.quotedAt, expiresAt: q.expiresAt }))
+  })
+  r("POST", "/quotes/freeze", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const input = parseQuoteInput(b, await quoteOrigin(c))
+    const q = await runQuote(c.env, m.tenantId, input, now())
+    const card = q.cards.find((x) => x.serviceCode === b.serviceCode && x.available)
+    if (!card) throw new AppError(409, "SERVICE_UNAVAILABLE", "Layanan ini tidak tersedia lagi. Pilih ekspedisi lain.")
+    const vault = vaultFor(c.env, m.tenantId)
+    const slug = await vault.allocateSlug(m.tenantId, "draft")
+    if (!slug.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    const frozen = await vault.freezeQuote(m.tenantId, frozenFrom(slug.value, q, card))
+    if (!frozen.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    const view = m.role === "gerai_admin" ? ownerCard(card) : cashierCard(card)
+    return ok(projectFor(m.role, { slug: slug.value, quoteId: frozen.value, card: view, expiresAt: q.expiresAt }), 201)
+  })
+
   // Kontak › Pengirim / Penerima (TASK-302, DEC-212). Deposit is owner-only (projection); WA verification only by an
   // interactive counter action of a signed-in member (API keys never reach these routes).
   const contacts = async (c: AppCtx, op: ContactOp, status = 200) => {
@@ -342,7 +383,18 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       c.env.DB.prepare("UPDATE sessions SET active_tenant_id = ? WHERE token_hash = ?").bind(id, s.row.token_hash),
     ])
     const { vaultFor } = await import("../do/gerai-vault/stub")
-    await vaultFor(c.env, id).migrate(id)
+    const vault = vaultFor(c.env, id)
+    await vault.migrate(id)
+    if (b.connect === true) {
+      // Local only: a connected seller on the offline Mengantar mock, a pickup outlet and 20 % rules.
+      const reg = await partnerClient(c.env).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })
+      if (reg.kind === "ok" && reg.data.apiKey) await vault.recordOnboarding(id, { environment: "sandbox", state: "connected", sellerId: reg.data.sellerId, externalUserId: id, apiKey: reg.data.apiKey })
+      await vault.upsertDefaultOutlet(id, { name: typeof b.name === "string" ? b.name.slice(0, 80) : "Gerai Contoh", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago, Coblong, Kota Bandung" })
+      await c.env.DB.prepare(
+        `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, effective_from, requested_at, updated_at)
+         SELECT ?1, service_code, courier_code, service_class, 2000, ?2, ?2, ?2 FROM courier_service_catalog WHERE is_active = 1 ON CONFLICT DO NOTHING`,
+      ).bind(id, t).run()
+    }
     return ok({ tenantId: id, slug }, 201)
   })
   // Local only: add a synthetic notification to the caller's gerai (renders `/notifikasi` states).

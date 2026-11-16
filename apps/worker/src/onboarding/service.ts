@@ -201,6 +201,9 @@ export async function approveApplication(env: Env, input: { applicationId: strin
   hostCache.clear()
   const migrated = await vaultFor(env, a.tenant_id).migrate(a.tenant_id)
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
+  // The application's pickup point becomes the default outlet (quote origin, labels, pickup).
+  const o = JSON.parse(a.outlet_json) as OutletInput
+  await vaultFor(env, a.tenant_id).upsertDefaultOutlet(a.tenant_id, { name: o.name, picName: o.picName, picPhone: o.picPhone, areaId: o.areaId, areaLabel: o.areaLabel, street: o.streetAddress, postalCode: o.postalCode ?? null }, input.now)
   const provisioning = await provisionSeller(env, { tenantId: a.tenant_id, name: a.business_name, email: a.seller_email, outlet: JSON.parse(a.outlet_json) as OutletInput, now: input.now })
   return { tenantId: a.tenant_id, slug: a.slug, provisioning }
 }

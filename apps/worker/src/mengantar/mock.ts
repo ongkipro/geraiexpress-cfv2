@@ -8,6 +8,11 @@ export const mockOrders = new Map<string, { cnote_no: string; ORDER_ID: string; 
 /** Discount Mengantar currently gives this mock seller, per rate key, in bps (default 2000 regular, 2000 cargo). */
 export const mockDiscountBps = new Map<string, number>()
 
+/** Rate keys answered as `unsupported: true` (coverage gaps); `SiCepatPickup` flags `unsupportedPickup`. */
+export const mockUnsupported = new Set<string>()
+/** When on, every COD estimate returns a different fee (spec 02 §3.3 `COD_FEE_UNSTABLE`). */
+export const mockCodFeeUnstable = { on: false, n: 0 }
+
 /** Fault injection for tests: the next call to a route throws a timeout (after or before Mengantar applied it). */
 export const mockFaults: { regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"; apiKey?: "timeout" } = {}
 
@@ -58,15 +63,40 @@ export const mockFetch: typeof fetch = async (input, init) => {
     return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })
   }
   if (/^\/api\/public\/[^/]+\/order\/estimate$/.test(p)) {
+    // Deterministic offline tariffs: price grows with weight; codFee = 2.8 % of COD_AMOUNT rounded up to Rp1.000
+    // (a step function, so fee-inclusive modes reach a fixed point in two or three passes, as on Mengantar);
+    // `mockCodFeeUnstable` makes every call return a different fee.
+    const weight = Math.max(1, Math.ceil(Number(url.searchParams.get("weight") ?? "1")))
+    const cod = url.searchParams.get("COD_AMOUNT")
+    const codAmount = cod === null ? null : Number(cod)
+    const only = url.searchParams.get("courier") ?? "all"
     const keys = ["JNE", "JNECargo", "SiCepat", "SiCepatCargo", "Sap", "SapCargo", "iDexpress", "iDexpressCargo", "JT", "lion", "anteraja", "pos", "spx"]
+    const base: Record<string, number> = { JNE: 12000, SiCepat: 13000, Sap: 11000, iDexpress: 11500, JT: 12500, lion: 11200, anteraja: 12800, pos: 14000, spx: 11800 }
     const data: Record<string, unknown> = {}
     for (const k of keys) {
+      if (only !== "all" && k !== only && k !== `${only}Cargo`) continue
       const bps = mockDiscountBps.get(k) ?? 2000
-      const price = 12000
+      const fee = codAmount === null ? 0 : mockCodFeeUnstable.on ? ++mockCodFeeUnstable.n * 37 : Math.ceil((codAmount * 0.028) / 1000) * 1000
+      if (k.endsWith("Cargo")) {
+        const cargoPrice = 60000 + Math.max(0, weight - 5) * 6000
+        const cargoDiscount = Math.floor((cargoPrice * bps) / 10000)
+        data[k] = { unsupported: false, unsupported_cod: true, price: 0, discountPercent: 0, discount: 0, codFee: 0, cargoPrice, cargoDiscount, cargoEstimatedPrice: cargoPrice, cargoEstimatedSpecialPrice: cargoPrice - cargoDiscount, minimumWeightCargo: 5, estimate_delivery: "3 - 5 hari" }
+        continue
+      }
+      const price = base[k]! * weight
       const discount = Math.floor((price * bps) / 10000)
-      data[k] = k.endsWith("Cargo")
-        ? { unsupported: false, unsupported_cod: true, price: 60000, discountPercent: 0, discount: 0, cargoPrice: 60000, cargoDiscount: Math.floor((60000 * bps) / 10000), cargoEstimatedPrice: 60000, cargoEstimatedSpecialPrice: 60000 - Math.floor((60000 * bps) / 10000), minimumWeightCargo: 5 }
-        : { unsupported: false, unsupported_cod: false, price, discountPercent: bps / 100, discount, codFee: 0, estimatedPrice: price, estimatedSpecialPrice: price - discount }
+      data[k] = {
+        unsupported: mockUnsupported.has(k),
+        unsupported_cod: false,
+        unsupportedPickup: k === "SiCepat" && mockUnsupported.has("SiCepatPickup"),
+        price,
+        discountPercent: bps / 100,
+        discount,
+        codFee: fee,
+        estimatedPrice: price + fee,
+        estimatedSpecialPrice: price - discount + fee,
+        estimate_delivery: k === "SiCepat" ? "1 - 2 hari" : "2 - 3 hari",
+      }
     }
     return json(200, { success: true, data })
   }
@@ -86,5 +116,8 @@ export function resetMock() {
   sellers.clear()
   mockOrders.clear()
   mockDiscountBps.clear()
+  mockUnsupported.clear()
+  mockCodFeeUnstable.on = false
+  mockCodFeeUnstable.n = 0
   for (const k of Object.keys(mockFaults)) delete mockFaults[k as keyof typeof mockFaults]
 }

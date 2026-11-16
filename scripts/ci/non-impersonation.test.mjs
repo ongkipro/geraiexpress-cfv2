@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest"
 import { scanOwnerVaultCalls } from "./route-scan-lib.mjs"
 
 const SRC = path.resolve(import.meta.dirname, "../../apps/worker/src")
-const OWNER_SIDE = ["admin", "pricing", "onboarding", "do/gerai-vault/credentials", "api/owner.ts"]
+// `pricing/quote` serves the gerai workspace (app. routes); only `pricing/rules` is Super Admin code.
+const OWNER_SIDE = ["admin", "pricing/rules", "onboarding", "do/gerai-vault/credentials", "api/owner.ts"]
 
 function collect(rel) {
   const p = path.join(SRC, rel)

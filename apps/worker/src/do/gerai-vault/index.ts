@@ -9,7 +9,7 @@ import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, t
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
-import type { CourierRate } from "@gx/mengantar-sdk"
+import type { Courier, CourierRate } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
 import { phoneHmac } from "../../admin/monitor"
@@ -41,14 +41,57 @@ export type ContactOpResult =
   | { kind: "archived"; done: boolean }
   | { kind: "badge"; badge: { phone: string | null; delivered: number; rts: number } & Risk }
 
-/** Discount-relevant fields of one estimate row (plain numbers, safe across RPC). */
+/** One estimate row as plain values (safe across RPC; spec 02 §1 cargo fields kept apart). */
 export interface ObservedRate {
   unsupported: boolean
+  unsupportedCod: boolean
+  unsupportedPickup: boolean
   price: number | null
   discount: number | null
   discountPercent: number | null
+  codFee: number | null
+  estimatedPrice: number | null
+  estimatedSpecialPrice: number | null
   cargoPrice: number | null
   cargoDiscount: number | null
+  cargoEstimatedPrice: number | null
+  cargoEstimatedSpecialPrice: number | null
+  minimumWeightCargo: number | null
+  eta: string | null
+}
+
+export type FrozenQuote = {
+  shipment_slug: string
+  origin_area_id: string
+  destination_area_id: string
+  cod_fee_mode: string
+  actual_weight_gram: number
+  length_cm: number | null
+  width_cm: number | null
+  height_cm: number | null
+  volumetric_divisor: number
+  billable_weight_gram: number
+  provider_weight_kg_text: string
+  courier_code: string
+  service_code: string
+  service_class: string
+  publish_shipping_idr: number
+  provider_net_shipping_idr: number
+  raw_discount_percent: string | null
+  provider_observed_discount_bps: number | null
+  assigned_gerai_discount_bps: number | null
+  effective_gerai_cost_idr: number
+  insurance_fee_idr: number | null
+  cod_fee_idr: number
+  cod_goods_amount_idr: number
+  cod_collection_total_idr: number
+  counter_due_idr: number
+  sender_cod_payable_idr: number
+  expected_provider_cod_credit_idr: number
+  packing_addon_idr: number
+  estimated_margin_idr: number
+  quoted_at: number
+  expires_at: number
 }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
@@ -342,17 +385,99 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   /** One `courier=all` estimate (1 kg, origin = destination = the outlet area) for the discount verifier. */
   async observeRates(tenantId: string, areaId: string): Promise<{ ok: true; value: Record<string, ObservedRate> } | { ok: false; refused: VaultRefusal | "NO_KEY" }> {
+    const r = await this.estimateRates(tenantId, { originId: areaId, destinationId: areaId, courier: "all", weightKg: 1 })
+    return r.ok ? { ok: true, value: r.value } : { ok: false, refused: r.refused === "PROVIDER_ERROR" ? "NO_KEY" : r.refused }
+  }
+
+  /**
+   * Mengantar `/order/estimate` with this gerai's key (the key never leaves the object). Returns plain numbers only;
+   * a provider failure is a refusal, never an exception across the RPC boundary.
+   */
+  async estimateRates(
+    tenantId: string,
+    q: { originId: string; destinationId: string; courier: Courier | "all"; weightKg: number; codAmountIdr?: number },
+  ): Promise<{ ok: true; value: Record<string, ObservedRate> } | { ok: false; refused: VaultRefusal | "NO_KEY" | "PROVIDER_ERROR"; message?: string }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const key = await this.sellerKey(tenantId)
     if (!key) return { ok: false, refused: "NO_KEY" }
-    const rates = await publicClient(this.env, key.key).estimate({ originId: areaId, destinationId: areaId, courier: "all", weightKg: 1 })
-    const n = (v: unknown) => (typeof v === "number" ? v : null)
+    let rates: Record<string, CourierRate>
+    try {
+      rates = await publicClient(this.env, key.key).estimate({ originId: q.originId, destinationId: q.destinationId, courier: q.courier, weightKg: q.weightKg, codAmountIdr: q.codAmountIdr })
+    } catch (err) {
+      return { ok: false, refused: "PROVIDER_ERROR", message: err instanceof Error ? err.message.slice(0, 200) : "estimate failed" }
+    }
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null)
+    const t = (v: unknown) => (typeof v === "string" ? v.slice(0, 40) : null)
     const value: Record<string, ObservedRate> = {}
-    for (const [k, r] of Object.entries(rates as Record<string, CourierRate>)) {
-      value[k] = { unsupported: r.unsupported === true, price: n(r.price), discount: n(r.discount), discountPercent: n(r.discountPercent), cargoPrice: n(r.cargoPrice), cargoDiscount: n(r.cargoDiscount) }
+    for (const [k, r] of Object.entries(rates)) {
+      value[k] = {
+        unsupported: r.unsupported === true,
+        unsupportedCod: r.unsupported_cod === true,
+        unsupportedPickup: r.unsupportedPickup === true,
+        price: n(r.price),
+        discount: n(r.discount),
+        discountPercent: n(r.discountPercent),
+        codFee: n(r.codFee),
+        estimatedPrice: n(r.estimatedPrice),
+        estimatedSpecialPrice: n(r.estimatedSpecialPrice),
+        cargoPrice: n(r.cargoPrice),
+        cargoDiscount: n(r.cargoDiscount),
+        cargoEstimatedPrice: n(r.cargoEstimatedPrice),
+        cargoEstimatedSpecialPrice: n(r.cargoEstimatedSpecialPrice),
+        minimumWeightCargo: n(r.minimumWeightCargo),
+        eta: t(r.estimate_delivery) ?? t(r.estimatedDate),
+      }
     }
     return { ok: true, value }
+  }
+
+  /** The default outlet (pickup origin). Written on approval from the application (TASK-303). */
+  async defaultOutlet(tenantId: string): Promise<VaultResult<{ id: string; areaId: string | null; name: string } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const r = this.ctx.storage.sql.exec<{ id: string; mengantar_area_id: string | null; name: string }>("SELECT id, mengantar_area_id, name FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    return { ok: true, value: r ? { id: r.id, areaId: r.mengantar_area_id, name: r.name } : null }
+  }
+
+  async upsertDefaultOutlet(tenantId: string, o: { name: string; picName?: string | null; picPhone?: string | null; areaId: string; areaLabel?: string | null; street?: string | null; postalCode?: string | null }, now: number = Date.now()): Promise<VaultResult<string>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const cur = sql.exec<{ id: string }>("SELECT id FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    const id = cur?.id ?? crypto.randomUUID()
+    sql.exec(
+      `INSERT INTO tenant_outlets (id, tenant_id, name, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10)
+       ON CONFLICT(id) DO UPDATE SET name = ?3, pic_name = ?4, pic_phone = ?5, mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9, updated_at = ?10`,
+      id,
+      tenantId,
+      o.name,
+      o.picName ?? null,
+      o.picPhone ?? null,
+      o.areaId,
+      o.areaLabel ?? null,
+      o.postalCode ?? null,
+      o.street ?? null,
+      now,
+    )
+    return { ok: true, value: id }
+  }
+
+  /** Stores a server-computed frozen quote for an allocated INV slug (TASK-304 dispatch sends these values). */
+  async freezeQuote(tenantId: string, snap: FrozenQuote): Promise<VaultResult<string> | { ok: false; refused: "UNKNOWN_SLUG" }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (!slugTaken(this.ctx.storage, snap.shipment_slug)) return { ok: false, refused: "UNKNOWN_SLUG" }
+    const id = crypto.randomUUID()
+    const cols = Object.keys(snap) as (keyof FrozenQuote)[]
+    this.ctx.storage.sql.exec(
+      `INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`,
+      id,
+      tenantId,
+      ...cols.map((c) => snap[c] as SqlStorageValue),
+    )
+    return { ok: true, value: id }
   }
 
   // ---- Courier preferences (TASK-206) --------------------------------------------------------------------------------

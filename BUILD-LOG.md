@@ -318,3 +318,23 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   (A's signed URL with B's session 403, B-signed URL for A's id 404, foreign key prefix refused, contacts invisible);
   e2e add reseller → verify WA → add recipient via area search; UI gates; mutation red.
 - Spec: risk badge thresholds made explicit in spec 03 §1 item 3 (were unstated).
+
+## 2026-11-16 — Power outage recovery (08:25 WIB, mid TASK-303)
+
+- `rich` lost power at 08:25 and rebooted at 08:29 with 8 uncommitted changes in the dev worktree (TASK-303 run
+  `RUN-20261116T012253Z-85f0ccf4` active). Verified before continuing: every changed file read in full via `git diff`
+  (the `onboarding/service.ts` edit and `0009_quotes.sql` complete), no NUL bytes or truncated tails, `git fsck` clean
+  (only the canonical empty tree reported missing), ledger JSON parses, all 13 local state SQLite files pass
+  `PRAGMA integrity_check`, typecheck + lint + `pnpm check` green. The one failure found was not corruption: the
+  non-impersonation scan correctly flagged the new `upsertDefaultOutlet` call on the approval path (allowlisted with
+  its reason). Dev server restarted.
+
+## 2026-11-16 — TASK-303 Quote engine, courier cards and `Cek Ongkir Cepat` (M3)
+
+- Shipped: pure quote engine over plain estimate rows, quote orchestration (Non-COD pass, COD passes, observations,
+  rate limit), frozen snapshots, quote routes, `Buat Pengiriman` and `Cek Ongkir Cepat` screens, weight input.
+- Evidence: Workers tests with exact numbers for all five modes on the offline mock (Rp1.000-step COD fee converges like
+  Mengantar), the spec 02 §3.4 worked row, unstable fee, all-in guard, cargo rules, coverage, prefs, non-allocation,
+  frozen snapshot values, observed bps 1989 (lossy floor) and cargo 2500, per-tenant 429, Kasir projection; e2e at three
+  viewports; UI gates 0 fail; mutation red.
+- Decision: `pricing/quote` is workspace code; the Super Admin source scan covers `pricing/rules` only.

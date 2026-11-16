@@ -8,6 +8,7 @@ import m0005 from "../migrations/tenant/0005_key_rotation.sql"
 import m0006 from "../migrations/tenant/0006_courier_prefs.sql"
 import m0007 from "../migrations/tenant/0007_notifications.sql"
 import m0008 from "../migrations/tenant/0008_contacts.sql"
+import m0009 from "../migrations/tenant/0009_quotes.sql"
 
 export interface TenantMigration {
   version: number
@@ -24,6 +25,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 6, name: "courier_prefs", sql: m0006 },
   { version: 7, name: "notifications", sql: m0007 },
   { version: 8, name: "contacts", sql: m0008 },
+  { version: 9, name: "quotes", sql: m0009 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length
