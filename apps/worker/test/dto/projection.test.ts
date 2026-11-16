@@ -23,7 +23,7 @@ describe("per-role DTOs on the wire", () => {
     const o = await seedConnected("shellpemilik")
     const ow = (await (await appGet("/workspace", o.cookie)).json()) as { data: { menus: string[]; role: string; tenant: { miniSiteHost: string } } }
     expect(ow.data.menus).toEqual(["dashboard", "buat-pengiriman", "kiriman", "kontak", "keuangan", "pengaturan"])
-    expect(ow.data.tenant.miniSiteHost).toBe("shellpemilik.gerai.localhost")
+    expect(ow.data.tenant.miniSiteHost).toBe("shellpemilik.geraimitra.localhost")
     const k = await appUser("kasir.shell@contoh.test")
     await env.DB.batch([
       env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'cashier', 'active', ?)").bind(o.tenantId, k.id, Date.now()),

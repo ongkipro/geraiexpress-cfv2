@@ -130,7 +130,7 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │ Gerai                                │  ├──────────────────────────────────────┤
 │ ┌──────────────────────────────────┐ │  │ ┌ Printer di perangkat ini ────────┐ │
 │ │ Profil Gerai          Berkah J. ›│ │  │ │ POS-58 · terhubung 🟢            │ │
-│ │ Mini-Site   berkahjaya.gerai.cc ›│ │  │ │ [Tes Cetak]  [Ganti Printer]     │ │
+│ │ Mini-Site   berkahjaya.geraimi… ›│ │  │ │ [Tes Cetak]  [Ganti Printer]     │ │
 │ │ Data Usaha        Belum diisi   ›│ │  │ └──────────────────────────────────┘ │
 │ └──────────────────────────────────┘ │  │ …                                    │
 │ Operasional                          │  ├──────────────────────────────────────┤
@@ -155,7 +155,7 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 | Route | Group | Who | Sections (`Card` each) | Save model |
 |---|---|---|---|---|
 | `/pengaturan/profil` | Gerai | O | Nama gerai, logo, WhatsApp, jam buka, alamat & titik peta | Save bar |
-| `/pengaturan/mini-site` | Gerai | O | Preview `<slug>.gerai.cc`, teks sambutan, layanan yang tampil, QR poster A4/A5, domain sendiri (Pro) | Save bar |
+| `/pengaturan/mini-site` | Gerai | O | Preview `<slug>.geraimitra.com`, teks sambutan, layanan yang tampil, QR poster A4/A5, domain sendiri (Pro) | Save bar |
 | `/pengaturan/data-usaha` | Gerai | O | Bentuk usaha, nama resmi, NIB, NPWP (encrypted), penanggung jawab — all optional (`DEC-218`) | Save bar |
 | `/pengaturan/ekspedisi` | Operasional | O | List of couriers with `Switch` per row (instant save + toast `J&T dinonaktifkan`), pickup mode, assigned discount with its status `Belum diterapkan / Sesuai / Selisih` (read-only, set by Super Admin) | Instant |
 | `/pengaturan/printer` | Operasional | O K | This device's printer (local, Kasir allowed) and density; outlet default label format: `10×15 · Paket + Bukti` / `10×10 · Paket saja` / `10×15 · Paket saja` / 58 mm roll (DEC-224, owner); receipt/stub content incl. `Catatan video unboxing` (0–50 chars, empty hides it) and `Tampilkan komisi di Cek Ongkir Cepat` (owner-only switch, default off) — fields in spec 01 §2.4 (owner) | Device part instant; receipt part Save bar |

@@ -722,3 +722,24 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol round 5 over `14c16a0..9d5e2c1`: APPROVE (R4-1 fixed, no new P0–P2). Review archived in `sol-delta/R5-sol.md`.
 - Integrated run REVIEW-GATE-5 on `9d5e2c1`: typecheck, lint, unit (166), build, worker (377), migrations, isolation,
   security, e2e — all RECORDED PASS (e2e re-recorded after removing an orphaned e2e server left by a killed run).
+
+## 2026-11-17 — DEC-234 (tenant zone → `geraimitra.com`) and DEC-235 (relay co-hosted on `99ribu-prod`)
+
+- DEC-234: every `gerai.cc` / `gerai.localhost` occurrence in code, tests, e2e, scripts, `wrangler.jsonc` (routes
+  `*/*`, `cname.geraimitra.com/*`, staging `*-stg.geraimitra.com/*`, `TENANT_ZONE`), UI copy, the brand page, receipt
+  fixtures and the living docs (decisions, PRD, architecture, ADRs, specs, visual, runbooks, diagrams, system map)
+  moved to `geraimitra.com` / `geraimitra.localhost`; `gerai.cc` stays reserved against custom-domain requests.
+  Historical review logs, archives and captured evidence are unchanged.
+- Receipts: 58 mm wrap tests for `<slug>.geraimitra.com` (25 columns fits one line; 30/31-char slugs wrap at `.` or
+  `-` within 32 columns); the 100 mm stub's `Lacak:` line now wraps left of the stub QR (a 31-char slug ran under
+  it — found by the new geometry test; mutation red).
+- DEC-235: spec 10, the relay runbook, architecture, roadmap, tasks, status and diagrams now describe the relay as an
+  isolated Coolify container on `99ribu-prod` behind its existing Reserved IPv4 `149.28.129.53` (IPv4-only egress
+  check, isolation check, Origin CA for `geraiexpress.com` on that Traefik); the old VPS `139.180.142.31` is deleted.
+- Local dev state: platform subdomains renamed to `*.geraimitra.localhost`; mini-site and brand page render
+  (`docs/evidence/DEC-234/`). Wireframes re-aligned (only the pre-existing free-form ARCHITECTURE arrow diagram
+  remains flagged); all 14 Mermaid diagrams render.
+- Gate and review: the first integrated run failed at e2e (`e2e/minisite.spec.ts` built `${tenant}.gerai` by string
+  replacement — fixed); integrated run `DEC-234-R2` PASS 9/9. GPT-6.1 Sol: round 1 REQUEST_CHANGES (one P2: the relay
+  IPv6-egress check could pass falsely — now requires `EnableIPv6=false` networks and a forced IPv6 connection that
+  fails), round 2 APPROVE (`docs/review/dec-234-235/`).

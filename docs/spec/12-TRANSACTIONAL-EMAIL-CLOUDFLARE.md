@@ -31,7 +31,7 @@ No receipts, shipment updates or promotions by email (receipts go to WhatsApp li
   support inbox).
 - **Binding:** `"send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }]`.
   No API key exists for email.
-- **Never** send from `gerai.cc` or a tenant custom domain (tenant domains are customer-controlled; DEC-202).
+- **Never** send from `geraimitra.com` or a tenant custom domain (tenant domains are customer-controlled; DEC-202).
 
 ## 3. Sending path
 

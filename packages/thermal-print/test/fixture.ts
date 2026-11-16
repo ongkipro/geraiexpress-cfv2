@@ -20,7 +20,7 @@ export const codDropship: LabelData = {
   dims: "30×20×15 cm",
   insuranceIdr: null,
   remark: "Rekam video saat buka paket untuk klaim",
-  trackingUrl: "berkahjaya.gerai.cc/lacak/8k4m2p7",
+  trackingUrl: "berkahjaya.geraimitra.com/lacak/8k4m2p7",
   showShippingFee: false,
   stub: { shippingIdr: 12000, packingIdr: 3000, promoIdr: 0, totalIdr: 3000, payment: { status: "paid", method: "qris", cashIdr: null, changeIdr: null }, codGoodsIdr: 150000, senderPayableIdr: 150000, feeMode: "buyer_bears_fee", reprint: false },
 }

@@ -1,13 +1,13 @@
 # 03 — Counter POS, Thermal Printing & Shift Drawer Specification (`geraiexpress-cfv2`)
 
-This contract governs daily counter execution in `app.geraiexpress.com` so operators aged 35–55+ complete walk-in checkouts in **under 45 seconds** (or **under 15 seconds** from a `<slug>.gerai.cc` QR pre-booking) with zero pricing or printing friction.
+This contract governs daily counter execution in `app.geraiexpress.com` so operators aged 35–55+ complete walk-in checkouts in **under 45 seconds** (or **under 15 seconds** from a `<slug>.geraimitra.com` QR pre-booking) with zero pricing or printing friction.
 
 ---
 
 ## 1. Two Entry Paths into `INV` Checkout
 
 ### Path A — Scan or Type Pre-Booking `INV` (`< 15s`)
-1. Walk-in sender or reseller presents the QR or 7-char code (`INV 8K4M2P7`) created on `<slug>.gerai.cc`.
+1. Walk-in sender or reseller presents the QR or 7-char code (`INV 8K4M2P7`) created on `<slug>.geraimitra.com`.
 2. Cashier scans QR or types `8k4m2p7` → opens `/kiriman/8k4m2p7` with sender, masking preset, recipient, destination `area_id`, and item declaration pre-populated.
 3. Cashier performs three physical steps:
    - places parcel on scale, verifies `actual_weight_gram` (`[ gram ● | kg ]`) + optional `P×L×T`,
@@ -106,7 +106,7 @@ history for the seller's own orders. Multi-koli shows each koli.
 
 1. **Parcel Label (`Label Paket`):** affixed to the box for courier sorting and delivery; obeys the selected **Masking Preset** (`ADR-0005`).
 2. **Customer Receipt (`Struk Jujur`):** handed to the walk-in sender as proof of handover and payment.
-   - Carries the unified **`INV ID`** (`INV 8K4M2P7`), frozen **preset-resolved presentation identity** at payment time (outlet name & WhatsApp by default; the reseller brand & WhatsApp under `Dropship Toko`, where outlet identity never appears — visual 04 §3 Dropship rule), AWB number, agreed actual & volumetric weights, line-by-line charges (`Ongkir`, `Asuransi`, `Packing`, `Potongan`, `Total Dibayar`, payment method, cash received & change — or COD collection & net payout estimate), plus QR link to `<slug>.gerai.cc/lacak/8k4m2p7`.
+   - Carries the unified **`INV ID`** (`INV 8K4M2P7`), frozen **preset-resolved presentation identity** at payment time (outlet name & WhatsApp by default; the reseller brand & WhatsApp under `Dropship Toko`, where outlet identity never appears — visual 04 §3 Dropship rule), AWB number, agreed actual & volumetric weights, line-by-line charges (`Ongkir`, `Asuransi`, `Packing`, `Potongan`, `Total Dibayar`, payment method, cash received & change — or COD collection & net payout estimate), plus QR link to `<slug>.geraimitra.com/lacak/8k4m2p7`.
    - **Never prints cashier staff names** on customer-facing paper/WA shares; staff attribution stays in internal audit logs.
    - **Immutable:** corrections use `Void Pembayaran` (creating a reversal record with a mandatory reason), never silent edits.
 

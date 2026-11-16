@@ -10,7 +10,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 ┌──────────────────┬───────────────────────────────────────────────────────────────────────────────────┐
 │ [G] BERKAH JAYA  │ DASHBOARD GERAI              [Periode ▾ 7 hari terakhir · 8–14 Nov]               │
 │ berkahjaya       │                                                      [📷 Scan QR] [+ Kiriman Baru]│
-│ .gerai.cc ↗      ├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
+│ .geraimitra.com ↗├───────────────────┬───────────────────┬────────────────────┬──────────────────────┤
 │ ──────────────── │ TOTAL KIRIMAN     │ OMZET KAS LOKET   │ LABA (OWNER)       │ SALDO MENGANTAR SYNC │
 │ ● Dashboard      │ 412 Paket (+18%▲) │ Rp 9.840.000      │ Estimasi Rp 2,19jt │ Aman : Rp 840.000*   │
 │ ○ Buat Pengiriman│ Non 260 · COD 152 │ Tunai 6,1jt·QR 3,7│ Laba Kas Rp 1,98jt │ COD  : Rp 4.850.000  │
@@ -28,7 +28,7 @@ This document defines the primary workspace layouts for `app.geraiexpress.com` a
 │                  │         └─────────────────────────    │ Lion/Cargo   48   Rp 280.500     6,2% 🟡  │
 │                  ├───────────────────────────────────────┼───────────────────────────────────────────┤
 │                  │ TOP PENGIRIM (`/kontak/pengirim`)     │ SUMBER ORDER & PROGRES TIER               │
-│                  │ 1. Toko Hijab Nisa (🎭) .. 94 pkt     │ • QR dari `berkahjaya.gerai.cc` : 38%     │
+│                  │ 1. Toko Hijab Nisa (🎭) .. 94 pkt     │ • QR `berkahjaya.geraimitra.com`: 38%     │
 │                  │ 2. Kopi Gunung Bandung ... 61 pkt     │ • Input langsung meja kasir     : 62%     │
 │                  │ 3. Bpk Hendra Wijaya ..... 29 pkt     │ Tier GOLD [████████░░] 88 pkt → PLATINUM  │
 └──────────────────┴───────────────────────────────────────┴───────────────────────────────────────────┘

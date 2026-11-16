@@ -36,12 +36,12 @@ flowchart LR
     subgraph GX["GeraiExpress v2 (Cloudflare)"]
         app["app.geraiexpress.com<br/>POS + owner workspace"]
         adm["owner.geraiexpress.com<br/>Super Admin console"]
-        mini["slug.gerai.cc / custom domain<br/>gerai mini-site"]
+        mini["slug.geraimitra.com / custom domain<br/>gerai mini-site"]
         hooks["hooks.geraiexpress.com<br/>webhook ingest"]
         brand["geraiexpress.com<br/>brand site"]
     end
 
-    relay["Partner relay<br/>(VPS, static IPv4)"]
+    relay["Partner relay<br/>(99ribu-prod co-host, 149.28.129.53)"]
     mpub["Mengantar Public API<br/>(per-seller key)"]
     mpart["Mengantar Partner API<br/>(IP allowlist)"]
     cfmail["Cloudflare Email Sending"]
@@ -82,7 +82,7 @@ flowchart TB
         q[["Queues: webhooks,<br/>finance sync, bulk"]]
     end
     email["send_email EMAIL"]
-    relay["partner-relay (VPS)"]
+    relay["partner-relay (99ribu-prod container)"]
     mengantar["Mengantar APIs"]
 
     waf --> hc
@@ -444,7 +444,7 @@ sequenceDiagram
     W->>W: normalise · cap · not taken → row pending
     W->>CF: POST custom_hostnames (ssl http dv)
     W->>CF: GET (validation records)
-    W-->>O: Tambahkan CNAME kirim → cname.gerai.cc
+    W-->>O: Tambahkan CNAME kirim → cname.geraimitra.com
     O->>DNS: add CNAME
     loop every 10 min or Periksa Lagi
         W->>CF: GET status
@@ -532,7 +532,7 @@ sequenceDiagram
     participant SA as Super Admin
     participant W as Worker
     participant P as PartnerQuotaDO
-    participant R as partner-relay (VPS)
+    participant R as partner-relay (99ribu-prod)
     participant MP as Mengantar Partner API
     SA->>W: Setujui & Buka Akun Seller (TOTP)
     W->>P: reserve quota (60/min, 1000/day)

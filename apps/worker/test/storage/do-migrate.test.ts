@@ -15,7 +15,7 @@ async function seed(ids: string[], prefix: string) {
   for (const id of ids) {
     await env.DB.batch([
       env.DB.prepare("INSERT INTO tenants (id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)").bind(id, `${prefix}${id}`.toLowerCase(), id, now, now),
-      env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES (?, ?, 'platform_subdomain', 'active', ?)").bind(`${prefix}${id}.gerai.localhost`.toLowerCase(), id, now),
+      env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES (?, ?, 'platform_subdomain', 'active', ?)").bind(`${prefix}${id}.geraimitra.localhost`.toLowerCase(), id, now),
     ])
   }
 }
@@ -64,8 +64,8 @@ describe("do:migrate ops endpoint (TASK-103, spec 07 §6)", () => {
     const pages = await walk({ batch: 1 })
     const failed = pages.at(-1)!.data.failed
     expect(failed?.tenantId).toBe("f-2")
-    expect(await status("failf-1.gerai.localhost")).toBe(200)
-    expect(await status("failf-2.gerai.localhost")).toBe(503)
+    expect(await status("failf-1.geraimitra.localhost")).toBe(200)
+    expect(await status("failf-2.geraimitra.localhost")).toBe(503)
     expect((await vaultFor(env, "f-3").schemaState()).version).toBe(0) // batch stopped before f-3
     expect(await env.DB.prepare("SELECT state FROM tenant_schema_versions WHERE tenant_id = 'f-2'").first()).toEqual({ state: "recovery" })
 
@@ -75,7 +75,7 @@ describe("do:migrate ops endpoint (TASK-103, spec 07 §6)", () => {
     })
     const again = await walk({ batch: 2 })
     expect(again.every((p) => p.data.failed === null)).toBe(true)
-    expect(await status("failf-2.gerai.localhost")).toBe(200)
+    expect(await status("failf-2.geraimitra.localhost")).toBe(200)
     for (const id of ["f-1", "f-2", "f-3"]) {
       expect(await vaultFor(env, id).schemaState()).toMatchObject({ version: TENANT_SCHEMA_VERSION, state: "ok", tenantId: id })
     }

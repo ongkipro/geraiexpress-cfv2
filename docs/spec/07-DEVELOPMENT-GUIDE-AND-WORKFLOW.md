@@ -29,7 +29,7 @@ Modern browsers resolve every `*.localhost` subdomain to `127.0.0.1` without `/e
 | Gerai Workspace (Owner & Kasir) | `http://app.geraiexpress.localhost:8787` | `https://app.geraiexpress.com` |
 | Super Admin Console | `http://owner.geraiexpress.localhost:8787` | `https://owner.geraiexpress.com` |
 | Mengantar Webhook Receiver | `http://hooks.geraiexpress.localhost:8787` | `https://hooks.geraiexpress.com` |
-| Sample Outlet White-Label Site | `http://berkahjaya.gerai.localhost:8787` | `https://berkahjaya.gerai.cc` |
+| Sample Outlet White-Label Site | `http://berkahjaya.geraimitra.localhost:8787` | `https://berkahjaya.geraimitra.com` |
 
 *(Cookie note: production over HTTPS uses `__Host-ge_app` / `__Host-ge_owner`; local HTTP `.localhost` uses host-only `dev_ge_app` / `dev_ge_owner` with identical `Path=/` and `HttpOnly` semantics.)*
 
@@ -46,7 +46,7 @@ Modern browsers resolve every `*.localhost` subdomain to `127.0.0.1` without `/e
 ## 3. Cloudflare Bindings & Secrets (`wrangler.jsonc` & `.dev.vars`)
 
 ### 3.1 Declared Bindings & Dual-SPA Static Asset Routing
-- `DB` (D1 control plane, ADR-0006) · `GERAI_VAULT` (`GeraiVaultDO`, **SQLite-backed** class migration `new_sqlite_classes`) · `PARTNER_QUOTA` (`PartnerQuotaDO`) · `BUCKET` (R2 Media, keys `t/<tenant_id>/…`) · `CACHE_KV` (KV area-search cache only — never host → tenant) · `EMAIL` (`send_email`, `allowed_sender_addresses: ["noreply@mail.geraiexpress.com"]`, spec 12) · `BULK_QUEUE` (Paket Massal checks and dispatch, spec 03 §1.3) · `WEBHOOK_QUEUE` & `FINANCE_SYNC_QUEUE` (Cloudflare Queues) · `RATE_LIMITER` (Cloudflare Workers Rate Limiting binding, paired with Cloudflare WAF rate-limit rules on `*.gerai.cc/api/public/*` and `/mcp`).
+- `DB` (D1 control plane, ADR-0006) · `GERAI_VAULT` (`GeraiVaultDO`, **SQLite-backed** class migration `new_sqlite_classes`) · `PARTNER_QUOTA` (`PartnerQuotaDO`) · `BUCKET` (R2 Media, keys `t/<tenant_id>/…`) · `CACHE_KV` (KV area-search cache only — never host → tenant) · `EMAIL` (`send_email`, `allowed_sender_addresses: ["noreply@mail.geraiexpress.com"]`, spec 12) · `BULK_QUEUE` (Paket Massal checks and dispatch, spec 03 §1.3) · `WEBHOOK_QUEUE` & `FINANCE_SYNC_QUEUE` (Cloudflare Queues) · `RATE_LIMITER` (Cloudflare Workers Rate Limiting binding, paired with Cloudflare WAF rate-limit rules on `*.geraimitra.com/api/public/*` and `/mcp`).
 - **Dual-SPA Static Assets (`ASSETS` binding):** `web-app` builds into `dist/assets/app/` and `web-owner` builds into `dist/assets/owner/` (`run_worker_first = true` on HTML navigation routes); `hostClassifierMiddleware` rewrites SPA shell fetches via `env.ASSETS.fetch` strictly by verified host (`app.` vs `owner.`).
 
 ### 3.2 Environment Secrets (Never Committed to Git)
@@ -57,7 +57,7 @@ Modern browsers resolve every `*.localhost` subdomain to `127.0.0.1` without `/e
 - `PARTNER_RELAY_URL` & `PARTNER_RELAY_SECRET` — HMAC credentials for `infra/partner-relay` (`docs/spec/10`).
 - `MENGANTAR_PUBLIC_ORIGIN` & `MENGANTAR_PARTNER_ORIGIN` — environment-specific provider origins (sandbox vs production); never inferred from each other.
 - `TURNSTILE_SECRET_KEY` — Cloudflare Turnstile secret (test dummy key locally).
-- `CF_SAAS_API_TOKEN` — zone-scoped token for custom hostnames on `gerai.cc` (spec 11 §2); production only.
+- `CF_SAAS_API_TOKEN` — zone-scoped token for custom hostnames on `geraimitra.com` (spec 11 §2); production only.
 - *(No email secret: the `EMAIL` binding needs no API key, spec 12.)*
 
 ---
@@ -113,5 +113,5 @@ are manual, labelled, and never part of CI.
 | Env | Hosts | Data | Mengantar | Email |
 |---|---|---|---|---|
 | local | `*.localhost:8787` | local D1 + local DO storage | mock / recorded fixtures | simulated |
-| staging | `staging.geraiexpress.com`, `app-staging.`, `owner-staging.`, `hooks-staging.geraiexpress.com`; mini-sites `<slug>-stg.gerai.cc` (first-level labels so Universal SSL covers them; routed to the staging Worker by `*-stg.gerai.cc/*`, spec 11 §2) | separate D1 + DO namespace | sandbox keys | real, test inboxes only |
+| staging | `staging.geraiexpress.com`, `app-staging.`, `owner-staging.`, `hooks-staging.geraiexpress.com`; mini-sites `<slug>-stg.geraimitra.com` (first-level labels so Universal SSL covers them; routed to the staging Worker by `*-stg.geraimitra.com/*`, spec 11 §2) | separate D1 + DO namespace | sandbox keys | real, test inboxes only |
 | production | spec 06 | production | production (Partner via relay) | real |

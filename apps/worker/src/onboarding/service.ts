@@ -1,5 +1,5 @@
 // Outlet application → Super Admin approval → Mengantar seller provisioning (TASK-203, PR-01..03, DEC-203, spec 10
-// §4.3). Approval needs recent TOTP + reason (route guard), activates `<slug>.gerai.cc` (a D1 row, no Cloudflare call),
+// §4.3). Approval needs recent TOTP + reason (route guard), activates `<slug>.geraimitra.com` (a D1 row, no Cloudflare call),
 // migrates the tenant object, and enqueues exactly one `application_status` email IN THE SAME D1 batch as the state
 // change. Provisioning never creates two sellers for one tenant: `externalUserId` = tenant id (idempotent at
 // Mengantar), and an unknown outcome is resolved by reading back `sellers/list { externalUserId }`.
@@ -166,7 +166,7 @@ function auditStmt(env: Env, actorId: string, action: string, tenantId: string, 
 }
 
 /**
- * Approve: in ONE D1 batch the application becomes approved, the tenant active, `<slug>.gerai.cc` active, the email
+ * Approve: in ONE D1 batch the application becomes approved, the tenant active, `<slug>.geraimitra.com` active, the email
  * enqueued and the audit written — guarded so a second call (double click, mailer retry) changes nothing.
  * Then the tenant object is migrated and the seller provisioned (outside the batch: external call).
  */

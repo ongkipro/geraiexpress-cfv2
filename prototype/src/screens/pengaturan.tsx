@@ -13,7 +13,7 @@ const groups = [
     label: "Gerai",
     items: [
       { id: "profil", label: "Profil Gerai", hint: "Berkah Jaya" },
-      { id: "mini-site", label: "Mini-Site", hint: "berkahjaya.gerai.cc" },
+      { id: "mini-site", label: "Mini-Site", hint: "berkahjaya.geraimitra.com" },
       { id: "data-usaha", label: "Data Usaha", hint: "Belum diisi" },
     ],
   },

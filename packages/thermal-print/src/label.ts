@@ -115,6 +115,26 @@ function footerBlock(p: PdfPage, d: LabelData, y: number, withQr: boolean) {
   }
 }
 
+/** Splits a URL line to fit `widthMm`: breaks after `.` or `-`, or before `/`, never inside a label. */
+export function urlLines(text: string, widthMm: number, sizePt: number): string[] {
+  const out: string[] = []
+  let rest = text
+  while (textWidthMm(rest, sizePt) > widthMm) {
+    let cut = -1
+    for (let i = 1; i < rest.length; i++) {
+      const ch = rest[i - 1]!
+      const next = rest[i]!
+      const boundary = ch === "." || ch === "-" || next === "/"
+      if (boundary && textWidthMm(rest.slice(0, i), sizePt) <= widthMm) cut = i
+    }
+    if (cut <= 0) break // nothing breakable fits: print as is (never split mid-label)
+    out.push(rest.slice(0, cut))
+    rest = rest.slice(cut)
+  }
+  out.push(rest)
+  return out
+}
+
 /** Joins charge items with " · " into as few lines as fit `widthMm`; an item is never split across lines. */
 export function chargeLines(items: string[], widthMm: number, sizePt: number): string[] {
   const lines: string[] = []
@@ -165,7 +185,12 @@ function stubBlock(p: PdfPage, d: LabelData, y0: number) {
   }
   drawQr(p, `https://${d.trackingUrl}`, W - PAD - 12, cutY + 22, 12)
   y += 4.2
-  p.text(PAD, y, 7.5, `Lacak: ${d.trackingUrl}`)
+  // The tracking URL stays left of the stub QR (x = 85 mm); a long `<slug>.geraimitra.com` wraps after `.`, `-` or
+  // before the `/lacak/…` path, never mid-label (DEC-234).
+  for (const [i, line] of urlLines(`Lacak: ${d.trackingUrl}`, W - PAD - 12 - 2 - PAD, 7.5).entries()) {
+    if (i) y += 3.2
+    p.text(PAD, y, 7.5, line)
+  }
   if (d.outlet?.whatsapp) {
     y += 3.4
     p.text(PAD, y, 7, `WA gerai ${d.outlet.whatsapp}`)

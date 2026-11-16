@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — System Architecture (`geraiexpress-cfv2`)
 
-This document defines the production topology for **GeraiExpress v2** on **Cloudflare Serverless** (the only non-Cloudflare runtime is the stateless Partner-API egress relay on a VPS, DEC-219), its dual-domain isolation (`geraiexpress.com` + `*.gerai.cc`), per-outlet serialization with **Durable Objects**, precision financial synchronization with **Mengantar**, and **OpenAPI 3.1 + MCP** exposure.
+This document defines the production topology for **GeraiExpress v2** on **Cloudflare Serverless** (the only non-Cloudflare runtime is the stateless Partner-API egress relay, co-hosted as an isolated container on the `99ribu-prod` Vultr host, DEC-219 → DEC-235), its dual-domain isolation (`geraiexpress.com` + `*.geraimitra.com`), per-outlet serialization with **Durable Objects**, precision financial synchronization with **Mengantar**, and **OpenAPI 3.1 + MCP** exposure.
 
 Rendered Mermaid views (context, containers, host routing, both ERDs, key sequences, state machines): [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md).
 
@@ -16,7 +16,7 @@ Rendered Mermaid views (context, containers, host routing, both ERDs, key sequen
                                │               │                │           │
         ┌──────────────────────┘               │                │           └────────────────────┐
         ▼                                      ▼                ▼                                ▼
-[geraiexpress.com]                  [app.geraiexpress.com]   [hooks.geraiexpress.com]    [<slug>.gerai.cc]
+[geraiexpress.com]                  [app.geraiexpress.com]   [hooks.geraiexpress.com]    [<slug>.geraimitra.com]
 Platform Marketing Site             (& owner.geraiexpress)   Mengantar Webhook (HMAC)    (+ Pro Custom Domains)
 Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queue Ingest  Outlet Mini-Site + QR
         │                           + /api/v1 + /mcp            │                        + Public WebMCP (/mcp)
@@ -45,7 +45,7 @@ Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queu
                      ┌─────────────────────────────────────────────────────────┐
                      │ `infra/partner-relay` (≤ 80 LOC Stateless Node/Go Relay)│
                      │ • Inbound: HMAC-signed (`X-Relay-Signature`) + TLS      │
-                     │ • Outbound: 1 Static Public IPv4 allowlisted at Partner │
+                     │ • Outbound: Reserved IPv4 149.28.129.53 (99ribu-prod)   │
                      └───────────────────────────┬─────────────────────────────┘
                                                  ▼
                                 [Mengantar Partner & Public APIs]
@@ -61,9 +61,9 @@ Hono JSX SSR (Edge Cached)          React 19 Vite PWA        Cookie-less · Queu
 | **Workers Static Assets + Vite React 19** | Serves `app.geraiexpress.com` (POS + Owner Workspace) and `owner.geraiexpress.com` (Super Admin) as fast PWAs. | Zero server CPU burned on tab switches; native browser access to Web-Bluetooth 58mm printers and camera barcode scanners. |
 | **Cloudflare D1 (SQLite)** | **Control plane only** (ADR-0006): users, sessions, OTPs, Super Admins, tenants, members, hostnames, API keys, discount rules, courier catalog, platform audit, the thin cross-tenant `shipment_index`, pushed daily stats and the email outbox. | Strict SQL migrations, composite `(tenant_id, ...)` indexing, and low fixed cost ($5 Workers plan baseline). |
 | **Durable Objects (`GeraiVaultDO` & `PartnerQuotaDO`)** | `GeraiVaultDO` (1 per `tenant_id`, **SQLite storage holding all of that tenant's data**, ADR-0006) serializes: (1) Mengantar order creation & `pay-unpaid` calls, (2) collision-free `INV` slug confirmation & receipt voiding, (3) shift open/close, (4) Mengantar `/invoices` cursor sync & balance reconciliation, and (5) seller key rotation. `PartnerQuotaDO` enforces global Partner API rate limits (60/min, 1000 reg/day). | Provides strict per-outlet single-writer atomicity that replaces PostgreSQL `SELECT ... FOR UPDATE` without cross-tenant contention; hibernates at Rp0 when idle. |
-| **Cloudflare R2** | Stores outlet logos, scale/dimension evidence photos, return-intake photos, claim attachments, and courier manifest signatures. | Zero egress bandwidth fees when rendering logos on `*.gerai.cc` or viewing evidence photos. |
+| **Cloudflare R2** | Stores outlet logos, scale/dimension evidence photos, return-intake photos, claim attachments, and courier manifest signatures. | Zero egress bandwidth fees when rendering logos on `*.geraimitra.com` or viewing evidence photos. |
 | **Cloudflare Queues + Cron Triggers** | Decouples webhook ingestion (< 5s Mengantar timeout rule) and runs scheduled 15-min `/invoices` financial reconciliation, hourly `GET /order` status polling floor (authoritative whenever `webhook_state != 'active'`), stuck-dispatch sweeps, and daily expired QR draft purges. | Guarantees Mengantar never pauses a seller's webhook due to downstream latency (20-failure pause rule). |
-| **Cloudflare for SaaS + KV** | Wildcard `*.gerai.cc` routing + custom hostnames for Pro domains (lifecycle in spec 11). KV caches Mengantar subdistrict searches only; **host → tenant is resolved from D1 `tenant_hostnames`**, never KV (eventually consistent). | Instant white-label mini-sites and automated custom-domain TLS (verify current Cloudflare plan quota at M6 provisioning). |
+| **Cloudflare for SaaS + KV** | Wildcard `*.geraimitra.com` routing + custom hostnames for Pro domains (lifecycle in spec 11). KV caches Mengantar subdistrict searches only; **host → tenant is resolved from D1 `tenant_hostnames`**, never KV (eventually consistent). | Instant white-label mini-sites and automated custom-domain TLS (verify current Cloudflare plan quota at M6 provisioning). |
 
 ---
 
@@ -75,7 +75,7 @@ Every request enters `hostClassifierMiddleware` first:
 2. **`app.geraiexpress.com` (`GERAI_WORKSPACE`)** — serves Outlet Owner & Cashier PWA, `/api/app/*`, `/api/v1/*` (Bearer API key), and `/mcp`. Uses host-only `__Host-ge_app` cookie.
 3. **`owner.geraiexpress.com` (`PLATFORM_OWNER`)** — serves Super Admin SPA and `/api/owner/*`. Uses isolated `__Host-ge_owner` cookie (12h max) + mandatory `aal2` TOTP verification.
 4. **`hooks.geraiexpress.com` (`WEBHOOK_INGEST`)** — accepts `POST /webhooks/mengantar/:webhookToken` only; resolves the tenant from D1 `webhook_routes` by token hash (spec 01 §2.7), then the tenant's `GeraiVaultDO` verifies and durably stores the event in its `webhook_inbox` before acknowledging (spec 01 §2.7); `x-signature = HMAC_SHA256("{x-timestamp}.{rawBody}")` within ±5 minutes and enqueues to `mengantar-webhooks`.
-5. **`<slug>.gerai.cc` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from D1 `tenant_hostnames` (authoritative; unknown/pending → neutral 404, suspended → 403, spec 11), serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and a restricted public `/mcp` (read tools plus `create_public_prebooking_inv` draft creation). Physically isolated from `geraiexpress.com` cookies.
+5. **`<slug>.geraimitra.com` or verified Custom Hostname (`TENANT_MINISITE`)** — resolves `tenant_id` from D1 `tenant_hostnames` (authoritative; unknown/pending → neutral 404, suspended → 403, spec 11), serves Indonesian SSR mini-site, Turnstile-guarded publish quotes, QR pre-booking (`INV` draft creation), privacy-minimal tracking, and a restricted public `/mcp` (read tools plus `create_public_prebooking_inv` draft creation). Physically isolated from `geraiexpress.com` cookies.
 
 ---
 
@@ -85,7 +85,7 @@ Every request enters `hostClassifierMiddleware` first:
 2. **Batch Concurrency & `batch_id` Accuracy:**
    - Mengantar generates J&T Premium and SiCepat AWBs sequentially per seller account (concurrent calls return HTTP 409). Routing creation through `GeraiVaultDO` naturally serializes per-seller dispatch.
    - Both human `batch` code (for `GET /order?batch=`) and 24-hex `batch_id` (`_id`, required by `POST /order/pay-unpaid`) are stored explicitly on every shipment dispatch attempt.
-3. **Stateless `infra/partner-relay`:** used **only** in Production for the 4 `/api/partner/v1/sellers/*` endpoints so traffic exits via our single allowlisted public IPv4. All daily counter quotes, orders, batch payments, tracking, and `/invoices` financial syncs run **directly from Cloudflare Workers**.
+3. **Stateless `infra/partner-relay`:** used **only** in Production for the 4 `/api/partner/v1/sellers/*` endpoints so traffic exits via our single allowlisted Reserved IPv4 (`149.28.129.53` on `99ribu-prod`, DEC-235). All daily counter quotes, orders, batch payments, tracking, and `/invoices` financial syncs run **directly from Cloudflare Workers**.
 
 ---
 

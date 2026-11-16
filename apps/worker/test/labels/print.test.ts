@@ -98,7 +98,7 @@ describe("print API", () => {
     // The outlet's name and WhatsApp never print on a Dropship parcel (the tracking host is allowed, visual 04 §4:
     // the /lacak page itself shows only the reseller brand).
     const outlet = await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec<{ name: string; pic_phone: string }>("SELECT name, pic_phone FROM tenant_outlets WHERE is_default = 1").one())
-    const withoutUrl = all.split("\n").filter((l) => !/gerai\.localhost|\/lacak\//.test(l)).join("\n")
+    const withoutUrl = all.split("\n").filter((l) => !/geraimitra\.localhost|\/lacak\//.test(l)).join("\n")
     expect(withoutUrl.toUpperCase()).not.toContain(outlet.name.toUpperCase())
     expect(all).not.toContain(outlet.pic_phone)
     const bytes = await print(t.cookie, { slugs: [slug], format: "roll_58mm", preview: true })

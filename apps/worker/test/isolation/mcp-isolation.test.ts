@@ -47,9 +47,9 @@ describe("MCP isolation", () => {
   it("public MCP on B's host tracks only B; A's key means nothing there", async () => {
     const a = await checkoutGerai("mcppisa")
     const b = await checkoutGerai("mcppisb")
-    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES ('mcppisb.gerai.localhost', ?, 'platform_subdomain', 'active', 1, 1)").bind(b.tenantId).run()
+    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES ('mcppisb.geraimitra.localhost', ?, 'platform_subdomain', 'active', 1, 1)").bind(b.tenantId).run()
     const sa = await readyInv(a)
-    const pub = "http://mcppisb.gerai.localhost:8787/mcp"
+    const pub = "http://mcppisb.geraimitra.localhost:8787/mcp"
     expect((await call(pub, null, "track_public_shipment_privacy_safe", { code: sa.toUpperCase() })).body!.isError).toBe(true)
     const ka = ((await (await post("/api-keys", a.cookie, { name: "Kunci A", scopes: ["tracking:read"] })).json()) as { data: { token: string } }).data.token
     // The outlet tool does not exist on the public server: JSON-RPC error, no result.

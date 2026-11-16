@@ -1,4 +1,4 @@
-# ADR-0002: Dual-Domain Isolation (`geraiexpress.com` Core Brand vs `*.gerai.cc` Outlet White-Label)
+# ADR-0002: Dual-Domain Isolation (`geraiexpress.com` Core Brand vs `*.geraimitra.com` Outlet White-Label)
 
 - **Status:** Accepted (2026-11-12)
 - **Related:** DEC-202, DEC-207
@@ -15,13 +15,13 @@ Split hosts across two separate registrable domains (`eTLD+1`) served by the sam
    - `app.geraiexpress.com` — Outlet Owner & Cashier PWA (`__Host-ge_app` cookie).
    - `owner.geraiexpress.com` — Super Admin console (`__Host-ge_owner` cookie + `aal2` TOTP).
    - `hooks.geraiexpress.com` — cookie-less HMAC webhook endpoint for Mengantar.
-2. **Outlet White-Label Network (`gerai.cc` + *Cloudflare for SaaS*):**
-   - `<slug>.gerai.cc` — wildcard DNS routed automatically upon outlet approval.
-   - `<custom.merchantdomain.id>` — optional Pro tier CNAMEd to `cname.gerai.cc` via **Cloudflare for SaaS** (automated TLS issuance). Lifecycle, root domains, quota and routing rules: `docs/spec/11` (DEC-228).
+2. **Outlet White-Label Network (`geraimitra.com` + *Cloudflare for SaaS*):**
+   - `<slug>.geraimitra.com` — wildcard DNS routed automatically upon outlet approval.
+   - `<custom.merchantdomain.id>` — optional Pro tier CNAMEd to `cname.geraimitra.com` via **Cloudflare for SaaS** (automated TLS issuance). Lifecycle, root domains, quota and routing rules: `docs/spec/11` (DEC-228).
 
 The Worker's entry middleware classifies `Host` strictly and returns an Indonesian HTTP 404 for cross-context paths.
 
 ## Consequences
-- **Security:** Because `gerai.cc` and custom domains are distinct `eTLD+1` origins from `geraiexpress.com`, browsers physically never attach `__Host-ge_app` or `__Host-ge_owner` cookies to outlet mini-site requests.
-- **Commercial:** Short URLs (`berkahjaya.gerai.cc`) fit cleanly on 58mm thermal receipts, WhatsApp bios, and storefront banners while remaining neutral for local resellers.
+- **Security:** Because `geraimitra.com` and custom domains are distinct `eTLD+1` origins from `geraiexpress.com`, browsers physically never attach `__Host-ge_app` or `__Host-ge_owner` cookies to outlet mini-site requests.
+- **Commercial:** Short URLs (`berkahjaya.geraimitra.com`) fit cleanly on 58mm thermal receipts, WhatsApp bios, and storefront banners while remaining neutral for local resellers.
 - **Obligation:** Enforce a strict `RESERVED_SLUGS` denylist (`www`, `app`, `api`, `owner`, `admin`, `hooks`, `custom`, `cname`, `fallback`, `mcp`, courier trademarks, etc.) at outlet registration.

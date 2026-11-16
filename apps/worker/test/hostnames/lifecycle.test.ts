@@ -26,7 +26,7 @@ const wrongProbe = async () => new Response("0".repeat(64))
 
 async function pro(slug: string, enabled = true) {
   const t = await checkoutGerai(slug)
-  await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1)").bind(`${slug}.gerai.localhost`, t.tenantId).run()
+  await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1)").bind(`${slug}.geraimitra.localhost`, t.tenantId).run()
   if (enabled) await env.DB.prepare("UPDATE tenants SET custom_domain_enabled = 1 WHERE id = ?").bind(t.tenantId).run()
   return t
 }
@@ -36,13 +36,13 @@ const site = (host: string, path = "/") => exports.default.fetch(`http://${host}
 
 describe("custom domain lifecycle", () => {
   it("planDomain: normalises, refuses platform names, root → root + www, www/subdomain branches", () => {
-    const e = { TENANT_ZONE: "gerai.localhost", PLATFORM_APEX: "geraiexpress.localhost" }
+    const e = { TENANT_ZONE: "geraimitra.localhost", PLATFORM_APEX: "geraiexpress.localhost" }
     expect(planDomain(e, "  https://Kirim.TokoBudi.id/ ", null)).toEqual({ hosts: [{ hostname: "kirim.tokobudi.id", role: "primary" }], branch: "subdomain" })
     expect(planDomain(e, "tokobudi.id", null)).toEqual({ hosts: [{ hostname: "tokobudi.id", role: "primary" }, { hostname: "www.tokobudi.id", role: "redirect" }], branch: "root_primary" })
     expect(planDomain(e, "tokobudi.co.id", "www_primary")).toEqual({ hosts: [{ hostname: "www.tokobudi.co.id", role: "primary" }], branch: "www_primary" })
     expect(planDomain(e, "www.tokobudi.co.id", null).branch).toBe("www_primary")
     expect(planDomain(e, "kirim.tokobudi.co.id", null).branch).toBe("subdomain")
-    for (const bad of ["budi.gerai.cc", "gerai.cc", "app.geraiexpress.com", "x.gerai.localhost", "127.0.0.1", "tokobudi", "", "xn--mnchen-3ya.de"]) expect(() => planDomain(e, bad, null), bad).toThrow()
+    for (const bad of ["budi.geraimitra.com", "geraimitra.com", "app.geraiexpress.com", "x.geraimitra.localhost", "127.0.0.1", "tokobudi", "", "xn--mnchen-3ya.de"]) expect(() => planDomain(e, bad, null), bad).toThrow()
   })
 
   it("request → create at Cloudflare first (queue) → pending 404 → active+ssl → probe → active, routing bump, canonical switch", async () => {
@@ -61,7 +61,7 @@ describe("custom domain lifecycle", () => {
     // Pending host: every path but the probe is a neutral 404.
     expect((await site("kirim.tokohidup.id")).status).toBe(404)
     const view = (await (await appGet("/custom-domain", t.cookie)).json()) as { data: { cnameTarget: string; domains: Array<{ state: string; remedy: { code: string } }> } }
-    expect(view.data.cnameTarget).toBe("cname.gerai.localhost")
+    expect(view.data.cnameTarget).toBe("cname.geraimitra.localhost")
     expect(view.data.domains[0]!.remedy.code).toBe("dns")
 
     const before = await rv(t.tenantId)
@@ -72,7 +72,7 @@ describe("custom domain lifecycle", () => {
     h = (await row("kirim.tokohidup.id"))!
     expect(h.state).toBe("pending")
     expect(remedyOf(h)!.code).toBe("probe")
-    expect(await primaryHost(env, t.tenantId, "cdhidup")).toBe("cdhidup.gerai.localhost")
+    expect(await primaryHost(env, t.tenantId, "cdhidup")).toBe("cdhidup.geraimitra.localhost")
     // Probe matches → active.
     await refreshHost(env, "kirim.tokohidup.id", now + 1, { probeFetch: probeVia(new Set(["kirim.tokohidup.id"])) })
     h = (await row("kirim.tokohidup.id"))!
@@ -85,7 +85,7 @@ describe("custom domain lifecycle", () => {
     expect(home.status).toBe(200)
     expect(await home.text()).toContain('rel="canonical" href="https://kirim.tokohidup.id/"')
     // The platform subdomain keeps working and points canonical at the custom host.
-    expect(await (await site("cdhidup.gerai.localhost", "/")).text()).toContain('href="https://kirim.tokohidup.id/"')
+    expect(await (await site("cdhidup.geraimitra.localhost", "/")).text()).toContain('href="https://kirim.tokohidup.id/"')
   })
 
   it("root_primary: www redirects to the root once active; one domain per gerai; taken by another gerai; Pro gate; Kasir 403", async () => {

@@ -251,7 +251,7 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 - **Allowed Paths:** `apps/web-owner/src/{shell,routes/gerai}/**`, `apps/web-app/src/routes/daftar/**`,
   `apps/worker/src/{onboarding,admin/gerai}/**`, `packages/db/migrations/{control,tenant}/203-*`, matching tests
 - **Depends On:** TASK-202, TASK-106
-- **Accepted Invariants:** 5 Super Admin menus; approval needs recent TOTP + reason and activates `<slug>.gerai.cc`;
+- **Accepted Invariants:** 5 Super Admin menus; approval needs recent TOTP + reason and activates `<slug>.geraimitra.com`;
   `registration_unknown` resolved by read-back; BYOK fallback; seller key encrypted in the tenant object; suspend/
   unsuspend bumps `routing_version`; masking kill-switch and `masking_daily_quota` editable with TOTP + reason; approve **and** reject insert
   an `application_status` email into the outbox in the same transaction as the state change.
@@ -670,7 +670,7 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 - **Depends On:** TASK-599
 - **Accepted Invariants:** 4 Partner routes only; no Mengantar credential on the VPS; relay HMAC secrets
   (`RELAY_SECRET`, `RELAY_SECRET_PREVIOUS` during rotation) provisioned exactly as spec 10 §5.
-- **Done when:** Vultr Reserved IPv4 attached (new small instance or existing server, owner approval); every spec 10
+- **Done when:** relay co-hosted on `99ribu-prod` behind Reserved IPv4 `149.28.129.53` (DEC-235, owner approval); every spec 10
   §6 check recorded; Mengantar allowlist confirmed with that IP.
 
 ### TASK-602: Production zones, SaaS setup, monitoring
@@ -680,7 +680,7 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 - **Capability:** `cloudflare-for-saas`, `wrangler`, `observability-engineering`
 - **Allowed Paths:** `wrangler.jsonc` (production), `OBSERVABILITY.md`, `BUILD-LOG.md`
 - **Depends On:** TASK-599
-- **Accepted Invariants:** zone-scoped token; routes `*/*` + `cname.gerai.cc/*`; staging `*-stg.gerai.cc/*`.
+- **Accepted Invariants:** zone-scoped token; routes `*/*` + `cname.geraimitra.com/*`; staging `*-stg.geraimitra.com/*`.
 - **Done when:** zone steps 1–6 recorded; all probes green in production; each alert of `OBSERVABILITY.md` fired once
   by a synthetic breach and received by the owner.
 

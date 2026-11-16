@@ -17,8 +17,8 @@ beforeEach(() => {
 
 async function site(slug: string) {
   const t = await checkoutGerai(slug)
-  await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1) ON CONFLICT DO NOTHING").bind(`${slug}.gerai.localhost`, t.tenantId).run()
-  return { ...t, base: `http://${slug}.gerai.localhost:8787` }
+  await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1) ON CONFLICT DO NOTHING").bind(`${slug}.geraimitra.localhost`, t.tenantId).run()
+  return { ...t, base: `http://${slug}.geraimitra.localhost:8787` }
 }
 const form = (o: Record<string, string>) => new URLSearchParams(o)
 let ipN = 0
@@ -46,7 +46,7 @@ describe("mini-site", () => {
     expect(body).not.toContain("Rp 10.000")
     expect(body.replace(/<style>[\s\S]*?<\/style>/, "")).not.toMatch(/laba|margin|biaya gerai/i)
     expect(await (await get(`${t.base}/robots.txt`)).text()).toContain("Disallow: /lacak")
-    expect(await (await get(`${t.base}/sitemap.xml`)).text()).toContain(`<loc>https://msongkir.gerai.localhost/</loc>`)
+    expect(await (await get(`${t.base}/sitemap.xml`)).text()).toContain(`<loc>https://msongkir.geraimitra.localhost/</loc>`)
   })
 
   it("QR pre-booking: 48 h draft → card with QR → counter claim keeps the INV → issue → anonymous tracking has 0 PII", async () => {

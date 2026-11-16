@@ -18,12 +18,12 @@ How to change, verify, review and release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md
 
 ## 3. Non-Negotiable Technical Invariants
 
-1. **Lightweight Cloudflare Serverless Stack** (only exception: the stateless Partner-API egress relay, DEC-219):
+1. **Lightweight Cloudflare Serverless Stack** (only exception: the stateless Partner-API egress relay, co-hosted on `99ribu-prod`, DEC-219/DEC-235):
    - Do not introduce Next.js, `@opennextjs/cloudflare`, or heavy Node-only frameworks into Workers.
    - Target Web/WinterCG standards (`fetch`, `Web Crypto`, `Streams`), Hono, Drizzle ORM on Cloudflare D1, Durable Objects (`GeraiVaultDO`), R2, Queues, Cron Triggers, and Turnstile.
    - Tenant data lives in the gerai's own SQLite `GeraiVaultDO`; D1 is the control plane only; host → tenant is read from D1, never KV (ADR-0006, spec 11).
 2. **Strict Multi-Tenant & Cross-Domain Isolation:**
-   - Session cookies on `app.geraiexpress.com` (`__Host-ge_app`) and `owner.geraiexpress.com` (`__Host-ge_owner`) must never use a broad `Domain` attribute and must never be sent to `*.gerai.cc` or tenant custom domains.
+   - Session cookies on `app.geraiexpress.com` (`__Host-ge_app`) and `owner.geraiexpress.com` (`__Host-ge_owner`) must never use a broad `Domain` attribute and must never be sent to `*.geraimitra.com` or tenant custom domains.
    - Every tenant data access goes to the `GeraiVaultDO` addressed by the `tenant_id` from the authenticated session or verified host resolution — never from an untrusted request parameter; D1 control-plane queries for tenant rows bind that same `tenant_id`.
 3. **Exact Integer Money, Gram Weights, & Dual-Book Financial Precision:**
    - Store all money as **integer Rupiah (`_idr`)**, all weights as **integer grams (`_gram`, default `1000`)**, and all percentage rates as **integer basis points (`_bps`, `10000 bps = 100%`)**. Floating-point money or stored float weights are forbidden.

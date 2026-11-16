@@ -16,7 +16,7 @@ Probe: brand-health|https://geraiexpress.com/healthz|200|"ok":true|1000
 Probe: app-health|https://app.geraiexpress.com/healthz|200|"ok":true|1000
 Probe: owner-health|https://owner.geraiexpress.com/healthz|200|"ok":true|1000
 Probe: hooks-health|https://hooks.geraiexpress.com/healthz|200|"ok":true|1000
-Probe: minisite-probe|https://probe.gerai.cc/healthz|200|"ok":true|1000
+Probe: minisite-probe|https://probe.geraimitra.com/healthz|200|"ok":true|1000
 Probe: relay-health|https://relay.geraiexpress.com/healthz|200|"ok":true|1500
 ```
 
@@ -73,7 +73,7 @@ Never log credentials, cookies, OTPs, reset links, raw webhook bodies or full ph
 
 ### minisite-probe
 - Symptom: tenant routing broken for mini-sites.
-- Check: D1 `tenant_hostnames` row for `probe.gerai.cc`; Worker route `*/*` on `gerai.cc`; spec 11 §3.
+- Check: D1 `tenant_hostnames` row for `probe.geraimitra.com`; Worker route `*/*` on `geraimitra.com`; spec 11 §3.
 - Mitigation: restore route; bump `routing_version`.
 
 ### relay-health / IP_NOT_ALLOWED

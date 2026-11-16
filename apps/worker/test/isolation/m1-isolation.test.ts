@@ -30,7 +30,7 @@ async function seedTenant(slug: string): Promise<Seeded> {
     env.DB.prepare("INSERT INTO users (id, email, name, password_hash, status, email_verified_at, password_changed_at, created_at, updated_at) VALUES (?1, ?2, 'Pemilik', ?3, 'active', ?4, ?4, ?4, ?4)").bind(userId, `${slug}@iso.test`, await hashPassword("iso-pass-123", env.AUTH_SESSION_PEPPER), t),
     env.DB.prepare("INSERT INTO tenants (id, slug, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)").bind(tenantId, slug, slug, t, t),
     env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'gerai_admin', 'active', ?)").bind(tenantId, userId, t),
-    env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES (?, ?, 'platform_subdomain', 'active', ?)").bind(`${slug}.gerai.localhost`, tenantId, t),
+    env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES (?, ?, 'platform_subdomain', 'active', ?)").bind(`${slug}.geraimitra.localhost`, tenantId, t),
   ])
   expect(await vaultFor(env, tenantId).migrate(tenantId)).toMatchObject({ ok: true })
   const s = await createSession(env, { userId, ctx: "app", activeTenantId: tenantId, deviceHash: null, userAgent: null, now: t })
@@ -67,8 +67,8 @@ describe("sessions and cookies", () => {
 
   it("an app cookie means nothing on owner., a tenant host, or the apex; and a request body cannot pick the tenant", async () => {
     expect((await exports.default.fetch(`${OWNER}/api/owner/auth/me`, { headers: { cookie: A.ownerCookie.replace("dev_ge_app", "dev_ge_owner") } })).status).toBe(401)
-    expect((await exports.default.fetch("http://isob.gerai.localhost:8787/", { headers: { cookie: A.ownerCookie } })).status).toBe(200)
-    expect(await (await exports.default.fetch("http://isob.gerai.localhost:8787/", { headers: { cookie: A.ownerCookie } })).text()).not.toContain("isoa")
+    expect((await exports.default.fetch("http://isob.geraimitra.localhost:8787/", { headers: { cookie: A.ownerCookie } })).status).toBe(200)
+    expect(await (await exports.default.fetch("http://isob.geraimitra.localhost:8787/", { headers: { cookie: A.ownerCookie } })).text()).not.toContain("isoa")
     expect((await exports.default.fetch("http://geraiexpress.localhost:8787/api/app/auth/me", { headers: { cookie: A.ownerCookie } })).status).toBe(404)
     // Invitation created by A's owner lands in A even when the body names B.
     const res = await exports.default.fetch(`${APP}/api/app/members/invitations`, {
@@ -106,17 +106,17 @@ describe("mini-site host lookup", () => {
   it("each tenant host resolves to its own tenant only; unknown hosts are neutral", async () => {
     const cache = new HostCache()
     const names = hostNames(env)
-    const ra = await classify(new Request("http://isoa.gerai.localhost/"), names, d1HostLookup(env.DB), cache)
-    const rb = await classify(new Request("http://isob.gerai.localhost/"), names, d1HostLookup(env.DB), cache)
+    const ra = await classify(new Request("http://isoa.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache)
+    const rb = await classify(new Request("http://isob.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache)
     expect(ra).toMatchObject({ outcome: "ok", ctx: { tenantId: A.tenantId } })
     expect(rb).toMatchObject({ outcome: "ok", ctx: { tenantId: B.tenantId } })
-    expect(await classify(new Request("http://isoc.gerai.localhost/"), names, d1HostLookup(env.DB), cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(new Request("http://isoc.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache)).toEqual({ outcome: "not_found" })
   })
 
   it("KV is never consulted for host → tenant", async () => {
     const poisoned = { ...env, CACHE_KV: { get: () => Promise.reject(new Error("KV must not be read for routing")) } as unknown as KVNamespace }
     hostCache.clear()
-    const r = await worker.fetch!(new Request("http://isoa.gerai.localhost:8787/") as Request<unknown, IncomingRequestCfProperties>, poisoned as Env, createExecutionContext())
+    const r = await worker.fetch!(new Request("http://isoa.geraimitra.localhost:8787/") as Request<unknown, IncomingRequestCfProperties>, poisoned as Env, createExecutionContext())
     expect(r.status).toBe(200)
   })
 
@@ -124,10 +124,10 @@ describe("mini-site host lookup", () => {
     const cache = new HostCache()
     const names = hostNames(env)
     const t0 = 5_000_000
-    expect(await classify(new Request("http://isob.gerai.localhost/"), names, d1HostLookup(env.DB), cache, t0)).toMatchObject({ outcome: "ok" })
+    expect(await classify(new Request("http://isob.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache, t0)).toMatchObject({ outcome: "ok" })
     await env.DB.prepare("UPDATE tenants SET status = 'suspended', routing_version = routing_version + 1 WHERE id = ?").bind(B.tenantId).run()
-    expect(await classify(new Request("http://isob.gerai.localhost/"), names, d1HostLookup(env.DB), cache, t0 + 29_000)).toMatchObject({ outcome: "ok" })
-    expect(await classify(new Request("http://isob.gerai.localhost/"), names, d1HostLookup(env.DB), cache, t0 + 30_000)).toEqual({ outcome: "suspended" })
+    expect(await classify(new Request("http://isob.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache, t0 + 29_000)).toMatchObject({ outcome: "ok" })
+    expect(await classify(new Request("http://isob.geraimitra.localhost/"), names, d1HostLookup(env.DB), cache, t0 + 30_000)).toEqual({ outcome: "suspended" })
     // A suspended tenant's members lose access to their workspace API too.
     expect(await (await me(B.ownerCookie)).json()).toMatchObject({ data: { membership: null } })
     await env.DB.prepare("UPDATE tenants SET status = 'active' WHERE id = ?").bind(B.tenantId).run()

@@ -26,6 +26,26 @@ describe("100 mm PDFs (DEC-224)", () => {
     expect(texts0(labelPage(big, "label_10x15_with_stub")).some((t) => t.includes(`TOTAL`))).toBe(true)
   })
 
+  it("DEC-234: the stub's `Lacak:` line never runs under the stub QR, even for a 30-char slug on geraimitra.com", () => {
+    for (const slug of ["berkahjaya", "toko-sembako-berkah-jaya-makmur", "tokosembakoberkahjayamakmurabcd"]) {
+      for (const base of [codDropship, nonCodStandard]) {
+        const page = labelPage({ ...base, trackingUrl: `${slug}.geraimitra.com/lacak/8k4m2p7` }, "label_10x15_with_stub")
+        const lacak = page.ops.filter((o): o is Extract<(typeof page.ops)[number], { kind: "text" }> => o.kind === "text" && o.text.includes("geraimitra.com") && !o.text.startsWith("http"))
+        expect(lacak.length, slug).toBeGreaterThan(0)
+        // Stub QR: the last 12 mm square drawn at x = 85 mm (W − PAD − 12).
+        const qrCells = page.ops.filter((o): o is Extract<(typeof page.ops)[number], { kind: "rect" }> => o.kind === "rect" && o.x >= 85 - 0.01 && o.w < 1 && o.h < 1)
+        const qrTop = Math.min(...qrCells.map((c) => c.y))
+        const qrBottom = Math.max(...qrCells.map((c) => c.y + c.h))
+        for (const t of lacak) {
+          const right = t.x + textWidthMm(t.text, t.size, t.font)
+          expect(right, `${slug}: ${t.text}`).toBeLessThanOrEqual(97)
+          const overlapsBand = t.y >= qrTop - 0.5 && t.y - t.size * 0.3528 <= qrBottom + 0.5
+          if (overlapsBand) expect(right, `${slug} under the QR`).toBeLessThanOrEqual(84)
+        }
+      }
+    }
+  })
+
   it("barcode keeps ≥ 3 mm quiet zones and nothing is drawn inside them on the barcode band", () => {
     for (const awb of [codDropship.awb, "SPXID0123456789012", "J1"]) {
       const page = labelPage({ ...codDropship, awb }, "label_10x15_with_stub")
@@ -97,9 +117,33 @@ describe("58 mm roll — exactly 32 columns", () => {
   })
 
   it("long hosts split before column 32 at a dot or dash; path on its own line", () => {
-    const lines = splitUrl("toko-sembako-berkah-jaya-makmur.gerai.cc/lacak/8k4m2p7")
+    const lines = splitUrl("toko-sembako-berkah-jaya-makmur.geraimitra.com/lacak/8k4m2p7")
     for (const l of lines) expect(l.length).toBe(COLS)
     expect(lines.at(-1)!.trim()).toBe("/lacak/8k4m2p7")
+  })
+
+  // DEC-234: `<slug>.geraimitra.com` is 6 columns longer than the old `<slug>.gerai.cc`.
+  it.each([
+    ["berkahjaya", 1], // berkahjaya.geraimitra.com = 25 columns: one line
+    ["warungsembakoberkahjaya", 2], // 23 + 15 = 38 columns: wraps once
+    ["tokosembakoberkahjayamakmurabc", 2], // 30-char slug without dashes: 45 columns, wraps at the dot
+    ["toko-sembako-berkah-jaya-makmur", 2], // 31 chars with dashes: 46 columns
+  ])("58 mm: %s.geraimitra.com wraps to %i host line(s) at a dot or dash, never past column 32", (slug, hostLines) => {
+    const host = `${slug}.geraimitra.com`
+    const lines = splitUrl(`${host}/lacak/8k4m2p7`).map((l) => l.trim())
+    const hostPart = lines.slice(0, -1)
+    expect(hostPart).toHaveLength(hostLines)
+    expect(hostPart.join("")).toBe(host) // nothing dropped or duplicated
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(COLS)
+    // Every break except the last host line ends right after a `.` or `-` (never mid-label).
+    for (const l of hostPart.slice(0, -1)) expect(l).toMatch(/[.-]$/)
+    expect(lines.at(-1)).toBe("/lacak/8k4m2p7")
+  })
+
+  it("58 mm: the tracking line on a printed roll uses the new zone and fits 32 columns", () => {
+    const lines = rollText({ ...codDropship, trackingUrl: "warungsembakoberkahjaya.geraimitra.com/lacak/8k4m2p7" })
+    expect(lines.some((l) => l.includes("geraimitra.com"))).toBe(true)
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(COLS)
   })
 
   it("ESC/POS: init, native Code 128 with the AWB, QR store/print, partial cut", () => {

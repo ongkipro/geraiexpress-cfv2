@@ -6,7 +6,7 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
 
 ## 1. Role & Permission Matrix
 
-| Capability | `Public (*.gerai.cc)` | `Cashier (Operator)` | `Gerai Admin (Owner)` | `Super Admin (Platform)` |
+| Capability | `Public (*.geraimitra.com)` | `Cashier (Operator)` | `Gerai Admin (Owner)` | `Super Admin (Platform)` |
 |---|:---:|:---:|:---:|:---:|
 | Publish rate check & create QR Pre-Booking (`INV` draft) | ✓ (Turnstile + IP limit) | ✓ | ✓ | – |
 | Anonymous parcel tracking (initials + city only) | ✓ | ✓ (full for own outlet) | ✓ (full for own outlet) | ✓ (cross-outlet monitor) |

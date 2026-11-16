@@ -34,7 +34,7 @@ export function DaftarStatusPage() {
   const connected = a.onboarding_state === "connected" || a.onboarding_state === "byok_connected"
   const reached = a.state === "approved" ? (connected ? 4 : 3) : a.state === "rejected" ? 2 : 1
   return (
-    <AuthCard title="Status Pengajuan" description={`${a.business_name} · ${a.slug}.gerai.cc`} footer={<LogoutLink />}>
+    <AuthCard title="Status Pengajuan" description={`${a.business_name} · ${a.slug}.geraimitra.com`} footer={<LogoutLink />}>
       <ol className="flex flex-col gap-3" aria-label="Tahap pengajuan">
         {STEPS.map((s, i) => (
           <li key={s} className="flex items-center gap-3 text-base">

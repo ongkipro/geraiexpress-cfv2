@@ -134,7 +134,7 @@ function Domains() {
   return (
     <Section title="Domain Mitra" aside={<span className="text-base text-muted-foreground tabular-nums">{quota}</span>}>
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
-        <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.gerai.cc. Domain sendiri gerai Pro tampil di sini." />
+        <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.geraimitra.com. Domain sendiri gerai Pro tampil di sini." />
       ) : (
         <ul className="flex flex-col divide-y">
           {data.items.map((d) => {

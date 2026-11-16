@@ -116,8 +116,8 @@ describe("contact update keeps omitted fields (final Carbon pass, M5 #8)", () =>
 describe("public mini-site MCP", () => {
   async function site(slug: string) {
     const t = await checkoutGerai(slug)
-    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1) ON CONFLICT DO NOTHING").bind(`${slug}.gerai.localhost`, t.tenantId).run()
-    return { ...t, mcp: `http://${slug}.gerai.localhost:8787/mcp` }
+    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES (?1, ?2, 'platform_subdomain', 'active', 1, 1) ON CONFLICT DO NOTHING").bind(`${slug}.geraimitra.localhost`, t.tenantId).run()
+    return { ...t, mcp: `http://${slug}.geraimitra.localhost:8787/mcp` }
   }
 
   it("four tools; publish prices only; pre-booking capped per IP; tracking initials only; no cookies", async () => {

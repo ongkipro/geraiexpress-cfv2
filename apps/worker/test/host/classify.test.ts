@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest"
 import { classify, HostCache, normalizeHost, probeSignature, type HostRow, type HostNames } from "../../src/host/classify"
 
-const NAMES: HostNames = { platformApex: "geraiexpress.com", tenantZone: "gerai.cc" }
+const NAMES: HostNames = { platformApex: "geraiexpress.com", tenantZone: "geraimitra.com" }
 const ROWS: Record<string, HostRow> = {
-  "berkahjaya.gerai.cc": { hostname: "berkahjaya.gerai.cc", tenantId: "t-a", tenantSlug: "berkahjaya", hostState: "active", tenantStatus: "active", schemaState: "ok", routingVersion: 3 },
+  "berkahjaya.geraimitra.com": { hostname: "berkahjaya.geraimitra.com", tenantId: "t-a", tenantSlug: "berkahjaya", hostState: "active", tenantStatus: "active", schemaState: "ok", routingVersion: 3 },
   "kirim.tokobudi.id": { hostname: "kirim.tokobudi.id", tenantId: "t-b", tenantSlug: "tokobudi", hostState: "active", tenantStatus: "active", schemaState: "ok", routingVersion: 1 },
-  "pending.gerai.cc": { hostname: "pending.gerai.cc", tenantId: "t-c", tenantSlug: "pending", hostState: "pending", tenantStatus: "active", schemaState: "ok", routingVersion: 1 },
-  "beku.gerai.cc": { hostname: "beku.gerai.cc", tenantId: "t-d", tenantSlug: "beku", hostState: "active", tenantStatus: "suspended", schemaState: "ok", routingVersion: 2 },
-  "pulih.gerai.cc": { hostname: "pulih.gerai.cc", tenantId: "t-e", tenantSlug: "pulih", hostState: "active", tenantStatus: "active", schemaState: "recovery", routingVersion: 1 },
-  "lama.gerai.cc": { hostname: "lama.gerai.cc", tenantId: "t-f", tenantSlug: "lama", hostState: "purged", tenantStatus: "active", schemaState: "ok", routingVersion: 1 },
-  "baru.gerai.cc": { hostname: "baru.gerai.cc", tenantId: "t-g", tenantSlug: "baru", hostState: "active", tenantStatus: "pending_review", schemaState: "ok", routingVersion: 1 },
+  "pending.geraimitra.com": { hostname: "pending.geraimitra.com", tenantId: "t-c", tenantSlug: "pending", hostState: "pending", tenantStatus: "active", schemaState: "ok", routingVersion: 1 },
+  "beku.geraimitra.com": { hostname: "beku.geraimitra.com", tenantId: "t-d", tenantSlug: "beku", hostState: "active", tenantStatus: "suspended", schemaState: "ok", routingVersion: 2 },
+  "pulih.geraimitra.com": { hostname: "pulih.geraimitra.com", tenantId: "t-e", tenantSlug: "pulih", hostState: "active", tenantStatus: "active", schemaState: "recovery", routingVersion: 1 },
+  "lama.geraimitra.com": { hostname: "lama.geraimitra.com", tenantId: "t-f", tenantSlug: "lama", hostState: "purged", tenantStatus: "active", schemaState: "ok", routingVersion: 1 },
+  "baru.geraimitra.com": { hostname: "baru.geraimitra.com", tenantId: "t-g", tenantSlug: "baru", hostState: "active", tenantStatus: "pending_review", schemaState: "ok", routingVersion: 1 },
 }
 
 function setup(rows: Record<string, HostRow> = ROWS) {
@@ -28,9 +28,9 @@ describe("normalizeHost (spec 11 §3 step 2)", () => {
     ["App.GeraiExpress.com", "app.geraiexpress.com"],
     ["app.geraiexpress.com:443", "app.geraiexpress.com"],
     ["app.geraiexpress.com.", "app.geraiexpress.com"],
-    ["BerkahJaya.Gerai.CC.:8787", "berkahjaya.gerai.cc"],
+    ["BerkahJaya.GeraiMitra.COM.:8787", "berkahjaya.geraimitra.com"],
   ])("%s → %s", (raw, out) => expect(normalizeHost(raw)).toBe(out))
-  it.each(["127.0.0.1", "10.0.0.1:80", "[::1]", "[::1]:8787", "localhost", "", "a..b.com", "-x.gerai.cc", "x".repeat(250) + ".cc", "app.geraiexpress.com:abc", "0177.0.0.1", "0x7f.0.0.1", "0x7f.0x0.0x0.0x1", "127.1", "127.0.1", "1.2.3.4.5", "host.c"])(
+  it.each(["127.0.0.1", "10.0.0.1:80", "[::1]", "[::1]:8787", "localhost", "", "a..b.com", "-x.geraimitra.com", "x".repeat(250) + ".cc", "app.geraiexpress.com:abc", "0177.0.0.1", "0x7f.0.0.1", "0x7f.0x0.0x0.0x1", "127.1", "127.0.1", "1.2.3.4.5", "host.c"])(
     "rejects %s",
     (raw) => expect(normalizeHost(raw)).toBeNull(),
   )
@@ -67,7 +67,7 @@ describe("classify — platform contexts", () => {
 describe("classify — tenant hosts", () => {
   it("active subdomain and active custom domain resolve to their tenant", async () => {
     const s = setup()
-    expect(await classify(req("https://berkahjaya.gerai.cc/"), NAMES, s.lookup, s.cache)).toMatchObject({
+    expect(await classify(req("https://berkahjaya.geraimitra.com/"), NAMES, s.lookup, s.cache)).toMatchObject({
       outcome: "ok",
       ctx: { kind: "tenant", tenantId: "t-a", tenantSlug: "berkahjaya", routingVersion: 3 },
     })
@@ -75,30 +75,30 @@ describe("classify — tenant hosts", () => {
   })
   it("unknown, pending, purged and not-yet-active tenants → neutral 404", async () => {
     const s = setup()
-    for (const h of ["nope.gerai.cc", "pending.gerai.cc", "lama.gerai.cc", "baru.gerai.cc", "unknown.example.com"]) {
+    for (const h of ["nope.geraimitra.com", "pending.geraimitra.com", "lama.geraimitra.com", "baru.geraimitra.com", "unknown.example.com"]) {
       expect(await classify(req(`https://${h}/`), NAMES, s.lookup, s.cache), h).toEqual({ outcome: "not_found" })
     }
   })
   it("suspended → 403, recovery → 503", async () => {
     const s = setup()
-    expect(await classify(req("https://beku.gerai.cc/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "suspended" })
-    expect(await classify(req("https://pulih.gerai.cc/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "recovery" })
+    expect(await classify(req("https://beku.geraimitra.com/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "suspended" })
+    expect(await classify(req("https://pulih.geraimitra.com/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "recovery" })
   })
   it("the tenant zone apex and two-level names under it are not tenants", async () => {
-    const s = setup({ ...ROWS, "gerai.cc": ROWS["berkahjaya.gerai.cc"]!, "a.berkahjaya.gerai.cc": ROWS["berkahjaya.gerai.cc"]! })
-    expect(await classify(req("https://gerai.cc/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
-    expect(await classify(req("https://a.berkahjaya.gerai.cc/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    const s = setup({ ...ROWS, "geraimitra.com": ROWS["berkahjaya.geraimitra.com"]!, "a.berkahjaya.geraimitra.com": ROWS["berkahjaya.geraimitra.com"]! })
+    expect(await classify(req("https://geraimitra.com/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(req("https://a.berkahjaya.geraimitra.com/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
     expect(s.calls).toEqual([])
   })
   it("ignores X-Forwarded-Host", async () => {
     const s = setup()
-    const r = await classify(req("https://nope.gerai.cc/", { "x-forwarded-host": "berkahjaya.gerai.cc" }), NAMES, s.lookup, s.cache)
+    const r = await classify(req("https://nope.geraimitra.com/", { "x-forwarded-host": "berkahjaya.geraimitra.com" }), NAMES, s.lookup, s.cache)
     expect(r).toEqual({ outcome: "not_found" })
-    expect(s.calls).toEqual(["nope.gerai.cc"])
+    expect(s.calls).toEqual(["nope.geraimitra.com"])
   })
   it("Host header wins over a forged absolute URL host", async () => {
     const s = setup()
-    const r = await classify(req("https://berkahjaya.gerai.cc/", { host: "nope.gerai.cc" }), NAMES, s.lookup, s.cache)
+    const r = await classify(req("https://berkahjaya.geraimitra.com/", { host: "nope.geraimitra.com" }), NAMES, s.lookup, s.cache)
     expect(r).toEqual({ outcome: "not_found" })
   })
   it("IP-literal hosts are rejected before any lookup", async () => {
@@ -112,7 +112,7 @@ describe("classify — DCV and probe", () => {
   it("DCV paths pass through on candidate tenant hosts (GET/HEAD), before the lookup", async () => {
     const s = setup()
     for (const p of ["/.well-known/acme-challenge/abc", "/.well-known/pki-validation/x.txt"]) {
-      expect(await classify(req(`https://nope.gerai.cc${p}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "dcv" })
+      expect(await classify(req(`https://nope.geraimitra.com${p}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "dcv" })
       expect(await classify(req(`https://kirim.tokobudi.id${p}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "dcv" })
     }
     expect(s.calls).toEqual([])
@@ -120,22 +120,22 @@ describe("classify — DCV and probe", () => {
   it("DCV is never passed through on platform hosts, relay., or for unsafe methods", async () => {
     const s = setup()
     const p = "/.well-known/acme-challenge/abc"
-    for (const h of ["relay.geraiexpress.com", "app.geraiexpress.com", "geraiexpress.com", "x.y.gerai.cc"]) {
+    for (const h of ["relay.geraiexpress.com", "app.geraiexpress.com", "geraiexpress.com", "x.y.geraimitra.com"]) {
       expect(await classify(req(`https://${h}${p}`), NAMES, s.lookup, s.cache), h).toEqual({ outcome: "not_found" })
     }
-    expect(await classify(new Request(`https://nope.gerai.cc${p}`, { method: "POST" }), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(new Request(`https://nope.geraimitra.com${p}`, { method: "POST" }), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
   })
   it("probe is answered for pending hosts but every other path on a pending host stays 404", async () => {
     const s = setup()
     const nonce = "n".repeat(24)
-    expect(await classify(req(`https://pending.gerai.cc/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({
+    expect(await classify(req(`https://pending.geraimitra.com/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({
       outcome: "probe",
-      host: "pending.gerai.cc",
+      host: "pending.geraimitra.com",
       nonce,
     })
-    expect(await classify(req("https://pending.gerai.cc/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
-    expect(await classify(req(`https://nope.gerai.cc/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
-    expect(await classify(req(`https://lama.gerai.cc/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(req("https://pending.geraimitra.com/"), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(req(`https://nope.geraimitra.com/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    expect(await classify(req(`https://lama.geraimitra.com/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
   })
   it("probe signature is HMAC-SHA256(secret, host:nonce) — no cross-TLD collision", async () => {
     const a = await probeSignature("s", "kirim.tokobudi.id", "n1")
@@ -147,9 +147,9 @@ describe("classify — DCV and probe", () => {
   })
   it("probe is GET only and refused for suspended tenants and moved/purged hosts", async () => {
     const nonce = "n".repeat(24)
-    const s = setup({ ...ROWS, "pindah.gerai.cc": { ...ROWS["berkahjaya.gerai.cc"]!, hostname: "pindah.gerai.cc", hostState: "moved" } })
-    expect(await classify(new Request(`https://pending.gerai.cc/.well-known/geraiexpress-probe/${nonce}`, { method: "POST" }), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
-    for (const h of ["beku.gerai.cc", "pindah.gerai.cc", "lama.gerai.cc"]) {
+    const s = setup({ ...ROWS, "pindah.geraimitra.com": { ...ROWS["berkahjaya.geraimitra.com"]!, hostname: "pindah.geraimitra.com", hostState: "moved" } })
+    expect(await classify(new Request(`https://pending.geraimitra.com/.well-known/geraiexpress-probe/${nonce}`, { method: "POST" }), NAMES, s.lookup, s.cache)).toEqual({ outcome: "not_found" })
+    for (const h of ["beku.geraimitra.com", "pindah.geraimitra.com", "lama.geraimitra.com"]) {
       expect(await classify(req(`https://${h}/.well-known/geraiexpress-probe/${nonce}`), NAMES, s.lookup, s.cache), h).toEqual({ outcome: "not_found" })
     }
   })
@@ -160,10 +160,10 @@ describe("in-isolate cache ≤ 30 s (suspension visible within the window)", () 
     const rows = { ...ROWS }
     const s = setup(rows)
     const t0 = 1_000_000
-    expect(await classify(req("https://berkahjaya.gerai.cc/"), NAMES, s.lookup, s.cache, t0)).toMatchObject({ outcome: "ok" })
-    rows["berkahjaya.gerai.cc"] = { ...rows["berkahjaya.gerai.cc"]!, tenantStatus: "suspended", schemaState: "ok", routingVersion: 4 }
-    expect(await classify(req("https://berkahjaya.gerai.cc/"), NAMES, s.lookup, s.cache, t0 + 29_999)).toMatchObject({ outcome: "ok" })
-    expect(await classify(req("https://berkahjaya.gerai.cc/"), NAMES, s.lookup, s.cache, t0 + 30_000)).toEqual({ outcome: "suspended" })
-    expect(s.calls).toEqual(["berkahjaya.gerai.cc", "berkahjaya.gerai.cc"])
+    expect(await classify(req("https://berkahjaya.geraimitra.com/"), NAMES, s.lookup, s.cache, t0)).toMatchObject({ outcome: "ok" })
+    rows["berkahjaya.geraimitra.com"] = { ...rows["berkahjaya.geraimitra.com"]!, tenantStatus: "suspended", schemaState: "ok", routingVersion: 4 }
+    expect(await classify(req("https://berkahjaya.geraimitra.com/"), NAMES, s.lookup, s.cache, t0 + 29_999)).toMatchObject({ outcome: "ok" })
+    expect(await classify(req("https://berkahjaya.geraimitra.com/"), NAMES, s.lookup, s.cache, t0 + 30_000)).toEqual({ outcome: "suspended" })
+    expect(s.calls).toEqual(["berkahjaya.geraimitra.com", "berkahjaya.geraimitra.com"])
   })
 })

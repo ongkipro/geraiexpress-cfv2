@@ -85,7 +85,7 @@ export function DaftarPage() {
       {step === 3 ? (
         <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); setStep(4) }} noValidate>
           <TextField label="Nama gerai" name="businessName" value={businessName} onChange={(v) => { setBusinessName(v); if (!slug) setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 30)) }} error={fieldErrors.businessName} required maxLength={80} />
-          <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => setSlug(v.toLowerCase())} error={fieldErrors.slug} hint={slug ? `${slug}.gerai.cc` : "Huruf kecil, angka, tanda hubung."} required maxLength={30} />
+          <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => setSlug(v.toLowerCase())} error={fieldErrors.slug} hint={slug ? `${slug}.geraimitra.com` : "Huruf kecil, angka, tanda hubung."} required maxLength={30} />
           <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
           <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" value={sellerEmail} onChange={setSellerEmail} error={fieldErrors.sellerEmail} hint="Pakai email yang Anda baca: hanya lewat email ini Anda bisa masuk ke akun Mengantar." required />
           <Button type="submit" size="lg">Lanjut</Button>
@@ -119,7 +119,7 @@ export function DaftarPage() {
       {step === 5 ? (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
           <dl className="flex flex-col gap-2 text-base">
-            <div><dt className="text-muted-foreground">Gerai</dt><dd className="font-medium">{businessName} · {slug}.gerai.cc</dd></div>
+            <div><dt className="text-muted-foreground">Gerai</dt><dd className="font-medium">{businessName} · {slug}.geraimitra.com</dd></div>
             <div><dt className="text-muted-foreground">Titik jemput</dt><dd>{street}, {area?.label}</dd></div>
             <div><dt className="text-muted-foreground">Akun Mengantar</dt><dd>{sellerEmail}</dd></div>
           </dl>

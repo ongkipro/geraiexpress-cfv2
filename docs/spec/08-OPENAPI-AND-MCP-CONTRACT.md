@@ -25,7 +25,7 @@
 | Surface | Endpoint | Consumer | Authentication |
 |---|---|---|---|
 | **1. Outlet Partner OpenAPI & MCP** | `https://app.geraiexpress.com/api/v1/*` · Docs: `/api/v1/docs` · MCP: `https://app.geraiexpress.com/mcp` | Outlet Owner's AI assistant, reseller WooCommerce/Shopify stores, shop WhatsApp bots | `Authorization: Bearer gx_live_<token>` (SHA-256 hashed in D1, managed in `Pengaturan › API & MCP` (`/pengaturan/api-mcp`)) |
-| **2. Mini-Site Public API & WebMCP** | `https://<gerai-slug>.gerai.cc/api/public/*` · MCP: `https://<gerai-slug>.gerai.cc/mcp` | Public buyers/resellers & public AI shopping assistants | Strict per-IP rate limiting (+ Turnstile on browser forms; capped draft quota on MCP) |
+| **2. Mini-Site Public API & WebMCP** | `https://<gerai-slug>.geraimitra.com/api/public/*` · MCP: `https://<gerai-slug>.geraimitra.com/mcp` | Public buyers/resellers & public AI shopping assistants | Strict per-IP rate limiting (+ Turnstile on browser forms; capped draft quota on MCP) |
 | **3. Super Admin Internal Schema** | `https://owner.geraiexpress.com/api/owner/*` *(internal build artifact only; no public docs)* | `web-owner` console | `__Host-ge_owner` cookie + `aal2` TOTP |
 
 ### Granular Token Scopes (`Pengaturan › API & MCP` (`/pengaturan/api-mcp`) — Owner Only)
@@ -85,7 +85,7 @@
 - `sync_mengantar_finance` (`idempotentHint: true`, `openWorldHint: true`, `finance:sync` — triggers immediate `/invoices` sync)
 - `upsert_sender_or_recipient_contact` (`contacts:write`)
 
-### 4.2 Public Outlet Mini-Site MCP (`https://<gerai-slug>.gerai.cc/mcp`)
+### 4.2 Public Outlet Mini-Site MCP (`https://<gerai-slug>.geraimitra.com/mcp`)
 Exposes 4 strictly public, tenant-scoped tools: `get_gerai_outlet_info`, `quote_public_shipping_rates` (`weight_gram` default `1000`), `create_public_prebooking_inv`, and `track_public_shipment_privacy_safe` (initials-only PII truncation enforced).
 
 ---

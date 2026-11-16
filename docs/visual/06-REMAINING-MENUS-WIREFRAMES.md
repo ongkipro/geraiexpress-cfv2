@@ -93,7 +93,7 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
 ## 4. `Pengaturan` Tabs (`/pengaturan`) & Super Admin Key Screens (`owner.geraiexpress.com`)
 
 1. **Gerai `Pengaturan` — superseded by `docs/visual/08` §2 (DEC-223: settings sub-menu, one route per item). The item contents below still apply, regrouped as Profil Gerai, Mini-Site, Data Usaha · Ekspedisi Aktif, Printer & Struk, Packing & Biaya Tambahan · Anggota, Mengantar, API & MCP:**
-   - `Mini-Site (*.gerai.cc)` — live preview of `berkahjaya.gerai.cc`, logo upload, hours, Google Maps pin, printable **A4/A5 Counter QR Tent Card**, Pro custom domain CNAME.
+   - `Mini-Site (*.geraimitra.com)` — live preview of `berkahjaya.geraimitra.com`, logo upload, hours, Google Maps pin, printable **A4/A5 Counter QR Tent Card**, Pro custom domain CNAME.
    - `Ekspedisi Aktif` — per-courier on/off toggles for the outlet & mini-site + courier rules & assigned discount visibility.
    - `Printer & Packing` — Web-Bluetooth pair/test, default label format (`10×15 · Paket + Bukti` / `10×10 · Paket saja` / `10×15 · Paket saja` / 58 mm roll, DEC-224), print density (`Normal` / `Tebal`), shop packing add-on catalog (`Plastik`, `Bubble`, `Kardus`).
    - `Outlet & Mengantar` — pickup `area_id` & map pinpoint, seller connection health, webhook status, plus an optional collapsed **`Data Usaha (opsional)`** section: `Bentuk Usaha` [Perorangan | UD | CV | PT | Koperasi | Lainnya], `Nama Resmi`, `NIB`, `NPWP`, `Alamat Terdaftar`, `Nama Brand`, `Penanggung Jawab` (nama, jabatan, email, HP) — helper: *"Boleh dikosongkan. Diisi jika perlu faktur atau kerja sama resmi."*
@@ -101,5 +101,5 @@ All post-checkout parcel workflows live as clean tabs inside one `Kiriman` menu 
    - `API & MCP` — issue/revoke scoped `gx_live_...` keys, link to `/api/v1/docs` Scalar UI, copy `/mcp` endpoint URL for AI assistants.
 2. **Super Admin `Sistem & Audit > Profil Perusahaan`:** form for `platform_legal_profile` grouped as `Identitas Badan Usaha` (Nama PT, NIB, NPWP, No. Akta & Tanggal, SK Kemenkumham, No. PSE), `Alamat` (Terdaftar, Korespondensi), `Kontak Resmi` (Email Dukungan, WhatsApp Dukungan, Email Pelindungan Data), `Direksi` (Nama Direktur). Empty fields show `Belum diisi`; header badge `Data perusahaan belum lengkap (n kolom)` until launch-required fields are filled. Save requires TOTP + audit reason.
 3. **Super Admin `Gerai > Pengajuan Baru` & `Tarif & Kurir > Diskon Gerai`:**
-   - One-click **`Setujui & Buka Akun Seller Mengantar`** with Partner relay status & `<slug>.gerai.cc` readiness check.
+   - One-click **`Setujui & Buka Akun Seller Mengantar`** with Partner relay status & `<slug>.geraimitra.com` readiness check.
    - Per-outlet × courier/service basis-point editor showing `Observed Mengantar Rate` vs `Assigned Outlet Rate` with automatic ceiling enforcement and mandatory TOTP + audit reason.

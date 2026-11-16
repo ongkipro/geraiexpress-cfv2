@@ -1,11 +1,14 @@
 # 10 — Partner Relay on a VPS: Static IPv4 Egress for Mengantar (`geraiexpress-cfv2`)
 
-- **Related:** `DEC-204`, `DEC-219`, `ADR-0003`, `ROADMAP.md` M6
-- **Decision:** a Vultr Reserved IPv4 on either the existing VPS (Option A) or a new small dedicated instance (Option C), chosen by the owner at M6 (DEC-219 as amended by DEC-232); the **simple push relay** (one HMAC secret).
+- **Related:** `DEC-204`, `DEC-219`, `DEC-232`, `DEC-235`, `ADR-0003`, `ROADMAP.md` M6
+- **Decision (DEC-235, 2026-11-17):** the dedicated GeraiExpress VPS (`139.180.142.31`) is retired and deleted. The
+  relay co-hosts as one isolated, stateless Coolify container on the existing **`99ribu-prod`** Vultr instance; its
+  Vultr **Reserved IPv4 `149.28.129.53`** is the egress address registered with Mengantar. The **simple push relay**
+  (one HMAC secret) is unchanged. Options A/C below are kept as the record of how DEC-219/DEC-232 were decided.
 - **Status:** Design. Nothing in this document is deployed. Any action on a live server, DNS record, or
   Mengantar production allowlist needs explicit owner approval at the time it is run.
-- **Scope boundary:** this spec does not change the running GeraiExpress v1 repository or its application.
-  It only reuses an existing server as an egress host after owner approval.
+- **Scope boundary:** this spec changes nothing in the 99ribu applications that share the host. The relay shares no
+  network, volume or secret with them; it only uses the host's egress address, after owner approval.
 
 ---
 
@@ -39,13 +42,13 @@ Cloudflare. A small VPS is the cheapest fixed egress identity we control.
  │ (Partner Secret stays     │                                                 │ origin TLS (Origin CA)
  │  in the Worker only)      │                                                 ▼
  └───────────────────────────┘                                 ┌──────────────────────────────────┐
-                                                               │ VPS (Vultr sgp) · Coolify/Traefik│
+                                                               │ 99ribu-prod (Vultr) · Coolify    │
                                                                │ container `partner-relay`        │
                                                                │ verifies HMAC + path allowlist   │
                                                                │ forwards exact bytes, no redirect│
                                                                └───────────────┬──────────────────┘
-                                                                               │ egress from the VPS
-                                                                               │ public IPv4 (IPv6 off)
+                                                                               │ egress from Reserved IPv4
+                                                                               │ 149.28.129.53 (IPv6 off)
                                                                                ▼
                                                                ┌──────────────────────────────────┐
                                                                │ Mengantar Partner API (prod)     │
@@ -53,24 +56,30 @@ Cloudflare. A small VPS is the cheapest fixed egress identity we control.
                                                                └──────────────────────────────────┘
 ```
 
-- **Inbound to the relay** goes through Cloudflare (orange-cloud DNS). The VPS firewall already accepts
-  80/443 only from Cloudflare ranges, so the relay is never reachable directly.
-- **Outbound from the relay** leaves through the VPS's own public IPv4. That address is what Mengantar
-  allowlists. IPv6 stays disabled on the host so the egress address is always the single IPv4.
+- **Inbound to the relay** goes through Cloudflare (orange-cloud DNS). The host firewall must accept 80/443 only
+  from Cloudflare ranges (verify on `99ribu-prod` before go-live, §6 step 2), so the relay is never reachable directly.
+- **Outbound from the relay** leaves through the host's primary IPv4, the Reserved IPv4 `149.28.129.53`. That address
+  is what Mengantar allowlists. The relay container must not get IPv6 egress (every attached Docker network has
+  `EnableIPv6=false` and a forced IPv6 connection fails — runbook §5 step 1b), so the source is always that IPv4.
+- **Co-hosting isolation (DEC-235):** own Coolify application and Docker network, no shared volume, no shared
+  environment variable, `read_only` root filesystem, non-root user, all capabilities dropped, memory limit 128 MB,
+  no published host port (Coolify's proxy routes `relay.geraiexpress.com` only). The 99ribu workloads are untouched.
 - **Public API, webhooks, D1, finance sync, POS:** unchanged, direct from Cloudflare (no relay hop).
 
 ---
 
-## 3. Host options (owner picks one)
+## 3. Host options (decided: co-host on `99ribu-prod`, DEC-235)
 
 | Option | What | Egress IP | Extra cost | Isolation | Recommendation |
 |---|---|---|---|---|---|
-| **A. Shared host + reserved IPv4** | Run `partner-relay` as one Coolify app on the existing `geraiexpress` VPS (Vultr `sgp`, IPv6 off, Cloudflare-only firewall). Attach a Vultr **Reserved IP** so the address survives a rebuild or migration. | Reserved IPv4 | Reserved IP fee only (check current Vultr price) | Shares the host with the v1 app; relay is stateless, ~64 MB RAM | **Recommended.** Same pattern the `99ribu-prod` host already uses for the AutoLaris IP allowlist. |
+| A. Shared host + reserved IPv4 *(historical — host deleted, DEC-235)* | Run `partner-relay` as one Coolify app on the existing `geraiexpress` VPS (Vultr `sgp`, IPv6 off, Cloudflare-only firewall). Attach a Vultr **Reserved IP** so the address survives a rebuild or migration. | Reserved IPv4 | Reserved IP fee only (check current Vultr price) | Shares the host with the v1 app; relay is stateless, ~64 MB RAM | **Recommended.** Same pattern the `99ribu-prod` host already uses for the AutoLaris IP allowlist. |
 | B. Shared host, current IPv4 *(historical — not chosen, DEC-232)* | As A, but allowlist the instance's current address. | Instance IPv4 | None | As A | Rejected: a rebuild changes the IP and stops onboarding. |
-| **C. Dedicated micro VPS** | Smallest Vultr instance only for the relay, own firewall group, plus a reserved IPv4. | Reserved IPv4 | Smallest-plan fee + reserved IP | Full: no shared blast radius | Choose when the v1 host is retired or must not carry v2 traffic. |
+| C. Dedicated micro VPS *(historical — not chosen, DEC-235)* | Smallest Vultr instance only for the relay, own firewall group, plus a reserved IPv4. | Reserved IPv4 | Smallest-plan fee + reserved IP | Full: no shared blast radius | Choose when the v1 host is retired or must not carry v2 traffic. |
 | D. Cloudflare dedicated egress | Workers VPC → Gateway egress policy → dedicated IPs. | Cloudflare-assigned (2 cities) | Zero Trust Enterprise add-on | Full | Rejected for now: plan cost; revisit only if the Enterprise plan is bought for other reasons. |
 
-Moving between A, B and C later is the same procedure as §7 ("IP change").
+**Decided (DEC-235):** neither A on the old host (deleted) nor C. The relay co-hosts on `99ribu-prod`, which already
+carries a Vultr Reserved IPv4 (`149.28.129.53`) for the AutoLaris allowlist — Option A's pattern on a different host.
+Moving to another host later is the same procedure as §7 ("IP change").
 
 ---
 
@@ -114,7 +123,7 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
    (`/sellers`, `/sellers/list`, `/sellers/api-key`, `/sellers/api-key/regenerate` under `/api/partner/v1`).
    The upstream origin is fixed config (`MENGANTAR_PARTNER_ORIGIN`), never taken from the request. Redirects are
    not followed.
-3. **No Mengantar secrets on the VPS:** the Worker computes the Partner signature
+3. **No Mengantar secrets on the relay host:** the Worker computes the Partner signature
    (`SHA256(METHOD:PATH:TYPE:BODY:TIMESTAMP:PARTNER_SECRET)`); the relay forwards the body bytes and exactly the
    headers `content-type`, `partner-id`, `timestamp`, `signature`.
 4. **Bounds:** request body ≤ 64 KB, response ≤ 1 MB, upstream timeout 15 s, max 4 concurrent upstream calls.
@@ -125,7 +134,7 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
    `relay_upstream_timeout`) so they are never confused with Mengantar's `403 IP_NOT_ALLOWED`.
 7. **Health:** `GET /healthz` → `200 {"ok":true}` without calling Mengantar.
 8. **Edge protection:** a Cloudflare WAF rate-limiting rule on `relay.geraiexpress.com` (e.g. 30 requests/min
-   per IP) blocks brute-force noise before it reaches the VPS. No Cloudflare Access app is needed.
+   per IP) blocks brute-force noise before it reaches the relay host. No Cloudflare Access app is needed.
 
 ### 4.2b Rejected alternative: pull mode
 
@@ -160,20 +169,19 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 - Key rotation fence (TASK-205) and immediate rotation on suspected exposure (`Sistem & Audit` action, TOTP).
 - Anomaly alerts (`OBSERVABILITY.md`): any `403 IP_NOT_ALLOWED`, spikes of `401/403` per tenant, unusual issue volume
   per tenant versus its 7-day baseline.
-- Egress for the Partner API only: a Vultr Reserved IPv4 on a new small instance or the existing Vultr server
-  (§3 options A or C, owner's choice at M6).
+- Egress for the Partner API only: the `99ribu-prod` Vultr Reserved IPv4 `149.28.129.53` (DEC-235).
 
-## 5. Deployment shape (Option A/B)
+## 5. Deployment shape (co-hosted on `99ribu-prod`, DEC-235)
 
 - Coolify application `partner-relay`, image pinned by digest, no published host ports (Traefik routes
   `relay.geraiexpress.com` to the container), `restart: unless-stopped`, memory limit 128 MB, read-only root
   filesystem, non-root user.
 - Relay env (Coolify): `RELAY_SECRET`, optional `RELAY_SECRET_PREVIOUS` (rotation only), `MENGANTAR_PARTNER_ORIGIN`. Worker secrets: `PARTNER_RELAY_URL`,
   `PARTNER_RELAY_SECRET` (same value as `RELAY_SECRET`), `MENGANTAR_PARTNER_ID`, `MENGANTAR_PARTNER_SECRET`.
-- DNS: `relay.geraiexpress.com` A record, proxied, to the VPS address; covered by the existing
+- DNS: `relay.geraiexpress.com` A record, proxied, to `149.28.129.53`; covered by the existing
   `*.geraiexpress.com` Origin CA certificate; zone SSL mode Full (strict).
-- `apps/worker` binds explicit hostnames only (`app.`, `owner.`, `hooks.`, apex, `*.gerai.cc`), **never**
-  `*.geraiexpress.com/*`, so a Worker `fetch` to `relay.` reaches the VPS instead of the Worker itself.
+- `apps/worker` binds explicit hostnames only (`app.`, `owner.`, `hooks.`, apex, `*.geraimitra.com`), **never**
+  `*.geraiexpress.com/*`, so a Worker `fetch` to `relay.` reaches the relay host instead of the Worker itself.
 - Traefik access logs for this router stay at the default (no headers, no bodies).
 - Size target: ≤ 80 lines of Node or Go, zero runtime dependencies beyond the standard library.
 
@@ -181,10 +189,11 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 
 ## 6. M6 verification checklist (all must pass before production onboarding)
 
-1. On the VPS: `curl -4 -s https://api.ipify.org` (or any IP echo) equals the address registered with Mengantar.
+1. Inside the relay container on `99ribu-prod`: `curl -4 -s https://api.ipify.org` (or any IP echo) returns
+   `149.28.129.53`, the address registered with Mengantar.
 2. `relay.geraiexpress.com/forward` with a bad HMAC or a timestamp older than 60 s → `401 relay_auth_failed`;
-   with a valid HMAC but a non-allowlisted target → `403 relay_target_denied`; direct request to the VPS IP
-   on 443 → refused by the Vultr firewall (Cloudflare ranges only).
+   with a valid HMAC but a non-allowlisted target → `403 relay_target_denied`; direct request to `149.28.129.53`
+   on 443 with `Host: relay.geraiexpress.com` → refused (firewall admits Cloudflare ranges only).
 3. Sandbox `POST /sellers/list` through the relay → `200`.
 4. Production `POST /sellers/list` through the relay → `200`. The same call sent directly from a Worker →
    `403 IP_NOT_ALLOWED` (proves the allowlist is enforced and the relay is the reason it works).
@@ -208,5 +217,7 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
   **primary** IPv4; a secondary address does not change the egress source. §6 step 1 proves it.
 - **Monitoring:** Super Admin health tab shows relay reachability (last `/healthz`), last Partner call status, and
   the count of outlets in `registration_pending` / `registration_unknown`.
-- **Disaster:** if the host is lost, Option A/C keeps the reserved IP: attach it to a new instance, deploy the
-  same image, run §6 steps 1–4. Option B requires a Mengantar allowlist update first.
+- **Disaster:** if `99ribu-prod` is lost, the Reserved IPv4 `149.28.129.53` survives: attach it to the replacement
+  instance as its primary IPv4, deploy the same image, run §6 steps 1–4. No Mengantar allowlist change is needed.
+- **Old host (DEC-235):** `139.180.142.31` was deleted by the owner. If it was ever registered with Mengantar, ask
+  Mengantar to remove it after §6 step 4 passes from `149.28.129.53`.

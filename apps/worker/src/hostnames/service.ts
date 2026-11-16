@@ -59,7 +59,8 @@ export function planDomain(env: { TENANT_ZONE: string; PLATFORM_APEX: string }, 
   }
   if (!h || !h.includes(".")) return fail("Tulis domain lengkap, misalnya kirim.tokoanda.id.")
   if (h.startsWith("xn--") || h.includes(".xn--")) return fail("Domain dengan huruf non-Latin belum didukung.")
-  for (const zone of [env.TENANT_ZONE, env.PLATFORM_APEX, "gerai.cc", "geraiexpress.com"]) if (h === zone || h.endsWith(`.${zone}`)) return fail("Domain ini milik GeraiExpress. Pakai domain toko Anda sendiri.")
+  // The previous tenant zone stays reserved too (DEC-234: `gerai.cc` → `geraimitra.com`).
+  for (const zone of [env.TENANT_ZONE, env.PLATFORM_APEX, "geraimitra.com", "gerai.cc", "geraiexpress.com"]) if (h === zone || h.endsWith(`.${zone}`)) return fail("Domain ini milik GeraiExpress. Pakai domain toko Anda sendiri.")
   const www = h.startsWith("www.") ? h.slice(4) : null
   if (www && isRoot(www)) {
     // `www.tokoanda.id` entered: www is the site; the root forwards at the registrar.

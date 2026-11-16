@@ -82,7 +82,7 @@ LUNAS · TUNAI        Rp   50.000
 Kembali              Rp   23.000
 --------------------------------
 Lacak & struk digital aman:
-      berkahjaya.gerai.cc       
+   berkahjaya.geraimitra.com    
          /lacak/8k4m2p7         
          [ QR 8K4M2P7 ]         
  Simpan struk ini sbg bukti sah 
@@ -181,7 +181,7 @@ block is identical in all three; only what surrounds it changes.
 │ J&T EZ · AWB JX88 2910 4412 · ke Kota Bandung                │
 │ COD Barang · Tagih penerima Rp 167.560 · Kardus Rp 3.000     │
 │ Bayar di loket Rp 3.000 · LUNAS · QRIS · Cair Rp 150.000     │
-│ Lacak: berkahjaya.gerai.cc/lacak/8k4m2p7          [QR]       │
+│ Lacak: berkahjaya.geraimitra.com/lacak/8k4m2p7    [QR]       │
 │ Simpan bukti ini untuk klaim dan pencairan COD               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -288,7 +288,7 @@ Uses the extra 50 mm for a two-line item/weight block and a separate sender line
 | **Non-COD Shipping Price** | Optional toggle | **Hidden by default** | Hidden on Non-COD; **COD collect total always shown** | Optional toggle |
 | **Neutral `INV: 8K4M2P7` Tag** | Shown | **Shown** (neutral alphanumeric code for return scan) | Shown | Shown |
 
-*(Transparency note shown to operators when selecting `Dropship Toko`: printed paper labels and `<slug>.gerai.cc/lacak` show only the Reseller's store brand, but automated SMS/WhatsApp messages sent directly by a third-party courier's own system may still reference the outlet's registered Mengantar pickup account name unless provider-side dropshipper mapping is enabled).*
+*(Transparency note shown to operators when selecting `Dropship Toko`: printed paper labels and `<slug>.geraimitra.com/lacak` show only the Reseller's store brand, but automated SMS/WhatsApp messages sent directly by a third-party courier's own system may still reference the outlet's registered Mengantar pickup account name unless provider-side dropshipper mapping is enabled).*
 
 ---
 

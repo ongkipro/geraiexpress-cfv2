@@ -32,7 +32,7 @@ export interface LabelData {
   dims: string | null // "30×20×15 cm"
   insuranceIdr: number | null
   remark: string // unboxing remark, may be ""
-  trackingUrl: string // "berkahjaya.gerai.cc/lacak/8k4m2p7"
+  trackingUrl: string // "berkahjaya.geraimitra.com/lacak/8k4m2p7"
   showShippingFee: boolean
   stub: {
     shippingIdr: number

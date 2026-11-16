@@ -60,7 +60,7 @@ allow: nav-label — tab labels are the spec's business terms (`Pickup & Manifes
 allow: marker-count — status badges are per table row in operational lists; each is dot + text, neutral chip
 allow: icon-overload — settings list on phones: a trailing chevron on every row is the platform cue that the row opens its own page (visual 08 §2.2); no icon tiles
 
-## Direction — mini-site `<slug>.gerai.cc` (TASK-501)
+## Direction — mini-site `<slug>.geraimitra.com` (TASK-501)
 
 Picked-by: inherited from the accepted workspace direction A (owner 2026-11-14) + visual 03 §1 (owner-approved
 wireframe). No separate owner pick was made for the public page; the independent visual verdict is pending

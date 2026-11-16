@@ -47,7 +47,7 @@ describe("SPA shells via ASSETS (spec 07 §3.1)", () => {
   })
 
   it("non-SPA platform hosts never serve a shell", async () => {
-    for (const h of ["geraiexpress.localhost", "hooks.geraiexpress.localhost", "berkahjaya.gerai.localhost"]) {
+    for (const h of ["geraiexpress.localhost", "hooks.geraiexpress.localhost", "berkahjaya.geraimitra.localhost"]) {
       const res = await exports.default.fetch(`http://${h}:8787/`)
       expect(await res.text()).not.toContain('<div id="root">')
     }

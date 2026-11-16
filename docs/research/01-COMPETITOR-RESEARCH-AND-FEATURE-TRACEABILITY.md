@@ -63,7 +63,7 @@ and leaked recipient data. v2 prioritises those four.
 | Mengantar | Reseller flows; hide-sender-address warning modal about returns | Returns always come back to the outlet — ADR-0005, PR-17 |
 | KiriminAja | RTS rate by phone / district; staff shifts + activity log | spec 03 risk badge; PR-10 |
 | Lincah | Proactive monitoring tabs (no update, over SLA, weight change) | `Kendala & Klaim` tabs — PR-20 |
-| UKURIR | White-label brand, branded resi and WhatsApp, outlet markup | `<slug>.gerai.cc`; optional disclosed `Biaya Layanan Loket` (`counter_service_fee_idr`, DEC-225 supersedes the earlier `0 at launch`; `P` stays the publish tariff per DEC-205) |
+| UKURIR | White-label brand, branded resi and WhatsApp, outlet markup | `<slug>.geraimitra.com`; optional disclosed `Biaya Layanan Loket` (`counter_service_fee_idr`, DEC-225 supersedes the earlier `0 at launch`; `P` stays the publish tariff per DEC-205) |
 | Kurir Pedia | Points converted to balance; AI assistant over account data | MCP server — PR-21; points deferred (§5) |
 
 ## 4. Five differentiators no competitor combines [I]

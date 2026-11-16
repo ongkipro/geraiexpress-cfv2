@@ -1,4 +1,4 @@
-// `<slug>.gerai.cc` mini-site (TASK-501, DEC-207, PR-19, spec 05 §3, visual 03 §1). Routes:
+// `<slug>.geraimitra.com` mini-site (TASK-501, DEC-207, PR-19, spec 05 §3, visual 03 §1). Routes:
 //   GET  /                 Cek Ongkir (publish prices only) — POST / runs the quote (Turnstile + per-IP limit)
 //   GET  /kirim            Kirim dari Rumah form — POST /kirim creates a 48 h QR pre-booking (Turnstile + IP limit)
 //   GET  /kirim/:slug      the QR card for a pre-booking

@@ -25,7 +25,7 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
  ├── 1:1 ──► tenant_business_profiles (Optional legal data: entity type, NIB, encrypted NPWP — DEC-218)
  ├── 1:1 ──► mengantar_connections (Seller credentials, key_version, webhook_state, sync cursor & balance)
  ├── 1:N ──► tenant_outlets (Physical pickup master + Mengantar 24-hex `area_id`)
- ├── 1:N ──► tenant_hostnames (D1; `<slug>.gerai.cc` + Cloudflare for SaaS custom hostnames — spec 11 §4)
+ ├── 1:N ──► tenant_hostnames (D1; `<slug>.geraimitra.com` + Cloudflare for SaaS custom hostnames — spec 11 §4)
  ├── 1:N ──► tenant_members (Roles: `gerai_admin` | `cashier`)
  ├── 1:N ──► tenant_api_keys (Hashed `gx_live_...` keys & scopes for OpenAPI / MCP)
  ├── 1:N ──► tenant_discount_rules (Super Admin per-courier × service `bps` rules)
@@ -57,7 +57,7 @@ tenants (Gerai — identified publicly by `slug`, e.g., `berkahjaya`)
 
 ### 2.1b Platform Operator Legal Profile (singleton, placeholders until filled)
 - **`platform_legal_profile`:** `id` (always `1`), `legal_name` (*`NULL` until filled; never a placeholder string*), `brand_name` (`GeraiExpress`), `entity_type` (`pt`), `nib`, `encrypted_npwp` (*AES-256-GCM under `KEK_SECRET`; Super Admin and tax invoices only, never public*), `akta_number`, `akta_date`, `sk_kemenkumham_number`, `pse_registration_number` (*Kominfo/Komdigi PSE, when issued*), `registered_address`, `correspondence_address`, `support_email`, `support_whatsapp`, `privacy_contact_email` (*UU PDP data-protection contact*), `director_name`, `updated_by`, `updated_at`.
-- **Rendering rule:** `geraiexpress.com` footer, `/ketentuan`, `/privasi`, and email footers read only `legal_name`, `pse_registration_number`, `registered_address`, `support_email`, `support_whatsapp`, `privacy_contact_email`; subscription tax invoices may add NPWP. `<slug>.gerai.cc` mini-sites keep the outlet's own identity and show only `Didukung jaringan resmi GeraiExpress` (+ `legal_name` when filled) and an absolute link to `https://geraiexpress.com/privasi`. A `NULL` field renders nothing (the line is omitted) — never a fake company name, number, or address. Super Admin sees an amber `Data perusahaan belum lengkap (n kolom)` badge until required launch fields (`legal_name`, `registered_address`, `support_email`, `privacy_contact_email`) are filled.
+- **Rendering rule:** `geraiexpress.com` footer, `/ketentuan`, `/privasi`, and email footers read only `legal_name`, `pse_registration_number`, `registered_address`, `support_email`, `support_whatsapp`, `privacy_contact_email`; subscription tax invoices may add NPWP. `<slug>.geraimitra.com` mini-sites keep the outlet's own identity and show only `Didukung jaringan resmi GeraiExpress` (+ `legal_name` when filled) and an absolute link to `https://geraiexpress.com/privasi`. A `NULL` field renders nothing (the line is omitted) — never a fake company name, number, or address. Super Admin sees an amber `Data perusahaan belum lengkap (n kolom)` badge until required launch fields (`legal_name`, `registered_address`, `support_email`, `privacy_contact_email`) are filled.
 
 ### 2.2 Dedicated Two-Submenu Contacts (`Pengirim` vs `Penerima` — DEC-212)
 - **`sender_contacts` (`/kontak/pengirim`):**

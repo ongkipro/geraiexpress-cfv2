@@ -1,6 +1,6 @@
 # 11 — Cloudflare for SaaS: Gerai Hostnames, Custom Domains & Tenant Routing
 
-Owner of: how a request on `<slug>.gerai.cc` or a gerai's own domain reaches the right tenant, and the custom-hostname
+Owner of: how a request on `<slug>.geraimitra.com` or a gerai's own domain reaches the right tenant, and the custom-hostname
 lifecycle. Related: ADR-0002 (dual domain), ADR-0006 (D1 control plane), DEC-202, DEC-228, PR-03, M5/M6.
 Method source: dotfiles skill `cloudflare-for-saas` (facts checked against developers.cloudflare.com 2026-11-13/14).
 Plans, prices and limits change: re-read the linked Cloudflare page at M6 provisioning and record page and date.
@@ -12,25 +12,25 @@ Plans, prices and limits change: re-read the linked Cloudflare page at M6 provis
 | Zone | Hosts | Served by |
 |---|---|---|
 | `geraiexpress.com` (platform) | apex, `www`, `app.`, `owner.`, `hooks.` | the Worker (custom domains on the Worker) |
-| `gerai.cc` (tenant zone, **Cloudflare for SaaS enabled**) | `<slug>.gerai.cc`, `cname.gerai.cc` (CNAME target), `fallback.gerai.cc` (fallback origin) | Worker route `*/*` on this zone |
-| Gerai's own domain (Pro) | e.g. `kirim.tokobudi.id`, or root `tokobudi.id` + `www` | custom hostname in the `gerai.cc` zone → same Worker |
+| `geraimitra.com` (tenant zone, **Cloudflare for SaaS enabled**) | `<slug>.geraimitra.com`, `cname.geraimitra.com` (CNAME target), `fallback.geraimitra.com` (fallback origin) | Worker route `*/*` on this zone |
+| Gerai's own domain (Pro) | e.g. `kirim.tokobudi.id`, or root `tokobudi.id` + `www` | custom hostname in the `geraimitra.com` zone → same Worker |
 
-- `<slug>.gerai.cc` needs **no custom hostname**: proxied `AAAA * 100::` and `AAAA @ 100::` plus Universal SSL cover
+- `<slug>.geraimitra.com` needs **no custom hostname**: proxied `AAAA * 100::` and `AAAA @ 100::` plus Universal SSL cover
   first-level subdomains. Activation on outlet approval is a D1 row, not a Cloudflare API call.
-- `cname.gerai.cc` replaces the earlier `custom.gerai.cc` name (DEC-228); `custom` stays in `RESERVED_SLUGS`.
+- `cname.geraimitra.com` replaces the earlier `custom.geraimitra.com` name (DEC-228); `custom` stays in `RESERVED_SLUGS`.
 - `relay.` is never a Worker host (spec 10).
 
 ## 2. One-time zone setup (M6, owner-approved production action)
 
-1. Separate registrable domains (already true: `geraiexpress.com` vs `gerai.cc`).
-2. Enable Cloudflare for SaaS on `gerai.cc` (non-Enterprise needs a payment method on the account).
+1. Separate registrable domains (already true: `geraiexpress.com` vs `geraimitra.com`).
+2. Enable Cloudflare for SaaS on `geraimitra.com` (non-Enterprise needs a payment method on the account).
 3. Originless fallback: proxied `AAAA fallback 100::`; set as fallback origin; wait for **Active**.
-4. Proxied `CNAME cname → fallback.gerai.cc` (the customer-facing target).
-5. Worker route `*/*` on `gerai.cc` → the production Worker; add `cname.gerai.cc/*` → Worker explicitly (O2O safety).
-   Staging: the route `*-stg.gerai.cc/*` → the **staging** Worker (more specific routes win), so `<slug>-stg` hosts never
+4. Proxied `CNAME cname → fallback.geraimitra.com` (the customer-facing target).
+5. Worker route `*/*` on `geraimitra.com` → the production Worker; add `cname.geraimitra.com/*` → Worker explicitly (O2O safety).
+   Staging: the route `*-stg.geraimitra.com/*` → the **staging** Worker (more specific routes win), so `<slug>-stg` hosts never
    reach production bindings. Staging does not create custom hostnames; custom-domain flows are tested in staging with
    a separate test zone owned by the team.
-6. API token for the Worker: zone-scoped to `gerai.cc`, custom-hostname edit + quota read only; stored as secret
+6. API token for the Worker: zone-scoped to `geraimitra.com`, custom-hostname edit + quota read only; stored as secret
    `CF_SAAS_API_TOKEN`. Never an account-wide token.
 
 ## 3. Request routing (the security boundary — R4)
@@ -46,7 +46,7 @@ Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
    the last label must start with a letter) and hosts over 253 chars. `/healthz` answers only on hosts that pass this
    step and are not `relay.`/other platform subdomains.
 3. Exact match on platform hosts → platform context (ARCHITECTURE §3), no tenant.
-4. `*.gerai.cc` (one label) or any other host → **authoritative D1 lookup** in `tenant_hostnames` (in-isolate cache
+4. `*.geraimitra.com` (one label) or any other host → **authoritative D1 lookup** in `tenant_hostnames` (in-isolate cache
    of at most 30 s, keyed by host and the tenant's `routing_version`):
    - unknown, `pending`, `purged` → neutral Indonesian 404 (no tenant data, no hint that a tenant exists);
    - tenant `suspended` → 403 `Gerai sedang tidak aktif`;
@@ -67,12 +67,12 @@ tenant; `tenants.routing_version` increments on any change.
 
 | # | Who | Step |
 |---|---|---|
-| 1 | Owner (`Pengaturan › Mini-Site › Domain Sendiri`) | Enters `kirim.tokobudi.id`. App normalises, refuses `gerai.cc`/platform names, a host another tenant owns, and anything over the cap (1 custom domain per Pro gerai; root + `www` count as one). Row `pending`. |
-| 2 | Worker | `POST /zones/{gerai.cc}/custom_hostnames` with `ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } }`; GET again after a short delay for `ownership_verification` and `ssl.validation_records`. Create **before** the owner saves a proxied CNAME (O2O Error 1014). |
+| 1 | Owner (`Pengaturan › Mini-Site › Domain Sendiri`) | Enters `kirim.tokobudi.id`. App normalises, refuses `geraimitra.com`/platform names, a host another tenant owns, and anything over the cap (1 custom domain per Pro gerai; root + `www` count as one). Row `pending`. |
+| 2 | Worker | `POST /zones/{geraimitra.com}/custom_hostnames` with `ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } }`; GET again after a short delay for `ownership_verification` and `ssl.validation_records`. Create **before** the owner saves a proxied CNAME (O2O Error 1014). |
 | 3 | Owner | Adds the DNS record shown in the app (§6). |
 | 4 | Worker (Cron every 10 min + `Periksa Lagi` button) | `GET` status; the button sends `PATCH` with the same `ssl` method to restart validation. |
 | 5 | Worker | When `status = active` **and** `ssl.status = active`, the Worker requests `https://<host>/.well-known/geraiexpress-probe/<random nonce>` and compares the response with its own `HMAC(probe_secret, host ":" nonce)`; only a match proves the host reaches this deployment, then it sets `state = active` and bumps `routing_version`. Every other path on a pending host stays a neutral 404 (lifecycle test). |
-| 6 | Worker | Canonical URLs, QR posters and receipts switch to the custom host only after step 5. A failed probe keeps `<slug>.gerai.cc` primary. |
+| 6 | Worker | Canonical URLs, QR posters and receipts switch to the custom host only after step 5. A failed probe keeps `<slug>.geraimitra.com` primary. |
 | 7 | Worker (daily reaper) | Delete hostnames `pending`/`failed` for 7 days, `moved`, or of churned/purged tenants: `DELETE` the custom hostname (stops billing), set `purged`. Never rely on Cloudflare's own deletion. |
 
 Remedies shown to the owner (Indonesian copy in the page): CNAME not pointed yet → show the exact record; HTTP DCV
@@ -81,7 +81,7 @@ Services / Let's Encrypt in CAA; `Blocked` → owner releases the zone hold, the
 
 ## 6. Root domains and Indonesian registrars
 
-- Default for a subdomain (`kirim.tokobudi.id`): `CNAME kirim → cname.gerai.cc`.
+- Default for a subdomain (`kirim.tokobudi.id`): `CNAME kirim → cname.geraimitra.com`.
 - Root (`tokobudi.id`) works only where the DNS can CNAME the root: Cloudflare DNS (CNAME flattening, default at the
   apex) or a provider with ALIAS/ANAME. **Never** instruct an `A` record to Cloudflare IPs (apex proxying is an
   Enterprise add-on).

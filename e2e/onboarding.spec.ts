@@ -72,7 +72,7 @@ test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) →
   await ctx.close()
 
   // Mini-site is live without a redeploy (PR-03).
-  const site = await request.get(`http://${slug}.gerai.localhost:${new URL(APP).port}/`)
+  const site = await request.get(`http://${slug}.geraimitra.localhost:${new URL(APP).port}/`)
   expect(site.status()).toBe(200)
   await page.reload()
   await expect(page.getByText("Akun Mengantar")).toBeVisible()

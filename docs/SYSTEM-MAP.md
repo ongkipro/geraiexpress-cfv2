@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass and of the GPT-6.1 Sol delta re-reviews fixed, Sol round 5 APPROVE, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
+Updated: 2026-11-17 — **DEC-234/DEC-235**: tenant zone `gerai.cc` → `geraimitra.com` (platform stays `geraiexpress.com`); Partner relay co-hosted on `99ribu-prod` (`149.28.129.53`). M6 code complete; production steps and TASK-604 await the owner (`STATUS.md`).
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
@@ -23,7 +23,7 @@ Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 o
 | `e2e/` | Playwright (390/768/1280), 22 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 24 · 1,013 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 166 unit + 377 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
+Tests: 172 unit + 377 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
 … `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`, `0017_retire_api_key_spend`; tenant (v22): `0001_baseline` … `0014_settings`,
 `0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`, `0022_rescan_and_api_spend`.
 
@@ -35,8 +35,8 @@ Tests: 166 unit + 377 Workers cases + 22 Playwright specs (each over 3 viewports
 | `app.geraiexpress.com` · `app.geraiexpress.localhost` | `GERAI_WORKSPACE` | owner, Kasir; integrations | SPA + `/api/app/*`; `/api/v1/*` + `/mcp` (Bearer `gx_live_` keys only) |
 | `owner.geraiexpress.com` · `owner.geraiexpress.localhost` | `PLATFORM_OWNER` | Super Admin | SPA + `/api/owner/*` + `/internal/ops/*` |
 | `hooks.geraiexpress.com` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `POST /webhooks/mengantar/:token` (bodiless 404 otherwise) |
-| `<slug>.gerai.cc` / custom · `<slug>.gerai.localhost` | `TENANT_MINISITE` | public | mini-site SSR (`/`, `/kirim`, `/kirim/:slug`, `/lacak`, `/lacak/:slug/buka`, `/area`, robots/sitemap), public `/mcp`; custom `www` twin → 301 to the root; canonical = active custom host |
-| `relay.geraiexpress.com` | — | Worker → VPS relay | never served by the Worker (404, also `/healthz`) |
+| `<slug>.geraimitra.com` / custom · `<slug>.geraimitra.localhost` | `TENANT_MINISITE` | public | mini-site SSR (`/`, `/kirim`, `/kirim/:slug`, `/lacak`, `/lacak/:slug/buka`, `/area`, robots/sitemap), public `/mcp`; custom `www` twin → 301 to the root; canonical = active custom host |
+| `relay.geraiexpress.com` | — | Worker → relay container on `99ribu-prod` (Reserved IPv4 `149.28.129.53`, DEC-235) | never served by the Worker (404, also `/healthz`) |
 
 Request order (`apps/worker/src/index.ts`): `/healthz` on eligible hosts → `host/classify.ts` (normalise, shape, DCV,
 platform match, D1 `tenant_hostnames` ≤ 30 s cache, 404/403/503) → context router (foreign API families → 404).
@@ -111,4 +111,4 @@ Queues (all consumed): `gx-mengantar-webhooks`, `gx-bulk` (row check + serialize
 
 `docs/runbooks/`: `email-deliverability.md` (TASK-112), `backups-and-restore.md` (TASK-603), `partner-relay-production.md`
 (TASK-601), `production-zones.md` (TASK-602). Worker routes per environment live in `wrangler.jsonc` (production: Custom
-Domains for platform hosts, `*/*` + `cname.gerai.cc/*` on `gerai.cc`; staging: `*-staging` hosts + `*-stg.gerai.cc/*`).
+Domains for platform hosts, `*/*` + `cname.geraimitra.com/*` on `geraimitra.com`; staging: `*-staging` hosts + `*-stg.geraimitra.com/*`).

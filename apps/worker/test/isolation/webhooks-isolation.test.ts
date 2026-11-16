@@ -42,8 +42,8 @@ describe("cross-tenant webhook tokens", () => {
   it("webhook paths answer only on hooks.; app., owner. and tenant hosts give a neutral 404", async () => {
     const a = await seedConnected("isoc")
     const { token } = await configureWebhook(a.cookie)
-    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES ('isoc.gerai.localhost', ?, 'platform_subdomain', 'active', ?)").bind(a.tenantId, Date.now()).run()
-    for (const host of ["app.geraiexpress.localhost", "owner.geraiexpress.localhost", "isoc.gerai.localhost"]) {
+    await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at) VALUES ('isoc.geraimitra.localhost', ?, 'platform_subdomain', 'active', ?)").bind(a.tenantId, Date.now()).run()
+    for (const host of ["app.geraiexpress.localhost", "owner.geraiexpress.localhost", "isoc.geraimitra.localhost"]) {
       const r = await exports.default.fetch(`http://${host}:8787/webhooks/mengantar/${token}`, { method: "POST", body: "{}" })
       expect(r.status, host).toBe(404)
     }

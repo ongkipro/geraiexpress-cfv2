@@ -38,14 +38,14 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
   it("activates the mini-site, stores the key encrypted, enqueues exactly one email, audits", async () => {
     const { tenantId, applicationId } = await submit("berkahjaya", "pemilik.berkah@contoh.test")
     // Before approval the mini-site is unknown (pending) → neutral 404.
-    expect((await exports.default.fetch("http://berkahjaya.gerai.localhost:8787/")).status).toBe(404)
+    expect((await exports.default.fetch("http://berkahjaya.geraimitra.localhost:8787/")).status).toBe(404)
     const admin = await adminSession()
     expect((await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, {})).status).toBe(422) // reason required
     const r = await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, { reason: "data lengkap dan valid" })
     expect(r.status).toBe(200)
     expect(await r.json()).toMatchObject({ data: { slug: "berkahjaya", provisioning: { state: "connected" } } })
     hostCache.clear()
-    expect((await exports.default.fetch("http://berkahjaya.gerai.localhost:8787/")).status).toBe(200)
+    expect((await exports.default.fetch("http://berkahjaya.geraimitra.localhost:8787/")).status).toBe(200)
     // Key inside the tenant object only, encrypted.
     await runInDurableObject(vaultFor(env, tenantId), (_i, s) => {
       const row = s.storage.sql.exec<{ encrypted_api_key: string; onboarding_state: string; key_version: number }>("SELECT encrypted_api_key, onboarding_state, key_version FROM mengantar_connections").one()
@@ -166,11 +166,11 @@ describe("suspend / unsuspend and masking controls", () => {
     const admin = await adminSession()
     await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, { reason: "data lengkap" })
     hostCache.clear()
-    expect((await exports.default.fetch("http://bekugerai.gerai.localhost:8787/")).status).toBe(200)
+    expect((await exports.default.fetch("http://bekugerai.geraimitra.localhost:8787/")).status).toBe(200)
     expect((await ownerPost("/gerai/bekugerai/status", admin, { status: "suspended", reason: "laporan penipuan" })).status).toBe(200)
-    expect((await exports.default.fetch("http://bekugerai.gerai.localhost:8787/")).status).toBe(403)
+    expect((await exports.default.fetch("http://bekugerai.geraimitra.localhost:8787/")).status).toBe(403)
     expect((await ownerPost("/gerai/bekugerai/status", admin, { status: "active", reason: "sudah diverifikasi" })).status).toBe(200)
-    expect((await exports.default.fetch("http://bekugerai.gerai.localhost:8787/")).status).toBe(200)
+    expect((await exports.default.fetch("http://bekugerai.geraimitra.localhost:8787/")).status).toBe(200)
     const m = await ownerPost("/gerai/bekugerai/masking", admin, { enabled: true, dailyQuota: 50, reason: "gerai terpercaya" })
     expect(await m.json()).toMatchObject({ data: { maskingEnabled: true, dailyQuota: 50 } })
     expect((await ownerPost("/gerai/bekugerai/masking", admin, { enabled: true, dailyQuota: null, reason: "tanpa batas" })).status).toBe(200)

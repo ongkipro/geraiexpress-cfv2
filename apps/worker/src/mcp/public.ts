@@ -1,4 +1,4 @@
-// Public mini-site MCP on `<slug>.gerai.cc/mcp` (TASK-504, spec 08 §4.2): four tenant-scoped tools for public
+// Public mini-site MCP on `<slug>.geraimitra.com/mcp` (TASK-504, spec 08 §4.2): four tenant-scoped tools for public
 // shopping assistants. Tenant comes only from the classified host. No key: per-IP rate limit on every call, and
 // pre-booking drafts are capped per IP (5/h, same as the form) and per gerai (50/WIB day). Prices are the publish
 // tariff only; tracking returns initials-only names (same `publicTrack` as `/lacak`).

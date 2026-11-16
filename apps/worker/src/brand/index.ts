@@ -57,7 +57,7 @@ const home = (app: string) => `<div class="wrap hero"><h1>Kasir gerai kirim pake
 <div><h3>Kirim atas nama toko</h3><p>Reseller dan dropshipper bisa mencetak nama tokonya sendiri; paket retur tetap kembali ke gerai.</p></div>
 </div></div></section>
 <section><div class="wrap cols cols2" style="display:grid;gap:28px"><div><h2>Uang yang bisa dipercaya</h2><p class="note">Saldo Mengantar disinkronkan dari tagihan resmi, COD cair dicocokkan per resi, dan laba kas hanya dihitung setelah uangnya benar-benar masuk.</p></div>
-<div><h2>Halaman gerai gratis</h2><p class="note">Setiap gerai mendapat alamat <strong>namagerai.gerai.cc</strong> untuk cek ongkir, isi alamat dari rumah lewat QR, dan lacak paket tanpa membuka data pribadi penerima.</p></div></div></section>
+<div><h2>Halaman gerai gratis</h2><p class="note">Setiap gerai mendapat alamat <strong>namagerai.geraimitra.com</strong> untuk cek ongkir, isi alamat dari rumah lewat QR, dan lacak paket tanpa membuka data pribadi penerima.</p></div></div></section>
 <section class="band"><div class="wrap"><h2>Cukup perangkat yang sudah ada</h2><p class="note" style="max-width:62ch">HP Android atau laptop, timbangan digital, dan printer thermal murah sudah cukup. Tidak ada mesin khusus yang wajib dibeli.</p>
 <div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai</a></div></div></section>`
 
@@ -105,7 +105,7 @@ const SIM_SCRIPT = `<script>
 const R=${JSON.stringify(SIM_RATES)},C=${JSON.stringify(SIM_CITIES)};const rp=n=>'Rp '+n.toLocaleString('id-ID');
 const price=r=>{const kg=Math.max(1,Math.ceil((parseInt(document.getElementById('berat').value.replace(/\\D/g,''))||0)/1000));return Math.round(r.base*C[document.getElementById('kota').value][1]*kg/500)*500};
 function draw(){const ul=document.getElementById('rates');ul.innerHTML='';const list=R.map(r=>({...r,p:price(r)})).sort((a,b)=>a.p-b.p);for(const r of list){const li=document.createElement('li');li.innerHTML='<span>'+r.name+'<br><span class="note">'+r.eta+'</span></span>';const b=document.createElement('button');b.type='button';b.textContent=rp(r.p);b.setAttribute('aria-label','Pilih '+r.name+' '+rp(r.p));b.onclick=()=>receipt(r);li.append(b);ul.append(li)}}
-function receipt(r){const inv='INV '+'DEMO'+String(Math.floor(Date.now()/1000)%1000).padStart(3,'0');document.getElementById('struk').textContent=['GERAI CONTOH','Jl. Contoh No. 1','','No: '+inv,'Ekspedisi: '+r.name,'Tujuan: '+C[document.getElementById('kota').value][0],'Berat: '+document.getElementById('berat').value+' g','','Ongkir        '+rp(r.p),'Total Dibayar '+rp(r.p),'Bayar: '+document.getElementById('bayar').value,'','Lacak: namagerai.gerai.cc/lacak','(simulasi — bukan resi sungguhan)'].join('\\n')}
+function receipt(r){const inv='INV '+'DEMO'+String(Math.floor(Date.now()/1000)%1000).padStart(3,'0');document.getElementById('struk').textContent=['GERAI CONTOH','Jl. Contoh No. 1','','No: '+inv,'Ekspedisi: '+r.name,'Tujuan: '+C[document.getElementById('kota').value][0],'Berat: '+document.getElementById('berat').value+' g','','Ongkir        '+rp(r.p),'Total Dibayar '+rp(r.p),'Bayar: '+document.getElementById('bayar').value,'','Lacak: namagerai.geraimitra.com/lacak','(simulasi — bukan resi sungguhan)'].join('\\n')}
 for(const id of ['kota','berat'])document.getElementById(id).addEventListener('input',draw);draw();
 </script>`
 

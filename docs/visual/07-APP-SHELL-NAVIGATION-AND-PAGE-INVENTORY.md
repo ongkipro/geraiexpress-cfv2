@@ -17,7 +17,7 @@
 ```text
 ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
 │ [G] Berkah Jaya  ▾ │ Dashboard          [🔍 Cari INV / AWB / HP  Ctrl+K]  [🔔 3] [Ani ▾]          │ ← header 64 px
-│ berkahjaya.gerai.cc│                                          [📷 Scan QR]  [+ Kiriman Baru]      │
+│ berkahjaya.geraimi…│                                          [📷 Scan QR]  [+ Kiriman Baru]      │
 ├────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
 │ ● Dashboard        │                                                                              │
 │ ○ Buat Pengiriman  │   PAGE BODY (max width 1440, padding 24 × 16)                                │
@@ -154,7 +154,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/pengawasan` | Pengawasan | — | tabs `Pantauan Kiriman & Sync · Radar Risiko COD`; cross-tenant search is read-only |
 | `/sistem` | Sistem & Audit | `Simpan` on `Profil Perusahaan` only (TOTP + reason) | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan` |
 
-### 3.4 Public (`geraiexpress.com`, `<slug>.gerai.cc`)
+### 3.4 Public (`geraiexpress.com`, `<slug>.geraimitra.com`)
 
 Public pages follow `docs/visual/03` and the public size floor (body ≥ 17 px, nothing under 14 px).
 Routes: `geraiexpress.com/ · /fitur · /cara-kerja · /simulasi-kasir · /hubungi-kami · /ketentuan · /privasi`;

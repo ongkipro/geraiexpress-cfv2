@@ -7,7 +7,7 @@ This document details the end-to-end UX of creating a shipment and choosing a co
 ## 1. Six-Stage Single-Screen Flow (Zero Page-Reload Friction)
 
 ```text
-[Click "+ Kiriman Baru"]  ──or──►  [Scan QR / Enter `INV` from `<slug>.gerai.cc`]
+[Click "+ Kiriman Baru"]  ──or──►  [Scan QR / Enter `INV` from `<slug>.geraimitra.com`]
           │                                            │
           ▼                                            ▼
  Allocates short `slug` (`8k4m2p7`)            Loads existing `8k4m2p7` draft

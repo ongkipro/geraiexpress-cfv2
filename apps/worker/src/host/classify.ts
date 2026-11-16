@@ -22,7 +22,7 @@ export type Classified =
 export interface HostNames {
   /** `geraiexpress.com` in production, `geraiexpress.localhost` locally. */
   platformApex: string
-  /** `gerai.cc` in production, `gerai.localhost` locally. */
+  /** `geraimitra.com` in production, `geraimitra.localhost` locally. */
   tenantZone: string
   /** Staging uses `app-staging.` etc. (spec 07 §7). */
   stagingLabels?: boolean

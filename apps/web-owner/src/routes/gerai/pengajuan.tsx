@@ -51,7 +51,7 @@ export function PengajuanPage() {
             <Row label="Pemohon">{data.applicant_name} · {data.applicant_email}</Row>
             <Row label="WhatsApp gerai"><span className="tabular-nums">{maskPhone(data.contact_whatsapp)}</span></Row>
             <Row label="Email akun Mengantar">{data.seller_email}</Row>
-            <Row label="Alamat gerai"><span className="font-mono">{data.slug}.gerai.cc</span></Row>
+            <Row label="Alamat gerai"><span className="font-mono">{data.slug}.geraimitra.com</span></Row>
             <Row label="Titik jemput">{data.outlet.streetAddress}, {data.outlet.areaLabel}</Row>
             <Row label="Penanggung jawab">{data.outlet.picName} · <span className="tabular-nums">{maskPhone(data.outlet.picPhone)}</span></Row>
             <Row label="Diajukan">{formatDate(data.submitted_at)}</Row>
@@ -62,7 +62,7 @@ export function PengajuanPage() {
           <ul className="flex flex-col gap-3">
             <li><StatusChip tone={data.slugReady ? "safe" : "danger"}>{data.slugReady ? "Alamat gerai siap" : "Alamat gerai sudah dipakai"}</StatusChip></li>
             <li><StatusChip tone="primary">Jalur Partner: {data.partnerTransport === "relay" ? "relay IPv4 statis" : "langsung (sandbox)"}</StatusChip></li>
-            <li className="text-base text-muted-foreground">Menyetujui akan membuka akun seller Mengantar atas nama gerai, mengaktifkan {data.slug}.gerai.cc, dan mengirim email keputusan.</li>
+            <li className="text-base text-muted-foreground">Menyetujui akan membuka akun seller Mengantar atas nama gerai, mengaktifkan {data.slug}.geraimitra.com, dan mengirim email keputusan.</li>
           </ul>
           {!decided ? (
             <p className="mt-6 text-base text-muted-foreground md:hidden">Persetujuan sebaiknya dilakukan di layar ≥ 768 px (tablet atau komputer) agar data bisa diperiksa utuh.</p>

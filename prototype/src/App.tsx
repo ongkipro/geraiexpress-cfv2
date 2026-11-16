@@ -132,7 +132,7 @@ export default function App() {
                   </span>
                   <span className="flex min-w-0 flex-col leading-tight">
                     <span className="truncate font-semibold">Berkah Jaya</span>
-                    <span className="truncate text-sm text-muted-foreground">berkahjaya.gerai.cc</span>
+                    <span className="truncate text-sm text-muted-foreground">berkahjaya.geraimitra.com</span>
                   </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

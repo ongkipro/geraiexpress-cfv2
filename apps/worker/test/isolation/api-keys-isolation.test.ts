@@ -33,7 +33,7 @@ describe("API key isolation", () => {
     expect(sendersA).toContain(a.sender)
     expect(sendersA).not.toContain(b.sender)
     // Other hosts: the Partner API exists only on app.
-    for (const host of ["http://owner.geraiexpress.localhost:8787", "http://geraiexpress.localhost:8787", "http://apiisoa.gerai.localhost:8787", "http://hooks.geraiexpress.localhost:8787"]) {
+    for (const host of ["http://owner.geraiexpress.localhost:8787", "http://geraiexpress.localhost:8787", "http://apiisoa.geraimitra.localhost:8787", "http://hooks.geraiexpress.localhost:8787"]) {
       expect((await v1(host, "/areas?q=tebet", ka)).status, host).toBe(404)
     }
     await env.DB.prepare("UPDATE tenants SET status = 'suspended' WHERE id = ?").bind(a.tenantId).run()

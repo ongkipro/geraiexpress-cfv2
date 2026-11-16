@@ -31,12 +31,12 @@ export function probeUrlsFor(probes, env, port = 8787) {
       const tail = `${u.pathname}${u.search}`
       let host = u.hostname
       if (env === "local") {
-        host = host.replace(/geraiexpress\.com$/, "geraiexpress.localhost").replace(/gerai\.cc$/, "gerai.localhost")
+        host = host.replace(/geraiexpress\.com$/, "geraiexpress.localhost").replace(/geraimitra\.com$/, "geraimitra.localhost")
         return { ...p, url: `http://${host}:${port}${tail}`, maxMs: p.maxMs * 3 }
       }
       if (env === "staging") {
-        const m = /^([a-z0-9-]+)\.gerai\.cc$/.exec(host)
-        host = STAGING_PLATFORM[host] ?? (m ? `${m[1]}-stg.gerai.cc` : host)
+        const m = /^([a-z0-9-]+)\.geraimitra\.com$/.exec(host)
+        host = STAGING_PLATFORM[host] ?? (m ? `${m[1]}-stg.geraimitra.com` : host)
       }
       return { ...p, url: `https://${host}${tail}` }
     })

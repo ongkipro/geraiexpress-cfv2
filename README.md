@@ -1,6 +1,6 @@
 # GeraiExpress v2 (`geraiexpress-cfv2`)
 
-**Cloudflare-native multi-courier counter POS, Mengantar financial reconciliation engine, and white-label outlet mini-site platform (`*.gerai.cc`) for Indonesian retail shipping counters.**
+**Cloudflare-native multi-courier counter POS, Mengantar financial reconciliation engine, and white-label outlet mini-site platform (`*.geraimitra.com`) for Indonesian retail shipping counters.**
 
 > **Repository status:** Milestone M0 — Architecture, PRD, Domain Contracts, and Visual Specifications complete. No runtime code or infrastructure is deployed yet.
 
@@ -17,7 +17,7 @@
 
 Research across 11 Indonesian multi-courier platforms, 396 recent app reviews (177 negative), public help/terms pages, and REA static/source-map teardowns (synthesis and traceability: `docs/research/01-COMPETITOR-RESEARCH-AND-FEATURE-TRACEABILITY.md`) exposed two structural gaps in the market:
 
-1. **Product gap:** Most platforms are online-seller warehouse tools (OMS) with an "Agent" landing page bolted on. None combine (a) quote-locked counter receipts (`Struk Jujur`), (b) per-shift cash drawer reconciliation, (c) 58mm Web-Bluetooth label+receipt printing, (d) three-way sender/recipient/outlet masking with **centralized pickup at the outlet** and structured **return intake**, (e) precision financial sync with Mengantar's ledger, and (f) an instant white-label promo & QR pre-booking site per outlet (`<slug>.gerai.cc`).
+1. **Product gap:** Most platforms are online-seller warehouse tools (OMS) with an "Agent" landing page bolted on. None combine (a) quote-locked counter receipts (`Struk Jujur`), (b) per-shift cash drawer reconciliation, (c) 58mm Web-Bluetooth label+receipt printing, (d) three-way sender/recipient/outlet masking with **centralized pickup at the outlet** and structured **return intake**, (e) precision financial sync with Mengantar's ledger, and (f) an instant white-label promo & QR pre-booking site per outlet (`<slug>.geraimitra.com`).
 2. **Runtime gap:** Running a heavy Next.js/OpenNext server adapter on Workers created bundle bloat and friction for multi-domain routing. v2 uses **Hono + Vite React 19 PWA + Hono JSX SSR + D1 + Durable Objects + R2 + Queues** for near-zero cold starts and atomic per-outlet serialization.
 
 ---
@@ -30,7 +30,7 @@ Research across 11 Indonesian multi-courier platforms, 396 recent app reviews (1
 | `app.geraiexpress.com` | **Gerai Admin** (Owner) & **Kasir** (Operator) | Counter POS, 58mm/10×15 printing, shift drawer, pickup manifests, return intake, contacts, Mengantar-synced finance, API/MCP keys | React 19 + Vite PWA + Hono API |
 | `owner.geraiexpress.com` | **Super Admin** (Platform) | Outlet approval → Mengantar seller provisioning, per-outlet × courier discount/cashback rules, cross-outlet risk & sync oversight | React 19 + Vite SPA + TOTP (`aal2`) |
 | `hooks.geraiexpress.com` | Mengantar servers | Cookie-less HMAC-verified shipment status webhook receiver → Cloudflare Queue | Hono Worker → Queue |
-| `<slug>.gerai.cc` *(+ Pro Custom Domains)* | Walk-in neighbors & local resellers/dropshippers | **Outlet White-Label Mini-Site**: store profile, hours, map, WA button, rate check, **QR Pre-Booking**, and privacy-safe tracking | Hono JSX SSR + Cloudflare for SaaS |
+| `<slug>.geraimitra.com` *(+ Pro Custom Domains)* | Walk-in neighbors & local resellers/dropshippers | **Outlet White-Label Mini-Site**: store profile, hours, map, WA button, rate check, **QR Pre-Booking**, and privacy-safe tracking | Hono JSX SSR + Cloudflare for SaaS |
 
 ---
 

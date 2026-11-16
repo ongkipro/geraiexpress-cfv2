@@ -6,7 +6,7 @@ const HOSTS = [
   "app.geraiexpress.localhost",
   "owner.geraiexpress.localhost",
   "hooks.geraiexpress.localhost",
-  "berkahjaya.gerai.localhost",
+  "berkahjaya.geraimitra.localhost",
 ]
 
 describe("GET /healthz (spec 07 §2)", () => {

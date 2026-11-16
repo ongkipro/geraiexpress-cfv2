@@ -22,7 +22,7 @@ test("Domain Sendiri: tambah, lihat record DNS, periksa lagi, hapus", async ({ p
   await expect(page.getByText("Domain didaftarkan. Pasang record DNS di bawah.")).toBeVisible()
   await expect(page.getByText("Menunggu DNS").first()).toBeVisible()
   await expect(page.getByText(`diarahkan ke ${domain}`)).toBeVisible()
-  await expect(page.locator("code:visible", { hasText: "cname.gerai.localhost" }).first()).toBeVisible()
+  await expect(page.locator("code:visible", { hasText: "cname.geraimitra.localhost" }).first()).toBeVisible()
   // The queue creates the hostname at the (fake) Cloudflare; Periksa Lagi shows the ownership TXT.
   await expect(async () => {
     await page.getByRole("button", { name: "Periksa Lagi" }).click()

@@ -15,14 +15,14 @@ describe("probes (OBSERVABILITY.md)", () => {
       "http://app.geraiexpress.localhost:8787/healthz",
       "http://owner.geraiexpress.localhost:8787/healthz",
       "http://hooks.geraiexpress.localhost:8787/healthz",
-      "http://probe.gerai.localhost:8787/healthz",
+      "http://probe.geraimitra.localhost:8787/healthz",
     ])
     expect(probeUrlsFor(PROBES, "staging").map((p) => p.url)).toEqual([
       "https://staging.geraiexpress.com/healthz",
       "https://app-staging.geraiexpress.com/healthz",
       "https://owner-staging.geraiexpress.com/healthz",
       "https://hooks-staging.geraiexpress.com/healthz",
-      "https://probe-stg.gerai.cc/healthz",
+      "https://probe-stg.geraimitra.com/healthz",
     ])
     expect(probeUrlsFor(PROBES, "production").map((p) => p.url)).toEqual(PROBES.map((p) => p.url))
     expect(() => probeUrlsFor(PROBES, "stg")).toThrow()

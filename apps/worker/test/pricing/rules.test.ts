@@ -132,7 +132,7 @@ describe("request list and exposure", () => {
     await env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'cashier', 'active', ?)").bind(g.tenantId, k.id, Date.now()).run()
     expect((await appGet("/settings/couriers", k.cookie)).status).toBe(403)
     // Public/tenant host: nothing.
-    const site = await exports.default.fetch(`http://tarifdto.gerai.localhost:8787/`)
+    const site = await exports.default.fetch(`http://tarifdto.geraimitra.localhost:8787/`)
     expect(await site.text()).not.toMatch(/assigned_bps|diskon/i)
   })
 })

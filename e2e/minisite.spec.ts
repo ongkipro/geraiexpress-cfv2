@@ -12,7 +12,7 @@ test("Mini-site: QR dari rumah → kasir buka INV yang sama → lacak tanpa data
   await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Mini", password: "mini-e2e-kuat-123" } })
   const tenant = `m${Date.now().toString(36)}`
   expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: tenant, name: "Gerai Mini", connect: true } })).status()).toBe(201)
-  const site = APP.replace("app.geraiexpress", `${tenant}.gerai`)
+  const site = APP.replace("app.geraiexpress", `${tenant}.geraimitra`)
 
   await page.goto(`${site}/kirim`)
   await expect(page.getByRole("heading", { name: "Kirim dari Rumah" })).toBeVisible()
