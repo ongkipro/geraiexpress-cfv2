@@ -248,4 +248,31 @@ describe("custom domain lifecycle", () => {
     await reapHosts(env, Date.now())
     expect((await row("www.tokosetengah.id"))!.state).toBe("purged")
   })
+
+  it("a lost race undoes only this request's rows, never a concurrent winner's (same tenant, same ms) (Sol delta C-8)", async () => {
+    const { requestDomain } = await import("../../src/hostnames/service")
+    const t = await pro("tokobalap")
+    const now = Date.now()
+    // A concurrent request of the same tenant commits `www.tokobalap.id` between our precheck and our batch.
+    const realBatch = env.DB.batch.bind(env.DB)
+    let injected = false
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "batch") {
+          return async (stmts: D1PreparedStatement[]) => {
+            if (!injected) {
+              injected = true
+              await env.DB.prepare("INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, dns_branch, ssl_method, created_at, state_changed_at, probe_failures, request_id) VALUES ('www.tokobalap.id', ?1, 'custom', 'primary', 'pending', 'www_primary', 'http', ?2, ?2, 0, 'pemenang')").bind(t.tenantId, now).run()
+            }
+            return realBatch(stmts)
+          }
+        }
+        const v = Reflect.get(target, prop)
+        return typeof v === "function" ? v.bind(target) : v
+      },
+    })
+    await expect(requestDomain({ ...env, DB: db }, t.tenantId, "tokobalap.id", "root_primary", now)).rejects.toMatchObject({ code: "DOMAIN_TAKEN" })
+    expect(await row("www.tokobalap.id")).toMatchObject({ state: "pending", request_id: "pemenang" })
+    expect((await row("tokobalap.id"))!.state).toBe("purged")
+  })
 })

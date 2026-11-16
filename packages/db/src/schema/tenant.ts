@@ -598,7 +598,9 @@ export const financeSyncState = sqliteTable("finance_sync_state", {
   lastManualAt: integer("last_manual_at"),
   lastPendingRescanAt: integer("last_pending_rescan_at"),
   runningSince: integer("running_since"),
-    backfillCursor: text("backfill_cursor"),
+  backfillCursor: text("backfill_cursor"),
+  rescanCursor: text("rescan_cursor"),
+  rescanRange: text("rescan_range"),
 })
 
 // TASK-403 pickup manifests (Surat Jalan).

@@ -72,13 +72,15 @@ export async function request(opts: TransportOptions, spec: RequestSpec): Promis
   const templ = keyed ? `/api/public/${KEY_PLACEHOLDER}${spec.path}` : spec.path
   if (keyed && (!opts.apiKey || /[/?#\s]/.test(opts.apiKey))) throw new MengantarError("envelope", templ, null, "KEY_MISSING", "Kunci Mengantar gerai belum tersedia.")
   // Validate the origin before the key enters any string (a bad origin must never throw with the key in it).
-  let base: URL
+  let url: URL
   try {
-    base = new URL(opts.origin)
+    const base = new URL(opts.origin)
+    if (base.protocol !== "https:" && base.protocol !== "http:") throw new Error("scheme")
+    url = new URL(base.origin + base.pathname.replace(/\/$/, "") + (keyed ? templ.replace(KEY_PLACEHOLDER, encodeURIComponent(opts.apiKey)) : templ))
   } catch {
+    // Fixed message only: the rejected input (which may contain the key) never leaves this boundary.
     throw new MengantarError("envelope", templ, null, "BAD_ORIGIN", "Konfigurasi Mengantar tidak valid.")
   }
-  const url = new URL(base.origin + base.pathname.replace(/\/$/, "") + (keyed ? templ.replace(KEY_PLACEHOLDER, encodeURIComponent(opts.apiKey)) : templ))
   for (const [k, v] of Object.entries(spec.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v))
   let res: Response
   try {

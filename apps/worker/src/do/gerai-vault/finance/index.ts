@@ -152,7 +152,11 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
       } else unlinked++
       if (cleared) flag(sql, id, "adjustment", ref?.slug ?? null, null, int(raw.amount), "Penyesuaian berat/tujuan dari Mengantar", now)
     } else if (returned) {
-      const ref = findSlug(sql, { awb: str(raw.cnote_no, 60) ?? returned[1]!, order: str(raw.ORDER_ID, 60) })
+      // Top-level references, then sub-item AWB/order, then the description token.
+      const ref =
+        findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ??
+        subs.map((x) => findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) })).find(Boolean) ??
+        findSlug(sql, { awb: returned[1]!, order: returned[1]! })
       if (!ref) {
         unlinked++
         flag(sql, id, "unmatched", null, null, int(raw.amount), `Ongkir retur untuk resi ${returned[1]} tidak ditemukan di gerai ini`, now)
@@ -160,10 +164,15 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         linked++
         if (subs.length) subs.forEach((_s, i) => link(i, ref))
         else sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, returned[1]!, int(raw.amount), ref.slug)
-        // Sum of every CLEARED return debit linked to this INV (re-reading an invoice never double-counts).
+        // Sum of every CLEARED return debit linked to this INV, per invoice first: the sub-item amounts when known,
+        // else the invoice amount ONCE (never multiplied across null-amount sub-items); re-reads never double-count.
         sql.exec(
-          `UPDATE shipments SET reconciled_extra_adjustment_idr = (SELECT SUM(ABS(COALESCE(si.amount_idr, m.amount_idr))) FROM mengantar_invoice_subitems si JOIN mengantar_invoice_mirror m ON m.invoice_id = si.invoice_id
-             WHERE si.shipment_slug = ?1 AND m.type = 'typePayment' AND m.status = 'statusCleared' AND LOWER(COALESCE(m.description, '')) LIKE '%returned order%'), updated_at = ?2 WHERE slug = ?1`,
+          `UPDATE shipments SET reconciled_extra_adjustment_idr = (
+             SELECT SUM(per_invoice) FROM (
+               SELECT CASE WHEN COUNT(si.amount_idr) > 0 THEN SUM(ABS(si.amount_idr)) ELSE ABS(MAX(m.amount_idr)) END AS per_invoice
+               FROM mengantar_invoice_subitems si JOIN mengantar_invoice_mirror m ON m.invoice_id = si.invoice_id
+               WHERE si.shipment_slug = ?1 AND m.type = 'typePayment' AND m.status = 'statusCleared' AND LOWER(COALESCE(m.description, '')) LIKE '%returned order%'
+               GROUP BY si.invoice_id)), updated_at = ?2 WHERE slug = ?1`,
           ref.slug,
           now,
         )
@@ -192,10 +201,15 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
   } else if (type === "typeRefund") {
     const m = /order\s+([A-Za-z0-9-]+)\s*$/i.exec(description ?? "")
     const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? m?.[1] ?? null
-    const ref = awb || str(raw.ORDER_ID, 60) ? findSlug(sql, { awb, order: str(raw.ORDER_ID, 60) }) : null
+    // Top-level AWB/order, then every sub-item AWB/order, then the description token (as AWB or order id).
+    const ref =
+      findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ??
+      subs.map((x) => findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) })).find(Boolean) ??
+      (m?.[1] ? findSlug(sql, { awb: m[1], order: m[1] }) : null)
     if (ref) {
       linked++
       if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
+      else subs.forEach((_s, i) => link(i, ref))
       if (cleared) markClaimPaid(sql, ref.slug, id, now)
     } else {
       unlinked++

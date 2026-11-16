@@ -123,6 +123,43 @@ describe("registration read-back safety (final Carbon pass, M2A #5)", () => {
   })
 })
 
+describe("BYOK vs Partner connection (Sol delta A-3)", () => {
+  it("the object itself refuses a BYOK key over a Partner-connected seller (race-safe, at commit time)", async () => {
+    const { tenantId, applicationId } = await submit("balapan", "balapan@contoh.test")
+    await ownerPost(`/gerai/applications/${applicationId}/approve`, await adminSession(), { reason: "lolos" })
+    const before = await vaultFor(env, tenantId).connectionView(tenantId)
+    expect(before).toMatchObject({ ok: true, value: { onboardingState: "connected" } })
+    const r = await vaultFor(env, tenantId).recordOnboarding(tenantId, { environment: "sandbox", state: "byok_connected", apiKey: "BYOK-KEY-LAMBAT-99", sellerId: null, externalUserId: null })
+    expect(r).toEqual({ ok: false, refused: "ALREADY_CONNECTED" })
+    expect(await vaultFor(env, tenantId).connectionView(tenantId)).toEqual(before)
+  })
+})
+
+describe("decision races (Sol delta A-5)", () => {
+  it("two rejections by the same admin in the same millisecond: one audit row, one email, one tenant update", async () => {
+    const { rejectApplication } = await import("../../src/onboarding/service")
+    const { tenantId, applicationId } = await submit("kembar", "kembar@contoh.test")
+    const now = Date.now()
+    const input = { applicationId, actorId: "sa-race", reason: "data belum lengkap", origin: "http://owner.geraiexpress.localhost:8787", now }
+    const results = await Promise.allSettled([rejectApplication(env, input), rejectApplication(env, input)])
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1)
+    const audits = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE tenant_id = ? AND action = 'tenant.reject'").bind(tenantId).first<{ n: number }>()
+    expect(audits?.n).toBe(1)
+    const mails = await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'application_status' AND substr(id, 1, ?) = ?").bind(`app-decision:${applicationId}:`.length, `app-decision:${applicationId}:`).first<{ n: number }>()
+    expect(mails?.n).toBe(1)
+  })
+
+  it("two approvals in the same millisecond bump the routing version once", async () => {
+    const { approveApplication } = await import("../../src/onboarding/service")
+    const { tenantId, applicationId } = await submit("kembardua", "kembardua@contoh.test")
+    const v0 = (await env.DB.prepare("SELECT routing_version AS v FROM tenants WHERE id = ?").bind(tenantId).first<{ v: number }>())!.v
+    const input = { applicationId, actorId: "sa-race", reason: "lolos", origin: "http://owner.geraiexpress.localhost:8787", now: Date.now() }
+    await Promise.allSettled([approveApplication(env, input), approveApplication(env, input)])
+    expect((await env.DB.prepare("SELECT routing_version AS v FROM tenants WHERE id = ?").bind(tenantId).first<{ v: number }>())!.v).toBe(v0 + 1)
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE tenant_id = ? AND action = 'tenant.approve'").bind(tenantId).first<{ n: number }>())!.n).toBe(1)
+  })
+})
+
 describe("suspend / unsuspend and masking controls", () => {
   it("suspend → 403 on the mini-site (within the cache window), audited; masking kill-switch + quota with TOTP + reason", async () => {
     const { tenantId, applicationId } = await submit("bekugerai", "beku@contoh.test")

@@ -25,6 +25,8 @@ export const mockFaults: {
   listIgnoresFilter?: true
   /** Every Public API call answers `403 IP_NOT_ALLOWED` (DEC-232 alert drill). */
   publicIpNotAllowed?: true
+  /** `POST /address` waits on this promise first (tests interleave a request while dispatch is awaiting). */
+  addressGate?: Promise<void>
 } = {}
 
 /** Seller balance per mock key (IDR); an order the balance cannot cover is created unpaid (no AWB). */
@@ -103,6 +105,11 @@ export const mockFetch: typeof fetch = async (input, init) => {
     if (created) return json(200, { success: true, data: created })
     const o = mockOrders.get(id)
     return o ? json(200, { success: true, data: o }) : json(404, { success: false, code: "ORDER_NOT_FOUND", message: "not found" })
+  }
+  if (/^\/api\/public\/[^/]+\/address$/.test(p) && init?.method === "POST" && mockFaults.addressGate) {
+    const gate = mockFaults.addressGate
+    delete mockFaults.addressGate
+    await gate
   }
   if (/^\/api\/public\/[^/]+\/address$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: body._id ?? hex24() } })
   if (/^\/api\/public\/[^/]+\/time$/.test(p) && init?.method === "POST") return json(200, { success: true, data: { _id: hex24(), date: body.date, time: body.time } })

@@ -56,6 +56,7 @@ export const tenantHostnames = sqliteTable(
     cfSslStatus: text("cf_ssl_status"),
     verificationErrorsJson: text("verification_errors_json"),
     dnsBranch: text("dns_branch", { enum: ["subdomain", "root_primary", "www_primary"] }),
+    requestId: text("request_id"),
     createdAt: integer("created_at").notNull(),
     activatedAt: integer("activated_at"),
     lastCheckedAt: integer("last_checked_at"),
@@ -293,6 +294,7 @@ export const tenantApplications = sqliteTable(
     submittedAt: integer("submitted_at"),
     decidedAt: integer("decided_at"),
     decidedBy: text("decided_by"),
+    decisionNonce: text("decision_nonce"),
     decisionReason: text("decision_reason"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
@@ -448,6 +450,19 @@ export const apiKeyDailyUsage = sqliteTable(
     issuedCount: integer("issued_count").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.keyId, t.wibDay] })],
+)
+
+export const apiKeySpendItems = sqliteTable(
+  "api_key_spend_items",
+  {
+    item: text("item").primaryKey(),
+    keyId: text("key_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    wibDay: text("wib_day").notNull(),
+    amountIdr: integer("amount_idr").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("api_key_spend_items_key").on(t.keyId, t.wibDay)],
 )
 
 export const publicApiEvents = sqliteTable(

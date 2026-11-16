@@ -79,7 +79,9 @@ export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoos
       .catch(() => setPos({ packingItems: [], serviceFeeIdr: null, showCommission: false }))
   }, [])
   const packingIdr = pos?.packingItems.find((i) => i.name === packing)?.priceIdr ?? 0
-  const serviceFeeIdr = serviceFee && pos?.serviceFeeIdr ? pos.serviceFeeIdr : 0
+  // Biaya Layanan Loket applies to Non-COD and COD Ongkir only (never COD Barang).
+  const feeAllowed = kind !== "cod_goods"
+  const serviceFeeIdr = feeAllowed && serviceFee && pos?.serviceFeeIdr ? pos.serviceFeeIdr : 0
   const [data, setData] = useState<QuoteResponse | null>(null)
   const [req, setReq] = useState<QuoteRequest | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -167,7 +169,7 @@ export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoos
             </select>
           </Field>
         ) : null}
-        {pos?.serviceFeeIdr ? (
+        {pos?.serviceFeeIdr && feeAllowed ? (
           <label className="flex min-h-11 items-center gap-3 text-base">
             <input type="checkbox" className="size-5" checked={serviceFee} onChange={(e) => setServiceFee(e.target.checked)} />
             Biaya layanan loket {rp(pos.serviceFeeIdr)}

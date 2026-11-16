@@ -5,6 +5,28 @@ import { describe, expect, it } from "vitest"
 import { ROUTES } from "../../src/api/registry"
 import "../../src/index"
 import { scanRoutes } from "../../../../scripts/ci/route-scan-lib.mjs"
+import { REGISTERED } from "../../src/api/registry"
+
+/**
+ * Side doors on a mounted Hono app: any route whose handler did not come from `register` (guard + handler pair),
+ * any `ALL` route except the expected count of documented global middleware (`use` without a path), and any
+ * registry mismatch. Returns human-readable problems.
+ */
+function sideDoors(app: { routes: Array<{ method: string; path: string; handler: unknown }> }, context: string, prefix: string, globalMiddleware: number): string[] {
+  const registered = new Set(ROUTES.map((r) => `${r.context} ${r.method} ${r.path}`))
+  const out: string[] = []
+  const all = app.routes.filter((r) => r.method === "ALL")
+  const globals = all.filter((r) => r.path === `${prefix}/*` && !REGISTERED.has(r.handler as object))
+  if (globals.length !== globalMiddleware) out.push(`expected ${globalMiddleware} global middleware, found ${globals.length}`)
+  for (const r of app.routes) {
+    if (globals.includes(r)) continue
+    if (!REGISTERED.has(r.handler as object)) out.push(`${r.method} ${r.path} mounted outside register()`)
+    if (r.method === "ALL") out.push(`${r.method} ${r.path} is an ALL route`)
+    const path = r.path.startsWith(prefix) ? r.path.slice(prefix.length) || "/" : r.path
+    if (r.method !== "ALL" && !registered.has(`${context} ${r.method} ${path}`)) out.push(`${r.method} ${r.path} is not in the registry`)
+  }
+  return out
+}
 
 describe("route-table scan (spec 05 §4 gate 3)", () => {
   it("the registry passes the scan", () => {
@@ -21,16 +43,21 @@ describe("route-table scan (spec 05 §4 gate 3)", () => {
   it("every route mounted on the app/owner Hono apps is in the registry with its guard (no side-door routes)", async () => {
     const { appApi } = await import("../../src/api/app")
     const { ownerApi } = await import("../../src/api/owner")
-    const registered = new Set(ROUTES.map((r) => `${r.context} ${r.method} ${r.path}`))
-    for (const [context, app, prefix] of [["app", appApi(), "/api/app"], ["owner", ownerApi(), "/api/owner"]] as const) {
-      // Hono lists middleware mounted with `use` as method ALL; only the documented rolling-cookie/session middleware.
-      const mounted = app.routes.filter((r) => r.method !== "ALL")
-      expect(mounted.length).toBeGreaterThan(10)
-      for (const r of mounted) {
-        const path = r.path.startsWith(prefix) ? r.path.slice(prefix.length) || "/" : r.path
-        expect(registered.has(`${context} ${r.method} ${path}`), `${context} ${r.method} ${r.path} is not registered`).toBe(true)
-      }
-    }
+    expect(sideDoors(appApi(), "app", "/api/app", 1)).toEqual([])
+    expect(sideDoors(ownerApi(), "owner", "/api/owner", 0)).toEqual([])
+  })
+
+  it("the side-door scan catches app.all, an extra use() and a route mounted outside register (fixture)", async () => {
+    const { appApi } = await import("../../src/api/app")
+    const a = appApi()
+    a.all("/pintu-belakang", (c) => c.text("x"))
+    expect(sideDoors(a, "app", "/api/app", 1)).toContainEqual(expect.stringContaining("ALL /api/app/pintu-belakang"))
+    const b = appApi()
+    b.use("/apa-saja/*", async (_c, next) => next())
+    expect(sideDoors(b, "app", "/api/app", 1).length).toBeGreaterThan(0)
+    const c2 = appApi()
+    c2.get("/workspace", (c) => c.text("tanpa guard"))
+    expect(sideDoors(c2, "app", "/api/app", 1)).toContainEqual(expect.stringContaining("GET /api/app/workspace"))
   })
 
   it("CSRF: same scheme + normalised host required; default port / trailing dot accepted", async () => {

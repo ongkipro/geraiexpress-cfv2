@@ -66,9 +66,14 @@ const BUCKET_WHERE: Record<Bucket, string> = {
   perlu_tindakan: "s.dispatch_state IN ('failed','reconciliation_needed','cancel_unknown')",
 }
 
-/** The tab badge uses exactly the union of the bucket predicates, so the count always matches what the tab shows. */
-// `tidak_bergerak` uses the swept flag here (the stuck sweep sets `stuck_attention_at` at 48 h), the list re-checks live.
-export const KENDALA_WHERE = `(${(Object.keys(BUCKET_WHERE) as Bucket[]).map((b) => (b === "tidak_bergerak" ? "s.status IN ('in_transit','handed_to_courier') AND s.stuck_attention_at IS NOT NULL" : BUCKET_WHERE[b])).map((w) => `(${w})`).join(" OR ")})`
+/**
+ * The tab badge uses exactly the union of the bucket predicates with the same live 48-hour cut-off as the buckets
+ * (an integer literal for `now − 48 h`, so the composed listing SQL needs no extra bound parameter).
+ */
+export function kendalaWhere(now: number): string {
+  const cutoff = Math.trunc(now - 48 * 3600_000)
+  return `(${(Object.keys(BUCKET_WHERE) as Bucket[]).map((b) => (b === "tidak_bergerak" ? BUCKET_WHERE[b].replace("?", String(cutoff)) : BUCKET_WHERE[b])).map((w) => `(${w})`).join(" OR ")})`
+}
 
 export function bucketCounts(sql: SqlStorage, now: number): Record<Bucket, number> {
   const out = {} as Record<Bucket, number>
@@ -179,5 +184,10 @@ export function noteConflict(sql: SqlStorage, slug: string, note: unknown, resol
 
 /** Expires drafts whose window closed (daily sweep alongside `flagStuck`). */
 export function expireClaims(sql: SqlStorage, now: number): number {
-  return sql.exec("UPDATE shipment_claims SET status = 'expired', updated_at = ? WHERE status = 'draft' AND deadline_at IS NOT NULL AND deadline_at <= ? RETURNING id", now, now).toArray().length
+  const n = sql.exec("UPDATE shipment_claims SET status = 'expired', updated_at = ? WHERE status = 'draft' AND deadline_at IS NOT NULL AND deadline_at <= ? RETURNING id", now, now).toArray().length
+  // Draft claims expire on their own deadline even in an idle gerai (no poll, no reads): one timer at the next one.
+  const next = sql.exec<{ at: number | null }>("SELECT MIN(deadline_at) AS at FROM shipment_claims WHERE status = 'draft' AND deadline_at IS NOT NULL").one().at
+  if (next !== null) sql.exec("INSERT INTO vault_timers (name, due_at) VALUES ('claim_expiry', ?) ON CONFLICT(name) DO UPDATE SET due_at = excluded.due_at", next)
+  else sql.exec("DELETE FROM vault_timers WHERE name = 'claim_expiry'")
+  return n
 }

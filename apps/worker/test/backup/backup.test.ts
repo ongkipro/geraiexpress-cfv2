@@ -74,4 +74,22 @@ describe("tenant backups", () => {
     expect(bad.status).toBe(422)
     expect((await exports.default.fetch(`${O}/backup-export`, { method: "POST", headers: { authorization: "Bearer test-ops-token" } })).status).toBe(200)
   })
+
+  it("ops restore over HTTP: success returns equal checksums; a second restore into the same target is 409 RESTORE_REFUSED (Sol delta C-9)", async () => {
+    const { exports } = await import("cloudflare:workers")
+    const O = "http://owner.geraiexpress.localhost:8787/internal/ops"
+    const a = await checkoutGerai("bkphttp")
+    await readyInv(a)
+    const now = Date.UTC(2026, 10, 20, 19, 0)
+    await exportAll(env, now)
+    const key = backupKey(a.tenantId, "2026-11-21")
+    const call = (target: string) => exports.default.fetch(`${O}/backup-restore`, { method: "POST", headers: { authorization: "Bearer test-ops-token" }, body: JSON.stringify({ key, target }) })
+    const okRes = await call(`drill-http-${a.tenantId.slice(0, 8)}`)
+    expect(okRes.status).toBe(200)
+    const report = ((await okRes.json()) as { data: { sourceChecksum: string; restoredChecksum: string } }).data
+    expect(report.restoredChecksum).toBe(report.sourceChecksum)
+    const again = await call(`drill-http-${a.tenantId.slice(0, 8)}`)
+    expect(again.status).toBe(409)
+    expect(((await again.json()) as { error: { code: string; message: string } }).error).toMatchObject({ code: "RESTORE_REFUSED" })
+  })
 })

@@ -244,6 +244,22 @@ describe("polling floor (PR-02b)", () => {
     expect(alarm).not.toBeNull()
   })
 
+  it("replacing an active webhook secret starts the hourly floor at once (Sol delta A-2)", async () => {
+    const t = await seedConnected("gantirahasia")
+    await addShipment(t.vault, t.tenantId, "r2r2r2r", "JNEGANTI1")
+    mockOrders.set("JNEGANTI1", { cnote_no: "JNEGANTI1", ORDER_ID: "ORD-r2r2r2r", statusCategory: "ON DELIVERY", history: [] })
+    const { url } = await configureWebhook(t.cookie)
+    await deliver(url, { cnote_no: "OTHER", status_category: "ON DELIVERY" })
+    const now = Date.now()
+    await t.vault.pollStatus(t.tenantId, now)
+    const timer = () => runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec<{ due_at: number }>("SELECT due_at FROM vault_timers WHERE name = 'status_poll'").toArray()[0]?.due_at)
+    expect(await timer()).toBe(now + 24 * 3600_000)
+    expect((await appPost("/settings/mengantar/webhook-secret", t.cookie, { secret: "rahasia-baru-yang-salah-ketik-123" })).status).toBe(200)
+    const due = (await timer())!
+    expect(due).toBeLessThanOrEqual(Date.now() + 3600_000)
+    expect(await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.getAlarm())).toBeLessThanOrEqual(due)
+  })
+
   it("a provider change missed by an active webhook marks the connection paused", async () => {
     const t = await seedConnected("jeda")
     const { url } = await configureWebhook(t.cookie)

@@ -48,6 +48,9 @@ export async function requestEmailChange(env: AuthEnv, userId: string, b: { emai
   if (!u) throw new AppError(401, "UNAUTHENTICATED", "Sesi Anda berakhir. Silakan masuk lagi.")
   if (email === u.email) throw new AppError(422, "SAME_EMAIL", "Email baru sama dengan email sekarang.", { email: "Masukkan alamat lain." })
   if (typeof b.password !== "string" || !(await verifyPassword(b.password, env.AUTH_SESSION_PEPPER, u.password_hash))) throw new AppError(400, "WRONG_PASSWORD", "Kata sandi saat ini salah.", { password: "Kata sandi saat ini salah." })
+  // A locked confirmation also blocks new codes (a code sent now would expire before the lock lifts).
+  const locked = await throttle.lockedUntil(env.DB, `email-change-lock:${userId}`, now)
+  if (locked) throw tooMany(locked - now)
   const eh = await emailHash(env.AUTH_SESSION_PEPPER, email)
   const perUser = await throttle.hit(env.DB, `email-change-send:${userId}`, OTP_PER_EMAIL.limit, OTP_PER_EMAIL.windowMs, now)
   if (!perUser.allowed) throw tooMany(perUser.retryAfterMs)

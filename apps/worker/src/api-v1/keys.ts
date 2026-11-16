@@ -45,24 +45,31 @@ export async function authenticate(env: Env, request: Request, now: number): Pro
   return { keyId: row.id, tenantId: row.tenant_id, tenantSlug: row.slug, scopes: new Set(JSON.parse(row.scopes_json) as Scope[]), dailyIssueCapIdr: row.daily_issue_cap_idr }
 }
 
-/** Daily Rupiah cap for `shipments:issue` (WIB day). Returns false when this issue would exceed the cap. */
-export async function reserveDailySpend(env: Env, keyId: string, capIdr: number | null, amountIdr: number, now: number): Promise<boolean> {
-  const day = new Date(now + 7 * 3600_000).toISOString().slice(0, 10)
-  if (capIdr === null) {
-    await env.DB.prepare("INSERT INTO api_key_daily_usage (key_id, wib_day, issued_idr, issued_count) VALUES (?, ?, ?, 1) ON CONFLICT(key_id, wib_day) DO UPDATE SET issued_idr = issued_idr + excluded.issued_idr, issued_count = issued_count + 1").bind(keyId, day, amountIdr).run()
-    return true
-  }
-  // Conditional upsert: the row only grows when the new total stays within the cap (atomic in one statement).
-  const r = await env.DB.prepare(
-    `INSERT INTO api_key_daily_usage (key_id, wib_day, issued_idr, issued_count) SELECT ?1, ?2, ?3, 1 WHERE ?3 <= ?4
-     ON CONFLICT(key_id, wib_day) DO UPDATE SET issued_idr = issued_idr + excluded.issued_idr, issued_count = issued_count + 1 WHERE issued_idr + excluded.issued_idr <= ?4 RETURNING issued_idr`,
-  )
-    .bind(keyId, day, amountIdr, capIdr)
-    .first()
-  return r !== null
+const wibDayOf = (now: number) => new Date(now + 7 * 3600_000).toISOString().slice(0, 10)
+
+/**
+ * Daily Rupiah cap for `shipments:issue` (WIB day), reserved per item (`slug` or `bulk:<batch>:<row>`). Returns
+ * "reserved", "already" (this item is already counted — never twice) or "cap" (would exceed the cap). The usage
+ * counter and the item row are written in one D1 batch, both gated on the cap check.
+ */
+export async function reserveSpend(env: Env, key: { keyId: string; tenantId: string; dailyIssueCapIdr: number | null }, item: string, amountIdr: number, now: number): Promise<"reserved" | "already" | "cap"> {
+  if (await env.DB.prepare("SELECT 1 FROM api_key_spend_items WHERE item = ? AND key_id = ?").bind(item, key.keyId).first()) return "already"
+  const day = wibDayOf(now)
+  const cap = key.dailyIssueCapIdr
+  const res = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO api_key_daily_usage (key_id, wib_day, issued_idr, issued_count) SELECT ?1, ?2, ?3, 1 WHERE (?4 IS NULL OR ?3 <= ?4) AND NOT EXISTS (SELECT 1 FROM api_key_spend_items WHERE item = ?5)
+       ON CONFLICT(key_id, wib_day) DO UPDATE SET issued_idr = issued_idr + excluded.issued_idr, issued_count = issued_count + 1 WHERE ?4 IS NULL OR issued_idr + excluded.issued_idr <= ?4`,
+    ).bind(key.keyId, day, amountIdr, cap, item),
+    env.DB.prepare("INSERT INTO api_key_spend_items (item, key_id, tenant_id, wib_day, amount_idr, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE changes() = 1 ON CONFLICT(item) DO NOTHING").bind(item, key.keyId, key.tenantId, day, amountIdr, now),
+  ])
+  if ((res[1]?.meta.changes ?? 0) === 1) return "reserved"
+  return (await env.DB.prepare("SELECT 1 FROM api_key_spend_items WHERE item = ?").bind(item).first()) ? "already" : "cap"
 }
 
-export async function releaseDailySpend(env: Env, keyId: string, amountIdr: number, now: number): Promise<void> {
-  const day = new Date(now + 7 * 3600_000).toISOString().slice(0, 10)
-  await env.DB.prepare("UPDATE api_key_daily_usage SET issued_idr = MAX(0, issued_idr - ?), issued_count = MAX(0, issued_count - 1) WHERE key_id = ? AND wib_day = ?").bind(amountIdr, keyId, day).run()
+/** Gives an item's reservation back (non-issue established). Idempotent: a second release changes nothing. */
+export async function releaseSpend(env: Env, keyId: string, item: string): Promise<void> {
+  const row = await env.DB.prepare("DELETE FROM api_key_spend_items WHERE item = ? AND key_id = ? RETURNING wib_day, amount_idr").bind(item, keyId).first<{ wib_day: string; amount_idr: number }>()
+  if (!row) return
+  await env.DB.prepare("UPDATE api_key_daily_usage SET issued_idr = MAX(0, issued_idr - ?), issued_count = MAX(0, issued_count - 1) WHERE key_id = ? AND wib_day = ?").bind(row.amount_idr, keyId, row.wib_day).run()
 }

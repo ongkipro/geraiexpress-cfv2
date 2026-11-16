@@ -37,4 +37,11 @@ test("Masking: Label & Privasi → Dropship Toko di kasir → lihat pengirim asl
   await page.getByLabel("Alasan membuka data pengirim asli (dicatat)").fill("paket retur, hubungi pengirim")
   await page.getByRole("button", { name: "Buka", exact: true }).click()
   await expect(page.getByText("Pengirim asli:")).toContainText("Ibu Siti Nisa")
+
+  // Sol delta B-6: "Samarkan HP penerima untuk COD" shows in the preview under Standar Gerai exactly as it prints.
+  expect((await api.post(`${APP}/api/app/settings/masking`, { headers: h, data: { offered: true, presetsEnabled: ["standar_gerai", "dropship_toko"], defaultPreset: "standar_gerai", maskRecipientOnCod: true } })).status()).toBe(200)
+  const cod = ((await (await api.post(`${APP}/api/app/quotes/freeze`, { headers: h, data: { destinationAreaId: "5fc64714f8f44b34aa4cdd60", weightGram: 1000, mode: "buyer_bears_fee", codGoodsIdr: 150000, serviceCode: "JT" } })).json()) as { data: { slug: string } }).data.slug
+  await page.goto(`${APP}/kiriman/${cod}`)
+  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
+  await expect(page.getByText("Tercetak di label:").locator("..")).toContainText("0857****8821")
 })

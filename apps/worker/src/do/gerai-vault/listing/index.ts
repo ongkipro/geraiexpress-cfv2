@@ -1,7 +1,7 @@
 // `Kiriman` list (TASK-311, DEC-213/220, spec 06 menu 3, visual 06 §1 / 07 `/kiriman`): tab filters with live counts,
 // search by INV/AWB/name/phone, period (created time, WIB bounds from the caller), courier and print filters, keyset
 // pagination, and the owner CSV. Pure SQL over this tenant object's tables.
-import { KENDALA_WHERE } from "../exceptions"
+import { kendalaWhere } from "../exceptions"
 import { normalizeSlug } from "@gx/domain/slug"
 import { normalizePhone08 } from "@gx/domain/contacts"
 
@@ -9,16 +9,17 @@ export const TABS = ["semua", "belum-dibayar", "draf-qr", "menunggu-saldo", "pic
 export type Tab = (typeof TABS)[number]
 
 /** Each tab is one SQL predicate over `shipments s`. Abandoned counter drafts never show (they have no AWB yet). */
-const TAB_WHERE: Record<Tab, string> = {
+const TAB_WHERE_BASE: Record<Exclude<Tab, "kendala">, string> = {
   semua: "s.dispatch_state != 'draft'",
   "belum-dibayar": "s.dispatch_state NOT IN ('draft','cancelled') AND s.counter_payment_status = 'unpaid'",
   "draf-qr": "s.dispatch_state = 'draft' AND s.entry_channel = 'minisite_qr'",
   "menunggu-saldo": "s.dispatch_state = 'provider_unpaid_hold'",
   pickup: "s.dispatch_state = 'issued' AND s.status = 'ready_for_pickup'",
-  // Exactly the `Kendala & Klaim` buckets (badge == items shown in the tab).
-  kendala: KENDALA_WHERE,
   retur: "s.status IN ('rts_in_transit','provider_returned','rts_at_gerai')",
 }
+
+/** Tab predicates at `now`: `kendala` is exactly the `Kendala & Klaim` buckets (badge == items shown in the tab). */
+const tabWhere = (now: number): Record<Tab, string> => ({ ...TAB_WHERE_BASE, kendala: kendalaWhere(now) })
 
 export interface ListQuery {
   tab: Tab
@@ -84,7 +85,8 @@ const FROM = "FROM shipments s LEFT JOIN recipient_contacts r ON r.id = s.recipi
 /** Counts per tab under the same search/period/courier/print filters (badges stay honest while filtering). */
 export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
   const f = filters(q)
-  const cols = TABS.map((t) => `SUM(CASE WHEN ${TAB_WHERE[t]} THEN 1 ELSE 0 END) AS "${t}"`).join(", ")
+  const where = tabWhere(Date.now())
+  const cols = TABS.map((t) => `SUM(CASE WHEN ${where[t]} THEN 1 ELSE 0 END) AS "${t}"`).join(", ")
   const row = sql.exec<Record<Tab, number | null>>(`SELECT ${cols} ${FROM} WHERE ${f.where}`, ...f.params).one()
   return Object.fromEntries(TABS.map((t) => [t, row[t] ?? 0])) as Record<Tab, number>
 }
@@ -92,7 +94,7 @@ export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
 /** One page, newest first. Cursor = `<created_at>:<slug>` of the last row (keyset, stable under inserts). */
 export function listShipments(sql: SqlStorage, q: ListQuery): { items: ListRow[]; nextCursor: string | null } {
   const f = filters(q)
-  const parts = [`(${TAB_WHERE[q.tab]})`, f.where]
+  const parts = [`(${tabWhere(Date.now())[q.tab]})`, f.where]
   const params = [...f.params]
   if (q.cursor) {
     const m = /^(\d{1,16}):([0-9a-z]{7})$/.exec(q.cursor)

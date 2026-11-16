@@ -11,11 +11,11 @@ const PRESET_HELP: Record<MaskPreset, string> = {
   privasi_penerima_cod: "HP penerima disamarkan (0857****8821) dan ongkir tidak dicetak.",
   full_nama_gerai: "Nama gerai dicetak sebagai pengirim.",
 }
-interface State { presets: MaskPreset[]; defaultPreset: MaskPreset; quotaLeft: number | null; quotaExhausted: boolean; killSwitchOff: boolean }
+interface State { presets: MaskPreset[]; defaultPreset: MaskPreset; maskRecipientOnCod?: boolean; quotaLeft: number | null; quotaExhausted: boolean; killSwitchOff: boolean }
 
 const senderMasked = (p: MaskPreset, reseller: boolean) => p === "dropship_toko" || p === "full_nama_gerai" || (p === "privasi_penerima_cod" && reseller)
 
-export function PresetPicker({ value, onChange, preview, reseller }: { value: MaskPreset; onChange: (p: MaskPreset) => void; preview: { sender: string; brand: string | null; outlet: string; recipientPhone: string | null }; reseller: boolean }) {
+export function PresetPicker({ value, onChange, preview, reseller, cod }: { value: MaskPreset; onChange: (p: MaskPreset) => void; preview: { sender: string; brand: string | null; outlet: string; recipientPhone: string | null }; reseller: boolean; cod: boolean }) {
   const [s, setS] = useState<State | null>(null)
   useEffect(() => {
     api<State>("/masking").then((x) => {
@@ -25,7 +25,8 @@ export function PresetPicker({ value, onChange, preview, reseller }: { value: Ma
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   if (!s) return null
-  const masked = (p: MaskPreset) => p === "privasi_penerima_cod" && preview.recipientPhone && preview.recipientPhone.length >= 8 ? `${preview.recipientPhone.slice(0, 4)}****${preview.recipientPhone.slice(-4)}` : preview.recipientPhone
+  // Same rule as the printed label: this preset, or any COD send when the gerai masks recipient phones on COD.
+  const masked = (p: MaskPreset) => (p === "privasi_penerima_cod" || (cod && s.maskRecipientOnCod)) && preview.recipientPhone && preview.recipientPhone.length >= 8 ? `${preview.recipientPhone.slice(0, 4)}****${preview.recipientPhone.slice(-4)}` : preview.recipientPhone
   const printedSender = value === "dropship_toko" || (value === "privasi_penerima_cod" && preview.brand) ? (preview.brand ?? preview.sender) : value === "full_nama_gerai" ? preview.outlet : preview.sender
   return (
     <fieldset className="flex flex-col gap-3">

@@ -116,4 +116,36 @@ describe("Kendala & Klaim", () => {
     const sum = Object.values(ex.data.counts).reduce((a, b) => a + b, 0)
     expect(list.data.counts.kendala).toBe(sum)
   })
+
+  it("badge and bucket share the live 48 h stuck rule; claim evidence excludes logos; an idle draft claim expires by its own timer (Sol delta C-5)", { timeout: 30_000 }, async () => {
+    const t = await checkoutGerai("kendalaidle")
+    // Stuck 49 h but not yet swept (no stuck_attention_at): the bucket counts it — and so must the badge.
+    const stuck = await issued(t)
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE shipments SET status = 'in_transit', provider_status = 'in_transit', last_provider_event_at = ?, stuck_attention_at = NULL WHERE slug = ?", Date.now() - 49 * 3600_000, stuck.slug))
+    const badge = ((await (await appGet("/shipments?tab=kendala", t.cookie)).json()) as { data: { counts: Record<string, number> } }).data.counts.kendala
+    const buckets = (await list(t.cookie, "tidak_bergerak")).counts
+    expect(buckets.tidak_bergerak).toBe(1)
+    expect(badge).toBe(Object.values(buckets).reduce((a, b) => a + b, 0))
+    // Evidence: a logo upload is never attached to a claim packet.
+    const logo = await runInDurableObject(t.vault, (_i, st) => {
+      const id = crypto.randomUUID()
+      st.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, purpose, r2_key, content_type, size_bytes, uploaded_by, created_at) VALUES (?, ?, 'logo', ?, 'image/png', 10, 'x', ?)", id, t.tenantId, `t/${t.tenantId}/logo/${id}`, Date.now())
+      return id
+    })
+    const lost = await issued(t)
+    await observe(t, lost.slug, "lost", Date.now())
+    const c = ((await (await post(`/shipments/${lost.slug}/claim`, t.cookie, { kind: "hilang", evidenceIds: [logo] })).json()) as { data: { id: string } }).data
+    const ev = await runInDurableObject(t.vault, (_i, st) => JSON.parse(st.storage.sql.exec<{ e: string }>("SELECT evidence_json AS e FROM shipment_claims WHERE id = ?", c.id).one().e) as string[])
+    expect(ev).toEqual([])
+    // Idle gerai: no poll and no reads — the claim_expiry timer alone expires the draft at its deadline.
+    const deadline = Date.now() + 1000
+    await runInDurableObject(t.vault, (_i, st) => {
+      st.storage.sql.exec("UPDATE shipment_claims SET deadline_at = ? WHERE id = ?", deadline, c.id)
+      st.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")
+      st.storage.sql.exec("INSERT INTO vault_timers (name, due_at) VALUES ('claim_expiry', ?) ON CONFLICT(name) DO UPDATE SET due_at = excluded.due_at", deadline)
+    })
+    await t.vault.runTimers(deadline + 1)
+    expect(await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ s: string }>("SELECT status AS s FROM shipment_claims WHERE id = ?", c.id).one().s)).toBe("expired")
+    expect(await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM vault_timers WHERE name = 'claim_expiry'").one().n)).toBe(0)
+  })
 })

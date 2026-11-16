@@ -10,7 +10,7 @@ import { hostCache } from "../../src/host/lookup"
 import { mockCreated, mockFaults, mockSeller, resetMock } from "../../src/mengantar/mock"
 import { appUser } from "../onboarding/helpers"
 import { appGet } from "../webhooks/helpers"
-import { checkoutGerai, DEST, post, readyInv } from "./helpers"
+import { checkoutGerai, DEST, ORIGIN, post, readyInv } from "./helpers"
 
 beforeEach(() => {
   resetMock()
@@ -231,6 +231,48 @@ describe("review fixes (final Carbon pass)", () => {
   })
 })
 
+describe("pay-unpaid batch fence (Sol delta B-1 / C-1)", () => {
+  async function twoHeldInOneBatch(name: string) {
+    const t = await checkoutGerai(name)
+    mockSeller.balanceIdr = 0
+    const a = await readyInv(t)
+    const b = await readyInv(t)
+    await post(`/shipments/${a}/dispatch`, t.cookie, {})
+    await post(`/shipments/${b}/dispatch`, t.cookie, {})
+    // Put both INVs into A's Mengantar batch (pay-unpaid settles the whole batch at once).
+    const batch = await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => {
+      const ba = st.storage.sql.exec<{ id: string; code: string }>("SELECT mengantar_batch_object_id AS id, mengantar_order_code AS code FROM shipments WHERE slug = ?", a).one()
+      const bb = st.storage.sql.exec<{ code: string }>("SELECT mengantar_order_code AS code FROM shipments WHERE slug = ?", b).one()
+      st.storage.sql.exec("UPDATE shipments SET mengantar_batch_object_id = ? WHERE slug = ?", ba.id, b)
+      return { id: ba.id, codeB: bb.code }
+    })
+    mockCreated.get(batch.codeB)!.batch_id = batch.id
+    return { t, a, b, batch }
+  }
+
+  it("an unknown attempt through INV A stops INV B of the same batch from paying again", async () => {
+    const { t, a, b } = await twoHeldInOneBatch("pagarbatch")
+    mockSeller.balanceIdr = 100_000
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES ('gx-pay-a-prev', ?, 'pay_unpaid', 'unknown', '{}', 1, 1)", a))
+    const calls = mockSeller.payUnpaidCalls
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(409)
+    expect(mockSeller.payUnpaidCalls).toBe(calls)
+    // Read back cleanly (still unpaid) settled A's old attempt too: now one payment issues both.
+    expect((await post(`/shipments/${b}/pay-unpaid`, t.cookie, {})).status).toBe(200)
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+    expect((await detail(t.cookie, a)).shipment).toMatchObject({ dispatch_state: "issued" })
+  })
+
+  it("two concurrent pay-unpaid calls for sibling INVs pay the batch once", async () => {
+    const { t, a, b } = await twoHeldInOneBatch("pagarserentak")
+    mockSeller.balanceIdr = 100_000
+    const calls = mockSeller.payUnpaidCalls
+    const [ra, rb] = await Promise.all([post(`/shipments/${a}/pay-unpaid`, t.cookie, {}), post(`/shipments/${b}/pay-unpaid`, t.cookie, {})])
+    expect([ra.status, rb.status].sort()).toEqual([200, 409])
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+  })
+})
+
 describe("status projection around issue (final Carbon pass, M2B #2)", () => {
   it("a provider observation during unpaid hold does not turn it into ready_for_pickup; issue then projects it", async () => {
     const { recordProviderObservation } = await import("../../src/do/gerai-vault/status")
@@ -260,6 +302,44 @@ describe("re-quote of an INV (final Carbon pass, M5 #2)", () => {
     expect(moved.counter_due_idr).toBeGreaterThan(first.counter_due_idr)
     await post(`/shipments/${slug}/payment`, t.cookie, { method: "qris" }, `rq-${slug}`)
     expect(await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).toMatchObject({ ok: false, refused: "SHIPMENT_LOCKED" })
+  })
+
+  it("an older quote that finishes freezing last never becomes the dispatched quote (Sol delta B-2)", async () => {
+    const t = await checkoutGerai("urutantarif")
+    const slug = await readyInv(t)
+    const { frozenFrom, parseQuoteInput, runQuote } = await import("../../src/pricing/quote/service")
+    const at = Date.now()
+    const qOld = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 2000, mode: "none" }, ORIGIN), at)
+    const qNew = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 3000, mode: "none" }, ORIGIN), at + 1000)
+    const pick = (q: typeof qOld) => q.cards.find((c) => c.serviceCode === "JT" && c.available)!
+    // The newer quote (3 kg) commits first, the older one (2 kg) last: the shipment follows the last commit and dispatch
+    // must use exactly that bound quote, never "newest quoted_at".
+    expect((await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, qNew, pick(qNew)))).ok).toBe(true)
+    expect((await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, qOld, pick(qOld)))).ok).toBe(true)
+    const d = (await detail(t.cookie, slug)) as unknown as { shipment: { actual_weight_gram: number; counter_due_idr: number }; quote: { actual_weight_gram: number; counter_due_idr: number } }
+    expect(d.shipment.actual_weight_gram).toBe(2000)
+    expect(d.quote.actual_weight_gram).toBe(2000)
+    expect(d.quote.counter_due_idr).toBe(d.shipment.counter_due_idr)
+  })
+
+  it("a re-quote while dispatch awaits pickup registration is refused; the journaled order matches the shipment (Sol delta B-3)", async () => {
+    const { mockFaults } = await import("../../src/mengantar/mock")
+    const t = await checkoutGerai("tarifbalap")
+    const slug = await readyInv(t)
+    let open!: () => void
+    mockFaults.addressGate = new Promise<void>((r) => (open = r))
+    const dispatching = post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    await new Promise((r) => setTimeout(r, 50))
+    const { frozenFrom, parseQuoteInput, runQuote } = await import("../../src/pricing/quote/service")
+    const q = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 3000, mode: "none" }, ORIGIN), Date.now())
+    const card = q.cards.find((c) => c.serviceCode === "JT" && c.available)!
+    expect(await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).toMatchObject({ ok: false, refused: "SHIPMENT_LOCKED" })
+    open()
+    expect((await dispatching).status).toBe(200)
+    const d = (await detail(t.cookie, slug)) as unknown as { shipment: { actual_weight_gram: number; dispatch_state: string } }
+    expect(d.shipment).toMatchObject({ actual_weight_gram: 1000, dispatch_state: "issued" })
+    const sent = await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => JSON.parse(s.storage.sql.exec<{ request_json: string }>("SELECT request_json FROM dispatch_journal WHERE slug = ? AND op = 'create_order'", slug).one().request_json) as { orders: Array<{ weight: number }> })
+    expect(sent.orders[0]!.weight).toBe(1)
   })
 })
 

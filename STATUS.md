@@ -1,12 +1,12 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-16
-Status: M1–M5 CLOSED 2026-11-16; M6 code complete 2026-11-16 (TASK-601/602 prepared for the owner, TASK-603 code + local drill done, TASK-604 live pilot is owner-run); final reviewer-carbon pass done 2026-11-16 — every P0–P2 finding fixed (`docs/review/final-2026-11-16/DISPOSITION.md`). Only live owner steps remain, listed below.
+Status: M1–M5 CLOSED 2026-11-16; M6 code complete 2026-11-16 (TASK-601/602 prepared for the owner, TASK-603 code + local drill done, TASK-604 live pilot is owner-run); final reviewer-carbon pass + GPT-6.1 Sol delta re-review done 2026-11-16 — every P0–P2 finding fixed (`docs/review/final-2026-11-16/DISPOSITION.md`, `sol-delta/DISPOSITION.md`). Only live owner steps remain, listed below.
 State: IN_PROGRESS
 Review-Risk: R4
-Independent-Review: final reviewer-carbon pass 2026-11-16 over the M1..M6 diffs (M2 split into M2A/M2B after a timeout): all REQUEST_CHANGES; every P0–P2 finding fixed with tests (key ones mutation-proven), dispositions in `docs/review/final-2026-11-16/DISPOSITION.md`; no second round run (owner rule on this device: reviews only when ordered). Earlier: TASK-107/108, TASK-102/103, TASK-101 round 2 APPROVE (`docs/review/`)
+Independent-Review: final reviewer-carbon pass 2026-11-16 over the M1..M6 diffs (M2 split into M2A/M2B after a timeout): all REQUEST_CHANGES; every P0–P2 finding fixed with tests (key ones mutation-proven), dispositions in `docs/review/final-2026-11-16/DISPOSITION.md`; then a GPT-6.1 Sol delta re-review of the fixes (goal runbook §2, three lanes, all REQUEST_CHANGES: 7 P1, 13 P2, 1 P3) — every P0–P2 fixed with mutation-proven tests (`docs/review/final-2026-11-16/sol-delta/`). Earlier: TASK-107/108, TASK-102/103, TASK-101 round 2 APPROVE (`docs/review/`)
 Primary-Worker: pi session (Claude Opus 5.5 via 9router-fantastico), 2026-11-16
-Independent-Reviewer: reviewer-carbon (9router-fantastico/ag/gemini-4-carbon-high)
+Independent-Reviewer: reviewer-carbon (9router-fantastico/ag/gemini-4-carbon-high); delta: reviewer (9router-fantastico/cx/gpt-6.1-sol)
 Independent-Review-Head: `82e90aa` (M1..M6 diffs `docs/review/final-2026-11-16/M*.diff.gz`)
 
 ## Now

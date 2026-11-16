@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { code128Values, COLS, drawBarcode, escposBytes, labelPage, labelsPdf, MM, PdfPage, QUIET_ZONE_MM, rollLines, rollText, splitUrl, textWidthMm } from "../src"
 import { codDropship, nonCodStandard } from "./fixture"
 
+const texts0 = (page: { ops: Array<{ kind: string; text?: string }> }) => page.ops.filter((o) => o.kind === "text").map((o) => o.text ?? "")
 const mediaBoxes = (pdf: Uint8Array) => [...new TextDecoder("latin1").decode(pdf).matchAll(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g)].map((m) => [Number(m[1]), Number(m[2])])
 
 describe("100 mm PDFs (DEC-224)", () => {
@@ -12,6 +13,17 @@ describe("100 mm PDFs (DEC-224)", () => {
     expect(mediaBoxes(labelsPdf([codDropship, nonCodStandard, codDropship], "label_10x15"))).toEqual([[mm(100), mm(150)], [mm(100), mm(150)], [mm(100), mm(150)]])
     const head = new TextDecoder("latin1").decode(labelsPdf([codDropship], "label_10x10").slice(0, 8))
     expect(head).toBe("%PDF-1.4")
+  })
+
+  it("every text line of the stub stays inside the page, even with the largest service fee and a promo (Sol delta B-5)", () => {
+    const big = { ...nonCodStandard, stub: { ...nonCodStandard.stub, shippingIdr: 12000, packingIdr: 5000, serviceFeeIdr: 200000, promoIdr: 2000, totalIdr: 215000 } }
+    for (const d of [big, { ...codDropship, stub: { ...codDropship.stub, packingIdr: 5000, serviceFeeIdr: 200000, promoIdr: 2000 } }]) {
+      const page = labelPage(d, "label_10x15_with_stub")
+      const texts = page.ops.filter((o): o is Extract<(typeof page.ops)[number], { kind: "text" }> => o.kind === "text" && (o.align ?? "left") === "left")
+      for (const t of texts) expect(t.x + textWidthMm(t.text, t.size, t.font), t.text).toBeLessThanOrEqual(100)
+      expect(texts.some((t) => t.text.includes("Layanan"))).toBe(true)
+    }
+    expect(texts0(labelPage(big, "label_10x15_with_stub")).some((t) => t.includes(`TOTAL`))).toBe(true)
   })
 
   it("barcode keeps ≥ 3 mm quiet zones and nothing is drawn inside them on the barcode band", () => {

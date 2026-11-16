@@ -36,5 +36,11 @@ export function register(
 ): void {
   if (!meta.auth || !meta.projection) throw new Error(`route ${meta.method} ${meta.path} lacks auth/projection`)
   ROUTES.push(meta)
-  app.on(meta.method, meta.path, guard(meta.auth), handler)
+  const g = guard(meta.auth)
+  REGISTERED.add(g)
+  REGISTERED.add(handler)
+  app.on(meta.method, meta.path, g, handler)
 }
+
+/** Every guard and handler mounted through `register` (the route scan rejects any other mounted handler). */
+export const REGISTERED = new WeakSet<object>()

@@ -674,3 +674,22 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - `scripts/ci/integrated-gate.sh REVIEW-GATE`: typecheck, lint, unit, build, worker, migrations, isolation, security
   (bundle audit + red fixtures + security-check) and e2e (every Playwright spec at 390/768/1280, incl. the Turnstile
   auth pages and the POS service fee/packing controls) — all RECORDED PASS in `delivery-ledger`.
+
+## 2026-11-16 — GPT-6.1 Sol delta re-review of the Carbon fixes, and its fixes
+
+- Ran `reviewer` on GPT-6.1 Sol (goal runbook §2) over `82e90aa..bd009ce` in three lanes; all REQUEST_CHANGES
+  (7 P1, 13 P2, 1 P3). Reviews, diffs and disposition: `docs/review/final-2026-11-16/sol-delta/`.
+- Fixed every P0–P2: Partner 2xx without an envelope is `maybe_sent`; webhook secret replacement starts the hourly
+  floor; BYOK and the rotation fence are enforced inside the object at commit time; rotation read-back reserves
+  Partner quota; approval/rejection side effects gated on a per-call nonce (control `0014_decision_nonce`); route
+  scan checks guard/handler identity and rejects `ALL` side doors; email-change requests honour the lock; non-HTTP
+  origins fail inside the redaction boundary; pay-unpaid fence before the first await and batch-wide unresolved
+  checks; dispatch uses the shipment's bound quote and owns the INV before awaiting, so a re-quote cannot change
+  money mid-dispatch; COD Barang never sends a service fee; receipt charges wrap on paper; the masking preview
+  follows the COD phone setting; API-key cap reservations per INV/row kept for held/ambiguous orders and released
+  only on established non-issue (control `0015_api_key_spend_items`); pending rescan continues a fixed range from a
+  stored cursor (tenant `0021`); bulk cap from frozen due + cost; claim evidence purposes, `claim_expiry` timer and a
+  shared live 48 h Kendala predicate; return/refund sub-item matching and per-invoice return-debit sums; hostname
+  rollback by request id (control `0016_hostname_request`); restore success/refusal over HTTP.
+- Evidence: each fix has a regression test proven red by a mutation; `pnpm check` green (unit 166, Workers 366);
+  e2e `quote` + `masking` green at 390/768/1280.

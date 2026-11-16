@@ -89,23 +89,25 @@ export async function requestDomain(env: Env2, tenantId: string, raw: unknown, r
     const owner = await env.DB.prepare("SELECT tenant_id, state FROM tenant_hostnames WHERE hostname = ?").bind(x.hostname).first<{ tenant_id: string; state: string }>()
     if (owner && owner.state !== "purged") throw new AppError(409, "DOMAIN_TAKEN", owner.tenant_id === tenantId ? "Domain ini sudah terdaftar di gerai Anda." : "Domain ini sudah dipakai gerai lain.", { hostname: "Domain ini sudah dipakai." })
   }
-  // A purged row of the same name is reused (PK); everything else inserts. The batch is one transaction: if a
-  // concurrent request took any of the names (0 rows written), it is rolled back whole (root + www never split).
+  // A purged row of the same name is reused (PK); everything else inserts. Every row written carries this request's
+  // id: if a concurrent request took any of the names (0 rows written), only OUR rows are undone (root + www never
+  // split, and a concurrent winner's rows are never touched).
+  const requestId = crypto.randomUUID()
   const res = await env.DB.batch(
     plan.hosts.map((x) =>
       env.DB.prepare(
-        `INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, dns_branch, ssl_method, created_at, state_changed_at, probe_failures)
-         VALUES (?1, ?2, 'custom', ?3, 'pending', ?4, 'http', ?5, ?5, 0)
-         ON CONFLICT(hostname) DO UPDATE SET tenant_id = excluded.tenant_id, kind = 'custom', role = excluded.role, state = 'pending', dns_branch = excluded.dns_branch,
+        `INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, dns_branch, ssl_method, created_at, state_changed_at, probe_failures, request_id)
+         VALUES (?1, ?2, 'custom', ?3, 'pending', ?4, 'http', ?5, ?5, 0, ?6)
+         ON CONFLICT(hostname) DO UPDATE SET tenant_id = excluded.tenant_id, kind = 'custom', role = excluded.role, state = 'pending', dns_branch = excluded.dns_branch, request_id = excluded.request_id,
            ssl_method = 'http', cf_custom_hostname_id = NULL, cf_status = NULL, cf_ssl_status = NULL, verification_errors_json = NULL, dns_records_json = NULL,
            created_at = excluded.created_at, state_changed_at = excluded.created_at, activated_at = NULL, last_checked_at = NULL, probe_ok_at = NULL, probe_failures = 0, deleted_at = NULL
          WHERE tenant_hostnames.state = 'purged'`,
-      ).bind(x.hostname, tenantId, x.role, plan.branch, now),
+      ).bind(x.hostname, tenantId, x.role, plan.branch, now, requestId),
     ),
   )
   if (res.some((r) => (r.meta.changes ?? 0) !== 1)) {
-    // Undo only rows this request wrote (state pending, created now by this tenant).
-    await env.DB.batch(plan.hosts.map((x) => env.DB.prepare("UPDATE tenant_hostnames SET state = 'purged', deleted_at = ?1 WHERE hostname = ?2 AND tenant_id = ?3 AND created_at = ?1 AND state = 'pending' AND cf_custom_hostname_id IS NULL").bind(now, x.hostname, tenantId)))
+    // Undo only rows this request wrote.
+    await env.DB.batch(plan.hosts.map((x) => env.DB.prepare("UPDATE tenant_hostnames SET state = 'purged', deleted_at = ?1 WHERE hostname = ?2 AND request_id = ?3 AND state = 'pending' AND cf_custom_hostname_id IS NULL").bind(now, x.hostname, requestId)))
     throw new AppError(409, "DOMAIN_TAKEN", "Domain ini baru saja didaftarkan. Muat ulang halaman.", { hostname: "Domain ini sudah dipakai." })
   }
   await env.HOSTNAME_QUEUE.sendBatch(plan.hosts.map((x) => ({ body: { kind: "create", hostname: x.hostname } satisfies HostMessage })))

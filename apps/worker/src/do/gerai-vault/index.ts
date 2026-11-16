@@ -10,6 +10,7 @@ import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, t
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
 import { partnerClient, publicClient } from "../../mengantar/factory"
+import { quotaFor } from "../partner-quota"
 import type { Courier, CourierRate, OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
 import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
@@ -231,6 +232,19 @@ export type HealthSnapshot = {
   issuesBaselineHourly: number
 }
 
+/** True when any INV of the Mengantar batch has an unresolved `pay_unpaid` attempt (the batch is paid as one). */
+function unresolvedBatchPay(sql: SqlStorage, batchId: string | null): boolean {
+  return (
+    sql
+      .exec<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM dispatch_journal j WHERE j.op = 'pay_unpaid' AND j.state IN ('in_flight','unknown')
+           AND (json_extract(j.request_json, '$.batch_id') = ?1 OR j.slug IN (SELECT slug FROM shipments WHERE mengantar_batch_object_id = ?1))`,
+        batchId,
+      )
+      .one().n > 0
+  )
+}
+
 export class GeraiVaultDO extends DurableObject<Env> {
   private flushing: Promise<{ delivered: number; failed: number }> | null = null
 
@@ -299,14 +313,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
   async recordOnboarding(
     tenantId: string,
     step: { environment: "sandbox" | "production"; state: OnboardingState; sellerId?: string | null; externalUserId?: string | null; apiKey?: string | null },
-  ): Promise<VaultResult<ConnectionView | null> | { ok: false; refused: "KEY_ROTATING" }> {
+  ): Promise<VaultResult<ConnectionView | null> | { ok: false; refused: "KEY_ROTATING" | "ALREADY_CONNECTED" }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const now = Date.now()
-    const cur = readConnection(this.ctx.storage.sql)
-    // A new key never lands during a seller-key rotation (the fence owns the key until it resolves).
-    if (step.apiKey && cur && cur.rotation_state !== "idle") return { ok: false, refused: "KEY_ROTATING" }
     const encrypted = step.apiKey ? await encryptString(this.env.KEK_SECRET, step.apiKey, `seller-key:${tenantId}`) : undefined
+    // Checked at commit time (after the await above, with no await until the write): a new key never lands during a
+    // seller-key rotation, and BYOK never overwrites a Partner-connected seller.
+    const cur = readConnection(this.ctx.storage.sql)
+    if (step.apiKey && cur && cur.rotation_state !== "idle") return { ok: false, refused: "KEY_ROTATING" }
+    if (step.state === "byok_connected" && cur?.onboarding_state === "connected") return { ok: false, refused: "ALREADY_CONNECTED" }
     upsertConnection(
       this.ctx.storage.sql,
       tenantId,
@@ -599,6 +615,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
       // counter amount, courier and weight can never disagree with what is dispatched.
       const cur = sql.exec<{ dispatch_state: string; counter_payment_status: string }>("SELECT dispatch_state, counter_payment_status FROM shipments WHERE slug = ?", snap.shipment_slug).toArray()[0]
       if (cur && (cur.dispatch_state !== "draft" || cur.counter_payment_status === "paid")) return { ok: false, refused: "SHIPMENT_LOCKED" }
+      // A dispatch that already read this draft's quote (awaiting key/pickup) owns it until it journals or gives up.
+      if (this.dispatching.has(snap.shipment_slug)) return { ok: false, refused: "SHIPMENT_LOCKED" }
       sql.exec(`INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`, id, tenantId, ...cols.map((c) => snap[c] as SqlStorageValue))
       if (cur) {
         sql.exec(
@@ -696,6 +714,25 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!ready.ok) return { ok: false, error: ready.error }
     // Per-tenant issue rate limit (spec 10 §4.4): 20 issues per minute.
     if (!this.allowRate("issue", 20, now)) return { ok: false, error: { status: 429, code: "ISSUE_RATE_LIMITED", message: "Terlalu banyak kiriman diterbitkan dalam semenit. Coba lagi sebentar lagi." } }
+    // Own the INV before the first await: a concurrent re-quote is refused (SHIPMENT_LOCKED) and a second dispatch
+    // answers DISPATCH_IN_PROGRESS, so the quote read above is the one that gets journaled and sent.
+    this.dispatching.add(slug)
+    try {
+      return await this.dispatchOwned(tenantId, slug, actorId, now, platform, ready)
+    } finally {
+      this.dispatching.delete(slug)
+    }
+  }
+
+  private async dispatchOwned(
+    tenantId: string,
+    slug: string,
+    actorId: string,
+    now: number,
+    platform: Platform,
+    ready: Extract<ReturnType<typeof readyToDispatch>, { ok: true }>,
+  ): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const sql = this.ctx.storage.sql
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: key.refused === "KEY_ROTATING" ? "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." : "Gerai belum terhubung ke Mengantar." } }
     const pickup = await this.pickupFor(tenantId, ready.q.courier_code, key.key)
@@ -715,9 +752,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
     })
     // `Samarkan HP penerima untuk kiriman COD` (DEC-231): COD labels print the masked recipient phone under any preset.
     if (ready.q.cod_fee_mode !== "none" && readSettings(sql, platform).maskRecipientOnCod) printed.recipientPhonePrinted = maskPhone(ready.recipient.phone)
-    this.dispatching.add(slug)
-    try {
-      const claim = this.ctx.storage.transactionSync((): ReturnType<typeof claimPreset> => {
+    {
+      const claim = this.ctx.storage.transactionSync((): ReturnType<typeof claimPreset> | { ok: false; status: number; code: string; message: string } => {
+        // Re-checked at journal time: the INV is still the draft bound to the quote that built this payload.
+        const now2 = sql.exec<{ dispatch_state: string; quote_snapshot_id: string | null }>("SELECT dispatch_state, quote_snapshot_id FROM shipments WHERE slug = ?", slug).toArray()[0]
+        if (!now2 || !["draft", "failed"].includes(now2.dispatch_state) || now2.quote_snapshot_id !== ready.q.id) return { ok: false, status: 409, code: "QUOTE_CHANGED", message: "Ongkir kiriman ini baru saja berubah. Periksa lagi lalu terbitkan." }
         const c = claimPreset(sql, platform, preset, reseller, now)
         if (!c.ok) return c
         sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'create_order', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify(payload), now, now)
@@ -731,7 +770,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         })
         return c
       })
-      if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, fields: { maskPreset: claim.message } } }
+      if (!claim.ok) return { ok: false, error: { status: claim.status, code: claim.code, message: claim.message, ...(claim.code === "QUOTE_CHANGED" ? {} : { fields: { maskPreset: claim.message } }) } }
       let outcome: OrderOutcome
       try {
         const res = await publicClient(this.env, key.key, tenantId).createOrder(payload, idem)
@@ -759,8 +798,6 @@ export class GeraiVaultDO extends DurableObject<Env> {
       if (outcome.kind === "rejected") return { ok: false, error: { status: 422, code: "PROVIDER_REJECTED", message: `Mengantar menolak kiriman: ${outcome.message}` } }
       const after = readShipment(sql, slug)!
       return { ok: true, value: { state: outcome.kind === "issued" ? "issued" : "provider_unpaid_hold", awb: after.awb_number } }
-    } finally {
-      this.dispatching.delete(slug)
     }
   }
 
@@ -818,19 +855,20 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (s.dispatch_state !== "provider_unpaid_hold" || !s.mengantar_batch_object_id) return { ok: false, error: { status: 409, code: "NOT_UNPAID_HOLD", message: "Kiriman ini tidak menunggu saldo." } }
     // `POST /order/pay-unpaid` has no idempotency key: one call per batch at a time, and after an unknown outcome the
     // order is read back first instead of paying again (ADR-0004).
+    // The fence is taken before the first await and released only by this invocation.
     const fence = `pay:${s.mengantar_batch_object_id}`
     if (this.dispatching.has(fence)) return { ok: false, error: { status: 409, code: "PAY_IN_PROGRESS", message: "Pembayaran ke Mengantar sedang diproses. Tunggu sebentar." } }
-    const key = await this.keyForDispatch(tenantId)
-    if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
-    const unresolved = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM dispatch_journal WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", slug).one().n > 0
-    const idem = `gx-pay-${slug}-${now}-${crypto.randomUUID().slice(0, 8)}`
-    this.ctx.storage.transactionSync(() => {
-      sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id, readBackOnly: unresolved }), now, now)
-    })
-    const client = publicClient(this.env, key.key, tenantId)
     this.dispatching.add(fence)
     try {
-      return await this.payUnpaidFenced(tenantId, slug, actorId, s, client, idem, unresolved)
+      const key = await this.keyForDispatch(tenantId)
+      if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
+      // Any unresolved attempt for ANY INV of this batch (pay-unpaid settles the whole batch) → read back, never pay.
+      const unresolved = unresolvedBatchPay(sql, s.mengantar_batch_object_id)
+      const idem = `gx-pay-${slug}-${now}-${crypto.randomUUID().slice(0, 8)}`
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id, readBackOnly: unresolved }), now, now)
+      })
+      return await this.payUnpaidFenced(tenantId, slug, actorId, s, publicClient(this.env, key.key, tenantId), idem, unresolved)
     } finally {
       this.dispatching.delete(fence)
     }
@@ -867,24 +905,28 @@ export class GeraiVaultDO extends DurableObject<Env> {
     // `pay-unpaid` settles the whole batch: read back the other INVs of the same batch too (no repeat pay later).
     const siblings = sql.exec<{ slug: string; mengantar_order_code: string | null }>("SELECT slug, mengantar_order_code FROM shipments WHERE mengantar_batch_object_id = ? AND slug != ? AND dispatch_state = 'provider_unpaid_hold'", s.mengantar_batch_object_id, slug).toArray()
     const siblingItems: Array<{ slug: string; item: OrderItem }> = []
+    let siblingsUnknown = false
     if (item?.cnote_no) {
       for (const sib of siblings) {
-        if (!sib.mengantar_order_code) continue
-        const it = await client.getOrder({ orderId: sib.mengantar_order_code }).catch(() => null)
+        const it = sib.mengantar_order_code ? await client.getOrder({ orderId: sib.mengantar_order_code }).catch(() => null) : null
         if (it?.cnote_no) siblingItems.push({ slug: sib.slug, item: it })
+        else siblingsUnknown = true
       }
     }
     const at = Date.now()
+    const batchSlugs = "SELECT slug FROM shipments WHERE mengantar_batch_object_id = ?"
     this.ctx.storage.transactionSync(() => {
       for (const sib of siblingItems) recordOutcome(sql, sib.slug, idem, { kind: "issued", item: sib.item, batchId: s.mengantar_batch_object_id, batchCode: sib.item.batch ?? null }, latestQuote(sql, sib.slug)?.cod_fee_idr ?? 0, at)
       if (item?.cnote_no) {
         recordOutcome(sql, slug, idem, { kind: "issued", item, batchId: s.mengantar_batch_object_id, batchCode: item.batch ?? null }, latestQuote(sql, slug)?.cod_fee_idr ?? 0, at)
-        // Earlier unresolved attempts are settled by this read-back.
-        sql.exec("UPDATE dispatch_journal SET state = 'done', updated_at = ? WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", at, slug)
+        // Earlier unresolved attempts of the batch are settled by this read-back.
+        sql.exec(`UPDATE dispatch_journal SET state = 'done', updated_at = ? WHERE slug IN (${batchSlugs}) AND op = 'pay_unpaid' AND state IN ('in_flight','unknown') AND idempotency_key != ?`, at, s.mengantar_batch_object_id, idem)
+        // The batch is paid: a sibling whose read-back failed stays read-back-only (an `unknown` row keeps the fence).
+        if (siblingsUnknown) sql.exec("UPDATE dispatch_journal SET state = 'unknown', error = 'batch paid; sibling read-back pending', updated_at = ? WHERE idempotency_key = ?", at, idem)
         this.audit(tenantId, at, "user", actorId, "shipment.pay_unpaid", { slug })
       } else if (item && unresolved) {
-        // Read back cleanly and still unpaid: the earlier attempt did not pay — the next click may pay again.
-        sql.exec("UPDATE dispatch_journal SET state = 'failed', error = 'read back: still unpaid', updated_at = ? WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", at, slug)
+        // Read back cleanly and still unpaid: the earlier attempts did not pay — the next click may pay again.
+        sql.exec(`UPDATE dispatch_journal SET state = 'failed', error = 'read back: still unpaid', updated_at = ? WHERE slug IN (${batchSlugs}) AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')`, at, s.mengantar_batch_object_id)
       } else sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", payError ? "unknown" : "failed", payError ?? "no AWB after pay-unpaid", at, idem)
     })
     this.scheduleFinanceSync(Date.now())
@@ -1126,13 +1168,20 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const client = publicClient(this.env, key.key, tenantId)
     try {
       if (trigger === "pending_rescan") {
-        // Non-final rows older than the newest page: re-read by their creation date range (spec 09 §4).
-        const oldest = sql.exec<{ t: number | null }>("SELECT MIN(provider_created_at) AS t FROM mengantar_invoice_mirror WHERE status IS NULL OR status NOT IN ('statusCleared','statusExpired')").one().t
-        if (oldest !== null) {
-          const day = (t: number) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10)
-          let cursor: string | null = null
+        // Non-final rows: re-read their creation date range (spec 09 §4). The range ends at the NEWEST non-final day
+        // (never "today", which would put every newer invoice in front) and is kept, with its cursor, across runs
+        // until fully read — an old pending invoice is always reached within a bounded number of runs.
+        const day = (t: number) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10)
+        const saved = sql.exec<{ c: string | null; r: string | null }>("SELECT rescan_cursor AS c, rescan_range AS r FROM finance_sync_state WHERE id = 1").one()
+        let range: { startDate: string; endDate: string } | null = saved.r ? (JSON.parse(saved.r) as { startDate: string; endDate: string }) : null
+        let cursor: string | null = saved.r ? saved.c : null
+        if (!range) {
+          const span = sql.exec<{ lo: number | null; hi: number | null }>("SELECT MIN(provider_created_at) AS lo, MAX(provider_created_at) AS hi FROM mengantar_invoice_mirror WHERE status IS NULL OR status NOT IN ('statusCleared','statusExpired')").one()
+          range = span.lo !== null && span.hi !== null ? { startDate: day(span.lo), endDate: day(span.hi) } : null
+        }
+        if (range) {
           do {
-            const page = await client.invoices({ cursor, size: 50, dateRange: { startDate: day(oldest), endDate: day(now) } })
+            const page = await client.invoices({ cursor, size: 50, dateRange: range })
             result.pages++
             this.ctx.storage.transactionSync(() => {
               for (const item of page.data) this.tallyInvoice(result, applyInvoice(sql, item as Record<string, unknown>, now))
@@ -1141,7 +1190,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
           } while (cursor && result.pages < 5)
           result.capped = !!cursor
         }
-        sql.exec("UPDATE finance_sync_state SET last_pending_rescan_at = ? WHERE id = 1", now)
+        sql.exec("UPDATE finance_sync_state SET last_pending_rescan_at = ?, rescan_cursor = ?, rescan_range = ? WHERE id = 1", now, cursor, cursor && range ? JSON.stringify(range) : null)
       } else {
         // Newest first until a fully known final page; then, with the remaining page budget, continue an unfinished
         // backfill from the stored cursor (a capped history is completed over the next runs, never orphaned).
@@ -1221,20 +1270,45 @@ export class GeraiVaultDO extends DurableObject<Env> {
     for (const j of stale) {
       const s = readShipment(sql, j.slug) as (ShipmentRow & { dispatch_state: string; mengantar_order_code: string | null; mengantar_batch_object_id: string | null }) | null
       if (!s?.mengantar_order_code) continue
-      let item: OrderItem | null = null
-      try {
-        item = await client.getOrder({ orderId: s.mengantar_order_code })
-      } catch {
-        continue
+      // Read back every held INV of the batch (pay-unpaid pays them together); the journal resolves only when all do.
+      const members = s.mengantar_batch_object_id
+        ? sql.exec<{ slug: string; mengantar_order_code: string | null }>("SELECT slug, mengantar_order_code FROM shipments WHERE mengantar_batch_object_id = ? AND dispatch_state = 'provider_unpaid_hold'", s.mengantar_batch_object_id).toArray()
+        : s.dispatch_state === "provider_unpaid_hold" ? [{ slug: j.slug, mengantar_order_code: s.mengantar_order_code }] : []
+      const seen: Array<{ slug: string; item: OrderItem | null }> = []
+      let readFailed = false
+      for (const m of members) {
+        if (!m.mengantar_order_code) {
+          readFailed = true
+          continue
+        }
+        try {
+          seen.push({ slug: m.slug, item: await client.getOrder({ orderId: m.mengantar_order_code }) })
+        } catch {
+          readFailed = true
+        }
       }
+      let primary: OrderItem | null = null
+      if (s.dispatch_state !== "provider_unpaid_hold") {
+        try {
+          primary = await client.getOrder({ orderId: s.mengantar_order_code })
+        } catch {
+          continue
+        }
+      }
+      const paid = seen.some((x) => x.item?.cnote_no) || !!primary?.cnote_no
       const at = Date.now()
       this.ctx.storage.transactionSync(() => {
-        if (item?.cnote_no && s.dispatch_state === "provider_unpaid_hold") {
-          recordOutcome(sql, j.slug, j.idempotency_key, { kind: "issued", item, batchId: s.mengantar_batch_object_id, batchCode: item.batch ?? null }, latestQuote(sql, j.slug)?.cod_fee_idr ?? 0, at)
-          this.audit(tenantId, at, "system", null, "shipment.pay_unpaid_recovered", { slug: j.slug })
-        } else sql.exec("UPDATE dispatch_journal SET state = ?, updated_at = ? WHERE idempotency_key = ?", item?.cnote_no ? "done" : "failed", at, j.idempotency_key)
+        for (const x of seen) {
+          if (!x.item?.cnote_no) continue
+          recordOutcome(sql, x.slug, j.idempotency_key, { kind: "issued", item: x.item, batchId: s.mengantar_batch_object_id, batchCode: x.item.batch ?? null }, latestQuote(sql, x.slug)?.cod_fee_idr ?? 0, at)
+          this.audit(tenantId, at, "system", null, "shipment.pay_unpaid_recovered", { slug: x.slug })
+        }
+        const pending = paid && (readFailed || seen.some((x) => !x.item?.cnote_no))
+        // Paid batch with a member still unread/unissued stays `unknown` (read again next run, never paid again).
+        if (pending) sql.exec("UPDATE dispatch_journal SET state = 'unknown', updated_at = ? WHERE idempotency_key = ?", at, j.idempotency_key)
+        else if (!readFailed) sql.exec("UPDATE dispatch_journal SET state = ?, updated_at = ? WHERE idempotency_key = ?", paid ? "done" : "failed", at, j.idempotency_key)
       })
-      out.resolved++
+      if (!readFailed) out.resolved++
     }
     // 2. Pay held batches the synced balance can cover (oldest first, one call per batch).
     const balance = sql.exec<{ b: number | null }>("SELECT synced_balance_idr AS b FROM mengantar_connections LIMIT 1").toArray()[0]?.b ?? null
@@ -1421,10 +1495,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
         return { ok: true, value: { kind: "list", counts: bucketCounts(sql, now), rows: listBucket(sql, op.bucket, now) } }
       }
       if (op.op === "claim") {
-        const keys = op.evidenceIds.filter((x) => /^[0-9a-f-]{36}$/.test(x)).map((x) => sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ?", x).toArray()[0]?.r2_key).filter((k): k is string => !!k)
+        // Only claim evidence (never a logo or a signature) can be attached, plus the Meja Retur photo. (No counter
+        // scale photo is captured yet — spec 01 `scale_photo_r2_key` has no writer; listed as a deferred gap.)
+        const keys = op.evidenceIds.filter((x) => /^[0-9a-f-]{36}$/.test(x)).map((x) => sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ? AND purpose IN ('claim','evidence','return_photo')", x).toArray()[0]?.r2_key).filter((k): k is string => !!k)
         const intakePhoto = sql.exec<{ photo_r2_key: string | null }>("SELECT photo_r2_key FROM return_intakes WHERE slug = ?", op.slug).toArray()[0]?.photo_r2_key
         const r = openClaim(sql, tenantId, { slug: op.slug, kind: op.kind, note: op.note, evidence: [...(intakePhoto ? [intakePhoto] : []), ...keys], actorId: actor.userId }, now)
         if (!r.ok) return r
+        expireClaims(sql, now) // arms `claim_expiry` for the new draft's deadline
         this.audit(tenantId, now, "user", actor.userId, "claim.open", { slug: op.slug, kind: op.kind })
         return { ok: true, value: { kind: "claim", id: r.value.id, deadline_at: r.value.deadline_at } }
       }
@@ -2256,6 +2333,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!pending.ok) return pending
     if (!pending.value) return { ok: true, value: { state: "none", keyVersion: null, code: null } }
     const { sellerId, keyVersion } = pending.value
+    // The global Partner budget (60/min) covers read-backs too: when refused, keep the fence and look again later.
+    const q = await quotaFor(this.env).reserve("call", now)
+    if (!q.ok) {
+      setTimer(this.ctx.storage.sql, "key_rotation_check", now + Math.max(60, q.retryAfterSeconds ?? 60) * 1000)
+      await this.armOutbox()
+      return { ok: true, value: { state: "unknown", keyVersion, code: "RATE_LIMITED" } }
+    }
     const key = await partnerClient(this.env).apiKey(sellerId)
     if (key.kind !== "ok") {
       setTimer(this.ctx.storage.sql, "key_rotation_check", now + 15 * 60_000)
@@ -2503,6 +2587,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
       if (name === "status_poll") await this.pollStatus(tenantId, now)
       if (name === "inbox_sweep") await this.sweepInbox(tenantId, now)
+      if (name === "claim_expiry") this.ctx.storage.transactionSync(() => void expireClaims(this.ctx.storage.sql, now))
       if (name === "key_rotation_check") {
         const r = await this.resolveKeyRotation(tenantId, now)
         if (r.ok && r.value.state === "none") {
@@ -2583,7 +2668,10 @@ export class GeraiVaultDO extends DurableObject<Env> {
         now,
         actorId,
       )
+      // Webhooks are unproven until a delivery verifies: the hourly polling floor starts now, not at the next daily poll.
+      if (pollCandidates(this.ctx.storage.sql, 1).length > 0) setTimer(this.ctx.storage.sql, "status_poll", now + POLL_INTERVAL_INACTIVE_MS, "earliest")
     })
+    await this.armAlarm()
     return { ok: true, value: this.webhookView() }
   }
 

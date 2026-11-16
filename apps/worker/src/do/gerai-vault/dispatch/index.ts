@@ -44,8 +44,14 @@ export type QuoteRow = {
   expires_at: number
 }
 
+/**
+ * The quote an INV is bound to: the shipment's `quote_snapshot_id` once the draft exists (authoritative even when an
+ * older quote finished freezing last), otherwise the newest frozen quote for the slug (draft creation).
+ */
 export function latestQuote(sql: SqlStorage, slug: string): QuoteRow | null {
-  return sql.exec<QuoteRow>("SELECT * FROM quote_snapshots WHERE shipment_slug = ? ORDER BY quoted_at DESC LIMIT 1", slug).toArray()[0] ?? null
+  const bound = sql.exec<QuoteRow>("SELECT q.* FROM shipments s JOIN quote_snapshots q ON q.id = s.quote_snapshot_id WHERE s.slug = ?", slug).toArray()[0]
+  if (bound) return bound
+  return sql.exec<QuoteRow>("SELECT * FROM quote_snapshots WHERE shipment_slug = ? ORDER BY quoted_at DESC, rowid DESC LIMIT 1", slug).toArray()[0] ?? null
 }
 
 /** Creates the INV draft from its frozen quote (idempotent: an existing draft is returned). */

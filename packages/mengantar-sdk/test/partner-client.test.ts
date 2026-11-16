@@ -54,6 +54,14 @@ describe("PartnerClient direct", () => {
     const client = new PartnerClient({ transport: "direct", partnerId: "ongkirich", partnerSecret: "partner-secret", partnerOrigin: "https://partner.example", fetchImpl, now: () => 1_790_000_000_000 })
     expect(await client.regenerate("s1")).toMatchObject({ kind: "maybe_sent" })
   })
+
+  it("a 200 with a valid JSON body but no success envelope ({} / null / success without data) is maybe_sent", async () => {
+    for (const body of ["{}", "null", '{"success":true}', '{"success":false}']) {
+      const fetchImpl = (async () => new Response(body, { status: 200 })) as unknown as typeof fetch
+      const client = new PartnerClient({ transport: "direct", partnerId: "ongkirich", partnerSecret: "partner-secret", partnerOrigin: "https://partner.example", fetchImpl, now: () => 1_790_000_000_000 })
+      expect(await client.regenerate("s1")).toMatchObject({ kind: "maybe_sent" })
+    }
+  })
 })
 
 describe("PartnerClient through the relay program (local stub run)", () => {

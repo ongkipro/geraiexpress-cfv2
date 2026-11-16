@@ -106,4 +106,13 @@ describe("Mengantar Public API client (TASK-201)", () => {
     const c2 = new MengantarPublicClient({ origin: "https://x.example", apiKey: "a/b", fetchImpl: (async () => new Response("{}")) as unknown as typeof fetch })
     await expect(c2.searchArea("bandung")).rejects.toMatchObject({ code: "KEY_MISSING" })
   })
+
+  it("a non-HTTP origin is a fixed BAD_ORIGIN error and the key never appears in it", async () => {
+    for (const origin of ["mailto:ops@example.test", "javascript:void(0)", "not a url"]) {
+      const client = new MengantarPublicClient({ origin, apiKey: KEY, fetchImpl: (async () => { throw new Error("must not fetch") }) as unknown as typeof fetch })
+      const e = await client.estimate({ originId: "o", destinationId: "d", courier: "JT", weightKg: 1 }).catch((x) => x)
+      expect(e).toMatchObject({ code: "BAD_ORIGIN" })
+      expect(JSON.stringify(e) + String(e?.message) + String(e?.stack)).not.toContain(KEY)
+    }
+  })
 })

@@ -145,6 +145,46 @@ describe("finance sync", () => {
     expect(s2).toBe(140000)
   })
 
+  it("return debit with null-amount sub-items counts the invoice once; refund/return match via sub-item ORDER_ID (Sol delta C-6/C-7)", async () => {
+    const t = await checkoutGerai("financesub")
+    const { non, cod } = await issuedPair(t)
+    mockInvoices.push({ _id: "rt1", type: "typePayment", status: "statusCleared", amount: -5000, balanceAmount: 9000, createdAt: iso(1), description: "Payment for returned order X-UNKNOWN", subItems: [{ ORDER_ID: non.mengantar_order_code }, { ORDER_ID: non.mengantar_order_code }] })
+    mockInvoices.unshift({ _id: "rf1", type: "typeRefund", status: "statusCleared", amount: 20000, balanceAmount: 29000, createdAt: iso(2), description: "Claim approved", subItems: [{ ORDER_ID: cod.mengantar_order_code, amount: 20000 }] })
+    await t.vault.financeSync(t.tenantId, "manual")
+    const extra = () => runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ x: number | null }>("SELECT reconciled_extra_adjustment_idr AS x FROM shipments WHERE slug = ?", non.slug).one().x)
+    expect(await extra()).toBe(5000)
+    // Re-reading the same invoices never inflates it.
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE finance_sync_state SET last_manual_at = 0"))
+    await t.vault.financeSync(t.tenantId, "pending_rescan")
+    expect(await extra()).toBe(5000)
+    const links = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ invoice_id: string; shipment_slug: string | null }>("SELECT invoice_id, shipment_slug FROM mengantar_invoice_subitems WHERE invoice_id IN ('rt1','rf1')").toArray())
+    expect(links.filter((l) => l.invoice_id === "rf1").map((l) => l.shipment_slug)).toEqual([cod.slug])
+    expect(links.filter((l) => l.invoice_id === "rt1").every((l) => l.shipment_slug === non.slug)).toBe(true)
+    const unmatched = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE invoice_id IN ('rt1','rf1') AND kind = 'unmatched'").one().n)
+    expect(unmatched).toBe(0)
+  })
+
+  it("daily pending rescan reaches an old pending invoice behind > 250 newer cleared rows (Sol delta C-3)", { timeout: 40_000 }, async () => {
+    const t = await checkoutGerai("financelapar")
+    const { cod } = await issuedPair(t)
+    const day = (d: number, m = 0) => new Date(Date.UTC(2026, 9, d, 1, m)).toISOString()
+    // Newest first in the mock: 300 cleared top-ups over later days, then the old pending COD credit.
+    mockInvoices.push({ _id: "oldpend", type: "typeReconciliation", status: "statusPending", amount: 140000, balanceAmount: null, createdAt: day(1), subItems: [{ cnote_no: cod.awb_number, amount: 140000 }] })
+    for (let i = 0; i < 300; i++) mockInvoices.push({ _id: `top-${i}`, type: "typeAddBalance", status: "statusCleared", amount: 1000, balanceAmount: 1000 * (i + 1), createdAt: day(2 + Math.floor(i / 60), i % 60) })
+    mockInvoices.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    // Mirror everything once (the backfill reads all pages over a few runs).
+    for (let i = 0; i < 4; i++) {
+      await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE finance_sync_state SET last_manual_at = 0"))
+      await t.vault.financeSync(t.tenantId, "cron")
+    }
+    // A newer pending row keeps "today" out of the range; the old row clears at Mengantar.
+    mockInvoices.find((x) => x._id === "oldpend")!.status = "statusCleared"
+    mockInvoices.find((x) => x._id === "oldpend")!.balanceAmount = 440000
+    const credit = () => runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ c: number | null }>("SELECT reconciled_provider_cod_credit_idr AS c FROM shipments WHERE slug = ?", cod.slug).one().c)
+    for (let run = 0; run < 3 && (await credit()) === null; run++) await t.vault.financeSync(t.tenantId, "pending_rescan")
+    expect(await credit()).toBe(140000)
+  })
+
   it("triggers: manual 1 per 30 s (Indonesian 429), +60 s after a mutation, cron fan-out, daily pending rescan; Kasir 403", async () => {
     const t = await checkoutGerai("financetrig")
     mockInvoices.push({ _id: "t1", type: "typeAddBalance", status: "statusPending", amount: 50000, balanceAmount: null, createdAt: iso(1) })

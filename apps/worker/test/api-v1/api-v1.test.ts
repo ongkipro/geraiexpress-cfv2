@@ -99,24 +99,70 @@ describe("/api/v1", () => {
     expect(ownerOnlyKeysIn(detail)).toEqual([])
   })
 
-  it("cap: a balance-held issue spends nothing until pay-unpaid; bulk commit is capped; finance/sync hides the balance without finance:read", async () => {
+  it("cap: a balance-held issue keeps its reservation (recovery cannot exceed the cap), pay-unpaid never counts it twice; a rejection releases; finance/sync hides the balance (Sol delta C-2)", async () => {
     const t = await checkoutGerai("apicapsaldo")
     const k = await key(t.cookie, ["rates:read", "shipments:draft", "shipments:issue", "tracking:read", "finance:sync"], { dailyIssueCapIdr: 30_000 })
-    const d = await v1("/shipments", k.token, { method: "POST", body: { destination_area_id: DEST, weight_gram: 1000, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
-    const slug = ((await d.json()) as { data: { slug: string } }).data.slug
-    await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
+    const draft = async () => {
+      const d = await v1("/shipments", k.token, { method: "POST", body: { destination_area_id: DEST, weight_gram: 1000, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
+      const slug = ((await d.json()) as { data: { slug: string } }).data.slug
+      await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
+      return slug
+    }
+    const used = async () => (await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>())!.n
+    const slug = await draft()
     mockSeller.balanceIdr = 0
     const held = await v1(`/shipments/${slug}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `held-${slug}` } })
     expect(((await held.json()) as { data: { state: string } }).data.state).toBe("provider_unpaid_hold")
-    const used = await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>()
-    expect(used!.n).toBe(0)
+    const reserved = await used()
+    expect(reserved).toBe(22_500) // 12.500 counter due + 10.000 gerai cost, held until the order resolves
+    // A second held issue would exceed the 30.000 cap: refused before Mengantar is called.
+    const second = await draft()
+    const calls = mockSeller.createCalls
+    expect((await v1(`/shipments/${second}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `held2-${second}` } })).status).toBe(429)
+    expect(mockSeller.createCalls).toBe(calls)
     mockSeller.balanceIdr = 100_000
     const paid = await v1(`/shipments/${slug}/pay-unpaid`, k.token, { method: "POST", headers: { "idempotency-key": `pay-${slug}` } })
     expect(((await paid.json()) as { data: { state: string } }).data.state).toBe("issued")
-    const after = await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>()
-    expect(after!.n).toBeGreaterThan(0)
+    expect(await used()).toBe(reserved) // the same INV is never counted twice
     const sync = (await (await v1("/finance/sync", k.token, { method: "POST" })).json()) as { data: Record<string, unknown> }
     expect(sync.data.balance).toBeUndefined()
+  })
+
+  it("cap: a provider rejection releases the reservation (Sol delta C-2)", async () => {
+    const { mockFaults } = await import("../../src/mengantar/mock")
+    const t = await checkoutGerai("apitolak")
+    const k = await key(t.cookie, ["shipments:draft", "shipments:issue"], { dailyIssueCapIdr: 30_000 })
+    const d = await v1("/shipments", k.token, { method: "POST", body: { destination_area_id: DEST, weight_gram: 1000, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
+    const slug = ((await d.json()) as { data: { slug: string } }).data.slug
+    await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
+    mockFaults.order = "validation_error"
+    expect((await v1(`/shipments/${slug}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `tolak-${slug}` } })).status).toBe(422)
+    expect((await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>())!.n).toBe(0)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM api_key_spend_items WHERE key_id = ?").bind(k.id).first<{ n: number }>()).toEqual({ n: 0 })
+  })
+
+  it("bulk commit reserves each row's frozen counter total + gerai cost, all or nothing (Sol delta C-4)", async () => {
+    const { checkBatch } = await import("../../src/bulk/service")
+    const t = await checkoutGerai("apimassal")
+    const csv = ["Nama Penerima,No HP,Alamat,Kecamatan/Kota,Kode Pos,Isi Paket,Berat (gram)", "Rina Kartika,0857-1234-8821,Jl. Tebet Barat No. 14,Tebet Barat,12810,Pakaian,1000", "Rina Dua,0857-1234-8822,Jl. Tebet Barat No. 15,Tebet Barat,12810,Buku,1000"].join("\r\n")
+    const make = async (cap: number) => {
+      const k = await key(t.cookie, ["shipments:issue"], { dailyIssueCapIdr: cap })
+      const b = await v1("/bulk-imports", k.token, { method: "POST", body: { sender_id: t.sender, service_code: "JT", csv } })
+      expect(b.status).toBe(201)
+      const id = ((await b.json()) as { data: { id: string } }).data.id
+      for (let i = 0; i < 3 && (await checkBatch(env, t.tenantId, id)).more; i++);
+      return { k, id }
+    }
+    // Two rows × (12.500 due + 10.000 cost) = 45.000: exactly the cap → accepted (publish-price math would refuse).
+    const ok = await make(45_000)
+    const r = await v1(`/bulk-imports/${ok.id}/commit`, ok.k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `c-${ok.id}` } })
+    expect(r.status).toBe(200)
+    expect((await env.DB.prepare("SELECT issued_idr FROM api_key_daily_usage WHERE key_id = ?").bind(ok.k.id).first<{ issued_idr: number }>())!.issued_idr).toBe(45_000)
+    // One Rupiah short → refused, and nothing stays reserved.
+    const short = await make(44_999)
+    expect((await v1(`/bulk-imports/${short.id}/commit`, short.k.token, { method: "POST", body: { prohibited_ack: true }, headers: { "idempotency-key": `c-${short.id}` } })).status).toBe(429)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM api_key_spend_items WHERE key_id = ?").bind(short.k.id).first<{ n: number }>()).toEqual({ n: 0 })
+    expect((await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(short.k.id).first<{ n: number }>())!.n).toBe(0)
   })
 
   it("OpenAPI 3.1 document is generated from the route table (every route, scopes, Idempotency-Key)", async () => {

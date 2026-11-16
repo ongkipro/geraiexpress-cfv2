@@ -157,12 +157,12 @@ async function loadApplication(env: Env, applicationId: string): Promise<AppRow>
 }
 
 /** Audit row written only when THIS call decided the application (same guard as the transition). */
-function auditStmt(env: Env, actorId: string, action: string, tenantId: string, reason: string, now: number, applicationId: string) {
+function auditStmt(env: Env, actorId: string, action: string, tenantId: string, reason: string, now: number, applicationId: string, nonce: string) {
   return env.DB.prepare(
     `INSERT INTO audit_logs (id, at, actor_type, actor_id, tenant_id, action, target_type, target_id, reason)
      SELECT ?1, ?2, 'super_admin', ?3, ?4, ?5, 'tenant', ?4, ?6
-     WHERE (SELECT decided_at FROM tenant_applications WHERE id = ?7) = ?2 AND (SELECT decided_by FROM tenant_applications WHERE id = ?7) = ?3`,
-  ).bind(crypto.randomUUID(), now, actorId, tenantId, action, reason, applicationId)
+     WHERE (SELECT decision_nonce FROM tenant_applications WHERE id = ?7) = ?8`,
+  ).bind(crypto.randomUUID(), now, actorId, tenantId, action, reason, applicationId, nonce)
 }
 
 /**
@@ -173,9 +173,10 @@ function auditStmt(env: Env, actorId: string, action: string, tenantId: string, 
 export async function approveApplication(env: Env, input: { applicationId: string; actorId: string; reason: string; origin: string; now: number }) {
   const a = await loadApplication(env, input.applicationId)
   if (a.state !== "submitted") throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
-  // `decided_by = actor AND decided_at = now` identifies THIS call's transition inside the batch: a concurrent or
-  // repeated approve matches zero rows, so nothing below it (host, email, audit) happens twice.
-  const thisCall = { sql: "(SELECT decided_at FROM tenant_applications WHERE id = ?9) = ?8 AND (SELECT decided_by FROM tenant_applications WHERE id = ?9) = ?10", params: [input.now, a.id, input.actorId] }
+  // A per-call nonce identifies THIS call's transition inside the batch: a concurrent or repeated approve (even by the
+  // same admin in the same millisecond) matches zero rows, so nothing below it (host, email, audit) happens twice.
+  const nonce = crypto.randomUUID()
+  const thisCall = { sql: "(SELECT decision_nonce FROM tenant_applications WHERE id = ?8) = ?9", params: [a.id, nonce] }
   const mail = await enqueueEmailStatement(env, {
     // One decision email per submission even if two decisions race in the same millisecond (PK dedupe).
     id: `app-decision:${a.id}:${a.submitted_at}`,
@@ -188,23 +189,23 @@ export async function approveApplication(env: Env, input: { applicationId: strin
   })
   const policy = await platformPolicy(env.DB)
   const res = await env.DB.batch([
-    env.DB.prepare("UPDATE tenant_applications SET state = 'approved', decided_at = ?1, decided_by = ?2, decision_reason = ?3, updated_at = ?1 WHERE id = ?4 AND state = 'submitted'").bind(input.now, input.actorId, input.reason, a.id),
-    env.DB.prepare("UPDATE tenants SET status = 'active', approved_at = ?1, masking_daily_quota = COALESCE(masking_daily_quota, 20), routing_version = routing_version + 1, updated_at = ?1 WHERE id = ?2 AND (SELECT decided_at FROM tenant_applications WHERE id = ?3) = ?1 AND (SELECT decided_by FROM tenant_applications WHERE id = ?3) = ?4").bind(input.now, a.tenant_id, a.id, input.actorId),
+    env.DB.prepare("UPDATE tenant_applications SET state = 'approved', decided_at = ?1, decided_by = ?2, decision_reason = ?3, decision_nonce = ?5, updated_at = ?1 WHERE id = ?4 AND state = 'submitted'").bind(input.now, input.actorId, input.reason, a.id, nonce),
+    env.DB.prepare("UPDATE tenants SET status = 'active', approved_at = ?1, masking_daily_quota = COALESCE(masking_daily_quota, 20), routing_version = routing_version + 1, updated_at = ?1 WHERE id = ?2 AND (SELECT decision_nonce FROM tenant_applications WHERE id = ?3) = ?4").bind(input.now, a.tenant_id, a.id, nonce),
     env.DB.prepare(
       `INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, created_at, activated_at)
-       SELECT ?1, ?2, 'platform_subdomain', 'primary', 'active', ?3, ?3 WHERE (SELECT decided_at FROM tenant_applications WHERE id = ?4) = ?3 AND (SELECT decided_by FROM tenant_applications WHERE id = ?4) = ?5
+       SELECT ?1, ?2, 'platform_subdomain', 'primary', 'active', ?3, ?3 WHERE (SELECT decision_nonce FROM tenant_applications WHERE id = ?4) = ?5
        ON CONFLICT(hostname) DO UPDATE SET state = 'active', activated_at = ?3`,
-    ).bind(platformHostOf(env, a.slug), a.tenant_id, input.now, a.id, input.actorId),
+    ).bind(platformHostOf(env, a.slug), a.tenant_id, input.now, a.id, nonce),
     mail.statement,
-    auditStmt(env, input.actorId, "tenant.approve", a.tenant_id, input.reason, input.now, a.id),
+    auditStmt(env, input.actorId, "tenant.approve", a.tenant_id, input.reason, input.now, a.id, nonce),
     // The onboarding row exists from the approval on, so a crash after this batch is always retryable.
     env.DB.prepare(
       `INSERT INTO tenant_onboarding (tenant_id, environment, onboarding_state, seller_id, external_user_id, last_error_code, updated_at)
-       SELECT ?1, ?2, 'registration_pending', NULL, ?1, NULL, ?3 WHERE (SELECT decided_at FROM tenant_applications WHERE id = ?4) = ?3 AND (SELECT decided_by FROM tenant_applications WHERE id = ?4) = ?5
+       SELECT ?1, ?2, 'registration_pending', NULL, ?1, NULL, ?3 WHERE (SELECT decision_nonce FROM tenant_applications WHERE id = ?4) = ?5
        ON CONFLICT(tenant_id) DO NOTHING`,
-    ).bind(a.tenant_id, env.GX_ENV === "production" ? "production" : "sandbox", input.now, a.id, input.actorId),
+    ).bind(a.tenant_id, env.GX_ENV === "production" ? "production" : "sandbox", input.now, a.id, nonce),
     // TASK-207: every active service starts at the courier default (20 %), `Belum diterapkan` (DEC-233).
-    seedRulesOnApproval(env, { tenantId: a.tenant_id, applicationId: a.id, actorId: input.actorId, now: input.now, defaultBps: policy.defaultBps }),
+    seedRulesOnApproval(env, { tenantId: a.tenant_id, applicationId: a.id, nonce, now: input.now, defaultBps: policy.defaultBps }),
   ])
   if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
   hostCache.clear()
@@ -222,7 +223,8 @@ const appOrigin = (ownerOrigin: string) => ownerOrigin.replace("://owner-staging
 export async function rejectApplication(env: Env, input: { applicationId: string; actorId: string; reason: string; origin: string; now: number }) {
   const a = await loadApplication(env, input.applicationId)
   if (a.state !== "submitted") throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
-  const thisCall = { sql: "(SELECT decided_at FROM tenant_applications WHERE id = ?9) = ?8 AND (SELECT decided_by FROM tenant_applications WHERE id = ?9) = ?10 AND (SELECT state FROM tenant_applications WHERE id = ?9) = 'rejected'", params: [input.now, a.id, input.actorId] }
+  const nonce = crypto.randomUUID()
+  const thisCall = { sql: "(SELECT decision_nonce FROM tenant_applications WHERE id = ?8) = ?9", params: [a.id, nonce] }
   const mail = await enqueueEmailStatement(env, {
     // One decision email per submission even if two decisions race in the same millisecond (PK dedupe).
     id: `app-decision:${a.id}:${a.submitted_at}`,
@@ -234,10 +236,10 @@ export async function rejectApplication(env: Env, input: { applicationId: string
     onlyIf: thisCall,
   })
   const res = await env.DB.batch([
-    env.DB.prepare("UPDATE tenant_applications SET state = 'rejected', decided_at = ?1, decided_by = ?2, decision_reason = ?3, updated_at = ?1 WHERE id = ?4 AND state = 'submitted'").bind(input.now, input.actorId, input.reason, a.id),
-    env.DB.prepare("UPDATE tenants SET status = 'draft_application', updated_at = ?1 WHERE id = ?2 AND (SELECT decided_at FROM tenant_applications WHERE id = ?3) = ?1 AND (SELECT state FROM tenant_applications WHERE id = ?3) = 'rejected'").bind(input.now, a.tenant_id, a.id),
+    env.DB.prepare("UPDATE tenant_applications SET state = 'rejected', decided_at = ?1, decided_by = ?2, decision_reason = ?3, decision_nonce = ?5, updated_at = ?1 WHERE id = ?4 AND state = 'submitted'").bind(input.now, input.actorId, input.reason, a.id, nonce),
+    env.DB.prepare("UPDATE tenants SET status = 'draft_application', updated_at = ?1 WHERE id = ?2 AND (SELECT decision_nonce FROM tenant_applications WHERE id = ?3) = ?4").bind(input.now, a.tenant_id, a.id, nonce),
     mail.statement,
-    auditStmt(env, input.actorId, "tenant.reject", a.tenant_id, input.reason, input.now, a.id),
+    auditStmt(env, input.actorId, "tenant.reject", a.tenant_id, input.reason, input.now, a.id, nonce),
   ])
   if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
   return { tenantId: a.tenant_id }
@@ -357,7 +359,11 @@ export async function connectByok(env: Env, tenantId: string, apiKey: string, no
   const cur = await vault.connectionView(tenantId)
   if (cur.ok && cur.value?.onboardingState === "connected") throw new AppError(409, "ALREADY_CONNECTED", "Gerai sudah terhubung lewat GeraiExpress. Hubungi tim bila perlu mengganti akun.")
   const r = await vault.recordOnboarding(tenantId, { environment, state: "byok_connected", apiKey: key, sellerId: null, externalUserId: null })
-  if (!r.ok) throw new AppError(409, r.refused === "KEY_ROTATING" ? "KEY_ROTATING" : "TENANT_NOT_READY", r.refused === "KEY_ROTATING" ? "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." : "Gerai belum disetujui.")
+  if (!r.ok) {
+    if (r.refused === "KEY_ROTATING") throw new AppError(409, "KEY_ROTATING", "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi.")
+    if (r.refused === "ALREADY_CONNECTED") throw new AppError(409, "ALREADY_CONNECTED", "Gerai sudah terhubung lewat GeraiExpress. Hubungi tim bila perlu mengganti akun.")
+    throw new AppError(409, "TENANT_NOT_READY", "Gerai belum disetujui.")
+  }
   await env.DB.prepare(
     // D1 mirror: `external_user_id` is NOT NULL there (it keys the row to the tenant); the authoritative BYOK record in
     // the tenant object has no externalUserId, and `seller_id` is cleared so reconciliation never targets it.

@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass fixed, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
+Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass and of the GPT-6.1 Sol delta re-review fixed, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
@@ -23,8 +23,8 @@ Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 o
 | `e2e/` | Playwright (390/768/1280), 22 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 24 · 1,013 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 163 unit + 350 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
-… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`; tenant (v21): `0001_baseline` … `0014_settings`,
+Tests: 166 unit + 366 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
+… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`; tenant (v21): `0001_baseline` … `0014_settings`,
 `0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`.
 
 ## 2. Runtime hosts and audiences (one Worker, `wrangler.jsonc`: local, `env.staging`, `env.production`)
@@ -45,7 +45,7 @@ platform match, D1 `tenant_hostnames` ≤ 30 s cache, 404/403/503) → context r
 
 | D1 control tables | Tenant object tables |
 |---|---|
-| keys: `tenant_api_keys`, `api_key_daily_usage` · ops: `public_api_events` · domains: `custom_hostname_quota` (+ `tenants.custom_domain_enabled`, `tenant_hostnames` lifecycle columns) · identity: `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins` (+`risk_review`) · tenancy: `tenants`, `tenant_members`, `tenant_hostnames`, `tenant_schema_versions`, `tenant_applications`, `tenant_onboarding` · routing: `webhook_routes` · pricing: `courier_service_catalog`, `platform_pricing_policy`, `courier_discount_policy`, `tenant_discount_rules` · indexes: `shipment_index`, `recipient_risk_index` · ops: `audit_logs`, `alert_state`, `email_outbox`, `email_suppressions`, `platform_legal_profile` | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`, `inv_slugs`, `mengantar_connections` (encrypted key + webhook secret, rotation fence, previous token 24 h), `shipments` (status + checkout + masking + print + bulk columns), `shipment_events`, `webhook_inbox`, `vault_timers`, `tenant_courier_prefs`, `notifications`, `sender_contacts`, `recipient_contacts`, `media_objects`, `quote_snapshots`, `dispatch_journal`, `counter_receipts`, `vault_rate`, `masking_usage`, `cashier_shifts`, `bulk_import_batches`, `bulk_import_rows`, `packing_items`, `mengantar_invoice_mirror`, `mengantar_invoice_subitems`, `finance_discrepancies`, `finance_sync_state`, `pickup_batches`, `pickup_batch_items`, `return_intakes`, `shipment_claims`, `minisite_drafts` (+ `schema_version`, `vault_identity`) |
+| keys: `tenant_api_keys`, `api_key_daily_usage`, `api_key_spend_items` (per-INV/row cap reservations) · ops: `public_api_events` · domains: `custom_hostname_quota` (+ `tenants.custom_domain_enabled`, `tenant_hostnames` lifecycle columns) · identity: `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins` (+`risk_review`) · tenancy: `tenants`, `tenant_members`, `tenant_hostnames`, `tenant_schema_versions`, `tenant_applications`, `tenant_onboarding` · routing: `webhook_routes` · pricing: `courier_service_catalog`, `platform_pricing_policy`, `courier_discount_policy`, `tenant_discount_rules` · indexes: `shipment_index`, `recipient_risk_index` · ops: `audit_logs`, `alert_state`, `email_outbox`, `email_suppressions`, `platform_legal_profile` | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`, `inv_slugs`, `mengantar_connections` (encrypted key + webhook secret, rotation fence, previous token 24 h), `shipments` (status + checkout + masking + print + bulk columns), `shipment_events`, `webhook_inbox`, `vault_timers`, `tenant_courier_prefs`, `notifications`, `sender_contacts`, `recipient_contacts`, `media_objects`, `quote_snapshots`, `dispatch_journal`, `counter_receipts`, `vault_rate`, `masking_usage`, `cashier_shifts`, `bulk_import_batches`, `bulk_import_rows`, `packing_items`, `mengantar_invoice_mirror`, `mengantar_invoice_subitems`, `finance_discrepancies`, `finance_sync_state`, `pickup_batches`, `pickup_batch_items`, `return_intakes`, `shipment_claims`, `minisite_drafts` (+ `schema_version`, `vault_identity`) |
 
 `GeraiVaultDO` (`apps/worker/src/do/gerai-vault/`): only via `vaultFor(env, tenantId)` (`locationHint: apac`); binds its
 tenant on first `migrate`; refusals as data. RPC groups: core (`migrate`, `schemaState`, `flushOutbox`, `runTimers`,
@@ -58,7 +58,7 @@ tenant on first `migrate`; refusals as data. RPC groups: core (`migrate`, `schem
 payout (`shiftOp`, `payoutOp`), Paket Massal (`bulkCreate` … `bulkDispatch` serialized, `bulkPay` atomic,
 `bulkCancelUnissued`), Cek Resi (`trackLookup`), dashboard, settings (`settingsView`/`settingsWrite`, NPWP encrypted),
 Kiriman list + CSV, finance sync (`financeSync` bounded/serialized, `recoverUnpaid`, `financeView`, Saldo Aman reserve), pickup manifests (`pickupOp`, `manifestData`), Meja Retur (`returnsOp`), Kendala & Klaim (`exceptionsOp`, `claimPacket`), mini-site (`minisiteProfile`, `createMinisiteDraft`, `minisiteTrack`, `minisiteUnlock`, `claimMinisiteDraft`), backups (`exportBackup`, `restoreBackup` into an empty `drill-*` object), operator health (`healthSnapshot`). One DO alarm serves the outbox and the named timers (`status_poll`, `inbox_sweep`,
-`key_rotation_check`, `daily_stats`, `finance_sync` +60 s after mutations). DO → D1 via the versioned absolute-upsert `outbox` (`shipment_index`,
+`key_rotation_check`, `daily_stats`, `finance_sync` +60 s after mutations, `claim_expiry`). DO → D1 via the versioned absolute-upsert `outbox` (`shipment_index`,
 `recipient_risk_index`, `tenant_daily_stats`). `PartnerQuotaDO` (global): 60 calls/min, 1,000 registrations per WIB day.
 
 Status = provider maximum (terminal, minute bucket, rank) + monotone custody + `combine` (`@gx/domain/status`).

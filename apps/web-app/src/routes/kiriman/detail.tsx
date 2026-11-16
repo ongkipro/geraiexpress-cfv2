@@ -174,7 +174,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           <h3 id="pengirim" className="text-lg font-semibold">3. Pengirim</h3>
           <PartyPicker kind="senders" value={sender} onPick={setSender} />
           {errors.senderId ? <p role="alert" className="text-base text-danger">{errors.senderId}</p> : null}
-          <PresetPicker value={preset} onChange={setPreset} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+          <PresetPicker value={preset} onChange={setPreset} cod={s.cod_fee_mode !== "none"} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
         </section>
         <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 md:p-6" aria-labelledby="penerima">

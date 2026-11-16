@@ -122,6 +122,8 @@ export class PartnerClient {
     }
     if (res.ok && json?.success && json.data !== undefined) return { kind: "ok", status: res.status, data: json.data }
     if (res.status >= 500 && code !== "KEY_PROVISIONING_FAILED") return { kind: "maybe_sent", reason: "upstream_5xx" }
+    // A 2xx without a readable success/error envelope (`{}`, `null`, success without data) proves nothing: unknown.
+    if (res.ok && !(json && typeof json === "object" && json.success === false && code)) return { kind: "maybe_sent", reason: "network" }
     return { kind: "error", status: res.status, code: code || `HTTP_${res.status}`, message: typeof json?.message === "string" ? json.message : "", field: json?.field }
   }
 }

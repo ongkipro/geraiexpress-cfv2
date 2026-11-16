@@ -115,6 +115,17 @@ function footerBlock(p: PdfPage, d: LabelData, y: number, withQr: boolean) {
   }
 }
 
+/** Joins charge items with " · " into as few lines as fit `widthMm`; an item is never split across lines. */
+export function chargeLines(items: string[], widthMm: number, sizePt: number): string[] {
+  const lines: string[] = []
+  for (const it of items) {
+    const last = lines[lines.length - 1]
+    if (last !== undefined && textWidthMm(`${last} · ${it}`, sizePt) <= widthMm) lines[lines.length - 1] = `${last} · ${it}`
+    else lines.push(it)
+  }
+  return lines
+}
+
 function stubBlock(p: PdfPage, d: LabelData, y0: number) {
   const W = 100
   const s = d.stub
@@ -129,13 +140,16 @@ function stubBlock(p: PdfPage, d: LabelData, y0: number) {
   y += 4
   p.text(PAD, y, 7.5, `${d.courierName} ${d.serviceName} · AWB ${d.awb} · ${d.destinationFallback}`.slice(0, 80))
   y += 3.8
-  if (s.feeMode === "none") {
-    const parts = [`Ongkir ${idr(s.shippingIdr)}`, s.packingIdr ? `Packing ${idr(s.packingIdr)}` : null, s.serviceFeeIdr ? `Layanan ${idr(s.serviceFeeIdr)}` : null, s.promoIdr ? `Promo -${idr(s.promoIdr)}` : null, `TOTAL ${idr(s.totalIdr)}`].filter(Boolean)
-    p.text(PAD, y, 7.5, parts.join(" · "))
-  } else {
-    p.text(PAD, y, 7.5, `COD · Tagih penerima ${idr(d.cod?.collectIdr ?? 0)}${s.packingIdr ? ` · Packing ${idr(s.packingIdr)}` : ""}${s.serviceFeeIdr ? ` · Layanan ${idr(s.serviceFeeIdr)}` : ""}${s.promoIdr ? ` · Promo -${idr(s.promoIdr)}` : ""}`)
+  // Charge lines never run off the paper: items wrap within the content width (the total stays whole on its line).
+  const charges =
+    s.feeMode === "none"
+      ? [`Ongkir ${idr(s.shippingIdr)}`, s.packingIdr ? `Packing ${idr(s.packingIdr)}` : null, s.serviceFeeIdr ? `Layanan ${idr(s.serviceFeeIdr)}` : null, s.promoIdr ? `Promo -${idr(s.promoIdr)}` : null, `TOTAL ${idr(s.totalIdr)}`]
+      : [`COD · Tagih penerima ${idr(d.cod?.collectIdr ?? 0)}`, s.packingIdr ? `Packing ${idr(s.packingIdr)}` : null, s.serviceFeeIdr ? `Layanan ${idr(s.serviceFeeIdr)}` : null, s.promoIdr ? `Promo -${idr(s.promoIdr)}` : null]
+  for (const line of chargeLines(charges.filter((x): x is string => !!x), W - 2 * PAD, 7.5)) {
+    p.text(PAD, y, 7.5, line)
+    y += 3.4
   }
-  y += 4.6
+  y += 1.2
   const pay = s.payment
   if (pay.status === "unpaid") {
     const t = `BELUM DIBAYAR ${idr(s.totalIdr)}`

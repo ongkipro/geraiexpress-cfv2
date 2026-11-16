@@ -59,6 +59,10 @@ describe("Akun Saya", () => {
     for (let i = 0; i < 5; i++) last = (await post("/account/email/confirm", u.cookie, { otpId, code: wrong })).status
     expect(last).toBe(429)
     expect((await post("/account/email/confirm", u.cookie, { otpId, code })).status).toBe(429)
+    // While locked, no new code is sent either (it would expire before the lock lifts).
+    const n0 = (await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'email_change_otp'").first<{ n: number }>())!.n
+    expect((await post("/account/email/request", u.cookie, { email: "bebas.lagi@contoh.test", password: "pemilik-kuat-1" })).status).toBe(429)
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'email_change_otp'").first<{ n: number }>())!.n).toBe(n0)
   })
 
   it("password change needs the current password and signs out every other session", async () => {

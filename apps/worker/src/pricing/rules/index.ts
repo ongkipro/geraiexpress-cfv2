@@ -48,18 +48,18 @@ export async function courierBands(db: D1Database): Promise<Map<string, Discount
 
 /**
  * Gives a newly approved gerai a rule at the courier default (platform default when the courier has no band) for every
- * active service, state `belum_diterapkan`. Part of the approval batch and guarded by THIS approval (`decided_at`,
- * `decided_by`), so a lost race or a repeated call seeds nothing; existing rules are kept.
+ * active service, state `belum_diterapkan`. Part of the approval batch and guarded by THIS approval (its
+ * `decision_nonce`), so a lost race or a repeated call seeds nothing; existing rules are kept.
  */
-export function seedRulesOnApproval(env: Env, input: { tenantId: string; applicationId: string; actorId: string; now: number; defaultBps: number }): D1PreparedStatement {
+export function seedRulesOnApproval(env: Env, input: { tenantId: string; applicationId: string; nonce: string; now: number; defaultBps: number }): D1PreparedStatement {
   return env.DB.prepare(
     `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, cashback_bps, effective_from, apply_channel,
        requested_at, verification_state, next_check_at, check_step, updated_at, updated_by)
      SELECT ?1, c.service_code, c.courier_code, c.service_class, COALESCE(p.default_discount_bps, ?2), 0, ?3, 'mengantar_team', ?3, 'belum_diterapkan', ?4, 0, ?3, 'system'
      FROM courier_service_catalog c LEFT JOIN courier_discount_policy p ON p.courier_code = c.courier_code
-     WHERE c.is_active = 1 AND (SELECT decided_at FROM tenant_applications WHERE id = ?5) = ?3 AND (SELECT decided_by FROM tenant_applications WHERE id = ?5) = ?6
+     WHERE c.is_active = 1 AND (SELECT decision_nonce FROM tenant_applications WHERE id = ?5) = ?6
      ON CONFLICT(tenant_id, service_code) DO NOTHING`,
-  ).bind(input.tenantId, input.defaultBps, input.now, verificationCheckAt(input.now, 0), input.applicationId, input.actorId)
+  ).bind(input.tenantId, input.defaultBps, input.now, verificationCheckAt(input.now, 0), input.applicationId, input.nonce)
 }
 
 /** Rules of one gerai with the band that applies to each. */

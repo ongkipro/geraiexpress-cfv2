@@ -11,7 +11,11 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Kuota", password: "kuota-e2e-kuat-1" } })
   expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `q${Date.now().toString(36)}`, name: "Gerai Kuota", connect: true } })).status()).toBe(201)
 
+  // Service fee on (Sol delta B-4): offered for Non-COD, never sent for COD Barang.
+  expect((await api.post(`${APP}/api/app/settings/packing`, { headers: h, data: { items: [{ name: "Plastik", priceIdr: 1000, active: true }], serviceFeeEnabled: true, serviceFeeIdr: 2000 } })).status()).toBe(200)
+
   await page.goto(`${APP}/kasir/cek-cepat`)
+  await expect(page.getByText("Biaya layanan loket Rp 2.000")).toBeVisible()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
@@ -21,6 +25,7 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await expect(list.getByText("Termurah").first()).toBeVisible()
 
   await page.getByRole("button", { name: "COD Barang" }).click()
+  await expect(page.getByText("Biaya layanan loket Rp 2.000")).toHaveCount(0)
   await page.getByLabel("Harga barang (COD)").fill("150000")
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
   await expect(list.getByText("Rp 167.500").first()).toBeVisible()
