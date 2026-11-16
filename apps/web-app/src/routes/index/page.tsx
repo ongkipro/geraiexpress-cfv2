@@ -1,3 +1,4 @@
+import { statusLabel } from "../../lib/status"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { ArrowDownRightIcon, ArrowUpRightIcon } from "lucide-react"
@@ -44,7 +45,6 @@ type Resp = { kind: "owner"; data: OwnerData; period: Period } | { kind: "counte
 
 const nf = new Intl.NumberFormat("id-ID")
 const short = (n: number) => (Math.abs(n) >= 1_000_000 ? `Rp ${(n / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 2 })} jt` : rp(n))
-const STATUS: Record<string, string> = { ready_for_pickup: "Siap dijemput", in_transit: "Dalam perjalanan", delivered: "Terkirim", undelivery_hold: "Gagal antar", rts_in_transit: "Retur", provider_returned: "Retur diterima", cancelled: "Dibatalkan", lost: "Hilang", handed_to_courier: "Diserahkan ke kurir", provider_unpaid_hold: "Menunggu saldo" }
 const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer: "Transfer", deposit: "Deposit" }
 const CHANNEL: Record<string, string> = { counter_pos: "Input di loket", counter_multi: "Paket Massal", minisite_qr: "QR dari mini-site", api_mcp: "API" }
 
@@ -131,7 +131,7 @@ function OwnerDashboard() {
               <li key={r.slug}>
                 <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="flex min-h-11 flex-wrap items-center justify-between gap-2 py-2 text-base hover:bg-muted">
                   <span><span className="font-medium text-primary tabular-nums">INV {r.slug.toUpperCase()}</span> · {r.courier} · {r.recipient ?? "—"}</span>
-                  <span className="tabular-nums">{rp(r.due)} · <span className={r.payment === "unpaid" ? "font-medium text-warn" : "text-muted-foreground"}>{r.payment === "paid" ? `Lunas · ${METHOD[r.method ?? ""] ?? r.method}` : r.payment === "unpaid" ? "Belum dibayar" : "Tanpa tagihan"}</span> · {STATUS[r.status] ?? r.status}</span>
+                  <span className="tabular-nums">{rp(r.due)} · <span className={r.payment === "unpaid" ? "font-medium text-warn" : "text-muted-foreground"}>{r.payment === "paid" ? `Lunas · ${METHOD[r.method ?? ""] ?? r.method}` : r.payment === "unpaid" ? "Belum dibayar" : "Tanpa tagihan"}</span> · {statusLabel(r.status)}</span>
                 </Link>
               </li>
             ))}

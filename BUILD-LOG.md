@@ -646,3 +646,25 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 
 - Real counts, routes, crons, ops endpoints, backups, operator checks and runbooks updated for the end of M6 code.
   Next: the end-of-build reviewer-carbon pass by milestone/domain diff (goal runbook §2).
+
+## 2026-11-16 — Final review fixes (reviewer-carbon pass over M1..M6)
+
+- Ran `reviewer-carbon` once per milestone diff (M2 split into M2A/M2B after a 30-minute timeout); all seven returned
+  REQUEST_CHANGES. Reviews, diffs and the per-finding disposition: `docs/review/final-2026-11-16/`.
+- Fixed every P0–P2 finding (P3 where cheap). Highlights: real Turnstile widget on `/masuk` and `/daftar-akun`
+  (`GET /auth/config`; fail closed without a site key); OTP enumeration/attempt races; DO alarm loop; email render
+  wedge; SDK ambiguity on unreadable bodies; onboarding crash recovery and exact `externalUserId` read-back; BYOK keeps
+  no externalUserId and respects the rotation fence; status no longer clobbered before issue; poll starvation;
+  reconcile only after an ambiguous dispatch; per-batch pay-unpaid fence; Kasir never sees reconciled amounts; masked
+  sender hidden after issue; service fee + packing frozen into the quote (tenant `0020_quote_fees`); finance applier
+  moves money only for cleared invoices, bounded backfill (tenant `0021_finance_backfill`), Selisih resolution;
+  `/api/v1` daily cap on every spending path; custom-domain root + www purge and redirect guard; relay crash paths;
+  bounce-rate and never-synced operator checks; restore only into a verified `drill-*` object.
+- Evidence: regression tests for each fix group (Workers 350, unit 163), mutations red for Turnstile fail-closed,
+  read-back exact match, daily_stats loop, OTP, route-scan, projection sweep, host recovery; `pnpm check` green
+  (two load-only timeouts re-ran green; the pricing verifier test now has a 40 s budget); UI gates 0 fail on
+  `/masuk`, `/daftar-akun`, `/`, `/kendala`, `/keuangan`, `/kiriman`, `/retur`; POS fee controls at 390/768/1280
+  (`docs/evidence/REVIEW-FINAL/`). Local objects migrated v19 → v21.
+- Test fix: the unit `10,000 slugs → 0 duplicates` case asserted zero raw collisions of the generator (p ≈ 0.23 % per
+  run, seen once); it now bounds raw collisions at 2, while the TASK-108 guarantee (0 duplicates per tenant through
+  the retrying allocator) stays proven by `apps/worker/test/slug/allocator.test.ts`.

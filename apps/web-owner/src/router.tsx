@@ -39,7 +39,9 @@ async function loadMe() {
     return { me, pending: summary.pending }
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      throw redirect(err.body.code === "TOTP_REQUIRED" ? { to: "/totp", search: { mode: "required" } } : { to: "/masuk" })
+      if (err.body.code === "TOTP_REQUIRED") throw redirect({ to: "/totp", search: { mode: "required" } })
+      if (err.body.code === "TOTP_ENROL_REQUIRED") throw redirect({ to: "/totp", search: { mode: "enrol" } })
+      throw redirect({ to: "/masuk" })
     }
     throw err
   }
@@ -74,7 +76,11 @@ const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk"
 const totpRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/totp",
-  validateSearch: (s: Record<string, unknown>) => ({ mode: s.mode === "enrol" ? ("enrol" as const) : ("required" as const) }),
+  // `kembali` = where a step-up came from; only same-site relative paths are kept (no open redirect).
+  validateSearch: (s: Record<string, unknown>): { mode: "required" | "enrol"; kembali?: string } => ({
+    mode: s.mode === "enrol" ? "enrol" : "required",
+    kembali: typeof s.kembali === "string" && s.kembali.startsWith("/") && !s.kembali.startsWith("//") && !s.kembali.includes("\\") ? s.kembali : undefined,
+  }),
   component: TotpPage,
 })
 

@@ -45,19 +45,28 @@ export interface ShiftTotals {
 export function shiftTotals(sql: SqlStorage, s: ShiftRow): ShiftTotals {
   const rows = sql.exec<{ event: string; direction: string; method: string; amount_idr: number }>("SELECT event, direction, method, amount_idr FROM counter_receipts WHERE shift_id = ?", s.id).toArray()
   const t: ShiftTotals = { tunaiIn: 0, tunaiOut: 0, voidTunai: 0, codPayoutTunai: 0, qris: 0, transfer: 0, deposit: 0, expectedCash: 0 }
+  let cashIn = 0
+  let cashOut = 0
   for (const r of rows) {
     const sign = r.direction === "in" ? 1 : -1
     if (r.method === "tunai") {
+      if (r.direction === "in") cashIn += r.amount_idr
+      else cashOut += r.amount_idr
       if (r.direction === "in") t.tunaiIn += r.amount_idr
       else t.tunaiOut += r.amount_idr
+      // Display lines: sales in, voided sales, net COD payouts (a reversed payout nets inside its own line, never
+      // also as "Tunai masuk"), so Modal + Tunai masuk − Void − Pencairan == expectedCash.
       if (r.event === "void_payment") t.voidTunai += r.amount_idr
       if (r.event === "sender_cod_payout") t.codPayoutTunai += r.amount_idr
-      if (r.event === "void_sender_payout") t.codPayoutTunai -= r.amount_idr
+      if (r.event === "void_sender_payout") {
+        t.codPayoutTunai -= r.amount_idr
+        t.tunaiIn -= r.amount_idr
+      }
     } else if (r.method === "qris") t.qris += sign * r.amount_idr
     else if (r.method === "transfer") t.transfer += sign * r.amount_idr
     else t.deposit += sign * r.amount_idr
   }
-  t.expectedCash = s.opening_float_idr + t.tunaiIn - t.tunaiOut
+  t.expectedCash = s.opening_float_idr + cashIn - cashOut
   return t
 }
 
@@ -111,6 +120,11 @@ export function senderPayout(
     return { ok: true, value: prior, replayed: true, remaining: (s?.sender_cod_payable_idr ?? 0) - (s?.sender_cod_paid_idr ?? 0) }
   }
   if (!s) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
+  // Only an issued COD parcel that was not cancelled or returned can owe the sender anything.
+  const st = sql.exec<{ status: string }>("SELECT status FROM shipments WHERE slug = ?", p.slug).one().status
+  if (s.dispatch_state !== "issued" || ["cancelled", "rts_in_transit", "provider_returned", "rts_at_gerai", "rts_returned_to_sender", "lost"].includes(st)) {
+    return { ok: false, error: { status: 409, code: "NOT_PAYABLE", message: "Kiriman ini tidak punya hak COD untuk dicairkan (belum terbit, dibatalkan, atau retur)." } }
+  }
   if (p.role === "cashier" && !p.cashierMayPay) return { ok: false, error: { status: 403, code: "OWNER_ONLY", message: "Pencairan COD ke pengirim hanya oleh pemilik gerai." } }
   if (!["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode)) return { ok: false, error: { status: 409, code: "NOT_COD_GOODS", message: "Kiriman ini bukan COD Barang." } }
   const override = typeof p.override === "string" ? p.override.trim() : ""

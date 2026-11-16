@@ -37,7 +37,7 @@ export async function enqueueEmailStatement<T extends TemplateId>(
   const guard = input.onlyIf ? ` WHERE ${input.onlyIf.sql}` : ""
   const statement = env.DB.prepare(
     `INSERT INTO email_outbox (id, template_id, to_email_hash, to_email_encrypted, payload_encrypted, expires_at, state, attempts, next_attempt_at, created_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, 'queued', 0, ?7, ?7${guard}`,
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, 'queued', 0, ?7, ?7${guard} ON CONFLICT(id) DO NOTHING`,
   ).bind(
     id,
     input.templateId,

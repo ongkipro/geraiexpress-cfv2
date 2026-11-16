@@ -18,6 +18,14 @@ export const OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
   "assigned_gerai_discount_bps",
   "raw_discount_percent",
   "provider_reconciled_cost_idr",
+  "providerReconciledCostIdr",
+  // reconciled Mengantar Book 2 amounts: COD credit (G + P − N), return/adjustment debits (reveal N and the discount)
+  "reconciled_provider_cod_credit_idr",
+  "reconciledProviderCodCreditIdr",
+  "reconciled_extra_adjustment_idr",
+  "reconciledExtraAdjustmentIdr",
+  "adjustment_idr",
+  "adjustmentIdr",
   "estimatedSpecialPrice",
   // discount / spread / margin
   "assigned_bps",

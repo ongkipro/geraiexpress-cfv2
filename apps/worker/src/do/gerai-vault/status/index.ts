@@ -92,7 +92,10 @@ export function setDispatchStatus(sql: SqlStorage, slug: string, status: string,
 export function markIssued(sql: SqlStorage, slug: string, now: number): void {
   const s = readShipment(sql, slug)
   if (!s) return
-  sql.exec("UPDATE shipments SET status = 'ready_for_pickup', provider_status = COALESCE(provider_status, 'ready_for_pickup'), last_provider_event_at = COALESCE(last_provider_event_at, ?), last_provider_rank = COALESCE(last_provider_rank, 10), index_version = index_version + 1, updated_at = ? WHERE slug = ?", Math.floor(now / 60_000) * 60_000, now, slug)
+  sql.exec("UPDATE shipments SET provider_status = COALESCE(provider_status, 'ready_for_pickup'), last_provider_event_at = COALESCE(last_provider_event_at, ?), last_provider_rank = COALESCE(last_provider_rank, 10), index_version = index_version + 1, updated_at = ? WHERE slug = ?", Math.floor(now / 60_000) * 60_000, now, slug)
+  // `status` is projected (an observation recorded before issue — e.g. during reconciliation — is not lost).
+  const after = readShipment(sql, slug)!
+  sql.exec("UPDATE shipments SET status = ? WHERE slug = ?", combine(after.provider_status, after.custody_stage).status, slug)
   publishIndex(sql, readShipment(sql, slug)!, now)
   setTimer(sql, "status_poll", now + 3600_000, "earliest")
 }
@@ -155,6 +158,16 @@ export function recordProviderObservation(
     )
     .toArray().length
   if (!inserted || !input.mapped) return { recorded: inserted > 0, changed: false, status: s.status }
+  // Pre-issue dispatch states own `status` (a held/unresolved order is not "ready for pickup" yet): record the
+  // provider status for later, but leave `status` until `markIssued` projects it.
+  if (["draft", "issuing_in_flight", "reconciliation_needed", "provider_unpaid_hold"].includes(s.status)) {
+    const incoming0: ProviderObservation = { status: input.mapped, eventAt: input.eventAt }
+    const current0: ProviderObservation | null = s.provider_status && s.last_provider_event_at !== null ? { status: s.provider_status, eventAt: s.last_provider_event_at } : null
+    if (!current0 || compareKeys(keyOf(incoming0), keyOf(current0)) > 0) {
+      sql.exec("UPDATE shipments SET provider_status = ?, last_provider_event_at = ?, last_provider_rank = ?, updated_at = ? WHERE slug = ?", input.mapped, Math.floor(input.eventAt / 60_000) * 60_000, PROVIDER_RANK[input.mapped], now, input.slug)
+    }
+    return { recorded: true, changed: false, status: s.status }
+  }
   const incoming: ProviderObservation = { status: input.mapped, eventAt: input.eventAt }
   const current: ProviderObservation | null = s.provider_status && s.last_provider_event_at !== null ? { status: s.provider_status, eventAt: s.last_provider_event_at } : null
   // Stored event time is the bucket start, so compare keys (bucket-based), not raw instants.

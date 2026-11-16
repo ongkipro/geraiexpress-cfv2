@@ -95,7 +95,7 @@ export function MiniSitePage() {
   }
   if (error) return <SettingsLayout title="Mini-Site"><ErrorState message={error} onRetry={load} /></SettingsLayout>
   if (!v) return <SettingsLayout title="Mini-Site"><LoadingState label="Memuat mini-site" /></SettingsLayout>
-  const primary = v.domains.find((d) => d.role === "primary") ?? null
+  const primary = v.domains.find((d) => d.role === "primary") ?? v.domains[0] ?? null
   return (
     <SettingsLayout title="Mini-Site" description="Halaman cek ongkir, kirim dari rumah, dan lacak paket untuk pelanggan gerai Anda.">
       <Card>
@@ -162,7 +162,7 @@ function AddDomain({ pending, onAdd }: { pending: boolean; onAdd: (hostname: str
 function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boolean; onCheck: (method?: "txt" | "http") => void; onRemove: (confirm: string) => void }) {
   const [confirming, setConfirming] = useState(false)
   const [typed, setTyped] = useState("")
-  const primary = v.domains.find((d) => d.role === "primary")!
+  const primary = v.domains.find((d) => d.role === "primary") ?? v.domains[0]!
   const root = primary.branch === "subdomain" ? primary.hostname.split(".").slice(1).join(".") : primary.hostname.replace(/^www\./, "")
   const dns: Array<{ type: string; name: string; value: string }> = []
   for (const d of v.domains) {

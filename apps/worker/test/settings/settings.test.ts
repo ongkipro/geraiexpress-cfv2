@@ -71,6 +71,18 @@ describe("Pengaturan", () => {
     expect(ok.data.packing).toMatchObject({ serviceFeeIdr: 2000, items: [{ name: "Kardus", active: true }, { name: "Bubble", active: false }] })
   })
 
+  it("saving Profil keeps the PIC phone, re-registers a moved pickup point, and renames the gerai in D1", async () => {
+    const t = await checkoutGerai("profilaman")
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE tenant_outlets SET mengantar_address_id = 'addr-lama'"))
+    const same = { name: "Gerai Profil Aman", whatsapp: "0812-3456-7890", openingHours: "08.00–21.00", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago", street: "Jl. Dago No. 1", postalCode: "40135" }
+    expect((await post("/settings/profile", t.cookie, same)).status).toBe(200)
+    const read = () => runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ pic_phone: string | null; mengantar_address_id: string | null }>("SELECT pic_phone, mengantar_address_id FROM tenant_outlets WHERE is_default = 1").one())
+    expect(await read()).toEqual({ pic_phone: "081200000000", mengantar_address_id: "addr-lama" })
+    expect(await env.DB.prepare("SELECT name FROM tenants WHERE id = ?").bind(t.tenantId).first()).toEqual({ name: "Gerai Profil Aman" })
+    expect((await post("/settings/profile", t.cookie, { ...same, street: "Jl. Baru No. 9" })).status).toBe(200)
+    expect((await read()).mengantar_address_id).toBeNull()
+  })
+
   it("Anggota: list, Kasir boleh bayar COD switch, revoke ends the Kasir's access; the owner cannot revoke self", async () => {
     const { t, k } = await withCashier("aturanggota")
     const list = ((await (await appGet("/members", t.cookie)).json()) as { data: { members: Array<{ id: string; role: string }> } }).data.members

@@ -30,7 +30,9 @@ export async function exportAll(env: Env, now: number): Promise<{ exported: numb
 
 /** Restore drill: load the backup in `key` into an EMPTY object named `target` and compare checksums. */
 export async function restoreInto(env: Env, key: string, target: string): Promise<{ rows: number; sourceChecksum: string; restoredChecksum: string }> {
-  const r = await vaultFor(env, target).restoreBackup(key)
+  // Scratch names only: a real (possibly empty, pending) tenant object can never be a restore target.
+  if (!/^drill-[a-z0-9-]{3,80}$/.test(target)) throw new Error("target harus objek drill-*")
+  const r = await vaultFor(env, target).restoreBackup(key, target)
   if (!r.ok) throw new Error(r.error)
   return r.value
 }

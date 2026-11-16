@@ -212,4 +212,40 @@ describe("custom domain lifecycle", () => {
     expect(mockCf.hosts.has(id)).toBe(false)
     expect((await row("kirim.tokocek.id"))!.state).toBe("purged")
   })
+
+  it("a moved host recovers through the real probe path (classify answers it again)", async () => {
+    const t = await pro("cdpulih")
+    await appPost("/custom-domain", t.cookie, { hostname: "kirim.tokopulih.id" })
+    await createAtCloudflare(env, "kirim.tokopulih.id", Date.now())
+    // The probe goes through the Worker itself (no shortcut): the host must be probe-able in its current state.
+    const viaWorker = async (url: string) => {
+      const u = new URL(url)
+      return exports.default.fetch(`http://${u.hostname}${u.pathname}`, { headers: { host: u.hostname } })
+    }
+    mockCf.advance("kirim.tokopulih.id", "active", "active")
+    await refreshHost(env, "kirim.tokopulih.id", Date.now(), { probeFetch: viaWorker })
+    expect((await row("kirim.tokopulih.id"))!.state).toBe("active")
+    mockCf.advance("kirim.tokopulih.id", "moved", "active")
+    await refreshHost(env, "kirim.tokopulih.id", Date.now(), { probeFetch: viaWorker })
+    expect((await row("kirim.tokopulih.id"))!.state).toBe("moved")
+    hostCache.clear()
+    mockCf.advance("kirim.tokopulih.id", "active", "active")
+    await refreshHost(env, "kirim.tokopulih.id", Date.now(), { probeFetch: viaWorker })
+    expect((await row("kirim.tokopulih.id"))!.state).toBe("active")
+  })
+
+  it("root_primary: www never 301s to the platform subdomain before the root is active; deleting one deletes both", async () => {
+    const t = await pro("cdsetengah")
+    await appPost("/custom-domain", t.cookie, { hostname: "tokosetengah.id" })
+    for (const h of ["tokosetengah.id", "www.tokosetengah.id"]) await createAtCloudflare(env, h, Date.now())
+    mockCf.advance("www.tokosetengah.id", "active", "active")
+    await refreshHost(env, "www.tokosetengah.id", Date.now(), { probeFetch: probeVia(new Set(["www.tokosetengah.id"])) })
+    hostCache.clear()
+    const w = await site("www.tokosetengah.id", "/")
+    expect(w.status).toBe(200)
+    // Reaping the stale root purges the www twin too (no orphan the owner cannot remove).
+    await env.DB.prepare("UPDATE tenant_hostnames SET state_changed_at = ? WHERE hostname = 'tokosetengah.id'").bind(Date.now() - REAP_AFTER_MS - 1).run()
+    await reapHosts(env, Date.now())
+    expect((await row("www.tokosetengah.id"))!.state).toBe("purged")
+  })
 })

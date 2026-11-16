@@ -38,6 +38,8 @@ export type QuoteRow = {
   expected_provider_cod_credit_idr: number
   packing_addon_idr: number
   estimated_margin_idr: number
+  counter_service_fee_idr: number
+  promo_discount_idr: number
   quoted_at: number
   expires_at: number
 }
@@ -55,8 +57,9 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
   sql.exec(
     `INSERT INTO shipments (tenant_id, slug, courier_code, service_code, is_cargo, cod_fee_mode, status, dispatch_state, quote_snapshot_id, created_by_user_id,
        publish_shipping_idr, gerai_shipping_cost_idr, packing_addon_idr, insurance_fee_idr, cod_goods_amount_idr, cod_service_fee_idr, cod_collection_total_idr,
-       counter_due_idr, expected_provider_cod_credit_idr, sender_cod_payable_idr, actual_weight_gram, billable_weight_gram, counter_payment_status, index_version, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'draft', 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+       counter_due_idr, expected_provider_cod_credit_idr, sender_cod_payable_idr, actual_weight_gram, billable_weight_gram, counter_payment_status, index_version, created_at, updated_at,
+       counter_service_fee_idr, promo_discount_idr)
+     VALUES (?, ?, ?, ?, ?, ?, 'draft', 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
     tenantId,
     slug,
     q.courier_code,
@@ -80,6 +83,8 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
     q.counter_due_idr === 0 ? "not_required" : "unpaid",
     now,
     now,
+    q.counter_service_fee_idr ?? 0,
+    q.promo_discount_idr ?? 0,
   )
   // An INV that started as a mini-site QR pre-booking keeps that entry channel (dashboard "Sumber order").
   sql.exec("UPDATE shipments SET entry_channel = 'minisite_qr' WHERE slug = ? AND EXISTS (SELECT 1 FROM minisite_drafts WHERE slug = ?)", slug, slug)

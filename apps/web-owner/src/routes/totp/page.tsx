@@ -13,7 +13,7 @@ interface Enrolment {
 
 // TOTP challenge (aal2). On first login or after a recovery reset, the enrolment QR is shown ONCE (visual 07 §3.3).
 export function TotpPage() {
-  const { mode } = useSearch({ strict: false }) as { mode?: "required" | "enrol" }
+  const { mode, kembali } = useSearch({ strict: false }) as { mode?: "required" | "enrol"; kembali?: string }
   const navigate = useNavigate()
   const [enrol, setEnrol] = useState<Enrolment | null>(null)
   const [code, setCode] = useState("")
@@ -40,7 +40,9 @@ export function TotpPage() {
     setError(null)
     try {
       await api("/auth/totp/verify", { body: { code } })
-      await navigate({ to: "/" })
+      // Back to where the step-up started (validated relative path), else the console home.
+      if (kembali) window.location.assign(kembali)
+      else await navigate({ to: "/" })
     } catch (err) {
       setError(err instanceof ApiError ? err.body.message : "Terjadi kesalahan. Silakan coba lagi.")
     } finally {

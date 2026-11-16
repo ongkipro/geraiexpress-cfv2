@@ -381,6 +381,8 @@ export const quoteSnapshots = sqliteTable(
     estimatedMarginIdr: integer("estimated_margin_idr").notNull(),
     quotedAt: integer("quoted_at").notNull(),
     expiresAt: integer("expires_at").notNull(),
+    counterServiceFeeIdr: integer("counter_service_fee_idr").notNull().default(0),
+    promoDiscountIdr: integer("promo_discount_idr").notNull().default(0),
   },
   (t) => [index("quote_snapshots_slug").on(t.shipmentSlug, t.quotedAt)],
 )
@@ -596,6 +598,7 @@ export const financeSyncState = sqliteTable("finance_sync_state", {
   lastManualAt: integer("last_manual_at"),
   lastPendingRescanAt: integer("last_pending_rescan_at"),
   runningSince: integer("running_since"),
+    backfillCursor: text("backfill_cursor"),
 })
 
 // TASK-403 pickup manifests (Surat Jalan).

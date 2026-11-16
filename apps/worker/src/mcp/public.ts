@@ -91,6 +91,10 @@ export const PUBLIC_TOOLS: Tool<Ctx>[] = [
     run: (c, a) =>
       wrap(async () => {
         const now = Date.now()
+        // Validate before spending any quota (an invalid call never uses up the gerai's daily allowance).
+        const { parseDraft } = await import("../do/gerai-vault/minisite")
+        const check = parseDraft({ cod: a.cod === true, senderName: a.sender_name, senderPhone: a.sender_phone, senderStore: a.sender_store, recipientName: a.recipient_name, recipientPhone: a.recipient_phone, recipientAreaId: a.recipient_area_id, recipientAreaLabel: a.recipient_area_label, recipientStreet: a.recipient_street, content: a.content, weightGram: a.weight_gram, codGoodsIdr: a.cod_goods_idr ?? 0 })
+        if (!check.ok) throw new AppError(422, "INVALID_PREBOOKING", Object.values(check.errors)[0]!, check.errors)
         const perIp = await hit(c.env.DB, `ms-draft:${c.ip}`, 5, 3600_000, now)
         if (!perIp.allowed) throw new AppError(429, "DRAFT_LIMIT", "Terlalu banyak pengajuan dari jaringan ini. Coba lagi nanti atau langsung datang ke gerai.")
         const day = new Date(now + 7 * 3600_000).toISOString().slice(0, 10)
@@ -124,7 +128,11 @@ export const PUBLIC_TOOLS: Tool<Ctx>[] = [
 
 export async function handlePublicMcp(request: Request, env: Env, c: { tenantId: string; tenantSlug: string; host: string }): Promise<Response> {
   const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
-  const lim = await hit(env.DB, `mcp-pub:${ip}`, 30, 60_000, Date.now())
+  // Charge every JSON-RPC message of a batch, not the HTTP request (a batch of 20 is 20 calls).
+  const peek = (await request.clone().json().catch(() => null)) as unknown
+  const calls = Array.isArray(peek) ? Math.max(1, peek.length) : 1
+  let lim = { allowed: true, retryAfterMs: 0 }
+  for (let i = 0; i < calls && lim.allowed; i++) lim = await hit(env.DB, `mcp-pub:${ip}`, 30, 60_000, Date.now())
   if (!lim.allowed) return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Terlalu banyak permintaan. Coba lagi sebentar lagi." } }, { status: 429, headers: { "retry-after": String(Math.ceil(lim.retryAfterMs / 1000)) } })
   return serveMcp(request, { env, ...c, ip }, PUBLIC_TOOLS, {
     name: "geraiexpress-gerai",

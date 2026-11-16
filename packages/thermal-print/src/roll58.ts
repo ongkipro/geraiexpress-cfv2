@@ -117,6 +117,7 @@ export function rollLines(d: LabelData): RollLine[] {
     t(money("Ongkos Kirim", s.shippingIdr))
     t(kv("Asuransi", d.insuranceIdr === null ? "-" : `Rp ${d.insuranceIdr.toLocaleString("id-ID")}`))
     if (s.packingIdr) t(money("Packing", s.packingIdr))
+    if (s.serviceFeeIdr) t(money("Biaya Layanan Loket", s.serviceFeeIdr))
     if (s.promoIdr) t(money("Potongan Promo", s.promoIdr, true))
     t(rule())
     t(money("TOTAL", s.totalIdr), { bold: true })
@@ -127,6 +128,8 @@ export function rollLines(d: LabelData): RollLine[] {
     t(money("Ditagih ke Penerima", d.cod?.collectIdr ?? 0))
     t(rule())
     if (s.packingIdr) t(money("Packing", s.packingIdr))
+    if (s.serviceFeeIdr) t(money("Biaya Layanan Loket", s.serviceFeeIdr))
+    if (s.promoIdr) t(money("Potongan Promo", s.promoIdr, true))
     t(money("Dibayar di Loket", s.totalIdr), { bold: true })
   }
   const pay = s.payment

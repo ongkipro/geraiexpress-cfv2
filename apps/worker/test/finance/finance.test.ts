@@ -114,9 +114,35 @@ describe("finance sync", () => {
     expect(r1).toMatchObject({ ok: true, value: { pages: 5, rows: 250, capped: true } })
     const calls = mockSeller.invoiceCalls
     const r2 = await t.vault.financeSync(t.tenantId, "cron")
-    // The newest page is already known and final → one page only.
-    expect(r2).toMatchObject({ ok: true, value: { pages: 1, newRows: 0 } })
-    expect(mockSeller.invoiceCalls - calls).toBe(1)
+    // The newest page is known and final → then the backfill continues where run 1 stopped (rows 149..0).
+    expect(r2).toMatchObject({ ok: true, value: { pages: 4, newRows: 150, capped: false } })
+    expect(mockSeller.invoiceCalls - calls).toBe(4)
+    const mirrored = await runInDurableObject(t.vault, (_i, s) => s.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM mengantar_invoice_mirror").one().n)
+    expect(mirrored).toBe(400)
+    // Fully read: the "more than 5 pages" notice is resolved.
+    const open = await runInDurableObject(t.vault, (_i, s) => s.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE invoice_id = 'sync' AND resolved_at IS NULL").one().n)
+    expect(open).toBe(0)
+    const r3 = await t.vault.financeSync(t.tenantId, "cron")
+    expect(r3).toMatchObject({ ok: true, value: { pages: 1, newRows: 0 } })
+  })
+
+  it("pending/expired invoices never move money; only statusCleared does; unmatched refunds are flagged", async () => {
+    const t = await checkoutGerai("financependng")
+    const { cod } = await issuedPair(t)
+    mockInvoices.push({ _id: "pend1", type: "typeReconciliation", status: "statusPending", amount: 140000, balanceAmount: null, createdAt: iso(1), subItems: [{ cnote_no: cod.awb_number, amount: 140000 }] })
+    mockInvoices.push({ _id: "ref1", type: "typeRefund", status: "statusCleared", amount: 5000, balanceAmount: 19000, createdAt: iso(2), description: "Claim approved for order NOTOURS0001" })
+    await t.vault.financeSync(t.tenantId, "manual")
+    const s1 = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ c: number | null }>("SELECT reconciled_provider_cod_credit_idr AS c FROM shipments WHERE slug = ?", cod.slug).one().c)
+    expect(s1).toBeNull()
+    const unmatched = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE invoice_id = 'ref1' AND kind = 'unmatched'").one().n)
+    expect(unmatched).toBe(1)
+    mockInvoices[0]!.status = "statusCleared"
+    mockInvoices[0]!.balanceAmount = 154000
+    await new Promise((r) => setTimeout(r, 0))
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE finance_sync_state SET last_manual_at = 0"))
+    await t.vault.financeSync(t.tenantId, "pending_rescan")
+    const s2 = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ c: number | null }>("SELECT reconciled_provider_cod_credit_idr AS c FROM shipments WHERE slug = ?", cod.slug).one().c)
+    expect(s2).toBe(140000)
   })
 
   it("triggers: manual 1 per 30 s (Indonesian 429), +60 s after a mutation, cron fan-out, daily pending rescan; Kasir 403", async () => {

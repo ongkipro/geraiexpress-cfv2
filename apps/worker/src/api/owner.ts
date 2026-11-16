@@ -6,6 +6,7 @@ import { emit } from "@gx/telemetry"
 import { clearSessionCookie, isSecureRequest, setSessionCookie } from "../auth/cookies"
 import { sameOriginOk } from "../auth/csrf"
 import { login } from "../auth/flows"
+import { dispatchDue } from "../email/mailer"
 import { readSession, revokeSession, type Session } from "../auth/session"
 import * as throttle from "../auth/throttle"
 import { newTotpSecret, otpauthUri, verifyTotp } from "../auth/totp"
@@ -50,7 +51,7 @@ export function ownerGuard(level: AuthLevel): MiddlewareHandler<{ Bindings: Env;
     if (!admin || admin.status !== "active") return fail(403, "FORBIDDEN", "Akses ditolak.")
     c.set("session", s.session)
     if (level === "owner_aal1") return next()
-    if (s.session.row.aal !== "aal2") return fail(401, "TOTP_REQUIRED", "Masukkan kode TOTP untuk melanjutkan.")
+    if (s.session.row.aal !== "aal2") return admin.totp_state === "active" ? fail(401, "TOTP_REQUIRED", "Masukkan kode TOTP untuk melanjutkan.") : fail(401, "TOTP_ENROL_REQUIRED", "Daftarkan aplikasi autentikator untuk melanjutkan.")
     if (level === "owner_recent") {
       const at = s.session.row.totp_verified_at ?? 0
       if (Date.now() - at > RECENT_TOTP_MS) return fail(401, "TOTP_RECENT_REQUIRED", "Konfirmasi ulang TOTP untuk melanjutkan.")
@@ -130,6 +131,7 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       now: now(),
       isSuperAdmin: async (userId) => (await adminOf(c.env, userId))?.status === "active",
     })
+    if (res.newDevice) c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
     const admin = await adminOf(c.env, res.userId)
     return ok({ totp: admin?.totp_state === "active" ? "required" : "enrol" }, 200, {
       "set-cookie": setSessionCookie("owner", isSecureRequest(c.req.raw, c.env.GX_ENV), res.sessionToken, res.maxAgeSeconds),

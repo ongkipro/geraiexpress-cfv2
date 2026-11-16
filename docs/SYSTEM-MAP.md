@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-16 — **M6 code complete** (TASK-601..603 prepared; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
+Updated: 2026-11-16 — **M6 code complete + final review fixes** (all P0–P2 of the reviewer-carbon pass fixed, `docs/review/final-2026-11-16/`; production steps and TASK-604 pilot await the owner, see `STATUS.md`)
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 
@@ -23,9 +23,9 @@ Updated: 2026-11-16 — **M6 code complete** (TASK-601..603 prepared; production
 | `e2e/` | Playwright (390/768/1280), 22 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 24 · 1,013 |
 | `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
 
-Tests: 159 unit + 325 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
-… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`; tenant (v19): `0001_baseline` … `0014_settings`,
-`0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`.
+Tests: 163 unit + 350 Workers cases + 22 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
+… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`; tenant (v21): `0001_baseline` … `0014_settings`,
+`0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`.
 
 ## 2. Runtime hosts and audiences (one Worker, `wrangler.jsonc`: local, `env.staging`, `env.production`)
 
@@ -72,10 +72,10 @@ Status = provider maximum (terminal, minute bucket, rank) + monotone custody + `
 | `hooks.` | `POST /webhooks/mengantar/:token` → token hash → tenant object verifies (token, HMAC, ±5 min, environment) and stores before 200 → Queue `gx-mengantar-webhooks` → `applyWebhook` | path token + signature |
 | `app.` | `/api/v1/*` (Partner OpenAPI 3.1 from one route table: areas, quotes, shipments draft/list/detail/issue/pay-unpaid/labels, labels/bulk, bulk-imports, contacts, recipient-risk, exceptions, returns, finance summary/analytics/sync; `openapi.json`, `docs`) · `POST /mcp` (11 outlet tools over the same table) | Bearer key + scope; issue needs `Idempotency-Key` + daily Rupiah cap |
 | tenant hosts | `POST /mcp` (5 public tools: outlet info, areas, publish-price quote, pre-booking, initials-only tracking) | none; per-IP + per-gerai/day caps |
-| `app.` | `POST /api/app/auth/{signup/request,signup/verify,signup/complete,login,password/forgot,password/reset}`, `GET /auth/invitations/:token`, `POST /auth/invitations/:token/accept` | public allowlist |
+| `app.` | `GET /api/app/auth/config` (Turnstile site key), `POST /api/app/auth/{signup/request,signup/verify,signup/complete,login,password/forgot,password/reset}`, `GET /auth/invitations/:token`, `POST /auth/invitations/:token/accept` | public allowlist |
 | `app.` | `POST /auth/logout`, `GET /auth/me` · `GET /onboarding/areas`, `POST /onboarding/application`, `GET /onboarding/status` · `GET /areas` | `app_session` / `app_member` |
-| `app.` | `GET /workspace`, `/notifications*`, `/contacts/*`, `/media*`, `POST /quotes`, `/quotes/freeze`, `/shipments` (list), `/shipments/:slug{,/parties,/payment,/dispatch,/reconcile,/pay-unpaid,/cancel,/reveal-sender,/cod-payout}`, `/shift{,s,/open,/close}`, `/print{,/settings,/list}`, `/masking`, `/bulk{,/services,/template.csv,/:batch{,/recheck,/rows/:row,/create,/pay,/cancel-unissued}}`, `/track`, `/dashboard`, `/pickup*` (queue, open, scan, unscan, handover, `surat-jalan.pdf`), `/returns*` (desk, intake, code, handback), `/exceptions`, `/shipments/:slug/claim`, `/claims/:id/{status,packet}` · `/account*`, `/support` | `app_member` / `app_session` (role projection strips cost, margin, balance for Kasir) |
-| `app.` | `POST /members/invitations`, `GET /members`, `POST /members/:userId/revoke`, `POST /onboarding/byok`, `GET /settings`, `POST /settings/{profile,business,receipt,packing,cashier-payout}`, `/settings/masking`, `GET /settings/mengantar`, `POST /settings/mengantar/webhook-secret`, `GET /settings/couriers`, `POST /settings/couriers/:code`, `GET /shipments-export.csv`, `GET /finance`, `POST /finance/sync`, `POST /shipments/:slug/conflict-note`, `GET/POST /api-keys`, `POST /api-keys/:id/revoke`, `GET/POST /custom-domain`, `POST /custom-domain/{check,remove}` · local-only `POST /dev/seed-tenant`, `/dev/notify`, `/dev/mock-invoices`, `/dev/provider-status` | `app_owner` |
+| `app.` | `GET /workspace`, `GET /pos-config` (packing, counter service fee, receipt option), `/notifications*`, `/contacts/*`, `/media*`, `POST /quotes`, `/quotes/freeze`, `/shipments` (list), `/shipments/:slug{,/parties,/payment,/dispatch,/reconcile,/pay-unpaid,/cancel,/reveal-sender,/cod-payout}`, `/shift{,s,/open,/close}`, `/print{,/settings,/list}`, `/masking`, `/bulk{,/services,/template.csv,/:batch{,/recheck,/rows/:row,/create,/pay,/cancel-unissued}}`, `/track`, `/dashboard`, `/pickup*` (queue, open, scan, unscan, handover, `surat-jalan.pdf`), `/returns*` (desk, intake, code, handback), `/exceptions`, `/shipments/:slug/claim`, `/claims/:id/{status,packet}` · `/account*`, `/support` | `app_member` / `app_session` (role projection strips cost, margin, balance for Kasir) |
+| `app.` | `POST /members/invitations`, `GET /members`, `POST /members/:userId/revoke`, `POST /onboarding/byok`, `GET /settings`, `POST /settings/{profile,business,receipt,packing,cashier-payout}`, `/settings/masking`, `GET /settings/mengantar`, `POST /settings/mengantar/webhook-secret`, `GET /settings/couriers`, `POST /settings/couriers/:code`, `GET /shipments-export.csv`, `GET /finance`, `POST /finance/sync`, `POST /finance/discrepancies/:id/resolve`, `POST /shipments/:slug/conflict-note`, `GET/POST /api-keys`, `POST /api-keys/:id/revoke`, `GET/POST /custom-domain`, `POST /custom-domain/{check,remove}` · local-only `POST /dev/seed-tenant`, `/dev/notify`, `/dev/mock-invoices`, `/dev/provider-status` | `app_owner` |
 | `owner.` | `POST /api/owner/auth/login` · `/auth/totp/{enrol,verify}`, `/auth/logout` · `GET /auth/me` | public · `owner_aal1` |
 | `owner.` | reads: `/overview`, `/gerai/{summary,applications,applications/:id,directory,:slug}`, `/tarif/{gerai,gerai/:id,permintaan,permintaan.csv,kebijakan}`, `/pengawasan/{kiriman,antrean}`, `/sistem/{kesehatan,admin,profil-perusahaan}`, `/domains` | `owner_aal2` |
 | `owner.` | changes + sensitive reads: approve/reject/status/masking/custom-domain/retry, `POST /domains/:hostname/delete`, `/tarif/*` edits, `/pengawasan/risiko` (+`risk_review`), `/sistem/{audit,admin/:id/risk-review,rotasi-kunci/:slug,profil-perusahaan}`, `/audit`, `/admins*` | `owner_recent` (TOTP ≤ 15 min) + reason + audit |

@@ -146,7 +146,11 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
   const [override, setOverride] = useState(false)
   const [share, setShare] = useState<string | null>(null)
   const [fieldErr, setFieldErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   async function sendCode() {
+    // One request at a time: a double tap would issue a second code and void the one already sent.
+    if (busy) return
+    setBusy(true)
     try {
       const x = await api<{ code: string }>(`/returns/${r.slug}/code`, { body: {} })
       const sender = await api<{ name: string; phone: string; brand: string | null }>(`/shipments/${r.slug}/reveal-sender`, { body: { reason: "Kirim Kode Ambil retur" } })
@@ -154,16 +158,22 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
       setShare(`https://wa.me/${wa(sender.phone)}?text=${encodeURIComponent(text)}`)
     } catch (e) {
       onChange({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Gagal membuat Kode Ambil." })
+    } finally {
+      setBusy(false)
     }
   }
   async function handback(e: FormEvent) {
     e.preventDefault()
+    if (busy) return
+    setBusy(true)
     setFieldErr(null)
     try {
       await api(`/returns/${r.slug}/handback`, { body: override ? { override: { reason } } : { code } })
       onChange({ tone: "safe", text: `INV ${r.slug.toUpperCase()} sudah diserahkan ke pengirim.` })
     } catch (err) {
       setFieldErr(err instanceof ApiError ? err.body.message : "Gagal menyerahkan paket.")
+    } finally {
+      setBusy(false)
     }
   }
   return (
@@ -175,7 +185,7 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
       <p className="text-base">Kondisi: {COND_LABEL[r.condition] ?? r.condition} · simpan sampai {day(r.storage_deadline_at)}{r.conflict ? <span className="font-medium text-danger"> · status bertentangan</span> : null}</p>
       {r.claim_offered ? <p className="border-l-4 border-warn pl-3 text-base">Paket rusak/terbuka: ajukan klaim retur rusak sebelum batas waktu ekspedisi (Kiriman › Kendala & Klaim).</p> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={sendCode}><MessageCircleIcon aria-hidden /> {r.code_issued_at ? "Kirim Ulang Kode Ambil" : "Kirim Kode Ambil"}</Button>
+        <Button variant="outline" disabled={busy} onClick={sendCode}><MessageCircleIcon aria-hidden /> {r.code_issued_at ? "Kirim Ulang Kode Ambil" : "Kirim Kode Ambil"}</Button>
         {share ? <a href={share} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Buka WhatsApp</a> : null}
       </div>
       <form onSubmit={handback} className="flex flex-wrap items-end gap-2" noValidate>

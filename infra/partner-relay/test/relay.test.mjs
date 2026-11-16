@@ -83,4 +83,23 @@ describe("partner relay (spec 10 §4.2)", () => {
     expect(code(await relay.handle("POST", "/forward", req(), Buffer.alloc(64 * 1024 + 1)))).toBe("relay_body_too_large")
     expect((await relay.handle("POST", "/other", req(), Buffer.from("{}"))).status).toBe(404)
   })
+
+  it("a call refused as busy is not remembered: its retry with the same X-Relay-Id is forwarded", async () => {
+    let release
+    const gate = new Promise((r) => (release = r))
+    const calls = []
+    const fetchImpl = async (url) => {
+      calls.push(url)
+      await gate
+      return new Response('{"success":true,"data":{}}', { status: 200 })
+    }
+    const relay = createRelay({ secret: RELAY_TEST_VALUE, upstreamOrigin: "https://partner.mengantar.example", fetchImpl, now: () => T * 1000, log: () => {}, maxConcurrent: 1 })
+    const first = send(relay, req())
+    const h = req()
+    expect(code(await send(relay, h))).toBe("relay_busy")
+    release()
+    await first
+    expect((await send(relay, h)).status).toBe(200)
+    expect(calls.length).toBe(2)
+  })
 })

@@ -24,6 +24,8 @@ describe("status ordering rule (spec 01 §3)", () => {
   it("read-back-confirmed local cancel → cancelled; conflict when provider moved on", () => {
     expect(combine(null, "cancelled_local")).toEqual({ status: "cancelled", conflict: false })
     expect(combine("in_transit", "cancelled_local")).toEqual({ status: "cancelled", conflict: true })
+    // Mengantar confirming the cancellation agrees with the counter: no conflict (final Carbon pass, M2B #1).
+    expect(combine("cancelled", "cancelled_local")).toEqual({ status: "cancelled", conflict: false })
   })
   it("terminal never regresses; a later non-terminal is ignored", () => {
     expect(fold([{ status: "delivered", eventAt: at("09:00:00") }, { status: "in_transit", eventAt: at("12:00:00") }])!.status).toBe("delivered")

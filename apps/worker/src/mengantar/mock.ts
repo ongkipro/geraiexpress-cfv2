@@ -18,9 +18,11 @@ export const mockFaults: {
   regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"
   apiKey?: "timeout"
   order?: "timeout_after_create" | "timeout_before_create" | "validation_error" | "replayed_5xx" | "unavailable"
-  deleteOrder?: "timeout_after_delete" | "refused"
+  deleteOrder?: "timeout_after_delete" | "timeout_before_delete" | "refused"
   readBack?: "timeout"
   invoices?: "error"
+  /** `sellers/list` ignores the externalUserId filter and returns every seller (loose provider filter). */
+  listIgnoresFilter?: true
   /** Every Public API call answers `403 IP_NOT_ALLOWED` (DEC-232 alert drill). */
   publicIpNotAllowed?: true
 } = {}
@@ -62,7 +64,8 @@ export const mockFetch: typeof fetch = async (input, init) => {
   }
   if (p === "/api/partner/v1/sellers/list") {
     const s = body.externalUserId ? sellers.get(body.externalUserId) : null
-    const list = body.externalUserId ? (s ? [{ ...s, externalUserId: body.externalUserId, active: true }] : []) : [...sellers.entries()].map(([k, v]) => ({ ...v, externalUserId: k, active: true }))
+    const all = [...sellers.entries()].map(([k, v]) => ({ ...v, externalUserId: k, active: true }))
+    const list = mockFaults.listIgnoresFilter ? all : body.externalUserId ? (s ? [{ ...s, externalUserId: body.externalUserId, active: true }] : []) : all
     return json(200, { success: true, data: { sellers: list.map(({ apiKey: _k, callbackSecret: _c, ...r }) => r), page: 1, size: 50, total: list.length, totalPages: 1 } })
   }
   if (p === "/api/partner/v1/sellers/api-key" || p === "/api/partner/v1/sellers/api-key/regenerate") {
@@ -191,6 +194,7 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const fault = mockFaults.deleteOrder
     delete mockFaults.deleteOrder
     if (fault === "refused") return json(400, { success: false, code: "CANNOT_CANCEL", message: "Order sudah dijemput" })
+    if (fault === "timeout_before_delete") throw Object.assign(new Error("timeout"), { name: "TimeoutError" })
     for (const id of body.ids ?? []) {
       const o = mockCreated.get(id) ?? [...mockCreated.values()].find((x) => x._id === id || x.cnote_no === id)
       if (o && ["PENDING PICKUP", "ACTIVE", "UNPAID"].includes(o.status)) {

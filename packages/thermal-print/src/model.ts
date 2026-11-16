@@ -37,6 +37,8 @@ export interface LabelData {
   stub: {
     shippingIdr: number
     packingIdr: number
+    /** `Biaya Layanan Loket` (0 = none); printed so the lines add up to TOTAL. */
+    serviceFeeIdr?: number
     promoIdr: number
     totalIdr: number
     payment: { status: "paid"; method: "qris" | "tunai" | "transfer" | "deposit"; cashIdr: number | null; changeIdr: number | null } | { status: "unpaid" | "not_required" }

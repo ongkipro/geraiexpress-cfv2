@@ -4,7 +4,7 @@ import { AuthCard, FormAlert } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { devTurnstileToken } from "../../lib/turnstile"
+import { useTurnstile } from "../../lib/turnstile"
 
 export function MasukPage() {
   const navigate = useNavigate()
@@ -14,15 +14,18 @@ export function MasukPage() {
   const [error, setError] = useState<string | null>(null)
   const [locked, setLocked] = useState(false)
 
+  const { setContainer: turnstileBox, ...ts } = useTurnstile()
+
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (pending) return
+    if (pending || !ts.token) return
     setPending(true)
     setError(null)
     try {
-      await api("/auth/login", { body: { email, password, turnstileToken: devTurnstileToken() } })
+      await api("/auth/login", { body: { email, password, turnstileToken: ts.token } })
       await navigate({ to: "/" })
     } catch (err) {
+      ts.reset()
       const ae = err instanceof ApiError ? err : null
       setLocked(ae?.status === 429)
       setError(ae?.body.message ?? "Terjadi kesalahan. Silakan coba lagi.")
@@ -50,7 +53,9 @@ export function MasukPage() {
             Lupa kata sandi?
           </Link>
         </div>
-        <Button type="submit" size="lg" disabled={pending}>
+        <div ref={turnstileBox} />
+        {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
+        <Button type="submit" size="lg" disabled={pending || !ts.ready}>
           {pending ? "Memproses…" : "Masuk"}
         </Button>
       </form>

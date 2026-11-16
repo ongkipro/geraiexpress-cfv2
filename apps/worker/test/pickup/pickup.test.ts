@@ -96,4 +96,21 @@ describe("pickup manifest", () => {
     const s = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ custody_stage: string }>("SELECT custody_stage FROM shipments WHERE slug = ?", a.slug).one().custody_stage)
     expect(s).toBe("handed_to_courier")
   })
+
+  it("an INV cancelled after scanning leaves the open manifest; a changed one blocks handover", async () => {
+    const t = await checkoutGerai("pickupbatal")
+    const a = await issue(t, { pay: false })
+    const b = await issue(t)
+    const open = ((await (await post("/pickup/open", t.cookie, { courier: "JT" })).json()) as { data: { batch: { id: string } } }).data.batch.id
+    await post(`/pickup/${open}/scan`, t.cookie, { code: a.slug })
+    await post(`/pickup/${open}/scan`, t.cookie, { code: b.slug })
+    expect((await post(`/shipments/${a.slug}/cancel`, t.cookie, { reason: "batal kirim" })).status).toBe(200)
+    const items = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ slug: string }>("SELECT slug FROM pickup_batch_items WHERE batch_id = ?", open).toArray().map((r) => r.slug))
+    expect(items).toEqual([b.slug])
+    // A scanned INV whose state changed underneath (e.g. a provider status) blocks the manifest.
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE shipments SET status = 'in_transit' WHERE slug = ?", b.slug))
+    const h = await post(`/pickup/${open}/handover`, t.cookie, { mode: "dropped_at_branch" })
+    expect(h.status).toBe(409)
+    expect(((await h.json()) as { error: { code: string } }).error.code).toBe("ITEM_NOT_READY")
+  })
 })

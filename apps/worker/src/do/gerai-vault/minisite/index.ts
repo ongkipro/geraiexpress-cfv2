@@ -23,9 +23,9 @@ export function publicProfile(sql: SqlStorage): PublicProfile | null {
 
 /** `Rina Kartika` → `R*** K******` (spec 05 §3). */
 export function initialsMask(name: string | null | undefined): string | null {
-  if (!name) return null
-  return name
-    .trim()
+  const t = (name ?? "").trim()
+  if (!t) return null
+  return t
     .split(/\s+/)
     .slice(0, 4)
     .map((w) => `${w[0]!.toUpperCase()}${"*".repeat(Math.min(6, Math.max(2, w.length - 1)))}`)
@@ -100,6 +100,7 @@ export function purgeDrafts(sql: SqlStorage, now: number): number {
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Menunggu diserahkan ke gerai",
+  provider_unpaid_hold: "Sedang diproses gerai",
   ready_for_pickup: "Menunggu dijemput kurir",
   handed_to_courier: "Sudah diserahkan ke kurir",
   in_transit: "Dalam perjalanan",
@@ -133,19 +134,20 @@ export type PublicTrack = {
 type Ship = { slug: string; awb_number: string | null; courier_code: string; service_code: string; status: string; true_sender_json: string | null; true_recipient_json: string | null; mask_preset: MaskPreset | null; mask_snapshot_json: string | null; pickup_snapshot_json: string | null; recipient_contact_id: string | null }
 
 /** Public lookup by INV slug or AWB. Drafts (not yet at the counter) answer with a neutral "waiting" state. */
-export function publicTrack(sql: SqlStorage, code: string): PublicTrack | null {
+export function publicTrack(sql: SqlStorage, code: string, now: number = Date.now()): PublicTrack | null {
   const raw = code.trim()
   const slug = normalizeSlug(raw)
   const s = sql
     .exec<Ship>(
-      "SELECT slug, awb_number, courier_code, service_code, status, true_sender_json, true_recipient_json, mask_preset, mask_snapshot_json, pickup_snapshot_json, recipient_contact_id FROM shipments WHERE (slug = ? OR UPPER(awb_number) = ?) AND dispatch_state IN ('issued','cancelled') LIMIT 1",
+      "SELECT slug, awb_number, courier_code, service_code, status, true_sender_json, true_recipient_json, mask_preset, mask_snapshot_json, pickup_snapshot_json, recipient_contact_id FROM shipments WHERE (slug = ? OR UPPER(awb_number) = ?) AND dispatch_state IN ('issued','cancelled','provider_unpaid_hold') LIMIT 1",
       slug ?? "~",
       raw.replace(/\s+/g, "").toUpperCase(),
     )
     .toArray()[0]
   if (!s) {
     const d = slug ? readDraft(sql, slug) : null
-    if (!d || d.claimed_at) return null
+    // An unclaimed pre-booking past its 48 h is gone for the public (the QR card no longer works).
+    if (!d || d.claimed_at || d.expires_at < now) return null
     return { inv: d.slug, awb: null, courier: null, service: null, status: "draft", statusLabel: STATUS_LABEL.draft!, sender: initialsMask(d.sender_store ?? d.sender_name), recipient: initialsMask(d.recipient_name), originArea: null, destinationArea: areaCity(d.recipient_area_label), timeline: [], delivered: false, outletContact: null }
   }
   const sender = s.true_sender_json ? (JSON.parse(s.true_sender_json) as { name?: string; brand?: string | null }) : null
@@ -205,6 +207,6 @@ export function unlock(sql: SqlStorage, slug: string, digits: string, now: numbe
     return { ok: false, code: attempts >= UNLOCK_MAX_WRONG ? "LOCKED" : "WRONG" }
   }
   sql.exec("DELETE FROM tracking_unlocks WHERE slug = ?", slug)
-  const note = sql.exec<{ raw_category: string | null }>("SELECT raw_category FROM shipment_events WHERE slug = ? AND mapped_status = 'delivered' ORDER BY event_at DESC LIMIT 1", slug).toArray()[0]?.raw_category ?? null
-  return { ok: true, value: { recipientName: r?.name ?? "", note } }
+  // No provider jargon on the public page (the raw category is an English enum, not a human note).
+  return { ok: true, value: { recipientName: r?.name ?? "", note: null } }
 }

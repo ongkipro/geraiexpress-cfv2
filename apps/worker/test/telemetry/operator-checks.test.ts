@@ -22,6 +22,9 @@ describe("operator checks fire on a synthetic breach (TASK-602)", () => {
     expect(await issueHealth(e, NOW, ctx([{ issues30m: 100, reconciliation30m: 2 }]))).toBeNull()
     expect((await issueHealth(e, NOW, ctx([{ issues30m: 100, reconciliation30m: 3 }])))!.key).toBe("issue_reconciliation_rate")
     expect((await issueHealth(e, NOW, ctx([{ failedStreak: true }])))!.key).toBe("issue_failed_streak")
+    // Separate checks: a streak at one gerai never hides a reconciliation storm elsewhere.
+    const { issueReconciliationRate } = await import("../../src/telemetry/checks")
+    expect((await issueReconciliationRate(e, NOW, ctx([{ failedStreak: true }, { issues30m: 100, reconciliation30m: 10 }])))!.key).toBe("issue_reconciliation_rate")
   })
 
   it("webhook inbox older than 15 min; finance sync older than 60 min (connected, ran before)", async () => {
@@ -29,6 +32,8 @@ describe("operator checks fire on a synthetic breach (TASK-602)", () => {
     expect((await webhookInboxAge(e, NOW, ctx([{ oldestInboxAgeMs: 15 * 60_000 + 1 }])))!.key).toBe("webhook_inbox_age")
     expect(await financeSyncAge(e, NOW, ctx([{ financeLastOkAgeMs: 60 * 60_000 }]))).toBeNull()
     expect(await financeSyncAge(e, NOW, ctx([{ financeLastOkAgeMs: 2 * 3600_000, connected: false }]))).toBeNull()
+    // Connected but never synced (measured from connection time) also alerts once 60 min passed.
+    expect((await financeSyncAge(e, NOW, ctx([{ financeLastOkAgeMs: 61 * 60_000, financeEverRan: false }])))!.key).toBe("finance_sync_age")
     expect((await financeSyncAge(e, NOW, ctx([{ financeLastOkAgeMs: 60 * 60_000 + 1 }])))!.key).toBe("finance_sync_age")
   })
 
@@ -62,6 +67,14 @@ describe("operator checks fire on a synthetic breach (TASK-602)", () => {
     await env.DB.batch([ins(20, "expired")])
     expect((await emailFailureRate(e, NOW, ctx([])))!.key).toBe("email_failure_rate")
     await env.DB.prepare("DELETE FROM email_outbox WHERE id LIKE 'drill-mail-%'").run()
+    // Hard bounces per day: > 5 % of sent + bounced (min 20) alerts.
+    const { emailBounceRate } = await import("../../src/telemetry/checks")
+    const ins2 = (i: number, state: string, code: string | null) => env.DB.prepare("INSERT INTO email_outbox (id, template_id, to_email_hash, state, attempts, next_attempt_at, expires_at, created_at, last_error_code) VALUES (?, 'signup_otp', 'h', ?, 1, 0, ?, ?, ?)").bind(`drill-b-${i}`, state, NOW + 1, t, code)
+    await env.DB.batch([...Array.from({ length: 19 }, (_, i) => ins2(i, "sent", null)), ins2(19, "suppressed", "E_DELIVERY_FAILED")])
+    expect(await emailBounceRate(e, NOW, ctx([]))).toBeNull()
+    await env.DB.batch([ins2(20, "suppressed", "E_DELIVERY_FAILED")])
+    expect((await emailBounceRate(e, NOW, ctx([])))!.key).toBe("email_bounce_rate")
+    await env.DB.prepare("DELETE FROM email_outbox WHERE id LIKE 'drill-b-%'").run()
 
     const g = await checkoutGerai("alertdiskon")
     await env.DB.prepare("UPDATE tenant_discount_rules SET verification_state = 'sesuai' WHERE verification_state = 'belum_diterapkan'").run()

@@ -33,6 +33,7 @@ import { desk as returnDesk, handback as returnHandback, intake as returnIntake,
 import { bucketCounts, expireClaims, listBucket, moveClaim, noteConflict, openClaim, type Bucket, type ExceptionError, type ExceptionRow } from "./exceptions"
 import { insertDraft, parseDraft, publicProfile, publicTrack, purgeDrafts, readDraft, unlock as unlockTrack, type DraftInput, type DraftRow, type PublicProfile, type PublicTrack } from "./minisite"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
+import { maskPhone } from "@gx/domain/masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
 import { labelDataFrom } from "../../labels/build"
@@ -112,6 +113,8 @@ export type FrozenQuote = {
   sender_cod_payable_idr: number
   expected_provider_cod_credit_idr: number
   packing_addon_idr: number
+  counter_service_fee_idr: number
+  promo_discount_idr: number
   estimated_margin_idr: number
   quoted_at: number
   expires_at: number
@@ -295,12 +298,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
   /** Records an onboarding step; a key, when given, is encrypted before it touches storage. */
   async recordOnboarding(
     tenantId: string,
-    step: { environment: "sandbox" | "production"; state: OnboardingState; sellerId?: string | null; externalUserId?: string; apiKey?: string | null },
-  ): Promise<VaultResult<ConnectionView | null>> {
+    step: { environment: "sandbox" | "production"; state: OnboardingState; sellerId?: string | null; externalUserId?: string | null; apiKey?: string | null },
+  ): Promise<VaultResult<ConnectionView | null> | { ok: false; refused: "KEY_ROTATING" }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const now = Date.now()
     const cur = readConnection(this.ctx.storage.sql)
+    // A new key never lands during a seller-key rotation (the fence owns the key until it resolves).
+    if (step.apiKey && cur && cur.rotation_state !== "idle") return { ok: false, refused: "KEY_ROTATING" }
     const encrypted = step.apiKey ? await encryptString(this.env.KEK_SECRET, step.apiKey, `seller-key:${tenantId}`) : undefined
     upsertConnection(
       this.ctx.storage.sql,
@@ -564,7 +569,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
     sql.exec(
       `INSERT INTO tenant_outlets (id, tenant_id, name, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10)
-       ON CONFLICT(id) DO UPDATE SET name = ?3, pic_name = ?4, pic_phone = ?5, mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9, updated_at = ?10`,
+       ON CONFLICT(id) DO UPDATE SET name = ?3, pic_name = COALESCE(?4, pic_name), pic_phone = COALESCE(?5, pic_phone), mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9,
+         -- A moved pickup point must be registered again at Mengantar (never keep shipping from the old address).
+         mengantar_address_id = CASE WHEN mengantar_area_id IS ?6 AND street_address IS ?9 THEN mengantar_address_id ELSE NULL END, updated_at = ?10`,
       id,
       tenantId,
       o.name,
@@ -580,19 +587,33 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   /** Stores a server-computed frozen quote for an allocated INV slug (TASK-304 dispatch sends these values). */
-  async freezeQuote(tenantId: string, snap: FrozenQuote): Promise<VaultResult<string> | { ok: false; refused: "UNKNOWN_SLUG" }> {
+  async freezeQuote(tenantId: string, snap: FrozenQuote): Promise<VaultResult<string> | { ok: false; refused: "UNKNOWN_SLUG" | "SHIPMENT_LOCKED" }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     if (!slugTaken(this.ctx.storage, snap.shipment_slug)) return { ok: false, refused: "UNKNOWN_SLUG" }
+    const sql = this.ctx.storage.sql
     const id = crypto.randomUUID()
     const cols = Object.keys(snap) as (keyof FrozenQuote)[]
-    this.ctx.storage.sql.exec(
-      `INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`,
-      id,
-      tenantId,
-      ...cols.map((c) => snap[c] as SqlStorageValue),
-    )
-    return { ok: true, value: id }
+    return this.ctx.storage.transactionSync((): VaultResult<string> | { ok: false; refused: "UNKNOWN_SLUG" } | { ok: false; refused: "SHIPMENT_LOCKED" } => {
+      // Re-quoting is allowed only while the INV is an unpaid draft; then the draft follows the new quote, so the
+      // counter amount, courier and weight can never disagree with what is dispatched.
+      const cur = sql.exec<{ dispatch_state: string; counter_payment_status: string }>("SELECT dispatch_state, counter_payment_status FROM shipments WHERE slug = ?", snap.shipment_slug).toArray()[0]
+      if (cur && (cur.dispatch_state !== "draft" || cur.counter_payment_status === "paid")) return { ok: false, refused: "SHIPMENT_LOCKED" }
+      sql.exec(`INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`, id, tenantId, ...cols.map((c) => snap[c] as SqlStorageValue))
+      if (cur) {
+        sql.exec(
+          `UPDATE shipments SET courier_code = ?, service_code = ?, is_cargo = ?, cod_fee_mode = ?, quote_snapshot_id = ?, publish_shipping_idr = ?, gerai_shipping_cost_idr = ?,
+             packing_addon_idr = ?, insurance_fee_idr = ?, cod_goods_amount_idr = ?, cod_service_fee_idr = ?, cod_collection_total_idr = ?, counter_due_idr = ?,
+             expected_provider_cod_credit_idr = ?, sender_cod_payable_idr = ?, actual_weight_gram = ?, billable_weight_gram = ?, counter_service_fee_idr = ?, promo_discount_idr = ?,
+             counter_payment_status = ?, updated_at = ? WHERE slug = ?`,
+          snap.courier_code, snap.service_code, snap.service_class === "cargo" ? 1 : 0, snap.cod_fee_mode, id, snap.publish_shipping_idr, snap.effective_gerai_cost_idr,
+          snap.packing_addon_idr, snap.insurance_fee_idr, snap.cod_goods_amount_idr, snap.cod_fee_idr, snap.cod_collection_total_idr, snap.counter_due_idr,
+          snap.expected_provider_cod_credit_idr, snap.sender_cod_payable_idr, snap.actual_weight_gram, snap.billable_weight_gram, snap.counter_service_fee_idr, snap.promo_discount_idr,
+          snap.counter_due_idr === 0 ? "not_required" : "unpaid", Date.now(), snap.shipment_slug,
+        )
+      }
+      return { ok: true, value: id }
+    })
   }
 
   // ---- Checkout, payment record, dispatch, cancellation (TASK-304, ADR-0004) -------------------------------------
@@ -610,14 +631,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
       draft = r.ok ? r.value : null
     })
     if (!draft) return { ok: true, value: null }
-    const s = readShipment(sql, slug) as unknown as Record<string, SqlStorageValue>
+    const s0 = readShipment(sql, slug) as unknown as Record<string, SqlStorageValue>
     const q = latestQuote(sql, slug)
+    // ADR-0005 §2: once a masked INV is issued, the true sender is shown only through the audited
+    // `reveal-sender` (reason required); the detail carries the printed identity instead.
+    const hidden = !["draft", "failed"].includes(String(s0.dispatch_state)) && s0.mask_preset !== null && s0.mask_preset !== "standar_gerai"
+    const s = hidden ? { ...s0, true_sender_json: null } : s0
     return {
       ok: true,
       value: {
         shipment: s,
         quote: q as unknown as Record<string, SqlStorageValue> | null,
-        sender: s.sender_contact_id ? readSender(sql, String(s.sender_contact_id)) : null,
+        sender: hidden ? null : s.sender_contact_id ? readSender(sql, String(s.sender_contact_id)) : null,
         recipient: s.recipient_contact_id ? readRecipient(sql, String(s.recipient_contact_id)) : null,
         receipts: receiptsFor(sql, slug),
         preflight: preflightOf(sql, s, q),
@@ -680,13 +705,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const payload = orderPayload(ready.q, ready.sender, ready.recipient, String(ready.s.content_declaration_text), slug, pickup.value)
     const preset = (ready.s.mask_preset ?? "standar_gerai") as MaskPreset
     const reseller = ready.sender.sender_kind === "reseller_dropship"
-    const outlet = sql.exec<{ name: string; pic_phone: string | null; street_address: string | null; subdistrict_name: string | null }>("SELECT name, pic_phone, street_address, subdistrict_name FROM tenant_outlets WHERE id = ?", pickup.value.outletId).toArray()[0]
+    const outlet = sql.exec<{ name: string; pic_phone: string | null; street_address: string | null; subdistrict_name: string | null }>("SELECT name, COALESCE(whatsapp, pic_phone) AS pic_phone, street_address, subdistrict_name FROM tenant_outlets WHERE id = ?", pickup.value.outletId).toArray()[0]
     const printed = printedIdentity(preset, {
       trueSender: { name: ready.sender.true_name, phone: ready.sender.true_phone },
       brand: { name: ready.sender.display_brand_name, phone: ready.sender.display_brand_phone, hideOutlet: ready.sender.hide_gerai_branding === 1 },
       outlet: { name: outlet?.name ?? "", phone: outlet?.pic_phone ?? null },
       recipientPhone: ready.recipient.phone,
+      senderIsReseller: reseller,
     })
+    // `Samarkan HP penerima untuk kiriman COD` (DEC-231): COD labels print the masked recipient phone under any preset.
+    if (ready.q.cod_fee_mode !== "none" && readSettings(sql, platform).maskRecipientOnCod) printed.recipientPhonePrinted = maskPhone(ready.recipient.phone)
     this.dispatching.add(slug)
     try {
       const claim = this.ctx.storage.transactionSync((): ReturnType<typeof claimPreset> => {
@@ -727,7 +755,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         this.audit(tenantId, at, "user", actorId, "shipment.dispatch", { slug, outcome: outcome.kind, preset })
       })
       await this.armOutbox()
-      if (outcome.kind === "ambiguous") return this.reconcileDispatch(tenantId, slug, at)
+      if (outcome.kind === "ambiguous") return this.reconcileNow(tenantId, slug, at)
       if (outcome.kind === "rejected") return { ok: false, error: { status: 422, code: "PROVIDER_REJECTED", message: `Mengantar menolak kiriman: ${outcome.message}` } }
       const after = readShipment(sql, slug)!
       return { ok: true, value: { state: outcome.kind === "issued" ? "issued" : "provider_unpaid_hold", awb: after.awb_number } }
@@ -740,7 +768,17 @@ export class GeraiVaultDO extends DurableObject<Env> {
   async reconcileDispatch(tenantId: string, slug: string, now: number = Date.now()): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
+    // Never while this object is still awaiting `POST /order` for the INV (the dispatch path reconciles itself).
+    if (this.dispatching.has(slug)) return { ok: false, error: { status: 409, code: "DISPATCH_IN_PROGRESS", message: "Penerbitan masih berjalan. Tunggu sebentar." } }
+    return this.reconcileNow(tenantId, slug, now)
+  }
+
+  private async reconcileNow(tenantId: string, slug: string, now: number): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
     const sql = this.ctx.storage.sql
+    // Only an unresolved issue is reconciled.
+    const cur = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string; mask_preset: string | null; sender_contact_id: string | null }) | null
+    if (!cur) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
+    if (cur.dispatch_state !== "reconciliation_needed") return { ok: true, value: { state: cur.dispatch_state, awb: cur.awb_number } }
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
     const q = latestQuote(sql, slug)
@@ -751,12 +789,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
     } catch {
       return { ok: false, error: { status: 503, code: "RECONCILIATION_PENDING", message: "Status kiriman belum pasti. Sistem akan memeriksa lagi; jangan buat ulang kiriman ini." } }
     }
-    const journal = sql.exec<{ idempotency_key: string }>("SELECT idempotency_key FROM dispatch_journal WHERE slug = ? AND op = 'create_order' ORDER BY created_at DESC LIMIT 1", slug).toArray()[0]
+    const journal = sql.exec<{ idempotency_key: string; created_at: number }>("SELECT idempotency_key, created_at FROM dispatch_journal WHERE slug = ? AND op = 'create_order' ORDER BY created_at DESC LIMIT 1", slug).toArray()[0]
     this.ctx.storage.transactionSync(() => {
+      // The state may have moved while the read-back was awaited (another request resolved it): re-check.
+      const again = sql.exec<{ dispatch_state: string }>("SELECT dispatch_state FROM shipments WHERE slug = ?", slug).toArray()[0]
+      if (again?.dispatch_state !== "reconciliation_needed") return
       if (found) recordOutcome(sql, slug, journal?.idempotency_key ?? "", { kind: found.cnote_no ? "issued" : "unpaid", item: found, batchId: found.batch_id ?? null, batchCode: found.batch ?? null }, q?.cod_fee_idr ?? 0, now)
       else {
         setDispatchStatus(sql, slug, "draft", now, { dispatch_state: "draft", dispatch_error: "Tidak ditemukan di Mengantar setelah diperiksa; aman untuk diterbitkan ulang." })
         if (journal) sql.exec("UPDATE dispatch_journal SET state = 'failed', error = 'not found on read-back', updated_at = ? WHERE idempotency_key = ?", now, journal.idempotency_key)
+        // The issue never reached Mengantar: give back the masking slot claimed for it.
+        const sender = cur.sender_contact_id ? sql.exec<{ sender_kind: string }>("SELECT sender_kind FROM sender_contacts WHERE id = ?", cur.sender_contact_id).toArray()[0] : undefined
+        releasePreset(sql, (cur.mask_preset ?? "standar_gerai") as MaskPreset, sender?.sender_kind === "reseller_dropship", journal?.created_at ?? now)
       }
     })
     await this.armOutbox()
@@ -772,16 +816,39 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const s = readShipment(sql, slug) as (ShipmentRow & { dispatch_state: string; mengantar_batch_object_id: string | null; mengantar_order_code: string | null }) | null
     if (!s) return { ok: false, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
     if (s.dispatch_state !== "provider_unpaid_hold" || !s.mengantar_batch_object_id) return { ok: false, error: { status: 409, code: "NOT_UNPAID_HOLD", message: "Kiriman ini tidak menunggu saldo." } }
+    // `POST /order/pay-unpaid` has no idempotency key: one call per batch at a time, and after an unknown outcome the
+    // order is read back first instead of paying again (ADR-0004).
+    const fence = `pay:${s.mengantar_batch_object_id}`
+    if (this.dispatching.has(fence)) return { ok: false, error: { status: 409, code: "PAY_IN_PROGRESS", message: "Pembayaran ke Mengantar sedang diproses. Tunggu sebentar." } }
     const key = await this.keyForDispatch(tenantId)
     if (!key.ok) return { ok: false, error: { status: 409, code: key.refused, message: "Kunci Mengantar sedang diganti. Coba lagi sebentar lagi." } }
-    const idem = `gx-pay-${slug}-${now}`
+    const unresolved = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM dispatch_journal WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", slug).one().n > 0
+    const idem = `gx-pay-${slug}-${now}-${crypto.randomUUID().slice(0, 8)}`
     this.ctx.storage.transactionSync(() => {
-      sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id }), now, now)
+      sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, request_json, created_at, updated_at) VALUES (?, ?, 'pay_unpaid', 'in_flight', ?, ?, ?)", idem, slug, JSON.stringify({ batch_id: s.mengantar_batch_object_id, readBackOnly: unresolved }), now, now)
     })
     const client = publicClient(this.env, key.key, tenantId)
-    let payError: string | null = null
+    this.dispatching.add(fence)
     try {
-      await client.payUnpaid(s.courier_code as Courier, s.mengantar_batch_object_id)
+      return await this.payUnpaidFenced(tenantId, slug, actorId, s, client, idem, unresolved)
+    } finally {
+      this.dispatching.delete(fence)
+    }
+  }
+
+  private async payUnpaidFenced(
+    tenantId: string,
+    slug: string,
+    actorId: string,
+    s: ShipmentRow & { dispatch_state: string; mengantar_batch_object_id: string | null; mengantar_order_code: string | null },
+    client: ReturnType<typeof publicClient>,
+    idem: string,
+    unresolved: boolean,
+  ): Promise<{ ok: true; value: { state: string; awb: string | null } } | { ok: false; refused?: VaultRefusal; error?: DispatchError }> {
+    const sql = this.ctx.storage.sql
+    let payError: string | null = unresolved ? "previous attempt unresolved" : null
+    try {
+      if (!unresolved) await client.payUnpaid(s.courier_code as Courier, s.mengantar_batch_object_id!)
     } catch (err) {
       const e = err as { ambiguous?: boolean; code?: string | null; message?: string }
       if (!e.ambiguous) {
@@ -797,11 +864,27 @@ export class GeraiVaultDO extends DurableObject<Env> {
     } catch {
       item = null
     }
+    // `pay-unpaid` settles the whole batch: read back the other INVs of the same batch too (no repeat pay later).
+    const siblings = sql.exec<{ slug: string; mengantar_order_code: string | null }>("SELECT slug, mengantar_order_code FROM shipments WHERE mengantar_batch_object_id = ? AND slug != ? AND dispatch_state = 'provider_unpaid_hold'", s.mengantar_batch_object_id, slug).toArray()
+    const siblingItems: Array<{ slug: string; item: OrderItem }> = []
+    if (item?.cnote_no) {
+      for (const sib of siblings) {
+        if (!sib.mengantar_order_code) continue
+        const it = await client.getOrder({ orderId: sib.mengantar_order_code }).catch(() => null)
+        if (it?.cnote_no) siblingItems.push({ slug: sib.slug, item: it })
+      }
+    }
     const at = Date.now()
     this.ctx.storage.transactionSync(() => {
+      for (const sib of siblingItems) recordOutcome(sql, sib.slug, idem, { kind: "issued", item: sib.item, batchId: s.mengantar_batch_object_id, batchCode: sib.item.batch ?? null }, latestQuote(sql, sib.slug)?.cod_fee_idr ?? 0, at)
       if (item?.cnote_no) {
         recordOutcome(sql, slug, idem, { kind: "issued", item, batchId: s.mengantar_batch_object_id, batchCode: item.batch ?? null }, latestQuote(sql, slug)?.cod_fee_idr ?? 0, at)
+        // Earlier unresolved attempts are settled by this read-back.
+        sql.exec("UPDATE dispatch_journal SET state = 'done', updated_at = ? WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", at, slug)
         this.audit(tenantId, at, "user", actorId, "shipment.pay_unpaid", { slug })
+      } else if (item && unresolved) {
+        // Read back cleanly and still unpaid: the earlier attempt did not pay — the next click may pay again.
+        sql.exec("UPDATE dispatch_journal SET state = 'failed', error = 'read back: still unpaid', updated_at = ? WHERE slug = ? AND op = 'pay_unpaid' AND state IN ('in_flight','unknown')", at, slug)
       } else sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", payError ? "unknown" : "failed", payError ?? "no AWB after pay-unpaid", at, idem)
     })
     this.scheduleFinanceSync(Date.now())
@@ -831,6 +914,12 @@ export class GeraiVaultDO extends DurableObject<Env> {
       this.ctx.storage.transactionSync(() => {
         this.scheduleFinanceSync(at)
         setDispatchStatus(sql, slug, "cancelled", at, { dispatch_state: "cancelled", cancelled_at: at, counter_payment_status: "voided", custody_stage: "cancelled_local", custody_at: at })
+        // A cancelled INV leaves any open pickup manifest it was scanned into (never handed over on a Surat Jalan).
+        const open = sql.exec<{ batch_id: string }>("SELECT i.batch_id FROM pickup_batch_items i JOIN pickup_batches b ON b.id = i.batch_id WHERE i.slug = ? AND b.status = 'open'", slug).toArray()
+        for (const o of open) {
+          sql.exec("DELETE FROM pickup_batch_items WHERE batch_id = ? AND slug = ?", o.batch_id, slug)
+          sql.exec("UPDATE pickup_batches SET scanned_count = (SELECT COUNT(*) FROM pickup_batch_items WHERE batch_id = ?1) WHERE id = ?1", o.batch_id)
+        }
         this.audit(tenantId, at, "user", actorId, "shipment.cancel", { slug, reason })
       })
     }
@@ -875,7 +964,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => {
       const known = item !== null
       sql.exec("UPDATE dispatch_journal SET state = ?, error = ?, updated_at = ? WHERE idempotency_key = ?", known ? "failed" : "unknown", refusedByProvider ?? (known ? `still ${cat}` : "read-back failed"), at, idem)
-      setDispatchStatus(sql, slug, s.status, at, { dispatch_state: known ? s.dispatch_state : "cancel_unknown" })
+      // Read back and still active: the order is issued (or unpaid) again — never left in `cancel_unknown`.
+      const restored = known ? (item!.cnote_no ? "issued" : s.dispatch_state === "cancel_unknown" ? "provider_unpaid_hold" : s.dispatch_state) : "cancel_unknown"
+      setDispatchStatus(sql, slug, s.status, at, { dispatch_state: restored })
     })
     if (!item) return { ok: false, error: { status: 503, code: "CANCEL_UNKNOWN", message: "Hasil pembatalan belum pasti. Sistem akan memeriksa ulang; jangan kirim paket ini dulu." } }
     return { ok: false, error: { status: 409, code: "CANCEL_REFUSED", message: `Mengantar menolak pembatalan${refusedByProvider ? `: ${refusedByProvider}` : "."}` } }
@@ -897,12 +988,12 @@ export class GeraiVaultDO extends DurableObject<Env> {
   /** Pickup address registered at Mengantar for the default outlet (created once), and the courier's pickup mode. */
   private async pickupFor(tenantId: string, courierCode: string, apiKey: string): Promise<{ ok: true; value: { addressId: string; type: "scheduledPickup" | "dropOff"; outletId: string } } | { ok: false; error: DispatchError }> {
     const sql = this.ctx.storage.sql
-    const o = sql.exec<{ id: string; name: string; pic_phone: string | null; mengantar_area_id: string | null; mengantar_address_id: string | null; street_address: string | null }>("SELECT id, name, pic_phone, mengantar_area_id, mengantar_address_id, street_address FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    const o = sql.exec<{ id: string; name: string; pic_phone: string | null; whatsapp: string | null; mengantar_area_id: string | null; mengantar_address_id: string | null; street_address: string | null }>("SELECT id, name, pic_phone, whatsapp, mengantar_area_id, mengantar_address_id, street_address FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
     if (!o?.mengantar_area_id) return { ok: false, error: { status: 409, code: "NO_PICKUP_AREA", message: "Titik jemput gerai belum diatur." } }
     let addressId = o.mengantar_address_id
     if (!addressId) {
       try {
-        addressId = await publicClient(this.env, apiKey).saveAddress({ areaId: o.mengantar_area_id, name: o.name, phone: o.pic_phone ?? "", address: o.street_address ?? o.name })
+        addressId = await publicClient(this.env, apiKey, tenantId).saveAddress({ areaId: o.mengantar_area_id, name: o.name, phone: o.whatsapp ?? o.pic_phone ?? "", address: o.street_address ?? o.name })
       } catch {
         return { ok: false, error: { status: 502, code: "PICKUP_ADDRESS_FAILED", message: "Alamat jemput gerai belum bisa didaftarkan ke Mengantar. Coba lagi." } }
       }
@@ -1009,7 +1100,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
       return { ok: false, error: { status: 429, code: "SYNC_RATE_LIMITED", message: "Sinkronisasi baru saja dijalankan. Coba lagi dalam 30 detik." } }
     }
     if (trigger === "manual") sql.exec("UPDATE finance_sync_state SET last_manual_at = ? WHERE id = 1", now)
-    if (this.financeRunning) return { ok: true, value: (await this.financeRunning) as FinanceRun }
+    if (this.financeRunning) {
+      // A pending rescan is a different job: wait for the running sync, then run it (never piggyback and drop it).
+      const other = (await this.financeRunning) as FinanceRun
+      if (trigger !== "pending_rescan" || this.financeRunning !== null) return { ok: true, value: other }
+    }
     const run = this.financeRun(tenantId, trigger, now)
     this.financeRunning = run
     try {
@@ -1048,8 +1143,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
         }
         sql.exec("UPDATE finance_sync_state SET last_pending_rescan_at = ? WHERE id = 1", now)
       } else {
-        let cursor: string | null = null
-        for (;;) {
+        // Newest first until a fully known final page; then, with the remaining page budget, continue an unfinished
+        // backfill from the stored cursor (a capped history is completed over the next runs, never orphaned).
+        const readPage = async (cursor: string | null) => {
           const page = await client.invoices({ cursor, size: 50 })
           result.pages++
           let allKnownFinal = page.data.length > 0
@@ -1061,19 +1157,37 @@ export class GeraiVaultDO extends DurableObject<Env> {
               if (!prior || !FINAL_STATUSES.has(prior.status ?? "")) allKnownFinal = false
             }
           })
-          cursor = page.nextCursor ?? null
-          if (!cursor || allKnownFinal) break
+          return { next: page.nextCursor ?? null, allKnownFinal }
+        }
+        let cursor: string | null = null
+        let backfill = sql.exec<{ c: string | null }>("SELECT backfill_cursor AS c FROM finance_sync_state WHERE id = 1").one().c
+        for (;;) {
+          const r = await readPage(cursor)
+          cursor = r.next
+          if (!cursor || r.allKnownFinal) break
           if (result.pages >= 5) {
-            result.capped = true
+            backfill = cursor
             break
           }
         }
+        while (backfill && result.pages < 5) {
+          const r = await readPage(backfill)
+          backfill = r.next
+        }
+        result.capped = !!backfill
+        sql.exec("UPDATE finance_sync_state SET backfill_cursor = ? WHERE id = 1", backfill)
       }
       const settled = this.ctx.storage.transactionSync(() => {
         const b = settleBalance(sql, now)
         if (b.balance !== null) sql.exec("UPDATE mengantar_connections SET synced_balance_idr = ?, last_invoice_synced_at = ?, last_sync_status = 'ok'", b.balance, now)
         else sql.exec("UPDATE mengantar_connections SET last_invoice_synced_at = ?, last_sync_status = 'ok'", now)
-        if (result.capped) sql.exec("INSERT INTO finance_discrepancies (id, invoice_id, kind, shipment_slug, detail, created_at) VALUES (?, 'sync', 'balance_gap', '', 'Mutasi lebih dari 5 halaman; sisanya diperiksa pada sinkronisasi berikutnya.', ?) ON CONFLICT(invoice_id, kind, shipment_slug) DO NOTHING", crypto.randomUUID(), now)
+        if (result.capped) sql.exec("INSERT INTO finance_discrepancies (id, invoice_id, kind, shipment_slug, detail, created_at) VALUES (?, 'sync', 'balance_gap', '', 'Mutasi lebih dari 5 halaman; sisanya diperiksa pada sinkronisasi berikutnya.', ?) ON CONFLICT(invoice_id, kind, shipment_slug) DO UPDATE SET resolved_at = NULL", crypto.randomUUID(), now)
+        else if (trigger !== "pending_rescan") sql.exec("UPDATE finance_discrepancies SET resolved_at = ? WHERE invoice_id = 'sync' AND resolved_at IS NULL", now)
+        // A later run that links an earlier unmatched row (or a now-consistent balance) closes the old flag.
+        sql.exec(
+          `UPDATE finance_discrepancies SET resolved_at = ?1 WHERE resolved_at IS NULL AND kind = 'unmatched' AND invoice_id IN (SELECT invoice_id FROM mengantar_invoice_mirror WHERE link_state = 'linked')`,
+          now,
+        )
         sql.exec("UPDATE finance_sync_state SET running_since = NULL, last_ok_at = ?, last_pages = ?, last_error = NULL WHERE id = 1", now, result.pages)
         return b
       })
@@ -1127,10 +1241,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (balance === null) return out
     const batches = sql
       .exec<{ batch: string; slug: string; need: number }>(
-        `SELECT mengantar_batch_object_id AS batch, MIN(slug) AS slug, SUM(COALESCE(gerai_shipping_cost_idr, 0)) AS need FROM shipments
-         WHERE dispatch_state = 'provider_unpaid_hold' AND mengantar_batch_object_id IS NOT NULL
-           AND slug NOT IN (SELECT slug FROM dispatch_journal WHERE op = 'pay_unpaid' AND state IN ('in_flight','unknown'))
-         GROUP BY mengantar_batch_object_id ORDER BY MIN(created_at)`,
+        // Mengantar debits the provider net + insurance (N + I0, spec 02 §2), not the gerai cost M. A batch with any
+        // unresolved pay-unpaid attempt is left to the read-back above (never paid twice).
+        `SELECT s.mengantar_batch_object_id AS batch, MIN(s.slug) AS slug,
+                SUM(COALESCE(q.provider_net_shipping_idr, s.gerai_shipping_cost_idr, 0) + COALESCE(s.insurance_fee_idr, 0)) AS need
+         FROM shipments s LEFT JOIN quote_snapshots q ON q.id = s.quote_snapshot_id
+         WHERE s.dispatch_state = 'provider_unpaid_hold' AND s.mengantar_batch_object_id IS NOT NULL
+           AND s.mengantar_batch_object_id NOT IN (
+             SELECT s2.mengantar_batch_object_id FROM dispatch_journal j JOIN shipments s2 ON s2.slug = j.slug
+             WHERE j.op = 'pay_unpaid' AND j.state IN ('in_flight','unknown') AND s2.mengantar_batch_object_id IS NOT NULL)
+         GROUP BY s.mengantar_batch_object_id ORDER BY MIN(s.created_at)`,
       )
       .toArray()
     let left = balance
@@ -1187,6 +1307,18 @@ export class GeraiVaultDO extends DurableObject<Env> {
   }
 
   /** `/keuangan` read model (owner only): summary cards + the five tabs. */
+  /** Owner closes a Selisih Sync row after checking it at Mengantar (audited with the reason). */
+  async resolveDiscrepancy(tenantId: string, id: string, actorId: string, reason: string, now: number = Date.now()): Promise<VaultResult<{ resolved: boolean }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    return this.ctx.storage.transactionSync(() => {
+      const n = sql.exec("UPDATE finance_discrepancies SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL", now, id).rowsWritten
+      if (n) this.audit(tenantId, now, "user", actorId, "finance.discrepancy_resolve", { id, reason })
+      return { ok: true as const, value: { resolved: n > 0 } }
+    })
+  }
+
   async financeView(tenantId: string, now: number = Date.now()): Promise<VaultResult<FinanceView>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
@@ -1238,14 +1370,19 @@ export class GeraiVaultDO extends DurableObject<Env> {
       const d = readDraft(sql, slug)
       if (!d) return { ok: false as const, error: { status: 404, code: "DRAFT_NOT_FOUND", message: "Kode QR tidak ditemukan di gerai ini." } }
       if (d.expires_at < now && !d.claimed_at) return { ok: false as const, error: { status: 410, code: "DRAFT_EXPIRED", message: "Kode QR sudah lewat 48 jam. Minta pelanggan mengisi ulang." } }
-      const existingSender = sql.exec<{ id: string }>("SELECT id FROM sender_contacts WHERE true_phone = ? AND is_archived = 0 LIMIT 1", d.sender_phone).toArray()[0]
+      // A QR whose INV is already paid or past draft opens that INV instead of re-quoting it.
+      const used = sql.exec<{ dispatch_state: string; counter_payment_status: string }>("SELECT dispatch_state, counter_payment_status FROM shipments WHERE slug = ?", slug).toArray()[0]
+      if (used && (used.dispatch_state !== "draft" || used.counter_payment_status === "paid")) return { ok: false as const, error: { status: 409, code: "DRAFT_ALREADY_USED", message: "Kode QR ini sudah diproses. Buka kiriman untuk melanjutkan." } }
+      // Match contacts on the typed details, not the phone alone: a different store name, street or recipient name
+      // becomes a new contact (the counter must never ship to an old address).
+      const existingSender = sql.exec<{ id: string }>("SELECT id FROM sender_contacts WHERE true_phone = ? AND COALESCE(LOWER(display_brand_name), '') = COALESCE(LOWER(?), '') AND is_archived = 0 LIMIT 1", d.sender_phone, d.sender_store ?? null).toArray()[0]
       let senderId = existingSender?.id ?? null
       if (!senderId) {
         const r = createSender(sql, tenantId, { senderKind: d.sender_store ? "reseller_dropship" : "walk_in", name: d.sender_name, phone: d.sender_phone, brandName: d.sender_store ?? undefined }, now)
         if (!r.ok) return { ok: false as const, error: { status: 422, code: "INVALID_SENDER", message: r.errors[0]!.message } }
         senderId = r.value.id
       }
-      const existingRecipient = sql.exec<{ id: string }>("SELECT id FROM recipient_contacts WHERE phone = ? AND mengantar_area_id = ? AND is_archived = 0 LIMIT 1", d.recipient_phone, d.recipient_area_id).toArray()[0]
+      const existingRecipient = sql.exec<{ id: string }>("SELECT id FROM recipient_contacts WHERE phone = ? AND mengantar_area_id = ? AND LOWER(street_address) = LOWER(?) AND LOWER(name) = LOWER(?) AND is_archived = 0 LIMIT 1", d.recipient_phone, d.recipient_area_id, d.recipient_street, d.recipient_name).toArray()[0]
       let recipientId = existingRecipient?.id ?? null
       if (!recipientId) {
         const r = createRecipient(sql, tenantId, { name: d.recipient_name, phone: d.recipient_phone, street: d.recipient_street, areaId: d.recipient_area_id, areaLabel: d.recipient_area_label }, now)
@@ -1278,7 +1415,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const sql = this.ctx.storage.sql
     const now = Date.now()
     return this.ctx.storage.transactionSync((): { ok: true; value: ExceptionsValue } | { ok: false; error: ExceptionError } => {
-      if (op.op === "list") return { ok: true, value: { kind: "list", counts: bucketCounts(sql, now), rows: listBucket(sql, op.bucket, now) } }
+      if (op.op === "list") {
+        // Draft claims expire on read too (not only when the status poll happens to run).
+        expireClaims(sql, now)
+        return { ok: true, value: { kind: "list", counts: bucketCounts(sql, now), rows: listBucket(sql, op.bucket, now) } }
+      }
       if (op.op === "claim") {
         const keys = op.evidenceIds.filter((x) => /^[0-9a-f-]{36}$/.test(x)).map((x) => sql.exec<{ r2_key: string }>("SELECT r2_key FROM media_objects WHERE id = ?", x).toArray()[0]?.r2_key).filter((k): k is string => !!k)
         const intakePhoto = sql.exec<{ photo_r2_key: string | null }>("SELECT photo_r2_key FROM return_intakes WHERE slug = ?", op.slug).toArray()[0]?.photo_r2_key
@@ -1349,7 +1490,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", actor.userId, "return.code_issued", { slug: op.slug }))
       return { ok: true, value: { kind: "code", code: r.value.code } }
     }
-    const r = await returnHandback(sql, { slug: op.slug, code: op.code, override: op.override, role: actor.role, actorId: actor.userId }, now)
+    const r = await returnHandback(sql, { slug: op.slug, code: op.code, override: op.override, role: actor.role, actorId: actor.userId, storage: this.ctx.storage }, now)
     if (!r.ok) return r
     this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", actor.userId, "return.handback", { slug: op.slug, method: r.value.method }))
     await this.armOutbox()
@@ -1578,7 +1719,10 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const sql = this.ctx.storage.sql
     const sender = readSender(sql, p.senderId)
     if (!sender || sender.is_archived) return { ok: false, error: { status: 422, code: "INVALID_SENDER", message: "Pilih pengirim dari Kontak.", fields: { senderId: "Pilih pengirim dari Kontak." } } }
-    if (p.codFeeMode !== "none" && !sender.wa_verified_at) return { ok: false, error: { status: 422, code: "SENDER_NOT_VERIFIED", message: "Kiriman COD butuh WhatsApp pengirim yang sudah diverifikasi.", fields: { senderId: "Verifikasi WhatsApp pengirim dulu." } } }
+    // COD rows (a CSV row with a COD amount becomes COD even when the batch default is Non-COD) and masked labels
+    // need a verified sender WhatsApp — refuse up front instead of failing every row at dispatch.
+    const needsVerified = p.codFeeMode !== "none" || p.maskPreset !== "standar_gerai" || rows.some((r) => (r.valid?.codGoodsIdr ?? 0) > 0)
+    if (needsVerified && !sender.wa_verified_at) return { ok: false, error: { status: 422, code: "SENDER_NOT_VERIFIED", message: "Kiriman COD butuh WhatsApp pengirim yang sudah diverifikasi.", fields: { senderId: "Verifikasi WhatsApp pengirim dulu." } } }
     const now = Date.now()
     const b = this.ctx.storage.transactionSync(() => createBatch(sql, tenantId, p, rows, now))
     this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", p.actorId, "bulk.create", { batchId: b.id, rows: rows.length, source: p.source }))
@@ -1677,13 +1821,15 @@ export class GeraiVaultDO extends DurableObject<Env> {
         if (!d.ok) throw new Error(d.error.code)
         const e = setParties(sql, slug, { senderId: b.sender_contact_id, recipientId: contact.value.id, content: r.content ?? "Paket", prohibitedAck: true, maskPreset: b.mask_preset }, now)
         if (e) throw new Error(e.code)
-        sql.exec("UPDATE shipments SET bulk_batch_id = ? WHERE slug = ?", batchId, slug)
+        sql.exec("UPDATE shipments SET bulk_batch_id = ?, entry_channel = 'counter_multi' WHERE slug = ?", batchId, slug)
         sql.exec("UPDATE bulk_import_rows SET state = 'created', shipment_slug = ? WHERE batch_id = ? AND row_no = ?", slug, batchId, r.row_no)
         created++
       }
       if (created === 0) return { ok: false, error: { status: 409, code: "NOTHING_READY", message: "Tidak ada baris yang siap dibuat." } }
       refreshCounts(sql, batchId, now)
-      sql.exec("UPDATE bulk_import_batches SET state = 'dispatching', updated_at = ? WHERE id = ?", now, batchId)
+      // A batch with nothing to collect at the counter (all COD) needs no payment step.
+      const owed = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE bulk_batch_id = ? AND counter_payment_status = 'unpaid'", batchId).one().n
+      sql.exec("UPDATE bulk_import_batches SET state = 'dispatching', counter_payment_status = CASE WHEN ? = 0 AND counter_payment_status = 'unpaid' THEN 'not_required' ELSE counter_payment_status END, updated_at = ? WHERE id = ?", owed, now, batchId)
       this.audit(tenantId, now, "user", actorId, "bulk.materialize", { batchId, created })
       return { ok: true, value: { created } }
     })
@@ -2065,12 +2211,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const keyChanged = oldKey !== next.apiKey
     let token = row.webhook_path_token
     let previous: string | null = null
-    this.ctx.storage.transactionSync(() => {
+    const stale = this.ctx.storage.transactionSync(() => {
       const sql = this.ctx.storage.sql
-      // Re-check inside the transaction (the awaits above could interleave with another call).
+      // Re-check inside the transaction (the awaits above could interleave with another call): a refusal, not a throw.
       const cur = readConnection(sql)
-      if (!cur || cur.key_version !== keyVersion || cur.rotation_state === "idle") throw new Error("STALE_KEY_VERSION")
-      if (encSecret && row.webhook_path_token) {
+      if (!cur || cur.key_version !== keyVersion || cur.rotation_state === "idle") return true
+      if (encSecret && !row.webhook_path_token) {
+        // No webhook URL yet: keep the rotated secret (it cannot be read back later) under a fresh path token.
+        token = newPathToken()
+        sql.exec("UPDATE mengantar_connections SET webhook_path_token = ?, encrypted_webhook_secret = ?, webhook_state = 'awaiting_seller_setup'", token, encSecret)
+      } else if (encSecret && row.webhook_path_token) {
         previous = row.webhook_path_token
         token = newPathToken()
         sql.exec(
@@ -2087,8 +2237,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
       sql.exec("UPDATE mengantar_connections SET encrypted_api_key = ?, rotation_state = 'idle', rotation_started_at = NULL, updated_at = ?", encKey, now)
       sql.exec("DELETE FROM vault_timers WHERE name = 'key_rotation_check'")
+      // Webhooks are not trusted until proven again: fall back to the hourly polling floor meanwhile.
+      if (readConnection(sql)?.webhook_state !== "active" && pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + POLL_INTERVAL_INACTIVE_MS, "earliest")
       this.audit(tenantId, now, "system", null, "mengantar.key_rotated", { keyVersion, readBack: !!next.readBack, keyChanged, webhookUrlRotated: previous !== null, secretKnown: !!encSecret })
+      return false
     })
+    if (stale) return { ok: false, refused: "STALE_KEY_VERSION" }
+    await this.armAlarm()
     return { ok: true, value: { routes: { token: token ?? "", keyVersion, previous } } }
   }
 
@@ -2144,9 +2299,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
       now - 5 * 60_000,
       win,
     )
-    const recentStates = sql.exec<{ state: string }>("SELECT state FROM dispatch_journal WHERE op = 'create_order' ORDER BY created_at DESC LIMIT 5").toArray().map((r) => r.state)
+    const recent = sql.exec<{ state: string; created_at: number }>("SELECT state, created_at FROM dispatch_journal WHERE op = 'create_order' ORDER BY created_at DESC LIMIT 5").toArray()
+    // A streak counts only while it is current (newest attempt within 30 min): an old one never re-pages.
+    const recentStates = recent.length && recent[0]!.created_at >= now - 30 * 60_000 ? recent.map((r) => r.state) : []
     const fin = one<{ ok: number | null; run: number | null }>("SELECT last_ok_at AS ok, last_run_at AS run FROM finance_sync_state WHERE id = 1")
-    const conn = sql.exec<{ s: string }>("SELECT onboarding_state AS s FROM mengantar_connections LIMIT 1").toArray()[0]?.s ?? "not_connected"
+    const connRow = sql.exec<{ s: string; t: number | null }>("SELECT onboarding_state AS s, updated_at AS t FROM mengantar_connections LIMIT 1").toArray()[0]
+    const conn = connRow?.s ?? "not_connected"
+    const connectedAt = connRow?.t ?? null
     const lastHour = one<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE issued_at >= ?", now - 3600_000).n
     const week = one<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE issued_at >= ? AND issued_at < ?", now - 7 * 86_400_000 - 3600_000, now - 3600_000).n
     return {
@@ -2156,7 +2315,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
         issues30m: issues.total,
         reconciliation30m: issues.recon,
         failedStreak: recentStates.length === 5 && recentStates.every((x) => x === "failed"),
-        financeLastOkAgeMs: fin.ok === null ? null : now - fin.ok,
+        // Never synced: measured from when the connection was made (a dead finance queue still alerts after 60 min).
+        financeLastOkAgeMs: fin.ok !== null ? now - fin.ok : connectedAt !== null ? now - connectedAt : null,
         financeEverRan: fin.run !== null,
         connected: conn === "connected" || conn === "byok_connected",
         issuesLastHour: lastHour,
@@ -2174,32 +2334,52 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const key = backupKey(tenantId, wibDayOf(now))
     const prefix = `t/${tenantId}/backup/`
     const cutoff = backupKey(tenantId, wibDayOf(now - BACKUP_KEEP_DAYS * 86_400_000))
-    const old = await this.env.BUCKET.list({ prefix })
-    const stale = old.objects.filter((o) => o.key < cutoff).map((o) => o.key)
-    if (stale.length) await this.env.BUCKET.delete(stale)
-    if (old.objects.some((o) => o.key === key)) return { ok: true, value: { key, bytes: 0, tables: 0, rows: 0, checksum: "", skipped: true } }
+    const existing: string[] = []
+    let cursor: string | undefined
+    do {
+      const page = await this.env.BUCKET.list({ prefix, cursor })
+      existing.push(...page.objects.map((o) => o.key))
+      cursor = page.truncated ? page.cursor : undefined
+    } while (cursor)
+    if (existing.includes(key)) return { ok: true, value: { key, bytes: 0, tables: 0, rows: 0, checksum: "", skipped: true } }
     const sql = this.ctx.storage.sql
     const tables = dumpTables(sql)
     const backup: TenantBackup = { format: BACKUP_FORMAT, tenantId, schemaVersion: readSchemaState(this.ctx.storage).version, exportedAt: now, ddl: schemaDdl(sql), tables }
     const checksum = await checksumOf(tables)
     const body = await gzipJson(backup)
     await this.env.BUCKET.put(key, body, { httpMetadata: { contentType: "application/gzip" }, customMetadata: { tenant: tenantId, checksum, format: BACKUP_FORMAT } })
+    // Old exports go only after today's is safely written.
+    const stale = existing.filter((k) => k < cutoff)
+    if (stale.length) await this.env.BUCKET.delete(stale)
     const rows = Object.values(tables).reduce((n, t) => n + t.rows.length, 0)
     return { ok: true, value: { key, bytes: body.byteLength, tables: Object.keys(tables).length, rows, checksum, skipped: false } }
   }
 
-  /** Restore drill target: only an EMPTY object (never provisioned) accepts a backup; checksum is re-computed after. */
-  async restoreBackup(key: string): Promise<{ ok: true; value: { rows: number; sourceChecksum: string; restoredChecksum: string } } | { ok: false; error: string }> {
-    if (userTables(this.ctx.storage.sql).length) return { ok: false, error: "restore target is not empty" }
-    if (!/^t\/[^/]+\/backup\/\d{4}-\d{2}-\d{2}\.json\.gz$/.test(key)) return { ok: false, error: "invalid backup key" }
+  /** Restore drill target: only an EMPTY `drill-*` object accepts a backup; content checksum must match after. */
+  async restoreBackup(key: string, target: string): Promise<{ ok: true; value: { rows: number; sourceChecksum: string; restoredChecksum: string } } | { ok: false; error: string }> {
+    if (!/^drill-[a-z0-9-]{3,80}$/.test(target) || (this.ctx.id.name !== undefined && this.ctx.id.name !== target)) return { ok: false, error: "target harus objek drill-* yang baru" }
+    if (userTables(this.ctx.storage.sql).length) return { ok: false, error: "target sudah berisi data" }
+    const m = /^t\/([^/]+)\/backup\/\d{4}-\d{2}-\d{2}\.json\.gz$/.exec(key)
+    if (!m) return { ok: false, error: "kunci cadangan tidak valid" }
     const obj = await this.env.BUCKET.get(key)
-    if (!obj) return { ok: false, error: "backup not found" }
-    const b = await gunzipJson<TenantBackup>(await obj.arrayBuffer())
-    if (b.format !== BACKUP_FORMAT || !key.startsWith(`t/${b.tenantId}/`)) return { ok: false, error: "backup format or tenant mismatch" }
+    if (!obj) return { ok: false, error: "cadangan tidak ditemukan" }
+    let b: TenantBackup
+    try {
+      b = await gunzipJson<TenantBackup>(await obj.arrayBuffer())
+    } catch {
+      return { ok: false, error: "berkas cadangan rusak" }
+    }
+    if (b.format !== BACKUP_FORMAT || b.tenantId !== m[1] || obj.customMetadata?.tenant !== b.tenantId) return { ok: false, error: "format atau gerai cadangan tidak cocok" }
     const sourceChecksum = await checksumOf(b.tables)
-    if (obj.customMetadata?.checksum && obj.customMetadata.checksum !== sourceChecksum) return { ok: false, error: "backup checksum mismatch" }
+    if (obj.customMetadata?.checksum !== sourceChecksum) return { ok: false, error: "checksum cadangan tidak cocok" }
     const rows = this.ctx.storage.transactionSync(() => restoreTables(this.ctx.storage.sql, b.ddl, b.tables))
-    return { ok: true, value: { rows, sourceChecksum, restoredChecksum: await checksumOf(dumpTables(this.ctx.storage.sql)) } }
+    const restoredChecksum = await checksumOf(dumpTables(this.ctx.storage.sql))
+    if (restoredChecksum !== sourceChecksum) {
+      // A restore that is not byte-for-byte the backup is not kept.
+      await this.ctx.storage.deleteAll()
+      return { ok: false, error: "hasil pemulihan tidak sama dengan cadangan" }
+    }
+    return { ok: true, value: { rows, sourceChecksum, restoredChecksum } }
   }
 
   /** Test/ops probe of the fence (no key material leaves the object). */
@@ -2246,9 +2426,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
     void tenantId
   }
 
+  /** After a state change: also re-push the daily counters within 5 minutes (debounced, never per event). */
   protected async armOutbox(): Promise<void> {
-    // Money/volume changed recently: re-push the daily counters within 5 minutes (debounced, never per event).
     if (tableExists(this.ctx.storage, "vault_timers") && tableExists(this.ctx.storage, "cashier_shifts")) setTimer(this.ctx.storage.sql, "daily_stats", Date.now() + 300_000, "earliest")
+    await this.armAlarm()
+  }
+
+  /** Arms the single alarm only (alarm/flush/timer paths): never re-schedules `daily_stats`, so an idle object sleeps. */
+  protected async armAlarm(): Promise<void> {
     if (!tableExists(this.ctx.storage, "outbox")) return
     const o = nextOutboxAt(this.ctx.storage.sql)
     const t = tableExists(this.ctx.storage, "vault_timers") ? nextTimerAt(this.ctx.storage.sql) : null
@@ -2274,7 +2459,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (!tenantId || !tableExists(this.ctx.storage, "outbox")) return { delivered: 0, failed: 0 }
     const rows = dueOutbox(this.ctx.storage.sql, now)
     if (rows.length === 0) {
-      await this.armOutbox()
+      await this.armAlarm()
       return { delivered: 0, failed: 0 }
     }
     // Safety net first: if the object dies while D1 is awaited, the alarm still retries these rows.
@@ -2296,7 +2481,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
     }
     await this.ctx.storage.deleteAlarm()
-    await this.armOutbox()
+    await this.armAlarm()
     return { delivered, failed }
   }
 
@@ -2328,7 +2513,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         }
       }
     }
-    await this.armOutbox()
+    await this.armAlarm()
     return due
   }
 
@@ -2387,7 +2572,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const now = Date.now()
     this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec(
-        "UPDATE mengantar_connections SET encrypted_webhook_secret = ?, webhook_state = CASE WHEN webhook_state = 'active' THEN 'active' ELSE 'awaiting_seller_setup' END, webhook_last_failure_at = NULL, updated_at = ?",
+        "UPDATE mengantar_connections SET encrypted_webhook_secret = ?, webhook_state = 'awaiting_seller_setup', webhook_last_failure_at = NULL, updated_at = ?",
         enc,
         now,
       )
@@ -2510,9 +2695,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
     sql.exec("UPDATE mengantar_connections SET previous_webhook_path_token = NULL, encrypted_previous_webhook_secret = NULL, previous_token_expires_at = NULL WHERE previous_token_expires_at IS NOT NULL AND previous_token_expires_at <= ?", now)
     const pending = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM webhook_inbox WHERE state = 'received'").one().n
     const any = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM webhook_inbox").one().n
+    // The previous webhook token must still be cleaned up at its expiry even with an empty inbox.
+    const prevExpiry = sql.exec<{ t: number | null }>("SELECT MIN(previous_token_expires_at) AS t FROM mengantar_connections WHERE previous_token_expires_at IS NOT NULL").one().t
     if (pending > 0) setTimer(sql, "inbox_sweep", now + INBOX_RESEND_AFTER_MS)
-    else if (any > 0) setTimer(sql, "inbox_sweep", now + 24 * HOUR)
+    else if (any > 0) setTimer(sql, "inbox_sweep", Math.min(now + 24 * HOUR, prevExpiry ?? Infinity))
+    else if (prevExpiry !== null) setTimer(sql, "inbox_sweep", prevExpiry)
     else sql.exec("DELETE FROM vault_timers WHERE name = 'inbox_sweep'")
+    await this.armAlarm()
     return { ok: true, value: { resent, deleted } }
   }
 
@@ -2557,16 +2746,24 @@ export class GeraiVaultDO extends DurableObject<Env> {
           })
         } catch {
           failed++
+          // A failing order moves to the back of the queue (it must never starve the healthy ones).
+          sql.exec("UPDATE shipments SET last_polled_at = ? WHERE slug = ?", now, s.slug)
         }
       }
     }
     const active = readConnection(sql)?.webhook_state === "active"
+    const fenced = candidates.length > 0 && !key
     this.ctx.storage.transactionSync(() => {
       flagStuck(sql, now)
       expireClaims(sql, now)
       purgeDrafts(sql, now)
-      if (conn) sql.exec("UPDATE mengantar_connections SET last_polled_at = ?, last_sync_status = ?", now, failed > 0 ? `poll_failed:${failed}` : "ok")
-      if (pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + (active ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_INACTIVE_MS))
+      if (conn && !fenced) sql.exec("UPDATE mengantar_connections SET last_polled_at = ?, last_sync_status = ?", now, failed > 0 ? `poll_failed:${failed}` : "ok")
+      const interval = active ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_INACTIVE_MS
+      // Key not usable (rotation fence): try again soon, not in 24 h. A full batch with more overdue rows: continue soon.
+      // pollCandidates orders by oldest poll first: if the next one is still overdue, the batch did not cover all.
+      const next = candidates.length >= POLL_BATCH ? pollCandidates(sql, 1)[0] : undefined
+      const backlog = !!next && Number((next as { last_polled_at?: number | null }).last_polled_at ?? 0) <= now - interval
+      if (pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + (fenced ? 10 * 60_000 : backlog ? 60_000 : interval))
       else sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")
     })
     await this.armOutbox()

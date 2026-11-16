@@ -40,7 +40,7 @@ function shell(o: { path: string; title: string; description: string; host: stri
 <title>${e(o.title)} - ${e(brand)}</title><meta name="description" content="${e(o.description)}"><link rel="canonical" href="https://${e(o.host)}${o.path === "/" ? "/" : o.path}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232E47BA'/%3E%3Cpath d='M9 12l7-4 7 4v9l-7 4-7-4z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
 ${o.noindex ? '<meta name="robots" content="noindex">' : ""}<meta property="og:title" content="${e(o.title)} - ${e(brand)}"><meta property="og:description" content="${e(o.description)}"><meta property="og:type" content="website"><meta property="og:url" content="https://${e(o.host)}${o.path}">
-<script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: brand, url: `https://${o.host}/`, ...(l?.legal_name ? { legalName: l.legal_name } : {}), ...(l?.support_email ? { email: l.support_email } : {}) })}</script>
+<script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: brand, url: `https://${o.host}/`, ...(l?.legal_name ? { legalName: l.legal_name } : {}), ...(l?.support_email ? { email: l.support_email } : {}) }).replace(/</g, "\\u003c")}</script>
 <style>${CSS}</style></head><body>
 <header class="wrap top"><a class="brand" href="/">${e(brand)}</a><nav aria-label="Menu utama">${NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${t}</a>`).join("")}<a href="${e(o.appOrigin)}/masuk">Masuk</a></nav></header>
 <main>${o.body}</main>
@@ -144,7 +144,9 @@ export async function handleBrand(request: Request, env: Env, host: string): Pro
   const path = url.pathname.replace(/\/+$/, "") || "/"
   if (request.method !== "GET" && request.method !== "HEAD") return notFoundHtml()
   const apex = env.PLATFORM_APEX
-  const appOrigin = env.GX_ENV === "local" ? `${url.protocol}//app.${apex}${url.port ? `:${url.port}` : ""}` : `https://app${env.GX_ENV === "staging" ? "-stg" : ""}.${apex}`
+  // One canonical brand host: `www.` redirects permanently to the apex.
+  if (host === `www.${apex}`) return new Response(null, { status: 301, headers: { location: `https://${apex}${url.pathname}${url.search}`, "cache-control": "public, max-age=86400" } })
+  const appOrigin = env.GX_ENV === "local" ? `${url.protocol}//app.${apex}${url.port ? `:${url.port}` : ""}` : `https://app${env.GX_ENV === "staging" ? "-staging" : ""}.${apex}`
   if (path === "/robots.txt") return new Response(`User-agent: *\nAllow: /\nSitemap: https://${host}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } })
   if (path === "/sitemap.xml") {
     const urls = Object.keys(PAGES).map((p) => `<url><loc>https://${host}${p === "/" ? "/" : p}</loc></url>`).join("")

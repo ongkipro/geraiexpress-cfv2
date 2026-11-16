@@ -129,7 +129,9 @@ function parse<T>(schema: z.ZodType<T>, raw: RawResponse, path: string): T {
   const r = schema.safeParse(raw.json)
   if (!r.success) {
     const body = raw.json as { message?: unknown } | null
-    throw new MengantarError("envelope", path, raw.status, "UNEXPECTED_SHAPE", typeof body?.message === "string" ? body.message : "Respons Mengantar tidak sesuai format.")
+    // Never echo provider text (it may contain the keyed URL and is not Indonesian UI copy).
+    void body
+    throw new MengantarError("envelope", path, raw.status, "UNEXPECTED_SHAPE", "Respons Mengantar tidak sesuai format.")
   }
   return r.data
 }

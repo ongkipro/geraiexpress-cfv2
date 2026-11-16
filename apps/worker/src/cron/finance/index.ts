@@ -27,6 +27,8 @@ export async function consumeFinanceBatch(batch: MessageBatch<FinanceMessage>, e
     try {
       const r = await vaultFor(env, m.tenant_id).financeSync(m.tenant_id, m.trigger)
       if (!r.ok && r.refused === "TENANT_NOT_READY") msg.retry({ delaySeconds: 120 })
+      // A daily rescan that hit a provider error is retried (the next one is a day away).
+      else if (r.ok && m.trigger === "pending_rescan" && r.value.error && r.value.error !== "NO_KEY") msg.retry({ delaySeconds: 300 })
       else msg.ack()
     } catch {
       msg.retry({ delaySeconds: 60 })

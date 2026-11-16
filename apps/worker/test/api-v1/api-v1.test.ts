@@ -5,7 +5,7 @@ import { env, exports } from "cloudflare:workers"
 import { runInDurableObject } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
 import { hostCache } from "../../src/host/lookup"
-import { resetMock } from "../../src/mengantar/mock"
+import { mockSeller, resetMock } from "../../src/mengantar/mock"
 import { ownerOnlyKeysIn } from "../../src/dto/projection"
 import { checkoutGerai, post, DEST } from "../dispatch/helpers"
 import { APP, appGet } from "../webhooks/helpers"
@@ -97,6 +97,26 @@ describe("/api/v1", () => {
     expect(actorTypes).toEqual(["api_key"])
     const detail = await (await v1(`/shipments/${issued[0]}`, reseller.token)).json()
     expect(ownerOnlyKeysIn(detail)).toEqual([])
+  })
+
+  it("cap: a balance-held issue spends nothing until pay-unpaid; bulk commit is capped; finance/sync hides the balance without finance:read", async () => {
+    const t = await checkoutGerai("apicapsaldo")
+    const k = await key(t.cookie, ["rates:read", "shipments:draft", "shipments:issue", "tracking:read", "finance:sync"], { dailyIssueCapIdr: 30_000 })
+    const d = await v1("/shipments", k.token, { method: "POST", body: { destination_area_id: DEST, weight_gram: 1000, service_code: "JT", sender_id: t.sender, recipient_id: t.recipient, content: "Pakaian" } })
+    const slug = ((await d.json()) as { data: { slug: string } }).data.slug
+    await post(`/shipments/${slug}/parties`, t.cookie, { prohibitedAck: true })
+    mockSeller.balanceIdr = 0
+    const held = await v1(`/shipments/${slug}/issue`, k.token, { method: "POST", headers: { "idempotency-key": `held-${slug}` } })
+    expect(((await held.json()) as { data: { state: string } }).data.state).toBe("provider_unpaid_hold")
+    const used = await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>()
+    expect(used!.n).toBe(0)
+    mockSeller.balanceIdr = 100_000
+    const paid = await v1(`/shipments/${slug}/pay-unpaid`, k.token, { method: "POST", headers: { "idempotency-key": `pay-${slug}` } })
+    expect(((await paid.json()) as { data: { state: string } }).data.state).toBe("issued")
+    const after = await env.DB.prepare("SELECT COALESCE(SUM(issued_idr), 0) AS n FROM api_key_daily_usage WHERE key_id = ?").bind(k.id).first<{ n: number }>()
+    expect(after!.n).toBeGreaterThan(0)
+    const sync = (await (await v1("/finance/sync", k.token, { method: "POST" })).json()) as { data: Record<string, unknown> }
+    expect(sync.data.balance).toBeUndefined()
   })
 
   it("OpenAPI 3.1 document is generated from the route table (every route, scopes, Idempotency-Key)", async () => {

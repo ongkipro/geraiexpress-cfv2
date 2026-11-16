@@ -57,6 +57,24 @@ describe("email outbox + sendMail (TASK-104, spec 12 §3)", () => {
     expect(await row("e1")).toMatchObject({ state: "sent", attempts: 1, payload_encrypted: null, to_email_encrypted: null, provider_message_id: "msg-1" })
   })
 
+  it("a row that cannot render (bad link) is terminal and never blocks the rest of the batch", async () => {
+    const { statement } = await enqueueEmailStatement(env, { id: "bad0", templateId: "password_reset", toEmail: "a@contoh.test", vars: { link: "https://evil.example/x" }, expiresAt: T0 + 60_000, now: T0 - 1 })
+    await statement.run()
+    await enqueue("good1")
+    const { sent, binding } = fakeEmail()
+    expect(await dispatchDue(mailEnv(binding), T0)).toMatchObject({ sent: 1, failed: 1 })
+    expect(await row("bad0")).toMatchObject({ state: "failed", last_error_code: "E_RENDER", payload_encrypted: null })
+    expect(sent).toHaveLength(1)
+  })
+
+  it("hostOrigin normalises case, trailing dot and default port (email links)", async () => {
+    const { hostOrigin } = await import("../../src/http/request")
+    const o = (host: string, url = "https://app.geraiexpress.com/x") => hostOrigin(new Request(url, { headers: { host } }))
+    expect(o("App.GeraiExpress.COM.")).toBe("https://app.geraiexpress.com")
+    expect(o("app.geraiexpress.com:443")).toBe("https://app.geraiexpress.com")
+    expect(o("app.geraiexpress.localhost:8787", "http://app.geraiexpress.localhost:8787/x")).toBe("http://app.geraiexpress.localhost:8787")
+  })
+
   it("retries transient errors at 30 s / 2 min / 5 min and stops after 4 attempts", async () => {
     await enqueue("e2", { expiresIn: 60 * 60_000 })
     const { binding } = fakeEmail(["E_INTERNAL_SERVER_ERROR", "E_RATE_LIMIT_EXCEEDED", "E_INTERNAL_SERVER_ERROR", "E_INTERNAL_SERVER_ERROR"])

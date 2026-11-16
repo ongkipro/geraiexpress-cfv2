@@ -63,7 +63,10 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
     const login = await post("/auth/login", { email: "a1@contoh.test", password: "admin-kuat-123" })
     const cookie = cookieOf(login)
     expect(await login.json()).toMatchObject({ data: { totp: "enrol" } })
-    expect((await get("/auth/me", cookie)).status).toBe(401)
+    const me = await get("/auth/me", cookie)
+    expect(me.status).toBe(401)
+    // Not yet enrolled: the console is told to show enrolment (a reload must not land on the code prompt).
+    expect(((await me.json()) as { error: { code: string } }).error.code).toBe("TOTP_ENROL_REQUIRED")
     const { secret } = ((await (await post("/auth/totp/enrol", {}, cookie)).json()) as { data: { secret: string } }).data
     expect((await post("/auth/totp/verify", { code: "000000" }, cookie)).status).toBe(400)
     const code = await hotp(secret, stepAt(Date.now()))

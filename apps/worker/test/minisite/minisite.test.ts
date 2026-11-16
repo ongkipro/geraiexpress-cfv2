@@ -90,21 +90,23 @@ describe("mini-site", () => {
     await post("/quotes/freeze", t.cookie, { slug, destinationAreaId: DEST, weightGram: 1000, mode: "none", serviceCode: "JT" })
     await post(`/shipments/${slug}/parties`, t.cookie, { senderId: claim.senderId, recipientId: claim.recipientId, content: "Pakaian", prohibitedAck: true })
     await post(`/shipments/${slug}/dispatch`, t.cookie, {})
-    expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821" })).status).toBe(400)
+    expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821", "cf-turnstile-response": "ok" })).status).toBe(400)
     await runInDurableObject(t.vault, (_i, st) => recordProviderObservation(st.storage.sql, { slug, eventKey: `dl-${slug}`, source: "webhook", rawCategory: "DELIVERED", mapped: "delivered", eventAt: Date.now() + 60_000, eventAtText: null }, Date.now()))
     const before = await (await get(`${t.base}/lacak?q=${slug}`)).text()
     expect(before).toContain("4 angka terakhir No. HP penerima")
     expect(before).not.toContain("Rina")
-    const wrong = await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "0000" })
+    const wrong = await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "0000", "cf-turnstile-response": "ok" })
     expect(wrong.status).toBe(400)
     expect(await wrong.text()).not.toContain("Rina")
-    const ok = await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821" })
+    // Without the human check the gate refuses (Turnstile, final Carbon pass M5 #6).
+    expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821" })).status).toBe(400)
+    const ok = await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821", "cf-turnstile-response": "ok" })
     expect(ok.status).toBe(200)
     expect(await ok.text()).toContain("Diterima oleh: Rina Kartika")
     let last = 0
-    for (let i = 0; i < 5; i++) last = (await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "1111" })).status
+    for (let i = 0; i < 5; i++) last = (await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "1111", "cf-turnstile-response": "ok" })).status
     expect(last).toBe(429)
-    expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821" })).status).toBe(429)
+    expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821", "cf-turnstile-response": "ok" })).status).toBe(429)
   })
 
   it("expired draft refused at the counter and purged by the sweep; draft from another gerai not found", async () => {

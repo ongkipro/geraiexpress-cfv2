@@ -2,6 +2,7 @@
 // route needs a session level, a projection, and owner routes beyond /auth need aal2.
 export const PUBLIC_ALLOWLIST = {
   app: [
+    "GET /auth/config",
     "POST /auth/signup/request",
     "POST /auth/signup/verify",
     "POST /auth/signup/complete",
@@ -56,6 +57,8 @@ export const OWNER_ALLOWED_VAULT_CALLS = new Set([
   "recordOnboarding",
   // approval provisions the gerai's own pickup outlet from the owner's application (no shipment, no money)
   "upsertDefaultOutlet",
+  // read-only: provisioning retry checks whether that outlet exists before creating it
+  "defaultOutlet",
   "webhookStatus",
   "courierPrefs",
   "observeRates",

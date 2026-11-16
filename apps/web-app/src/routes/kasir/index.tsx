@@ -34,7 +34,7 @@ function ScanBox({ onClaim }: { onClaim: (c: Claim) => void }) {
       onClaim(await api<Claim>(`/minisite-drafts/${slug}/claim`, { body: {} }))
     } catch (err) {
       // Not a pre-booking: maybe an existing INV of this gerai.
-      if (err instanceof ApiError && err.body.code === "DRAFT_NOT_FOUND") await navigate({ to: "/kiriman/$slug", params: { slug } })
+      if (err instanceof ApiError && (err.body.code === "DRAFT_NOT_FOUND" || err.body.code === "DRAFT_ALREADY_USED")) await navigate({ to: "/kiriman/$slug", params: { slug } })
       else setMsg(err instanceof ApiError ? err.body.message : "Kode tidak bisa dibuka.")
     }
   }

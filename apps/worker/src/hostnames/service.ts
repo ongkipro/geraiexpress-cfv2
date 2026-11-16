@@ -89,8 +89,9 @@ export async function requestDomain(env: Env2, tenantId: string, raw: unknown, r
     const owner = await env.DB.prepare("SELECT tenant_id, state FROM tenant_hostnames WHERE hostname = ?").bind(x.hostname).first<{ tenant_id: string; state: string }>()
     if (owner && owner.state !== "purged") throw new AppError(409, "DOMAIN_TAKEN", owner.tenant_id === tenantId ? "Domain ini sudah terdaftar di gerai Anda." : "Domain ini sudah dipakai gerai lain.", { hostname: "Domain ini sudah dipakai." })
   }
-  // A purged row of the same name is reused (PK); everything else inserts.
-  await env.DB.batch(
+  // A purged row of the same name is reused (PK); everything else inserts. The batch is one transaction: if a
+  // concurrent request took any of the names (0 rows written), it is rolled back whole (root + www never split).
+  const res = await env.DB.batch(
     plan.hosts.map((x) =>
       env.DB.prepare(
         `INSERT INTO tenant_hostnames (hostname, tenant_id, kind, role, state, dns_branch, ssl_method, created_at, state_changed_at, probe_failures)
@@ -102,6 +103,11 @@ export async function requestDomain(env: Env2, tenantId: string, raw: unknown, r
       ).bind(x.hostname, tenantId, x.role, plan.branch, now),
     ),
   )
+  if (res.some((r) => (r.meta.changes ?? 0) !== 1)) {
+    // Undo only rows this request wrote (state pending, created now by this tenant).
+    await env.DB.batch(plan.hosts.map((x) => env.DB.prepare("UPDATE tenant_hostnames SET state = 'purged', deleted_at = ?1 WHERE hostname = ?2 AND tenant_id = ?3 AND created_at = ?1 AND state = 'pending' AND cf_custom_hostname_id IS NULL").bind(now, x.hostname, tenantId)))
+    throw new AppError(409, "DOMAIN_TAKEN", "Domain ini baru saja didaftarkan. Muat ulang halaman.", { hostname: "Domain ini sudah dipakai." })
+  }
   await env.HOSTNAME_QUEUE.sendBatch(plan.hosts.map((x) => ({ body: { kind: "create", hostname: x.hostname } satisfies HostMessage })))
   emit("hostname.lifecycle", { state: "requested" }, { hosts: plan.hosts.length }, { env: env.GX_ENV })
   return domainRows(env, tenantId)
@@ -188,7 +194,12 @@ export async function refreshHost(env: Env2, hostname: string, now: number, opts
     return reread(env, hostname)
   }
   const cfReady = (cf.status === "active" || cf.status === "active_redeploying") && cf.ssl.status === "active"
-  if (cfReady && (row.state === "pending" || row.state === "failed" || row.state === "moved" || row.state === "active")) {
+  // The probe is answered only for pending/active hosts: a recovered `moved`/`failed` host goes back to pending first.
+  if (cfReady && (row.state === "failed" || row.state === "moved")) {
+    await setState(env, row, "pending", now)
+    row.state = "pending"
+  }
+  if (cfReady && (row.state === "pending" || row.state === "active")) {
     const ok = await probeHost(env, hostname, opts.probeFetch)
     if (ok) {
       if (row.state !== "active") await setState(env, row, "active", now, { activated_at: now })
@@ -235,6 +246,13 @@ export async function pollHosts(env: Env2, now: number, probeFetch: ProbeFetch, 
   return n
 }
 
+/** Purges every custom row of the gerai (root + `www` are one domain: never leave half of it behind). */
+export async function purgeDomain(env: Env2, tenantId: string, now: number, saas: SaasClient = saasClient(env)): Promise<string[]> {
+  const rows = await domainRows(env, tenantId)
+  for (const r of rows) await purgeHost(env, r.hostname, now, saas)
+  return rows.map((r) => r.hostname)
+}
+
 /** Owner removal or reaper: DELETE at Cloudflare (stops billing), then `purged`. Never relies on Cloudflare's own deletion. */
 export async function purgeHost(env: Env2, hostname: string, now: number, saas: SaasClient = saasClient(env)): Promise<void> {
   const row = await env.DB.prepare(`SELECT ${COLS} FROM tenant_hostnames WHERE hostname = ? AND kind = 'custom'`).bind(hostname).first<DomainRow>()
@@ -265,8 +283,9 @@ export async function reapHosts(env: Env2, now: number, saas: SaasClient = saasC
   const done: string[] = []
   for (const r of rows) {
     try {
-      await purgeHost(env, r.hostname, now, saas)
-      done.push(r.hostname)
+      if (done.includes(r.hostname)) continue
+      const tenant = await env.DB.prepare("SELECT tenant_id FROM tenant_hostnames WHERE hostname = ?").bind(r.hostname).first<{ tenant_id: string }>()
+      done.push(...(tenant ? await purgeDomain(env, tenant.tenant_id, now, saas) : []))
     } catch (e) {
       emit("hostname.lifecycle", { state: "reap_error" }, { error: e }, { env: env.GX_ENV, severity: "warn" })
     }

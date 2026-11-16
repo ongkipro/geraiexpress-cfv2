@@ -26,16 +26,23 @@ export async function tenantsInRecovery(env: AlertEnv): Promise<Alert | null> {
   return n > 0 ? { key: "tenant_recovery", severity: "error", text: `${n} gerai dalam status pemulihan (migrasi gagal). Periksa tenant_schema_versions.` } : null
 }
 
-/** "Can counters issue?" — reconciliation_needed > 2 % of issues in 30 min, or a 5-issue failed streak. */
-export const issueHealth: Check = async (_env, _now, ctx) => {
+/** "Can counters issue?" — reconciliation_needed > 2 % of ≥ 10 issues in 30 min. */
+export const issueReconciliationRate: Check = async (_env, _now, ctx) => {
   const all = await ctx.snapshots()
   const issues = all.reduce((n, x) => n + x.s.issues30m, 0)
   const recon = all.reduce((n, x) => n + x.s.reconciliation30m, 0)
-  const streak = all.filter((x) => x.s.failedStreak).length
-  if (streak > 0) return { key: "issue_failed_streak", severity: "error", text: `${streak} gerai gagal menerbitkan resi 5 kali berturut-turut. Periksa status Mengantar dan kunci seller.` }
   if (issues >= 10 && recon * 10_000 > issues * RECON_RATE_BPS) return { key: "issue_reconciliation_rate", severity: "error", text: `${recon} dari ${issues} penerbitan resi 30 menit terakhir perlu rekonsiliasi (> 2 %). Periksa Mengantar dan relay.` }
   return null
 }
+
+/** A recent streak of 5 failed issues (newest within 30 min) — a separate alert, never masking the rate above. */
+export const issueFailedStreak: Check = async (_env, _now, ctx) => {
+  const streak = (await ctx.snapshots()).filter((x) => x.s.failedStreak).length
+  return streak > 0 ? { key: "issue_failed_streak", severity: "error", text: `${streak} gerai gagal menerbitkan resi 5 kali berturut-turut. Periksa status Mengantar dan kunci seller.` } : null
+}
+
+/** Backwards-compatible name used by tests: either issue alert. */
+export const issueHealth: Check = async (env, now, ctx) => (await issueFailedStreak(env, now, ctx)) ?? (await issueReconciliationRate(env, now, ctx))
 
 /** "Are provider statuses fresh?" — oldest `received` webhook older than 15 minutes. */
 export const webhookInboxAge: Check = async (_env, _now, ctx) => {
@@ -45,9 +52,9 @@ export const webhookInboxAge: Check = async (_env, _now, ctx) => {
   return { key: "webhook_inbox_age", severity: "error", text: `Webhook Mengantar belum diproses di ${stale.length} gerai (tertua ${Math.round(worst / 60_000)} menit). Periksa antrean gx-mengantar-webhooks.` }
 }
 
-/** "Is money in sync?" — last successful finance sync older than 60 minutes for a connected tenant that has synced before. */
+/** "Is money in sync?" — a connected tenant without a successful sync for 60 minutes (also one that never synced). */
 export const financeSyncAge: Check = async (_env, _now, ctx) => {
-  const stale = (await ctx.snapshots()).filter((x) => x.s.connected && x.s.financeEverRan && (x.s.financeLastOkAgeMs === null || x.s.financeLastOkAgeMs > FINANCE_MAX_AGE_MS))
+  const stale = (await ctx.snapshots()).filter((x) => x.s.connected && (x.s.financeLastOkAgeMs === null || x.s.financeLastOkAgeMs > FINANCE_MAX_AGE_MS))
   return stale.length ? { key: "finance_sync_age", severity: "warn", text: `Sinkron keuangan Mengantar tertinggal > 60 menit di ${stale.length} gerai. Periksa antrean gx-mengantar-finance-sync.` } : null
 }
 
@@ -81,9 +88,18 @@ export const relayDown: Check = async (env, now, ctx) => {
   return since && now - since.last_sent_at >= RELAY_DOWN_MS ? { key: "relay_down", severity: "error", text: "Relay Partner Mengantar tidak terjangkau ≥ 5 menit. Pendaftaran gerai baru tertunda; kasir tetap berjalan." } : null
 }
 
+/** Bounces > 5 % of delivered-or-bounced mail per day (min 20): a sender-reputation problem (spec 12 §7). */
+export const emailBounceRate: Check = async (env, now) => {
+  const r = await env.DB.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(state = 'suppressed' AND last_error_code = 'E_DELIVERY_FAILED'), 0) AS bad FROM email_outbox WHERE created_at >= ? AND (state = 'sent' OR (state = 'suppressed' AND last_error_code = 'E_DELIVERY_FAILED'))")
+    .bind(now - 86_400_000)
+    .first<{ total: number; bad: number }>()
+  if (!r || r.total < 20 || r.bad * 10_000 <= r.total * EMAIL_FAIL_BPS) return null
+  return { key: "email_bounce_rate", severity: "error", text: `${r.bad} dari ${r.total} email transaksi 24 jam terakhir terpental (> 5 %). Periksa reputasi pengirim dan daftar penerima.` }
+}
+
 /** "Can people sign up and log in?" — failed or expired > 5 % of transactional emails in the last hour (min 20). */
 export const emailFailureRate: Check = async (env, now) => {
-  const r = await env.DB.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(state IN ('failed','expired')), 0) AS bad FROM email_outbox WHERE created_at >= ? AND state != 'queued' AND state != 'sending'")
+  const r = await env.DB.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(state IN ('failed','expired')), 0) AS bad FROM email_outbox WHERE created_at >= ? AND state IN ('sent','failed','expired')")
     .bind(now - 3600_000)
     .first<{ total: number; bad: number }>()
   if (!r || r.total < 20 || r.bad * 10_000 <= r.total * EMAIL_FAIL_BPS) return null
@@ -97,7 +113,7 @@ export const discountOverdue: Check = async (env, now) => {
   return r && r.n > 0 ? { key: "discount_overdue", severity: "warn", text: `${r.n} aturan diskon belum diterapkan Mengantar lewat 2× SLA (${sla} menit). Periksa Tarif & Kurir.` } : null
 }
 
-export const CHECKS: Check[] = [tenantsInRecovery, issueHealth, webhookInboxAge, financeSyncAge, issueVolumeSpike, publicApiAuthSpike, relayDown, emailFailureRate, discountOverdue]
+export const CHECKS: Check[] = [tenantsInRecovery, issueReconciliationRate, issueFailedStreak, webhookInboxAge, financeSyncAge, issueVolumeSpike, publicApiAuthSpike, relayDown, emailFailureRate, emailBounceRate, discountOverdue]
 
 /** Bounded per-tenant fan-out, computed once per tick and shared by every check. */
 function snapshotLoader(env: AlertEnv, now: number): CheckCtx["snapshots"] {
@@ -105,7 +121,10 @@ function snapshotLoader(env: AlertEnv, now: number): CheckCtx["snapshots"] {
   return () =>
     (cache ??= (async () => {
       if (!env.GERAI_VAULT) return []
-      const ids = (await env.DB.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY id LIMIT ?").bind(MAX_TENANTS_PER_TICK).all<{ id: string }>()).results
+      // Rotate the slice tick by tick so every active tenant is checked even past MAX_TENANTS_PER_TICK.
+      const total = (await env.DB.prepare("SELECT COUNT(*) AS n FROM tenants WHERE status = 'active'").first<{ n: number }>())?.n ?? 0
+      const offset = total > MAX_TENANTS_PER_TICK ? (Math.floor(now / 300_000) * MAX_TENANTS_PER_TICK) % total : 0
+      const ids = (await env.DB.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY id LIMIT ? OFFSET ?").bind(MAX_TENANTS_PER_TICK, offset).all<{ id: string }>()).results
       const out: Array<{ tenantId: string; s: HealthSnapshot }> = []
       for (const { id } of ids) {
         const r = await vaultFor({ GERAI_VAULT: env.GERAI_VAULT }, id).healthSnapshot(id, now).catch(() => null)

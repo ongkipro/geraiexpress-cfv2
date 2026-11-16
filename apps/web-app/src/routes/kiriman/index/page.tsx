@@ -1,3 +1,4 @@
+import { statusLabel } from "../../../lib/status"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { DownloadIcon, PrinterIcon, SearchIcon } from "lucide-react"
@@ -49,7 +50,6 @@ const TABS: Array<{ id: Tab | "massal"; label: string }> = [
   { id: "kendala", label: "Kendala & Klaim" },
   { id: "retur", label: "Meja Retur" },
 ]
-const STATUS: Record<string, string> = { ready_for_pickup: "Siap dijemput", in_transit: "Dalam perjalanan", delivered: "Terkirim", undelivery_hold: "Gagal antar", rts_in_transit: "Retur", provider_returned: "Retur diterima", rts_at_gerai: "Retur di gerai", cancelled: "Dibatalkan", lost: "Hilang", handed_to_courier: "Diserahkan ke kurir", provider_unpaid_hold: "Menunggu saldo", draft: "Draf", failed: "Gagal diterbitkan", reconciliation_needed: "Diperiksa" }
 const MODE: Record<string, string> = { none: "Non-COD", buyer_bears_fee: "COD", sender_bears_fee: "COD", cod_all_in: "COD", dfod: "COD Ongkir" }
 const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer: "Transfer", deposit: "Deposit" }
 const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
@@ -175,7 +175,7 @@ export function KirimanPage() {
                   <td className="px-4 py-3">{r.sender_brand ?? r.sender ?? "—"}<span className="block text-muted-foreground">→ {r.recipient ?? "—"}{r.recipient_area ? ` (${r.recipient_area.split(",")[0]})` : ""}</span></td>
                   <td className="px-4 py-3 text-right tabular-nums">{rp(r.counter_due_idr)}<span className="block text-muted-foreground">{MODE[r.cod_fee_mode] ?? r.cod_fee_mode}{r.cod_collection_total_idr ? ` ${rp(r.cod_collection_total_idr)}` : ""}</span>{owner && r.estimated_margin_idr != null ? <span className="block text-muted-foreground">laba {rp(r.estimated_margin_idr)}</span> : null}</td>
                   <td className="px-4 py-3"><Payment r={r} /></td>
-                  <td className="px-4 py-3">{STATUS[r.dispatch_state === "issued" ? r.status : r.dispatch_state] ?? r.status}</td>
+                  <td className="px-4 py-3">{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</td>
                   <td className="px-4 py-3 text-right">{r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}</td>
                 </tr>
               ))}
@@ -191,7 +191,7 @@ export function KirimanPage() {
                 </div>
                 <p className="text-base">{r.courier_code} · <span className="tabular-nums">{r.awb_number ?? "Resi belum terbit"}</span></p>
                 <p className="text-base text-muted-foreground">{r.sender_brand ?? r.sender ?? "—"} → {r.recipient ?? "—"}</p>
-                <p className="text-base tabular-nums">{rp(r.counter_due_idr)} · <Payment r={r} /> · {STATUS[r.dispatch_state === "issued" ? r.status : r.dispatch_state] ?? r.status}</p>
+                <p className="text-base tabular-nums">{rp(r.counter_due_idr)} · <Payment r={r} /> · {statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</p>
                 {r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" className="mt-2" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}
               </li>
             ))}

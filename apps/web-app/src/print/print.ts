@@ -67,18 +67,23 @@ export function printPdf(blob: Blob): void {
 }
 
 type BtCharacteristic = { writeValueWithoutResponse?: (b: BufferSource) => Promise<void>; writeValue: (b: BufferSource) => Promise<void> }
-/** Sends ESC/POS bytes to a paired BLE printer (common 58 mm service UUID); returns false when unsupported. */
-export async function printBluetooth(bytes: Uint8Array): Promise<boolean> {
+/** Connects a paired BLE printer (common 58 mm service UUID); null when unsupported or the user cancels. */
+export async function connectBluetooth(): Promise<((bytes: Uint8Array) => Promise<void>) | null> {
   const bt = (navigator as unknown as { bluetooth?: { requestDevice: (o: unknown) => Promise<{ gatt?: { connect: () => Promise<{ getPrimaryService: (u: string) => Promise<{ getCharacteristic: (u: string) => Promise<BtCharacteristic> }> }> } }> } }).bluetooth
-  if (!bt) return false
+  if (!bt) return null
   const SERVICE = "000018f0-0000-1000-8000-00805f9b34fb"
   const CHAR = "00002af1-0000-1000-8000-00805f9b34fb"
-  const device = await bt.requestDevice({ filters: [{ services: [SERVICE] }] })
-  const server = await device.gatt!.connect()
-  const ch = await (await server.getPrimaryService(SERVICE)).getCharacteristic(CHAR)
-  for (let i = 0; i < bytes.length; i += 180) {
-    const chunk = bytes.slice(i, i + 180)
-    await (ch.writeValueWithoutResponse ? ch.writeValueWithoutResponse(chunk) : ch.writeValue(chunk))
+  try {
+    const device = await bt.requestDevice({ filters: [{ services: [SERVICE] }] })
+    const server = await device.gatt!.connect()
+    const ch = await (await server.getPrimaryService(SERVICE)).getCharacteristic(CHAR)
+    return async (bytes) => {
+      for (let i = 0; i < bytes.length; i += 180) {
+        const chunk = bytes.slice(i, i + 180)
+        await (ch.writeValueWithoutResponse ? ch.writeValueWithoutResponse(chunk) : ch.writeValue(chunk))
+      }
+    }
+  } catch {
+    return null
   }
-  return true
 }

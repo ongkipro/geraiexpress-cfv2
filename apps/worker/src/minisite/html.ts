@@ -5,6 +5,8 @@ import { escapeHtml as e } from "../http/pages"
 
 export interface Shell {
   host: string
+  /** Platform brand origin for the privacy link (`https://geraiexpress.com`, staging/local equivalents). */
+  brandOrigin: string
   outlet: { name: string; whatsapp: string | null; openingHours: string | null; address: string | null; area: string | null }
   tab: "ongkir" | "kirim" | "lacak"
   title: string
@@ -59,7 +61,7 @@ ${s.noindex ? '<meta name="robots" content="noindex">' : ""}<meta property="og:t
 ${o.whatsapp ? `<div class="row"><a class="cta ghost" href="${e(wa(o.whatsapp))}" rel="noopener">Chat WhatsApp Gerai</a></div>` : ""}
 <nav class="tabs" aria-label="Menu gerai">${TABS.map(([id, href, label]) => `<a href="${href}"${s.tab === id ? ' aria-current="page"' : ""}>${label}</a>`).join("")}</nav></header>
 <main class="wrap">${body}</main>${after}
-<footer><div class="wrap"><span>Didukung jaringan resmi GeraiExpress</span><a href="https://${e(s.host.replace(/^[^.]+\./, "geraiexpress."))}/privasi" rel="noopener">Kebijakan Privasi</a></div></footer>
+<footer><div class="wrap"><span>Didukung jaringan resmi GeraiExpress</span><a href="${e(s.brandOrigin)}/privasi" rel="noopener">Kebijakan Privasi</a></div></footer>
 ${scripts}</body></html>`
 }
 

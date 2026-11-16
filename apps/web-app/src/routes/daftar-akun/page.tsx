@@ -4,7 +4,7 @@ import { AuthCard, FormAlert } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { devTurnstileToken } from "../../lib/turnstile"
+import { useTurnstile } from "../../lib/turnstile"
 
 type Step = "email" | "otp" | "profile"
 
@@ -12,6 +12,7 @@ type Step = "email" | "otp" | "profile"
 export function DaftarAkunPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>("email")
+  const { setContainer: turnstileBox, ...ts } = useTurnstile()
   const [email, setEmail] = useState("")
   const [otpId, setOtpId] = useState("")
   const [code, setCode] = useState("")
@@ -41,9 +42,13 @@ export function DaftarAkunPage() {
   const sendCode = (e?: FormEvent) => {
     e?.preventDefault()
     return run(async () => {
-      const r = await api<{ otpId: string }>("/auth/signup/request", { body: { email, turnstileToken: devTurnstileToken() } })
-      setOtpId(r.otpId)
-      setStep("otp")
+      try {
+        const r = await api<{ otpId: string }>("/auth/signup/request", { body: { email, turnstileToken: ts.token } })
+        setOtpId(r.otpId)
+        setStep("otp")
+      } finally {
+        ts.reset()
+      }
     })
   }
   const verify = (e: FormEvent) => {
@@ -77,7 +82,7 @@ export function DaftarAkunPage() {
       {step === "email" ? (
         <form className="flex flex-col gap-5" onSubmit={sendCode} noValidate>
           <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} hint="Kode verifikasi 6 digit dikirim ke email ini." required />
-          <Button type="submit" size="lg" disabled={pending}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
+          <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
         </form>
       ) : null}
       {step === "otp" ? (
@@ -85,9 +90,11 @@ export function DaftarAkunPage() {
           <FormAlert tone="safe">Kode dikirim ke {email}. Berlaku 10 menit.</FormAlert>
           <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required />
           <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
-          <Button type="button" variant="outline" size="lg" disabled={pending} onClick={() => sendCode()}>Kirim ulang kode</Button>
+          <Button type="button" variant="outline" size="lg" disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang kode</Button>
         </form>
       ) : null}
+      {step === "email" || step === "otp" ? <div ref={turnstileBox} /> : null}
+      {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
         <form className="flex flex-col gap-5" onSubmit={complete} noValidate>
           <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />

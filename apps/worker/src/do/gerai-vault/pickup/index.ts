@@ -148,6 +148,15 @@ export function handover(
     if (!p.signatureKey && !p.photoKey) fields.signature = "Minta tanda tangan kurir atau foto Surat Jalan yang sudah ditandatangani."
   }
   if (Object.keys(fields).length) return err(422, "INVALID_HANDOVER", Object.values(fields)[0]!, fields)
+  // Re-check every scanned INV at handover: one cancelled or changed since scanning blocks the manifest.
+  const bad = sql
+    .exec<{ slug: string }>(
+      `SELECT i.slug FROM pickup_batch_items i JOIN shipments s ON s.slug = i.slug
+       WHERE i.batch_id = ? AND NOT (s.dispatch_state = 'issued' AND s.status = 'ready_for_pickup' AND s.custody_stage = 'none') LIMIT 3`,
+      batchId,
+    )
+    .toArray()
+  if (bad.length) return err(409, "ITEM_NOT_READY", `INV ${bad.map((b) => b.slug.toUpperCase()).join(", ")} sudah dibatalkan atau berubah. Keluarkan dari manifest dulu.`)
   sql.exec(
     "UPDATE pickup_batches SET status = ?, driver_name = ?, driver_phone = ?, driver_vehicle_no = ?, signature_r2_key = ?, signed_manifest_photo_r2_key = ?, handed_over_at = ?, handed_over_by = ? WHERE id = ?",
     p.mode,

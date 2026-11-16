@@ -66,6 +66,13 @@ describe("Mengantar Public API client (TASK-201)", () => {
     await expect(client.payUnpaid("JT", "B-JT-0002")).rejects.toMatchObject({ code: "BATCH_ID_INVALID" })
   })
 
+  it("an HTML 502 gateway page after POST /order is ambiguous (never treated as a rejection)", async () => {
+    const { client } = fake([{ status: 502, text: "<html><body>Bad Gateway</body></html>" }])
+    const e = await client.estimate({ originId: "o", destinationId: "d", courier: "JT", weightKg: 1 }).catch((x) => x)
+    expect(e).toMatchObject({ kind: "parse", status: 502 })
+    expect(e.ambiguous).toBe(true)
+  })
+
   it("4xx/5xx/timeout/network/parse errors never contain the key, even when Mengantar echoes it", async () => {
     const echo = { status: 500, json: { success: false, message: `Internal error at /api/public/${KEY}/order for key ${KEY}` } }
     const { client } = fake([echo, { status: 401, json: { message: `invalid key ${KEY}`, code: "X001" } }, "timeout", "network", { status: 200, text: `<html>${KEY}</html>` }, { status: 200, json: { success: true, data: "nope" } }])
@@ -85,6 +92,8 @@ describe("Mengantar Public API client (TASK-201)", () => {
     assertNoKey(e4)
     const e5 = await client.invoices({}).catch((e) => e)
     expect(e5).toMatchObject({ kind: "parse" })
+    // An unreadable 200 body may hide an applied order: ambiguous (read back, never blind-retry).
+    expect(e5.ambiguous).toBe(true)
     assertNoKey(e5)
     const e6 = await client.invoices({}).catch((e) => e)
     expect(e6).toMatchObject({ kind: "envelope", code: "UNEXPECTED_SHAPE" })

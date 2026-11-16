@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { EyeIcon, EyeOffIcon } from "lucide-react"
 import { AreaPicker, type Area } from "../../components/area-picker"
 import { WeightInput } from "../../components/weight-input"
@@ -41,7 +41,10 @@ export interface QuoteRequest {
   widthCm?: number
   heightCm?: number
   codGoodsIdr?: number
+  packingIdr?: number
+  serviceFeeIdr?: number
 }
+interface PosConfig { packingItems: Array<{ name: string; priceIdr: number }>; serviceFeeIdr: number | null; showCommission: boolean }
 interface QuoteResponse { cards: QuoteCard[]; medals: { termurah: string | null; tercepat: string | null; cairTerbesar: string | null } }
 
 /** `Rp 12.500`; negatives as `-Rp 2.500`; never `Rp -0`. */
@@ -63,6 +66,20 @@ export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoos
   const [goods, setGoods] = useState(initial?.codGoodsIdr ? initial.codGoodsIdr.toLocaleString("id-ID") : "")
   const [tab, setTab] = useState<"regular" | "cargo">("regular")
   const [showMargin, setShowMargin] = useState(false)
+  // Owner defaults from Pengaturan › Packing & Biaya / Printer & Struk (DEC-225): packing catalogue, counter fee.
+  const [pos, setPos] = useState<PosConfig | null>(null)
+  const [packing, setPacking] = useState<string>("")
+  const [serviceFee, setServiceFee] = useState(true)
+  useEffect(() => {
+    api<PosConfig>("/pos-config")
+      .then((c) => {
+        setPos(c)
+        if (c.showCommission) setShowMargin(true)
+      })
+      .catch(() => setPos({ packingItems: [], serviceFeeIdr: null, showCommission: false }))
+  }, [])
+  const packingIdr = pos?.packingItems.find((i) => i.name === packing)?.priceIdr ?? 0
+  const serviceFeeIdr = serviceFee && pos?.serviceFeeIdr ? pos.serviceFeeIdr : 0
   const [data, setData] = useState<QuoteResponse | null>(null)
   const [req, setReq] = useState<QuoteRequest | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -79,6 +96,8 @@ export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoos
     const body: QuoteRequest = { destinationAreaId: area?.id ?? "", mode, weightGram: gram }
     if (dims.l || dims.w || dims.h) Object.assign(body, { lengthCm: Number(dims.l), widthCm: Number(dims.w), heightCm: Number(dims.h) })
     if (kind === "cod_goods") body.codGoodsIdr = Number(goods.replace(/\D/g, ""))
+    if (packingIdr) body.packingIdr = packingIdr
+    if (serviceFeeIdr) body.serviceFeeIdr = serviceFeeIdr
     try {
       const r = await api<QuoteResponse>("/quotes", { body })
       setData(r)
@@ -137,6 +156,23 @@ export function QuotePanel({ onChoose, chooseLabel, footer, initial }: { onChoos
           </>
         ) : null}
         {kind === "cod_shipping" ? <p className="text-base text-muted-foreground">Ongkir dibayar penerima saat paket tiba.</p> : null}
+        {pos && pos.packingItems.length ? (
+          <Field>
+            <FieldLabel htmlFor="packing">Packing (opsional)</FieldLabel>
+            <select id="packing" value={packing} onChange={(e) => setPacking(e.target.value)} className="h-11 w-full max-w-sm rounded-md border border-input bg-background px-3 text-base">
+              <option value="">Tanpa packing</option>
+              {pos.packingItems.map((i) => (
+                <option key={i.name} value={i.name}>{i.name} · {rp(i.priceIdr)}</option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        {pos?.serviceFeeIdr ? (
+          <label className="flex min-h-11 items-center gap-3 text-base">
+            <input type="checkbox" className="size-5" checked={serviceFee} onChange={(e) => setServiceFee(e.target.checked)} />
+            Biaya layanan loket {rp(pos.serviceFeeIdr)}
+          </label>
+        ) : null}
         <div><Button type="submit" disabled={loading}>{loading ? "Menghitung…" : "Cek Ongkir"}</Button></div>
       </form>
 

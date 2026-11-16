@@ -20,9 +20,10 @@ export function reserveOf(sql: SqlStorage): { returnExposure: number; disputeExp
     .toArray()
   const disputes = sql
     .exec<ReserveRow>(
-      `SELECT d.shipment_slug AS slug, 'sengketa' AS kind, COALESCE(s.status, '') AS status, ABS(COALESCE(d.actual_idr, 0)) AS amount_idr
+      // One row per INV (several open adjustments of the same INV are summed).
+      `SELECT d.shipment_slug AS slug, 'sengketa' AS kind, COALESCE(MAX(s.status), '') AS status, SUM(ABS(COALESCE(d.actual_idr, 0))) AS amount_idr
        FROM finance_discrepancies d LEFT JOIN shipments s ON s.slug = d.shipment_slug
-       WHERE d.kind = 'adjustment' AND d.resolved_at IS NULL AND d.shipment_slug != '' ORDER BY d.created_at`,
+       WHERE d.kind = 'adjustment' AND d.resolved_at IS NULL AND d.shipment_slug != '' GROUP BY d.shipment_slug ORDER BY MIN(d.created_at)`,
     )
     .toArray()
   const sum = (r: ReserveRow[]) => r.reduce((a, x) => a + x.amount_idr, 0)

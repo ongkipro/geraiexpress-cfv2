@@ -64,7 +64,8 @@ export function combine(provider: ProviderStatus | null, custody: CustodyStage):
     case "rts_returned_to_sender":
       return { status: "rts_returned_to_sender", conflict: provider === "delivered" || provider === "lost" }
     case "cancelled_local":
-      return { status: "cancelled", conflict: provider === "delivered" || provider === "lost" || rank >= 30 }
+      // Mengantar confirming the cancellation is agreement, not a conflict.
+      return { status: "cancelled", conflict: provider !== "cancelled" && (provider === "delivered" || provider === "lost" || rank >= 30) }
     case "rts_at_gerai":
       return { status: "rts_at_gerai", conflict: provider === "delivered" || provider === "lost" }
     case "handed_to_courier":

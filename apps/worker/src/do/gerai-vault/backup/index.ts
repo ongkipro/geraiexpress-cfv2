@@ -23,7 +23,14 @@ export const userTables = (sql: SqlStorage): string[] =>
     .toArray()
     .map((r) => r.name)
 
-const toCell = (v: SqlStorageValue): Cell => (v instanceof ArrayBuffer ? { b64: btoa(String.fromCharCode(...new Uint8Array(v))) } : (v as string | number | null))
+function b64(buf: ArrayBuffer): string {
+  // Chunked: spreading a large BLOB into one call overflows the stack.
+  const u = new Uint8Array(buf)
+  let out = ""
+  for (let i = 0; i < u.length; i += 8192) out += String.fromCharCode(...u.subarray(i, i + 8192))
+  return btoa(out)
+}
+const toCell = (v: SqlStorageValue): Cell => (v instanceof ArrayBuffer ? { b64: b64(v) } : (v as string | number | null))
 const fromCell = (v: Cell): SqlStorageValue => (v !== null && typeof v === "object" ? Uint8Array.from(atob(v.b64), (c) => c.charCodeAt(0)).buffer : v)
 
 export function dumpTables(sql: SqlStorage): Record<string, TableDump> {

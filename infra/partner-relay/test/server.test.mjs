@@ -24,4 +24,23 @@ describe("relay server", () => {
     const small = await fetch(`http://127.0.0.1:${PORT}/forward`, { method: "POST", body: "{}" })
     expect(small.status).toBe(401)
   })
+
+  it("survives a `//host:badport` path and a client reset mid-body", async () => {
+    const net = await import("node:net")
+    await new Promise((resolve) => {
+      const sock = net.connect(PORT, "127.0.0.1", () => sock.end("GET //a:b HTTP/1.1\r\nHost: x\r\n\r\n"))
+      sock.on("data", () => {})
+      sock.on("close", resolve)
+      sock.on("error", resolve)
+    })
+    await new Promise((resolve) => {
+      const sock = net.connect(PORT, "127.0.0.1", () => {
+        sock.write("POST /forward HTTP/1.1\r\nHost: x\r\nContent-Length: 100000\r\n\r\nabc")
+        setTimeout(() => sock.destroy(), 50)
+      })
+      sock.on("close", resolve)
+      sock.on("error", resolve)
+    })
+    expect((await fetch(`http://127.0.0.1:${PORT}/healthz`)).status).toBe(200)
+  })
 })

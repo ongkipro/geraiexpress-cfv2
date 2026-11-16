@@ -103,7 +103,17 @@ export class PartnerClient {
       const name = (err as { name?: string })?.name
       return { kind: "maybe_sent", reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : "network" }
     }
-    const json = (await res.json().catch(() => null)) as { success?: boolean; data?: T; code?: string; message?: string; field?: string } | null
+    let json: { success?: boolean; data?: T; code?: string; message?: string; field?: string } | null
+    try {
+      json = JSON.parse(await res.text()) as typeof json
+    } catch (err) {
+      // Headers arrived but the body is unreadable: on 2xx/5xx the call may have been applied (never a refusal).
+      if (res.ok || res.status >= 500) {
+        const name = (err as { name?: string })?.name
+        return { kind: "maybe_sent", reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : res.ok ? "network" : "upstream_5xx" }
+      }
+      json = null
+    }
     const code = json?.code ?? ""
     if (code.startsWith("relay_")) {
       if (code === "relay_duplicate") return { kind: "maybe_sent", reason: "relay_duplicate" }

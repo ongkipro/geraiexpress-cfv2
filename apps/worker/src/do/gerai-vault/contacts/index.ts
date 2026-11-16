@@ -162,7 +162,7 @@ export function createSender(sql: SqlStorage, tenantId: string, input: SenderInp
 export function updateSender(sql: SqlStorage, id: string, input: SenderInput, now: number): ContactResult<SenderRow> {
   const cur = readSender(sql, id)
   if (!cur) return { ok: false, errors: [{ field: "id", message: "Pengirim tidak ditemukan." }] }
-  const p = parseSender({ senderKind: cur.sender_kind, name: cur.true_name, phone: cur.true_phone, street: cur.true_street, areaId: cur.true_area_id, areaLabel: cur.true_area_label, postalCode: cur.true_postal_code, brandName: cur.display_brand_name, brandPhone: cur.display_brand_phone, hideGeraiBranding: cur.hide_gerai_branding === 1, ...input })
+  const p = parseSender({ senderKind: cur.sender_kind, name: cur.true_name, phone: cur.true_phone, street: cur.true_street, areaId: cur.true_area_id, areaLabel: cur.true_area_label, postalCode: cur.true_postal_code, brandName: cur.display_brand_name, brandPhone: cur.display_brand_phone, hideGeraiBranding: cur.hide_gerai_branding === 1, ...defined(input) })
   if (!p.ok) return p
   const phoneChanged = p.value.true_phone !== cur.true_phone
   sql.exec(
@@ -226,7 +226,7 @@ export function createRecipient(sql: SqlStorage, tenantId: string, input: Recipi
 export function updateRecipient(sql: SqlStorage, id: string, input: RecipientInput, now: number): ContactResult<RecipientRow> {
   const cur = readRecipient(sql, id)
   if (!cur) return { ok: false, errors: [{ field: "id", message: "Penerima tidak ditemukan." }] }
-  const p = parseRecipient({ name: cur.name, phone: cur.phone, street: cur.street_address, areaId: cur.mengantar_area_id, areaLabel: cur.subdistrict_name, postalCode: cur.postal_code, note: cur.address_note, linkedSenderId: cur.linked_sender_id, ...input })
+  const p = parseRecipient({ name: cur.name, phone: cur.phone, street: cur.street_address, areaId: cur.mengantar_area_id, areaLabel: cur.subdistrict_name, postalCode: cur.postal_code, note: cur.address_note, linkedSenderId: cur.linked_sender_id, ...defined(input) })
   if (!p.ok) return p
   sql.exec(
     "UPDATE recipient_contacts SET name = ?, phone = ?, mengantar_area_id = ?, subdistrict_name = ?, postal_code = ?, street_address = ?, address_note = ?, linked_sender_id = ?, updated_at = ? WHERE id = ?",
@@ -332,4 +332,9 @@ export function recordCodOutcome(sql: SqlStorage, recipientId: string, outcome: 
   // The per-phone version is the sum of row versions: monotone for the phone across all of its rows.
   const version = sql.exec<{ s: number }>("SELECT SUM(risk_version) AS s FROM recipient_contacts WHERE phone = ?", row.phone).one().s
   return { phone: row.phone, delivered: totals.d, rts: totals.t, version }
+}
+
+/** Only the fields the caller actually sent: an omitted field keeps its stored value (never becomes empty). */
+function defined<T extends object>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>
 }

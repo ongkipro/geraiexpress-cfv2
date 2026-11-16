@@ -44,7 +44,7 @@ describe("Kendala & Klaim", () => {
     mockInvoices.push({ _id: "adj1", type: "typePayment", status: "statusCleared", amount: -3_000, balanceAmount: 1, createdAt: new Date().toISOString(), description: "Biaya penyesuaian berat", cnote_no: adj.awb })
     await t.vault.financeSync(t.tenantId, "cron")
     const counts = (await list(t.cookie, "tidak_bergerak")).counts
-    expect(counts).toEqual({ tidak_bergerak: 1, gagal_antar: 1, selisih_berat: 1, bisa_klaim: 1, bertentangan: 0 })
+    expect(counts).toEqual({ tidak_bergerak: 1, gagal_antar: 1, selisih_berat: 1, bisa_klaim: 1, bertentangan: 0, perlu_tindakan: 0 })
     expect((await list(t.cookie, "tidak_bergerak")).rows[0]).toMatchObject({ slug: stuck.slug, band: "5-14h" })
     expect((await list(t.cookie, "gagal_antar")).rows.map((r) => r.slug)).toEqual([failed.slug])
     expect((await list(t.cookie, "selisih_berat")).rows[0]).toMatchObject({ slug: adj.slug, adjustment_idr: 3_000 })
@@ -102,5 +102,18 @@ describe("Kendala & Klaim", () => {
     expect((await post(`/shipments/${x.slug}/conflict-note`, t.cookie, { note: "ok" })).status).toBe(422)
     expect((await post(`/shipments/${x.slug}/conflict-note`, t.cookie, { note: "Kurir J&T konfirmasi paket ada di gerai", resolve: true })).status).toBe(200)
     expect((await list(t.cookie, "bertentangan")).counts.bertentangan).toBe(0)
+  })
+
+  it("the Kendala tab badge equals what the buckets show (a failed issue appears under Gagal Terbit)", async () => {
+    const { mockFaults } = await import("../../src/mengantar/mock")
+    const t = await checkoutGerai("kendalabadge")
+    const slug = await readyInv(t)
+    mockFaults.order = "validation_error"
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    const list = (await (await appGet("/shipments?tab=kendala", t.cookie)).json()) as { data: { counts: Record<string, number> } }
+    const ex = (await (await appGet("/exceptions?bucket=perlu_tindakan", t.cookie)).json()) as { data: { counts: Record<string, number>; rows: Array<{ slug: string }> } }
+    expect(ex.data.rows.map((r) => r.slug)).toEqual([slug])
+    const sum = Object.values(ex.data.counts).reduce((a, b) => a + b, 0)
+    expect(list.data.counts.kendala).toBe(sum)
   })
 })

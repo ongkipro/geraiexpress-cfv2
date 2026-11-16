@@ -115,5 +115,8 @@ describe("dashboard", () => {
     await t.vault.flushOutbox(Date.now() + 3000)
     const again = await env.DB.prepare("SELECT shipments FROM tenant_daily_stats WHERE tenant_id = ? AND day = ?").bind(t.tenantId, day).first<{ shipments: number }>()
     expect(again?.shipments).toBe(1)
+    // An idle object sleeps: after the push and the flushes, `daily_stats` is not re-scheduled (no 5-minute loop).
+    const timers = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ name: string }>("SELECT name FROM vault_timers WHERE name = 'daily_stats'").toArray())
+    expect(timers).toEqual([])
   })
 })

@@ -85,7 +85,7 @@ export function intake(sql: SqlStorage, tenantId: string, p: { code: string; con
   )
   recordCustody(sql, { slug: s.slug, stage: "rts_at_gerai", eventKey: `custody:retur:${s.slug}` }, now)
   // Provider says delivered/lost while the parcel is physically here → `Status Bertentangan` (spec 01 §3).
-  const conflict = sql.exec<{ c: number | null }>("SELECT provider_status_conflict_at AS c FROM shipments WHERE slug = ?", s.slug).one().c !== null
+  const conflict = sql.exec<{ c: number | null }>("SELECT CASE WHEN conflict_resolved_at IS NULL THEN provider_status_conflict_at END AS c FROM shipments WHERE slug = ?", s.slug).one().c !== null
   return { ok: true, value: { slug: s.slug, conflict } }
 }
 
@@ -103,7 +103,7 @@ export async function issueCode(sql: SqlStorage, slug: string, now: number): Pro
 /** Step 3: handback by code (constant-length compare on hashes; 5 wrong → 15 min lock) or owner ID override. */
 export async function handback(
   sql: SqlStorage,
-  p: { slug: string; code?: unknown; override?: { reason: unknown }; role: "gerai_admin" | "cashier"; actorId: string },
+  p: { slug: string; code?: unknown; override?: { reason: unknown }; role: "gerai_admin" | "cashier"; actorId: string; storage: DurableObjectStorage },
   now: number,
 ): Promise<{ ok: true; value: { method: "code" | "id_override" } } | { ok: false; error: ReturnError }> {
   const r = sql.exec<IntakeRow & { code_hash: string | null; code_salt: string | null }>("SELECT * FROM return_intakes WHERE slug = ?", p.slug).toArray()[0]
@@ -127,8 +127,14 @@ export async function handback(
     }
     method = "code"
   }
-  sql.exec("UPDATE return_intakes SET handback_at = ?, handback_by = ?, handback_method = ?, handback_reason = ?, code_hash = NULL, code_salt = NULL WHERE slug = ?", now, p.actorId, method, reason, p.slug)
-  recordCustody(sql, { slug: p.slug, stage: "rts_returned_to_sender", eventKey: `custody:handback:${p.slug}` }, now)
+  // The hash was awaited: commit only if nothing changed meanwhile (not handed back, same code), in one step.
+  const res = p.storage.transactionSync(() => {
+    const done = sql.exec("UPDATE return_intakes SET handback_at = ?, handback_by = ?, handback_method = ?, handback_reason = ?, code_hash = NULL, code_salt = NULL WHERE slug = ? AND handback_at IS NULL AND (? = 'id_override' OR code_hash IS ?)", now, p.actorId, method, reason, p.slug, method, r.code_hash).rowsWritten
+    if (!done) return false
+    recordCustody(sql, { slug: p.slug, stage: "rts_returned_to_sender", eventKey: `custody:handback:${p.slug}` }, now)
+    return true
+  })
+  if (!res) return err(409, "ALREADY_RETURNED", "Paket ini baru saja diproses. Muat ulang halaman.")
   return { ok: true, value: { method } }
 }
 
@@ -140,7 +146,7 @@ export function desk(sql: SqlStorage, now: number): { open: DeskRow[]; returned:
     sql
       .exec<DeskRow>(
         `SELECT r.slug, r.condition, r.photo_r2_key, r.note, r.intake_at, r.code_issued_at, r.code_attempts, r.code_locked_until, r.storage_deadline_at, r.handback_at, r.handback_method, r.claim_offered,
-                s.awb_number, s.courier_code, s.status, s.provider_status, (s.provider_status_conflict_at IS NOT NULL) AS conflict
+                s.awb_number, s.courier_code, s.status, s.provider_status, (s.provider_status_conflict_at IS NOT NULL AND s.conflict_resolved_at IS NULL) AS conflict
          FROM return_intakes r JOIN shipments s ON s.slug = r.slug WHERE ${where}`,
         ...args,
       )

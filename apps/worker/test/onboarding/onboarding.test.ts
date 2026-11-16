@@ -107,6 +107,22 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
   })
 })
 
+describe("registration read-back safety (final Carbon pass, M2A #5)", () => {
+  it("read-back never adopts another tenant's seller even if the list filter is ignored", async () => {
+    const { reconcileRegistration } = await import("../../src/onboarding/service")
+    const { mockFaults } = await import("../../src/mengantar/mock")
+    // Another gerai is a real seller already.
+    await submit("lainsatu", "lain1@contoh.test").then(async ({ applicationId }) => ownerPost(`/gerai/applications/${applicationId}/approve`, await adminSession(), { reason: "gerai lain" }))
+    const { tenantId } = await submit("bacaaman", "bacaaman@contoh.test")
+    await vaultFor(env, tenantId).migrate(tenantId)
+    mockFaults.listIgnoresFilter = true
+    const r = await reconcileRegistration(env, tenantId, Date.now())
+    expect(r).toMatchObject({ state: "registration_pending", code: "NOT_FOUND_ON_READBACK" })
+    const conn = await vaultFor(env, tenantId).connectionView(tenantId)
+    expect(conn).toMatchObject({ ok: true, value: { hasKey: false } })
+  })
+})
+
 describe("suspend / unsuspend and masking controls", () => {
   it("suspend → 403 on the mini-site (within the cache window), audited; masking kill-switch + quota with TOTP + reason", async () => {
     const { tenantId, applicationId } = await submit("bekugerai", "beku@contoh.test")

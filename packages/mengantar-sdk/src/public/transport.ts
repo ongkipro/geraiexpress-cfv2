@@ -24,7 +24,8 @@ export class MengantarError extends Error {
   }
   /** An outcome we cannot know (timeout, network, 5xx): callers must read back, never blindly retry (ADR-0004). */
   get ambiguous(): boolean {
-    return this.kind === "timeout" || this.kind === "network" || (this.kind === "http" && (this.status ?? 0) >= 500)
+    // Any 5xx (JSON or an HTML gateway page) and an unreadable 2xx body may hide an applied request.
+    return this.kind === "timeout" || this.kind === "network" || (this.status ?? 0) >= 500 || (this.kind === "parse" && (this.status ?? 0) >= 200 && (this.status ?? 0) < 300)
   }
 }
 
@@ -36,7 +37,8 @@ export function scrubKey(text: string, apiKey: string | null): string {
 
 function scrubDeep(value: unknown, apiKey: string | null, depth = 0): unknown {
   if (typeof value === "string") return scrubKey(value, apiKey)
-  if (depth > 6 || value === null || typeof value !== "object") return value
+  if (value === null || typeof value !== "object") return value
+  if (depth > 6) return "[REDACTED]"
   if (Array.isArray(value)) return value.map((v) => scrubDeep(v, apiKey, depth + 1))
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, scrubDeep(v, apiKey, depth + 1)]))
 }
@@ -69,7 +71,14 @@ export async function request(opts: TransportOptions, spec: RequestSpec): Promis
   const keyed = spec.keyed !== false
   const templ = keyed ? `/api/public/${KEY_PLACEHOLDER}${spec.path}` : spec.path
   if (keyed && (!opts.apiKey || /[/?#\s]/.test(opts.apiKey))) throw new MengantarError("envelope", templ, null, "KEY_MISSING", "Kunci Mengantar gerai belum tersedia.")
-  const url = new URL(opts.origin.replace(/\/$/, "") + (keyed ? templ.replace(KEY_PLACEHOLDER, encodeURIComponent(opts.apiKey)) : templ))
+  // Validate the origin before the key enters any string (a bad origin must never throw with the key in it).
+  let base: URL
+  try {
+    base = new URL(opts.origin)
+  } catch {
+    throw new MengantarError("envelope", templ, null, "BAD_ORIGIN", "Konfigurasi Mengantar tidak valid.")
+  }
+  const url = new URL(base.origin + base.pathname.replace(/\/$/, "") + (keyed ? templ.replace(KEY_PLACEHOLDER, encodeURIComponent(opts.apiKey)) : templ))
   for (const [k, v] of Object.entries(spec.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v))
   let res: Response
   try {
@@ -84,7 +93,14 @@ export async function request(opts: TransportOptions, spec: RequestSpec): Promis
     const timeout = name === "TimeoutError" || name === "AbortError"
     throw new MengantarError(timeout ? "timeout" : "network", templ, null, null, timeout ? "Mengantar tidak merespons tepat waktu." : "Tidak dapat terhubung ke Mengantar.")
   }
-  const text = await res.text()
+  let text: string
+  try {
+    text = await res.text()
+  } catch (err) {
+    // Headers arrived but the body did not: the request may have been applied (ambiguous, read back).
+    const name = (err as { name?: string })?.name
+    throw new MengantarError(name === "TimeoutError" || name === "AbortError" ? "timeout" : "network", templ, res.status, null, "Respons Mengantar terputus.")
+  }
   let json: unknown
   try {
     json = text ? JSON.parse(text) : null

@@ -22,6 +22,6 @@ export async function handleBackupOps(request: Request, env: Env, path: string):
   try {
     return ok(await restoreInto(env, key, target))
   } catch (e) {
-    return fail(409, "RESTORE_REFUSED", e instanceof Error ? e.message : "restore refused")
+    return fail(409, "RESTORE_REFUSED", `Pemulihan ditolak: ${e instanceof Error ? e.message : "alasan tidak diketahui"}.`)
   }
 }

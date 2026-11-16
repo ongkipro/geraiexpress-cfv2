@@ -36,14 +36,14 @@ export function financeView(sql: SqlStorage, now: number): FinanceView {
   const st = sql.exec<{ last_error: string | null }>("SELECT last_error FROM finance_sync_state WHERE id = 1").toArray()[0]
   const res = reserveOf(sql)
   const reserve = res.total
-  const codWaiting = sql.exec<{ c: number; s: number }>("SELECT COUNT(*) AS c, SUM(expected_provider_cod_credit_idr) AS s FROM shipments WHERE cod_fee_mode != 'none' AND dispatch_state = 'issued' AND reconciled_provider_cod_credit_idr IS NULL AND status NOT IN ('cancelled')").one()
+  const codWaiting = sql.exec<{ c: number; s: number }>("SELECT COUNT(*) AS c, SUM(expected_provider_cod_credit_idr) AS s FROM shipments WHERE cod_fee_mode != 'none' AND dispatch_state = 'issued' AND reconciled_provider_cod_credit_idr IS NULL AND status NOT IN ('cancelled','lost','rts_in_transit','provider_returned','rts_at_gerai','rts_returned_to_sender')").one()
   const today = resolvePreset("today", now)
   const counter = { tunai: 0, qris: 0, transfer: 0 }
   for (const r of sql.exec<{ method: string; total: number }>("SELECT method, SUM(CASE WHEN event = 'mark_paid' THEN amount_idr WHEN event = 'void_payment' THEN -amount_idr ELSE 0 END) AS total FROM counter_receipts WHERE created_at >= ? AND created_at < ? GROUP BY method", today.fromMs, today.toMs)) {
     if (r.method in counter) counter[r.method as keyof typeof counter] = n(r.total)
   }
-  const hold = sql.exec<{ c: number; s: number }>("SELECT COUNT(*) AS c, SUM(gerai_shipping_cost_idr) AS s FROM shipments WHERE dispatch_state = 'provider_unpaid_hold'").one()
-  const payable = n(sql.exec<{ s: number }>("SELECT SUM(sender_cod_payable_idr - COALESCE(sender_cod_paid_idr, 0)) AS s FROM shipments WHERE cod_fee_mode != 'none' AND dispatch_state = 'issued' AND status = 'delivered'").one().s)
+  const hold = sql.exec<{ c: number; s: number }>("SELECT COUNT(*) AS c, SUM(COALESCE(q.provider_net_shipping_idr, s.gerai_shipping_cost_idr, 0) + COALESCE(s.insurance_fee_idr, 0)) AS s FROM shipments s LEFT JOIN quote_snapshots q ON q.id = s.quote_snapshot_id WHERE s.dispatch_state = 'provider_unpaid_hold'").one()
+  const payable = n(sql.exec<{ s: number }>("SELECT SUM(sender_cod_payable_idr - COALESCE(sender_cod_paid_idr, 0)) AS s FROM shipments WHERE cod_fee_mode != 'none' AND dispatch_state = 'issued' AND status != 'cancelled' AND (status = 'delivered' OR reconciled_provider_cod_credit_idr IS NOT NULL) AND sender_cod_payable_idr > COALESCE(sender_cod_paid_idr, 0)").one().s)
   const month = resolvePreset("30d", now)
   const profit = sql
     .exec<{ est: number; cash: number }>(

@@ -101,6 +101,18 @@ describe("outlet MCP", () => {
   })
 })
 
+describe("contact update keeps omitted fields (final Carbon pass, M5 #8)", () => {
+  it("updating a reseller sender's name via MCP keeps its brand and kind", async () => {
+    const t = await checkoutGerai("mcpparsial")
+    const k = await key(t.cookie, ["contacts:write", "contacts:read"])
+    await post(`/contacts/senders/${t.sender}`, t.cookie, { senderKind: "reseller_dropship", brandName: "TOKO NISA", phone: "081234567890", name: "Ibu Siti" })
+    const r = await call(MCP, k, "upsert_sender_or_recipient_contact", { kind: "sender", id: t.sender, name: "Ibu Siti Nisa", phone: "081234567890" })
+    expect(r.isError).toBe(false)
+    const item = (r.structuredContent as { item: { true_name: string; display_brand_name: string; sender_kind: string } }).item
+    expect(item).toMatchObject({ true_name: "Ibu Siti Nisa", display_brand_name: "TOKO NISA", sender_kind: "reseller_dropship" })
+  })
+})
+
 describe("public mini-site MCP", () => {
   async function site(slug: string) {
     const t = await checkoutGerai(slug)

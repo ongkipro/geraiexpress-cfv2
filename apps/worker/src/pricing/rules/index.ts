@@ -232,7 +232,7 @@ export async function recordObservation(env: Env, input: { tenantId: string; ser
   const nextCheck = input.scheduled ? verificationCheckAt(rule.requested_at, step) : rule.next_check_at
   const becameSesuai = next === "sesuai" && rule.verification_state !== "sesuai"
   const alert = next === "selisih" && rule.verification_state !== "selisih"
-  await env.DB.prepare(
+  const res = await env.DB.prepare(
     `UPDATE tenant_discount_rules SET verification_state = ?1, observed_bps = COALESCE(?2, observed_bps), observed_at = CASE WHEN ?2 IS NULL THEN observed_at ELSE ?3 END,
        verified_at = CASE WHEN ?4 THEN ?3 ELSE verified_at END, applied_at = CASE WHEN ?4 AND applied_at IS NULL THEN ?3 ELSE applied_at END,
        next_check_at = ?5, check_step = ?6, alerted_at = CASE WHEN ?7 THEN ?3 ELSE alerted_at END
@@ -240,6 +240,8 @@ export async function recordObservation(env: Env, input: { tenantId: string; ser
   )
     .bind(next, input.observedBps, input.now, becameSesuai ? 1 : 0, nextCheck, step, alert ? 1 : 0, input.tenantId, input.serviceCode, rule.updated_at)
     .run()
+  // A rule edited meanwhile (optimistic lock lost): this observation belongs to the old rule — no alert, no state.
+  if ((res.meta.changes ?? 0) !== 1) return rule.verification_state
   if (alert) {
     await sendAlert(env, { key: `discount_selisih.${input.tenantId}.${input.serviceCode}`.toLowerCase().replace(/[^a-z0-9_.-]/g, "-").slice(0, 80), severity: "warn", text: `Diskon gerai belum sesuai di Mengantar (${input.serviceCode}): diminta ${rule.assigned_bps / 100}%, teramati ${input.observedBps === null ? "—" : `${input.observedBps / 100}%`}.` }, input.now)
   }

@@ -1,6 +1,7 @@
 // Account lifecycles (TASK-105, PR-01, spec 05 §2, spec 12): sign-up by email OTP, login with sessions, password
 // reset, Kasir invitations. Pure server logic over D1; HTTP wiring lives in routes.ts. Every user-facing message is
 // Indonesian; no OTP, token, link or address is ever logged.
+import { USER_MESSAGE_SUPPRESSED } from "../email/mailer"
 import { emit } from "@gx/telemetry"
 import { decryptString, encryptString } from "../crypto/aead"
 import { enqueueEmailStatement, emailHash, normalizeEmail } from "../email/outbox"
@@ -59,23 +60,29 @@ export async function requestSignupOtp(env: AuthEnv, input: { email: unknown; ip
   const perEmail = await throttle.hit(env.DB, `otp-send:${eh}`, OTP_PER_EMAIL.limit, OTP_PER_EMAIL.windowMs, input.now)
   const perIp = await throttle.hit(env.DB, `otp-send-ip:${input.ipHash}`, OTP_PER_IP.limit, OTP_PER_IP.windowMs, input.now)
   if (!perEmail.allowed || !perIp.allowed) throw tooMany(Math.max(perEmail.retryAfterMs, perIp.retryAfterMs))
+  const locked = await throttle.lockedUntil(env.DB, `otp-lock:${eh}`, input.now)
+  if (locked) throw tooMany(locked - input.now)
   const otpId = crypto.randomUUID()
-  const existing = await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()
-  if (existing) {
-    // Do not reveal registration state; the existing owner can use "Lupa kata sandi".
-    emit("auth.otp", { outcome: "existing_account" }, {}, { env: env.GX_ENV, now: input.now })
-    return { otpId }
-  }
-  const code = newOtp()
   const expiresAt = input.now + OTP_TTL_MS
-  const mail = await enqueueEmailStatement(env, { templateId: "signup_otp", toEmail: email, vars: { code }, expiresAt, now: input.now })
-  await env.DB.batch([
+  const existing = await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()
+  // An already registered address gets an unmatchable OTP row (no email sent): `/verify` then behaves exactly like
+  // for a new address (wrong code → 400, 5 wrong → 429), so registration state never leaks.
+  const code = existing ? null : newOtp()
+  const stmts: D1PreparedStatement[] = [
+    // Only the newest code is valid: older open codes for this email stop working.
+    env.DB.prepare("UPDATE email_otps SET expires_at = ?1 WHERE email_hash = ?2 AND purpose = 'signup' AND consumed_at IS NULL AND expires_at > ?1").bind(input.now, eh),
     env.DB.prepare(
       `INSERT INTO email_otps (id, purpose, email_hash, email_encrypted, code_hash, ip_hash, attempts, expires_at, created_at)
        VALUES (?1, 'signup', ?2, ?3, ?4, ?5, 0, ?6, ?7)`,
-    ).bind(otpId, eh, await encryptString(env.KEK_SECRET, email, "otp"), await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`), input.ipHash, expiresAt, input.now),
-    mail.statement,
-  ])
+    ).bind(otpId, eh, await encryptString(env.KEK_SECRET, email, "otp"), code ? await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`) : `existing:${newToken()}`, input.ipHash, expiresAt, input.now),
+  ]
+  if (code) stmts.push((await enqueueEmailStatement(env, { templateId: "signup_otp", toEmail: email, vars: { code }, expiresAt, now: input.now })).statement)
+  await env.DB.batch(stmts)
+  if (existing) {
+    // The existing owner can use "Lupa kata sandi".
+    emit("auth.otp", { outcome: "existing_account" }, {}, { env: env.GX_ENV, now: input.now })
+    return { otpId }
+  }
   emit("auth.otp", { outcome: "sent" }, {}, { env: env.GX_ENV, now: input.now })
   return { otpId }
 }
@@ -96,12 +103,13 @@ export async function verifySignupOtp(env: AuthEnv, input: { otpId: unknown; cod
   if (row.consumed_at !== null || input.now >= row.expires_at) throw invalid()
   const expected = await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`)
   if (expected !== row.code_hash) {
-    const attempts = row.attempts + 1
-    const stmts = [env.DB.prepare("UPDATE email_otps SET attempts = ? WHERE id = ?").bind(attempts, otpId)]
-    if (attempts >= OTP_MAX_WRONG) stmts.push(throttle.lock(env.DB, lockKey, input.now + OTP_LOCK_MS, input.now))
+    // Atomic per-email counter (shared by every open code of this address, safe under concurrency).
+    const wrong = await throttle.hit(env.DB, `otp-wrong:${row.email_hash}`, OTP_MAX_WRONG - 1, OTP_LOCK_MS, input.now)
+    const stmts = [env.DB.prepare("UPDATE email_otps SET attempts = attempts + 1 WHERE id = ?").bind(otpId)]
+    if (!wrong.allowed) stmts.push(throttle.lock(env.DB, lockKey, input.now + OTP_LOCK_MS, input.now), throttle.clear(env.DB, `otp-wrong:${row.email_hash}`))
     await env.DB.batch(stmts)
-    emit("auth.otp", { outcome: attempts >= OTP_MAX_WRONG ? "locked" : "wrong" }, {}, { env: env.GX_ENV, now: input.now })
-    if (attempts >= OTP_MAX_WRONG) throw tooMany(OTP_LOCK_MS)
+    emit("auth.otp", { outcome: wrong.allowed ? "wrong" : "locked" }, {}, { env: env.GX_ENV, now: input.now })
+    if (!wrong.allowed) throw tooMany(OTP_LOCK_MS)
     throw invalid()
   }
   const ticket = newToken()
@@ -208,7 +216,8 @@ export async function login(
     const mail = await enqueueEmailStatement(env, {
       templateId: "security_alert",
       toEmail: email,
-      vars: { when, device: describeDevice(input.userAgent), link: `${input.origin}/akun` },
+      // `Akun Saya` (password, sessions) lives on app. for every account, Super Admins included.
+      vars: { when, device: describeDevice(input.userAgent), link: `${input.origin.replace("://owner-staging.", "://app-staging.").replace("://owner.", "://app.")}/akun` },
       expiresAt: input.now + 24 * 3600_000,
       now: input.now,
     })
@@ -277,6 +286,8 @@ export async function createInvitation(
   const email = validEmail(input.email)
   const member = await env.DB.prepare("SELECT 1 FROM tenant_members m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = ? AND u.email = ? AND m.status = 'active'").bind(input.tenantId, email).first()
   if (member) throw new AppError(409, "ALREADY_MEMBER", "Email ini sudah menjadi anggota gerai.")
+  // An address that bounced before is told now, not silently dropped by the mailer (spec 12 §3).
+  if (await env.DB.prepare("SELECT 1 FROM email_suppressions WHERE to_email_hash = ?").bind(await emailHash(env.AUTH_SESSION_PEPPER, email)).first()) throw new AppError(422, "EMAIL_SUPPRESSED", USER_MESSAGE_SUPPRESSED, { email: USER_MESSAGE_SUPPRESSED })
   const token = newToken()
   const expiresAt = input.now + INVITE_TTL_MS
   const mail = await enqueueEmailStatement(env, {
@@ -328,7 +339,7 @@ export async function viewInvitation(env: AuthEnv, token: unknown, now: number):
 /** Accepts once: creates the account (new email) or verifies the password (existing account), then adds the membership. */
 export async function acceptInvitation(
   env: AuthEnv,
-  input: { token: unknown; name: unknown; password: unknown; deviceHash: string | null; userAgent: string | null; now: number },
+  input: { token: unknown; name: unknown; password: unknown; deviceHash: string | null; userAgent: string | null; now: number; ipHash: string },
 ): Promise<{ userId: string; tenantId: string; sessionToken: string; maxAgeSeconds: number }> {
   const row = await openInvitation(env, typeof input.token === "string" ? input.token : "", input.now)
   const existing = await env.DB.prepare("SELECT id, password_hash, status FROM users WHERE email = ?").bind(row.email).first<{ id: string; password_hash: string; status: string }>()
@@ -337,8 +348,19 @@ export async function acceptInvitation(
     env.DB.prepare("UPDATE invitations SET consumed_at = ?1, consumed_by = ?2 WHERE token_hash = ?3 AND consumed_at IS NULL AND revoked_at IS NULL"),
   ]
   if (existing) {
+    // Same brute-force guards as `/auth/login`: email lock, per-IP limit, failure counter → lock.
+    const eh = await emailHash(env.AUTH_SESSION_PEPPER, row.email)
+    const lockKey = `login-lock:${eh}`
+    const locked = await throttle.lockedUntil(env.DB, lockKey, input.now)
+    if (locked) throw tooMany(locked - input.now)
+    const ipLimit = await throttle.hit(env.DB, `login-ip:${input.ipHash}`, 50, 15 * 60_000, input.now)
+    if (!ipLimit.allowed) throw tooMany(ipLimit.retryAfterMs)
     const ok = existing.status === "active" && (await verifyPassword(typeof input.password === "string" ? input.password : "", env.AUTH_SESSION_PEPPER, existing.password_hash))
-    if (!ok) throw new AppError(401, "LOGIN_FAILED", "Kata sandi salah untuk akun dengan email ini.")
+    if (!ok) {
+      const fails = await throttle.hit(env.DB, `login-fail:${eh}`, LOGIN_MAX_FAILS, LOGIN_LOCK_MS, input.now)
+      if (!fails.allowed) await throttle.lock(env.DB, lockKey, input.now + LOGIN_LOCK_MS, input.now).run()
+      throw new AppError(401, "LOGIN_FAILED", "Kata sandi salah untuk akun dengan email ini.")
+    }
     userId = existing.id
   } else {
     userId = crypto.randomUUID()

@@ -7,14 +7,23 @@ export function sameOriginOk(request: Request): boolean {
   const origin = request.headers.get("origin")
   if (!origin) return false
   const url = new URL(request.url)
-  const host = request.headers.get("host") ?? url.host
   let o: URL
   try {
     o = new URL(origin)
   } catch {
     return false
   }
-  if (o.host.toLowerCase() !== host.toLowerCase()) return false
+  // Same scheme, and the same normalised host + effective port as the request (lowercase, no trailing dot,
+  // default ports dropped) — RFC 6454 same-origin, robust to `Host: app.x.com:443` / `app.x.com.`.
+  if (o.protocol !== url.protocol) return false
+  if (canonical(o.host, o.protocol) !== canonical(request.headers.get("host") ?? url.host, url.protocol)) return false
   const site = request.headers.get("sec-fetch-site")
   return site === null || site === "same-origin"
+}
+
+function canonical(hostPort: string, protocol: string): string {
+  const m = /^(.*?)(?::(\d{1,5}))?$/.exec(hostPort.trim().toLowerCase())!
+  const name = m[1]!.replace(/\.$/, "")
+  const port = m[2] && !((protocol === "https:" && m[2] === "443") || (protocol === "http:" && m[2] === "80")) ? `:${m[2]}` : ""
+  return `${name}${port}`
 }

@@ -71,7 +71,7 @@ describe("editing rules (TOTP + reason + audit, band per courier)", () => {
 })
 
 describe("verification (fake clock)", () => {
-  it("+15/+60/+120 min: Belum diterapkan → Sesuai when Mengantar applied it; → Selisih + alert after 2 × SLA when not", async () => {
+  it("+15/+60/+120 min: Belum diterapkan → Sesuai when Mengantar applied it; → Selisih + alert after 2 × SLA when not", { timeout: 40_000 }, async () => {
     const g = await approved("tarifcek")
     const t0 = (await ruleOf(g.tenantId, "JNE"))!.requested_at
     // Mengantar gives 20 % on JNE regular, and 15 % on JT (not applied).

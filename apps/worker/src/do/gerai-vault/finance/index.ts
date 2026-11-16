@@ -113,6 +113,8 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
   let linked = 0
   let unlinked = 0
   let state: string = "not_applicable"
+  // Only a cleared invoice moves money on the shipments (Book 2); pending/expired rows are mirrored and linked only.
+  const cleared = status === "statusCleared"
   const link = (idx: number, ref: ShipmentRef) => sql.exec("UPDATE mengantar_invoice_subitems SET shipment_slug = ? WHERE invoice_id = ? AND idx = ?", ref.slug, id, idx)
 
   if (!KNOWN_TYPES.has(type)) {
@@ -129,6 +131,7 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
       }
       linked++
       link(i, ref)
+      if (!cleared) return
       sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ?, payment_sync_state = 'provider_invoice_reconciled', updated_at = ? WHERE slug = ?", amount, now, ref.slug)
       if (ref.expected_credit !== null && ref.expected_credit !== amount) {
         sql.exec("UPDATE shipments SET quote_drift = 1 WHERE slug = ?", ref.slug)
@@ -137,14 +140,19 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
     })
   } else if (type === "typePayment") {
     const d = (description ?? "").toLowerCase()
-    const returned = /returned order\s+([A-Za-z0-9]+)/i.exec(description ?? "")
+    const returned = /returned order\s+([A-Za-z0-9-]+)/i.exec(description ?? "")
     if (d.includes("penyesuaian")) {
-      const ref = findSlug(sql, { awb: str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? null, order: str(raw.ORDER_ID, 60) })
-      if (ref) linked++
-      else unlinked++
-      flag(sql, id, "adjustment", ref?.slug ?? null, null, int(raw.amount), "Penyesuaian berat/tujuan dari Mengantar", now)
+      const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? null
+      const ref = findSlug(sql, { awb, order: str(raw.ORDER_ID, 60) })
+      if (ref) {
+        linked++
+        // A single-INV adjustment without sub-items still links (Mutasi Sync shows the INV).
+        if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
+        else subs.forEach((_s, i) => link(i, ref))
+      } else unlinked++
+      if (cleared) flag(sql, id, "adjustment", ref?.slug ?? null, null, int(raw.amount), "Penyesuaian berat/tujuan dari Mengantar", now)
     } else if (returned) {
-      const ref = findSlug(sql, { awb: returned[1]! })
+      const ref = findSlug(sql, { awb: str(raw.cnote_no, 60) ?? returned[1]!, order: str(raw.ORDER_ID, 60) })
       if (!ref) {
         unlinked++
         flag(sql, id, "unmatched", null, null, int(raw.amount), `Ongkir retur untuk resi ${returned[1]} tidak ditemukan di gerai ini`, now)
@@ -152,10 +160,10 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         linked++
         if (subs.length) subs.forEach((_s, i) => link(i, ref))
         else sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, returned[1]!, int(raw.amount), ref.slug)
-        // Sum of every return debit linked to this INV (re-reading an invoice never double-counts).
+        // Sum of every CLEARED return debit linked to this INV (re-reading an invoice never double-counts).
         sql.exec(
-          `UPDATE shipments SET reconciled_extra_adjustment_idr = (SELECT SUM(ABS(si.amount_idr)) FROM mengantar_invoice_subitems si JOIN mengantar_invoice_mirror m ON m.invoice_id = si.invoice_id
-             WHERE si.shipment_slug = ?1 AND m.type = 'typePayment' AND LOWER(COALESCE(m.description, '')) LIKE '%returned order%'), updated_at = ?2 WHERE slug = ?1`,
+          `UPDATE shipments SET reconciled_extra_adjustment_idr = (SELECT SUM(ABS(COALESCE(si.amount_idr, m.amount_idr))) FROM mengantar_invoice_subitems si JOIN mengantar_invoice_mirror m ON m.invoice_id = si.invoice_id
+             WHERE si.shipment_slug = ?1 AND m.type = 'typePayment' AND m.status = 'statusCleared' AND LOWER(COALESCE(m.description, '')) LIKE '%returned order%'), updated_at = ?2 WHERE slug = ?1`,
           ref.slug,
           now,
         )
@@ -172,6 +180,7 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         }
         linked++
         link(i, ref)
+        if (!cleared) return
         const debit = Math.abs(amount)
         sql.exec("UPDATE shipments SET provider_reconciled_cost_idr = ?, payment_sync_state = 'provider_invoice_reconciled', updated_at = ? WHERE slug = ?", debit, now, ref.slug)
         if (ref.expected_debit !== null && ref.expected_debit !== debit) {
@@ -181,13 +190,17 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
       })
     }
   } else if (type === "typeRefund") {
-    const m = /order\s+([A-Za-z0-9]+)\s*$/i.exec(description ?? "")
-    const ref = m ? findSlug(sql, { awb: m[1]! }) : null
+    const m = /order\s+([A-Za-z0-9-]+)\s*$/i.exec(description ?? "")
+    const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? m?.[1] ?? null
+    const ref = awb || str(raw.ORDER_ID, 60) ? findSlug(sql, { awb, order: str(raw.ORDER_ID, 60) }) : null
     if (ref) {
       linked++
-      if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, m![1]!, int(raw.amount), ref.slug)
-      if (status === "statusCleared") markClaimPaid(sql, ref.slug, id, now)
-    } else unlinked++
+      if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
+      if (cleared) markClaimPaid(sql, ref.slug, id, now)
+    } else {
+      unlinked++
+      flag(sql, id, "unmatched", null, null, int(raw.amount), `Pengembalian dana untuk resi ${awb ?? "?"} tidak ditemukan di gerai ini`, now)
+    }
   }
   if (state !== "unknown_type" && (type === "typeReconciliation" || type === "typePayment" || type === "typeRefund")) state = unlinked === 0 ? "linked" : linked === 0 ? "unlinked" : "partial"
   sql.exec("UPDATE mengantar_invoice_mirror SET link_state = ? WHERE invoice_id = ?", state, id)
@@ -205,14 +218,20 @@ export function settleBalance(sql: SqlStorage, now: number): { balance: number |
     )
     .toArray()
   let gaps = 0
+  const open = new Set<string>()
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1]!
     const cur = rows[i]!
     if (cur.amount_idr === null || prev.balance_amount_idr === null) continue
     if (prev.balance_amount_idr + cur.amount_idr !== cur.balance_amount_idr) {
       gaps++
+      open.add(cur.invoice_id)
       flag(sql, cur.invoice_id, "balance_gap", null, prev.balance_amount_idr + cur.amount_idr, cur.balance_amount_idr, "Saldo berjalan tidak cocok dengan mutasi sebelumnya", now)
     }
+  }
+  // A gap that no longer appears (the missing row arrived later) is closed, never left open forever.
+  for (const g of sql.exec<{ invoice_id: string }>("SELECT invoice_id FROM finance_discrepancies WHERE kind = 'balance_gap' AND invoice_id != 'sync' AND resolved_at IS NULL").toArray()) {
+    if (!open.has(g.invoice_id)) sql.exec("UPDATE finance_discrepancies SET resolved_at = ? WHERE kind = 'balance_gap' AND invoice_id = ?", now, g.invoice_id)
   }
   const newest = rows[rows.length - 1]
   return { balance: newest?.balance_amount_idr ?? null, gaps }

@@ -56,6 +56,22 @@ describe("issue with a masked preset", () => {
     expect((await state(t.cookie)).quotaLeft).toBe(4)
   })
 
+  it("issued masked INV: detail and list never carry the true sender (only the audited reveal does)", async () => {
+    const t = await resellerGerai("masksembunyi")
+    await platform(t.tenantId, 1, 5)
+    await appPost("/settings/masking", t.cookie, { offered: true, presetsEnabled: ["dropship_toko"], defaultPreset: "dropship_toko" })
+    const slug = await readyInv(t)
+    await appPost(`/shipments/${slug}/parties`, t.cookie, { maskPreset: "dropship_toko" })
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    const det = await (await appGet(`/shipments/${slug}`, t.cookie)).text()
+    const list = await (await appGet("/shipments?tab=semua", t.cookie)).text()
+    for (const body of [det, list]) {
+      expect(body).not.toContain("Ibu Siti")
+      expect(body).not.toContain("081234567890")
+    }
+    expect(list).toContain("TOKO HIJAB NISA")
+  })
+
   it("quota exhausted → 422 MASKING_QUOTA_EXCEEDED, no Mengantar call, never a silent fallback; switching to Standar Gerai issues", async () => {
     const t = await resellerGerai("maskkuota")
     await platform(t.tenantId, 1, 1)

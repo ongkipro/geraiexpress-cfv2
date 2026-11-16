@@ -1,6 +1,7 @@
 // `Kiriman` list (TASK-311, DEC-213/220, spec 06 menu 3, visual 06 §1 / 07 `/kiriman`): tab filters with live counts,
 // search by INV/AWB/name/phone, period (created time, WIB bounds from the caller), courier and print filters, keyset
 // pagination, and the owner CSV. Pure SQL over this tenant object's tables.
+import { KENDALA_WHERE } from "../exceptions"
 import { normalizeSlug } from "@gx/domain/slug"
 import { normalizePhone08 } from "@gx/domain/contacts"
 
@@ -14,11 +15,8 @@ const TAB_WHERE: Record<Tab, string> = {
   "draf-qr": "s.dispatch_state = 'draft' AND s.entry_channel = 'minisite_qr'",
   "menunggu-saldo": "s.dispatch_state = 'provider_unpaid_hold'",
   pickup: "s.dispatch_state = 'issued' AND s.status = 'ready_for_pickup'",
-  // Same five buckets as `Kendala & Klaim` (spec 04 §3) plus dispatch problems that need a person.
-  kendala: `(s.stuck_attention_at IS NOT NULL AND s.status = 'in_transit') OR s.status = 'undelivery_hold' OR s.provider_status = 'lost'
-    OR (s.provider_status_conflict_at IS NOT NULL AND s.conflict_resolved_at IS NULL) OR s.dispatch_state IN ('failed','reconciliation_needed','cancel_unknown')
-    OR s.slug IN (SELECT shipment_slug FROM finance_discrepancies WHERE kind = 'adjustment' AND resolved_at IS NULL)
-    OR s.slug IN (SELECT slug FROM return_intakes WHERE condition != 'baik')`,
+  // Exactly the `Kendala & Klaim` buckets (badge == items shown in the tab).
+  kendala: KENDALA_WHERE,
   retur: "s.status IN ('rts_in_transit','provider_returned','rts_at_gerai')",
 }
 
@@ -106,7 +104,9 @@ export function listShipments(sql: SqlStorage, q: ListQuery): { items: ListRow[]
   const limit = Math.min(200, Math.max(1, q.limit))
   const rows = sql
     .exec<ListRow>(
-      `SELECT s.slug, s.created_at, s.issued_at, s.courier_code, s.service_code, s.awb_number, s.print_count, c.true_name AS sender, c.display_brand_name AS sender_brand,
+      `SELECT s.slug, s.created_at, s.issued_at, s.courier_code, s.service_code, s.awb_number, s.print_count, CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
+                   THEN json_extract(s.mask_snapshot_json, '$.sender.name') ELSE c.true_name END AS sender,
+              CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed') THEN NULL ELSE c.display_brand_name END AS sender_brand,
               r.name AS recipient, r.subdistrict_name AS recipient_area, s.cod_fee_mode, s.counter_due_idr, s.cod_collection_total_idr, s.counter_payment_status,
               s.counter_payment_method, s.status, s.dispatch_state, s.bulk_batch_id, q.effective_gerai_cost_idr, q.estimated_margin_idr
        ${FROM} WHERE ${parts.join(" AND ")} ORDER BY s.created_at DESC, s.slug DESC LIMIT ?`,

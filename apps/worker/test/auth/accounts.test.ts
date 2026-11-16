@@ -58,6 +58,25 @@ describe("sign-up by email OTP (PR-01, spec 05 §2)", () => {
     expect(((await r.json()) as { data: { otpId: string } }).data.otpId).toMatch(/^[0-9a-f-]{36}$/)
     const after = await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'signup_otp'").first<{ n: number }>()
     expect(after!.n).toBe(before!.n)
+    // `/verify` behaves exactly as for a new address: 4 × 400, then 429 (no 400-forever oracle).
+    const { otpId } = ((await r.json().catch(() => null)) as { data: { otpId: string } } | null)?.data ?? { otpId: "" }
+    void otpId
+    const r2 = await post("/auth/signup/request", { email: "pemilik2@contoh.test", turnstileToken: "ok" }, { "cf-connecting-ip": "203.0.113.70" })
+    const id2 = ((await r2.json()) as { data: { otpId: string } }).data.otpId
+    for (let i = 0; i < 4; i++) expect((await post("/auth/signup/verify", { otpId: id2, code: "123456" })).status).toBe(400)
+    expect((await post("/auth/signup/verify", { otpId: id2, code: "123456" })).status).toBe(429)
+  })
+
+  it("only the newest code works, and wrong guesses across several codes share one 5-attempt budget", async () => {
+    const a = await post("/auth/signup/request", { email: "multi@contoh.test", turnstileToken: "ok" }, { "cf-connecting-ip": "203.0.113.71" })
+    const id1 = ((await a.json()) as { data: { otpId: string } }).data.otpId
+    const c1 = (await lastMailVars("signup_otp")).code
+    const b = await post("/auth/signup/request", { email: "multi@contoh.test", turnstileToken: "ok" }, { "cf-connecting-ip": "203.0.113.71" })
+    const id2 = ((await b.json()) as { data: { otpId: string } }).data.otpId
+    expect((await post("/auth/signup/verify", { otpId: id1, code: c1 })).status).toBe(400) // superseded (expired, not counted)
+    // Wrong guesses are counted per email across codes: 4 on the new code, then the 5th locks.
+    for (let i = 0; i < 4; i++) expect((await post("/auth/signup/verify", { otpId: id2, code: "000002" })).status).toBe(400)
+    expect((await post("/auth/signup/verify", { otpId: id2, code: "000002" })).status).toBe(429)
   })
 
   it("5 wrong codes lock the email's OTP for 15 minutes (even the right code)", async () => {
@@ -209,6 +228,19 @@ describe("Kasir invitations (single use, 7 days)", () => {
     const t2 = (await lastMailVars("kasir_invite")).link.split("/undangan/")[1]!
     await env.DB.prepare("UPDATE invitations SET expires_at = 1 WHERE email = 'kasir2@contoh.test'").run()
     expect((await get(`/auth/invitations/${t2}`)).status).toBe(400)
+  })
+
+  it("accepting with an existing account is throttled like login (wrong passwords lock the email)", async () => {
+    const owner = await ownerWithTenant("owner-inv2@contoh.test", "tenant-inv2")
+    await signup("ada-akun@contoh.test", "akun-lama-kuat-1")
+    await post("/members/invitations", { email: "ada-akun@contoh.test" }, { cookie: owner })
+    const token = (await lastMailVars("kasir_invite")).link.split("/undangan/")[1]!
+    // Same budget as /auth/login (LOGIN_MAX_FAILS = 10): the 11th failure sets the lock, the next try is 429.
+    for (let i = 0; i < 11; i++) expect((await post(`/auth/invitations/${token}/accept`, { password: `salah-${i}-xxxxxx` })).status).toBe(401)
+    expect((await post(`/auth/invitations/${token}/accept`, { password: "salah-12-xxxxx" })).status).toBe(429)
+    // Locked even with the right password, and /auth/login shares the lock.
+    expect((await post(`/auth/invitations/${token}/accept`, { password: "akun-lama-kuat-1" })).status).toBe(429)
+    expect((await post("/auth/login", { email: "ada-akun@contoh.test", password: "akun-lama-kuat-1", turnstileToken: "ok" })).status).toBe(429)
   })
 })
 

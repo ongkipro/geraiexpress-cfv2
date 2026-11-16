@@ -34,7 +34,7 @@ export class PartnerQuotaDO extends DurableObject<Env> {
       bump(minute)
       if (kind === "register") bump(day)
       // Keep the table small: drop minute buckets older than 10 minutes and day buckets older than 3 days.
-      this.ctx.storage.sql.exec("DELETE FROM quota WHERE (bucket LIKE 'm:%' AND CAST(substr(bucket, 3) AS INTEGER) < ?)", Math.floor(nowMs / 60_000) - 10)
+      this.ctx.storage.sql.exec("DELETE FROM quota WHERE (bucket LIKE 'm:%' AND CAST(substr(bucket, 3) AS INTEGER) < ?) OR (bucket LIKE 'd:%' AND substr(bucket, 3) < ?)", Math.floor(nowMs / 60_000) - 10, wibDay(nowMs - 3 * 86_400_000))
       return { ok: true as const }
     })
   }

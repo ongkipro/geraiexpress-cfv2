@@ -30,8 +30,11 @@ Vars to set: `TURNSTILE_SITE_KEY` (widget for `*.gerai.cc` + `geraiexpress.com`)
 | 5 | Worker routes come from `wrangler.jsonc` on deploy: Custom Domains `geraiexpress.com`, `www.`, `app.`, `owner.`, `hooks.`; `*/*` and `cname.gerai.cc/*` on `gerai.cc`. Staging: `*-stg.gerai.cc/*` + `*-staging` platform hosts. Also proxied `AAAA * 100::` and `AAAA @ 100::` on `gerai.cc` for first-level mini-site hosts | `wrangler deploy --dry-run --env production` lists the routes; after deploy, Workers → Routes shows them |
 | 6 | API token: Zone `gerai.cc` only — **SSL and Certificates: Edit** (custom hostnames) + **Zone: Read**; no account scope. Store as `CF_SAAS_API_TOKEN` | `curl -H "Authorization: Bearer …" https://api.cloudflare.com/client/v4/zones/<id>/custom_hostnames/quota` → 200 |
 
-Also: D1 row `probe.gerai.cc` (platform_subdomain, active) for a synthetic tenant used by the `minisite-probe` probe
-(OBSERVABILITY.md), created through the normal approval flow on a test gerai.
+Also: a synthetic `probe` tenant + D1 row `probe.gerai.cc` (`probe-stg.gerai.cc` on staging; platform_subdomain, active)
+for the `minisite-probe` probe (OBSERVABILITY.md). `probe` is a reserved slug, so it is seeded directly, never through the
+approval flow (which would also call the live Partner API):
+`wrangler d1 execute DB --remote --env <env> --command "INSERT INTO tenants (id, slug, name, status, created_at, updated_at) VALUES ('probe', 'probe', 'Probe', 'active', 0, 0); INSERT INTO tenant_hostnames (hostname, tenant_id, kind, state, created_at, activated_at) VALUES ('probe.gerai.cc', 'probe', 'platform_subdomain', 'active', 0, 0)"`
+(owner approval; `/healthz` answers without touching the tenant object).
 
 ## 3. Deploy and verify
 

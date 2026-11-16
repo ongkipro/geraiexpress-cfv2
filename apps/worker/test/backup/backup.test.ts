@@ -57,6 +57,21 @@ describe("tenant backups", () => {
     expect(await scratch.schemaState()).toMatchObject({ state: "ok", tenantId: a.tenantId })
     expect((await scratch.shipmentList("tenant-lain", { tab: "semua", q: "", fromMs: 0, toMs: 1, courier: null, printed: "semua", cursor: null, limit: 1 })).ok).toBe(false)
     // Restoring into a non-empty object is refused.
-    await expect(restoreInto(env, key, `drill-${a.tenantId}`)).rejects.toThrow(/not empty/)
+    await expect(restoreInto(env, key, `drill-${a.tenantId}`)).rejects.toThrow(/sudah berisi data/)
+    // A real tenant id is never a restore target (only drill-* scratch objects).
+    await expect(restoreInto(env, key, a.tenantId)).rejects.toThrow(/drill-/)
+    // A tampered backup (checksum metadata mismatch) is refused.
+    const obj = await env.BUCKET.get(key)
+    await env.BUCKET.put(key, await obj!.arrayBuffer(), { customMetadata: { ...obj!.customMetadata, checksum: "0".repeat(64) } })
+    await expect(restoreInto(env, key, `drill-tamper-${a.tenantId}`)).rejects.toThrow(/checksum/)
+  })
+
+  it("ops endpoints: OPS_TOKEN required; restore target must be drill-*", async () => {
+    const { exports } = await import("cloudflare:workers")
+    const O = "http://owner.geraiexpress.localhost:8787/internal/ops"
+    expect((await exports.default.fetch(`${O}/backup-export`, { method: "POST" })).status).toBe(401)
+    const bad = await exports.default.fetch(`${O}/backup-restore`, { method: "POST", headers: { authorization: "Bearer test-ops-token" }, body: JSON.stringify({ key: "t/x/backup/2026-11-19.json.gz", target: "tenant-asli" }) })
+    expect(bad.status).toBe(422)
+    expect((await exports.default.fetch(`${O}/backup-export`, { method: "POST", headers: { authorization: "Bearer test-ops-token" } })).status).toBe(200)
   })
 })

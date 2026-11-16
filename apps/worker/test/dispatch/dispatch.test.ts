@@ -10,7 +10,7 @@ import { hostCache } from "../../src/host/lookup"
 import { mockCreated, mockFaults, mockSeller, resetMock } from "../../src/mengantar/mock"
 import { appUser } from "../onboarding/helpers"
 import { appGet } from "../webhooks/helpers"
-import { checkoutGerai, post, readyInv } from "./helpers"
+import { checkoutGerai, DEST, post, readyInv } from "./helpers"
 
 beforeEach(() => {
   resetMock()
@@ -184,6 +184,82 @@ describe("cancellation", () => {
     const resolved = await post(`/shipments/${b}/cancel`, t.cookie, { reason: "batal" })
     expect(((await resolved.json()) as { data: { state: string } }).data.state).toBe("cancelled")
     expect(mockSeller.deleteCalls).toBe(calls) // resolved by read-back, DELETE not re-sent
+  })
+})
+
+describe("review fixes (final Carbon pass)", () => {
+  it("cancel_unknown + read-back shows the order still active → back to issued (not wedged); printing works again", async () => {
+    const t = await checkoutGerai("batalmacet")
+    const slug = await readyInv(t)
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    mockFaults.deleteOrder = "timeout_before_delete"
+    mockFaults.readBack = "timeout"
+    expect(((await (await post(`/shipments/${slug}/cancel`, t.cookie, { reason: "batal" })).json()) as { error: { code: string } }).error.code).toBe("CANCEL_UNKNOWN")
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ dispatch_state: "cancel_unknown" })
+    // Connectivity back; DELETE never applied: the read-back finds an active order → issued, cancel refused cleanly.
+    const r = await post(`/shipments/${slug}/cancel`, t.cookie, { reason: "batal" })
+    expect(((await r.json()) as { error: { code: string } }).error.code).toBe("CANCEL_REFUSED")
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ dispatch_state: "issued" })
+  })
+
+  it("reconcile only acts on reconciliation_needed: an issued shipment is untouched", async () => {
+    const t = await checkoutGerai("rekonaman")
+    const slug = await readyInv(t)
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    const before = (await detail(t.cookie, slug)).shipment as { issued_at: number; dispatch_state: string }
+    const r = await post(`/shipments/${slug}/reconcile`, t.cookie, {})
+    expect(((await r.json()) as { data: { state: string } }).data.state).toBe("issued")
+    expect(((await detail(t.cookie, slug)).shipment as { issued_at: number }).issued_at).toBe(before.issued_at)
+  })
+
+  it("pay-unpaid after an unknown outcome reads back first instead of paying again", async () => {
+    const t = await checkoutGerai("bayarbelum")
+    const slug = await readyInv(t)
+    mockSeller.balanceIdr = 0
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    mockSeller.balanceIdr = 50_000
+    // Seed an unresolved previous attempt (timeout on pay + read-back).
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec("INSERT INTO dispatch_journal (idempotency_key, slug, op, state, created_at, updated_at) VALUES ('gx-pay-prev', ?, 'pay_unpaid', 'unknown', 1, 1)", slug))
+    const calls = mockSeller.payUnpaidCalls
+    const r = await post(`/shipments/${slug}/pay-unpaid`, t.cookie, {})
+    expect(r.status).toBe(409) // read back: still unpaid, nothing paid blindly
+    expect(mockSeller.payUnpaidCalls).toBe(calls)
+    // The read-back settled the old attempt; the next click may pay.
+    const paid = await post(`/shipments/${slug}/pay-unpaid`, t.cookie, {})
+    expect(((await paid.json()) as { data: { state: string } }).data.state).toBe("issued")
+    expect(mockSeller.payUnpaidCalls).toBe(calls + 1)
+  })
+})
+
+describe("status projection around issue (final Carbon pass, M2B #2)", () => {
+  it("a provider observation during unpaid hold does not turn it into ready_for_pickup; issue then projects it", async () => {
+    const { recordProviderObservation } = await import("../../src/do/gerai-vault/status")
+    const t = await checkoutGerai("tahanstatus")
+    const slug = await readyInv(t)
+    mockSeller.balanceIdr = 0
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => recordProviderObservation(s.storage.sql, { slug, eventKey: `obs-${slug}`, source: "webhook", rawCategory: "PENDING PICKUP", mapped: "ready_for_pickup", eventAt: Date.now(), eventAtText: null }, Date.now()))
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ status: "provider_unpaid_hold", dispatch_state: "provider_unpaid_hold" })
+    mockSeller.balanceIdr = 100_000
+    await post(`/shipments/${slug}/pay-unpaid`, t.cookie, {})
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ status: "ready_for_pickup", dispatch_state: "issued" })
+  })
+})
+
+describe("re-quote of an INV (final Carbon pass, M5 #2)", () => {
+  it("re-freezing an unpaid draft moves the draft to the new quote; after payment the INV is locked", async () => {
+    const t = await checkoutGerai("ubahtarif")
+    const slug = await readyInv(t)
+    const first = (await detail(t.cookie, slug)).shipment as { counter_due_idr: number; actual_weight_gram: number }
+    const { frozenFrom, parseQuoteInput, runQuote } = await import("../../src/pricing/quote/service")
+    const q = await runQuote(env, t.tenantId, parseQuoteInput({ destinationAreaId: DEST, weightGram: 3000, mode: "none" }, "5fc62f5df8f44b34aa4c0d8c"), Date.now())
+    const card = q.cards.find((c) => c.serviceCode === "JT" && c.available)!
+    expect((await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).ok).toBe(true)
+    const moved = (await detail(t.cookie, slug)).shipment as { counter_due_idr: number; actual_weight_gram: number }
+    expect(moved.actual_weight_gram).toBe(3000)
+    expect(moved.counter_due_idr).toBeGreaterThan(first.counter_due_idr)
+    await post(`/shipments/${slug}/payment`, t.cookie, { method: "qris" }, `rq-${slug}`)
+    expect(await t.vault.freezeQuote(t.tenantId, frozenFrom(slug, q, card))).toMatchObject({ ok: false, refused: "SHIPMENT_LOCKED" })
   })
 })
 

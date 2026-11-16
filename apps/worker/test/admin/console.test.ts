@@ -71,6 +71,13 @@ describe("Sistem & Audit", () => {
     const items = ((await r.json()) as { data: { items: Array<{ action: string }> } }).data.items
     expect(items.every((x) => x.action.startsWith("tenant."))).toBe(true)
     expect(await lastAudit("audit.read")).not.toBeNull()
+    // Underscores are literal (escaped), not stripped: `risk_review` finds `admin.risk_review_*` only.
+    const { env } = await import("cloudflare:workers")
+    await env.DB.prepare("INSERT INTO audit_logs (id, at, actor_type, actor_id, action, reason) VALUES ('a-us', ?, 'system', 'x', 'admin.risk_review_grant', 'uji')").bind(Date.now()).run()
+    const u = ((await (await ownerGet("/sistem/audit?action=admin.risk_review", admin)).json()) as { data: { items: Array<{ action: string }> } }).data.items
+    expect(u.map((x) => x.action)).toContain("admin.risk_review_grant")
+    const none = ((await (await ownerGet("/sistem/audit?action=admin.riskxreview", admin)).json()) as { data: { items: unknown[] } }).data.items
+    expect(none).toEqual([])
     const h = await (await ownerGet("/sistem/kesehatan", admin)).text()
     expect(h).not.toMatch(/test-relay-secret|test-partner-secret|KEY-|MOCK-/)
   })

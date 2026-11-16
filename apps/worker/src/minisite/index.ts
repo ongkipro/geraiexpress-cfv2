@@ -45,8 +45,10 @@ async function preparing(env: Env, c: Ctx): Promise<Response> {
 async function shell(env: Env, c: Ctx, tab: Shell["tab"], title: string, description: string, path: string, noindex = false): Promise<Shell | null> {
   const p = await vaultFor(env, c.tenantId).minisiteProfile(c.tenantId)
   if (!p.ok || !p.value) return null
+  const apex = env.PLATFORM_APEX
   return {
     host: c.host,
+    brandOrigin: env.GX_ENV === "local" ? `http://${apex}${c.host.includes(":") ? `:${c.host.split(":")[1]}` : ""}` : `https://${env.GX_ENV === "staging" ? `staging.${apex}` : apex}`,
     outlet: p.value,
     tab,
     title: `${title} - ${p.value.name}`,
@@ -188,7 +190,7 @@ async function kirimCard(env: Env, c: Ctx, slug: string): Promise<Response> {
 const STEPS = ["Diterima gerai", "Diserahkan ke kurir", "Dalam perjalanan", "Terkirim"]
 const stepOf = (status: string) => (status === "delivered" ? 3 : ["in_transit", "undelivery_hold", "rts_in_transit"].includes(status) ? 2 : ["handed_to_courier"].includes(status) ? 1 : 0)
 
-function trackBody(t: PublicTrack, host: string, unlocked?: { recipientName: string; note: string | null }, gateError?: string): string {
+function trackBody(t: PublicTrack, host: string, unlocked?: { recipientName: string; note: string | null }, gateError?: string, siteKey: string | null = null): string {
   const when = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
   const step = stepOf(t.status)
   return `<h2>INV ${e(t.inv.toUpperCase())}${t.awb ? ` · ${e(t.awb)}` : ""}</h2>
@@ -200,7 +202,7 @@ ${
   t.delivered
     ? unlocked
       ? `<p role="status" style="margin-top:16px"><strong>Diterima oleh: ${e(unlocked.recipientName)}</strong>${unlocked.note ? `<br>${e(unlocked.note)}` : ""}</p>`
-      : `<form method="post" action="/lacak/${e(t.inv)}/buka" novalidate style="margin-top:16px"><label for="last4">Masukkan 4 angka terakhir No. HP penerima untuk membuka rincian penerima</label><input id="last4" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" style="max-width:160px"${gateError ? ' aria-invalid="true" aria-describedby="last4-err"' : ""}>${gateError ? `<p class="err" id="last4-err" role="alert">${e(gateError)}</p>` : ""}<input type="hidden" name="cf-turnstile-response" value="gate"><div class="row"><button class="cta ghost" type="submit">Buka Rincian</button></div></form>`
+      : `<form method="post" action="/lacak/${e(t.inv)}/buka" novalidate style="margin-top:16px"><label for="last4">Masukkan 4 angka terakhir No. HP penerima untuk membuka rincian penerima</label><input id="last4" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" style="max-width:160px"${gateError ? ' aria-invalid="true" aria-describedby="last4-err"' : ""}>${gateError ? `<p class="err" id="last4-err" role="alert">${e(gateError)}</p>` : ""}${turnstile(siteKey)}<div class="row"><button class="cta ghost" type="submit">Buka Rincian</button></div></form>`
     : ""
 }
 ${t.outletContact?.whatsapp ? `<div class="row"><a class="cta ghost" href="${e(wa(t.outletContact.whatsapp, `Halo ${t.outletContact.name}, saya ingin menanyakan kiriman INV ${t.inv.toUpperCase()}.`))}" rel="noopener">Tanya Gerai via WhatsApp</a></div>` : ""}
@@ -221,7 +223,7 @@ async function lacak(env: Env, c: Ctx, request: Request, url: URL): Promise<Resp
       status = 429
     } else {
       const t = await vaultFor(env, c.tenantId).minisiteTrack(c.tenantId, q)
-      if (t.ok && t.value) result = trackBody(t.value, c.host)
+      if (t.ok && t.value) result = trackBody(t.value, c.host, undefined, undefined, s.turnstileSiteKey)
       else {
         result = `<p class="err" role="alert">Kiriman tidak ditemukan di gerai ini. Periksa kembali nomor INV atau resi.</p>`
         status = 404
@@ -229,7 +231,7 @@ async function lacak(env: Env, c: Ctx, request: Request, url: URL): Promise<Resp
     }
   }
   const body = `<form method="get" action="/lacak" role="search"><h2>Lacak paket</h2>${field("q", "Nomor INV atau resi", { value: q, hint: "Contoh: INV 8K4M2P7 atau nomor resi ekspedisi." })}<div class="row"><button class="cta" type="submit">Lacak</button></div></form>${result}`
-  return html(page(s, body), status)
+  return html(page(s, body, TURNSTILE_SCRIPT(s.turnstileSiteKey)), status)
 }
 
 async function unlockGate(env: Env, c: Ctx, request: Request, slug: string): Promise<Response> {
@@ -240,12 +242,16 @@ async function unlockGate(env: Env, c: Ctx, request: Request, slug: string): Pro
   const f = await request.formData()
   const t = await vaultFor(env, c.tenantId).minisiteTrack(c.tenantId, slug)
   if (!t.ok || !t.value) return notFoundHtml()
-  if (!lim.allowed) return html(page(s, trackBody(t.value, c.host, undefined, "Terlalu banyak percobaan dari jaringan ini. Coba lagi nanti.")), 429)
+  const k = s.turnstileSiteKey
+  const view = (body: string, status = 200) => html(page(s, body, TURNSTILE_SCRIPT(k)), status)
+  if (!lim.allowed) return view(trackBody(t.value, c.host, undefined, "Terlalu banyak percobaan dari jaringan ini. Coba lagi nanti.", k), 429)
+  // The recipient-name gate is a human check too (no scripted guessing across INVs).
+  if (!(await humanOk(env, request, f.get("cf-turnstile-response")))) return view(trackBody(t.value, c.host, undefined, "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.", k), 400)
   const u = await vaultFor(env, c.tenantId).minisiteUnlock(c.tenantId, slug, String(f.get("last4") ?? "").trim())
   if (!u.ok) return notFoundHtml()
-  if (u.value.ok) return html(page(s, trackBody(t.value, c.host, u.value.value)))
+  if (u.value.ok) return view(trackBody(t.value, c.host, u.value.value))
   const msg = u.value.code === "LOCKED" ? "Terlalu banyak angka salah. Coba lagi dalam 15 menit." : u.value.code === "NOT_DELIVERED" ? "Rincian penerima hanya bisa dibuka setelah paket terkirim." : "Angka tidak cocok."
-  return html(page(s, trackBody(t.value, c.host, undefined, msg)), u.value.code === "LOCKED" ? 429 : 400)
+  return view(trackBody(t.value, c.host, undefined, msg, k), u.value.code === "LOCKED" ? 429 : 400)
 }
 
 // ---- Router ----------------------------------------------------------------------------------------------------

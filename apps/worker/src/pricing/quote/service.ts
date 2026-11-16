@@ -196,6 +196,8 @@ export function frozenFrom(slug: string, q: QuoteResult, c: QuoteCard): FrozenQu
     sender_cod_payable_idr: c.flow.senderCodPayableIdr,
     expected_provider_cod_credit_idr: c.flow.expectedProviderCodCreditIdr,
     packing_addon_idr: input.packingIdr,
+    counter_service_fee_idr: input.serviceFeeIdr,
+    promo_discount_idr: input.promoIdr,
     estimated_margin_idr: c.flow.outletMarginIdr,
     quoted_at: q.quotedAt,
     expires_at: q.expiresAt,

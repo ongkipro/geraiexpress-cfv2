@@ -254,6 +254,8 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
       <p className="text-base font-medium">{v.batch.state === "dispatching" ? `Menerbitkan resi… ${issued.length} dari ${v.rows.filter((r) => r.state === "created").length}` : `${issued.length} resi terbit`}</p>
       {paid ? (
         <p className="text-base text-safe font-medium">Batch sudah lunas{v.batch.change_idr ? ` · kembalian ${rp(v.batch.change_idr)}` : ""}.</p>
+      ) : v.batch.counter_payment_status === "not_required" || v.totals.due === 0 ? (
+        <p className="text-base font-medium">Tidak ada pembayaran di loket untuk batch ini (semua COD).</p>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
           <ToggleGroup value={[method]} onValueChange={(x) => x[0] && setMethod(x[0] as typeof method)} variant="outline" aria-label="Cara bayar">

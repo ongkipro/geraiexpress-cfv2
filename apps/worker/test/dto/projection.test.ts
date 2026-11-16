@@ -66,12 +66,24 @@ describe("per-role DTOs on the wire", () => {
       env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'cashier', 'active', ?)").bind(t.tenantId, k.id, Date.now()),
       env.DB.prepare("UPDATE sessions SET active_tenant_id = ? WHERE user_id = ?").bind(t.tenantId, k.id),
     ])
-    const paths = ["/workspace", "/dashboard", "/shipments", `/shipments/${s}`, "/shift", "/shifts", "/bulk", "/print/list?status=semua", `/track?q=${s}`, "/contacts/senders", "/contacts/recipients", "/notifications", "/masking"]
+    // A reconciled COD credit and a weight adjustment (Book 2) are on the row: they must never reach a Kasir.
+    const { runInDurableObject } = await import("cloudflare:test")
+    await runInDurableObject(t.vault, (_i, st) => {
+      st.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = 141000, reconciled_extra_adjustment_idr = 4000 WHERE slug = ?", s)
+      st.storage.sql.exec("INSERT INTO finance_discrepancies (id, kind, invoice_id, shipment_slug, expected_idr, actual_idr, detail, created_at) VALUES ('d-sweep', 'adjustment', 'inv-sweep', ?, NULL, -4000, 'penyesuaian', 1)", s)
+    })
+    const paths = ["/workspace", "/dashboard", "/shipments", `/shipments/${s}`, "/shift", "/shifts", "/bulk", "/print/list?status=semua", `/track?q=${s}`, "/contacts/senders", "/contacts/recipients", "/notifications", "/masking", "/exceptions?bucket=selisih_berat", "/returns", "/pickup"]
     for (const p of paths) {
       const r = await appGet(p, k.cookie)
       expect(r.status, p).toBe(200)
-      expect(ownerOnlyKeysIn(await r.json()), p).toEqual([])
+      const body = await r.json()
+      expect(ownerOnlyKeysIn(body), p).toEqual([])
+      // Independent of the key list itself (removing a key from OWNER_ONLY_KEYS must still fail here).
+      const raw = JSON.stringify(body)
+      for (const k of ["reconciled_provider_cod_credit_idr", "reconciled_extra_adjustment_idr", "adjustment_idr", "provider_net_shipping_idr", "effective_gerai_cost_idr"]) expect(raw, `${p} ${k}`).not.toContain(`"${k}"`)
     }
+    const det = (await (await appGet(`/shipments/${s}`, k.cookie)).json()) as { data: { shipment: { cod_credit_settled: boolean } } }
+    expect(det.data.shipment.cod_credit_settled).toBe(true)
     // The same owner response does carry the money fields (the projection is doing the work).
     expect(ownerOnlyKeysIn(await (await appGet(`/shipments/${s}`, t.cookie)).json()).length).toBeGreaterThan(0)
   })

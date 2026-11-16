@@ -151,16 +151,22 @@ export const ROUTES: Route[] = [
       const vault = vaultFor(c.env, c.key.tenantId)
       const d = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
       if (!d.ok || !d.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
+      const now = Date.now() // one WIB day for reserve and release (never split across midnight)
       const amount = Number(d.value.shipment.counter_due_idr ?? 0) + Number(d.value.quote?.effective_gerai_cost_idr ?? 0)
-      const already = ["issued", "provider_unpaid_hold"].includes(String(d.value.shipment.dispatch_state))
-      if (!already && !(await reserveDailySpend(c.env, c.key.keyId, c.key.dailyIssueCapIdr, amount, Date.now()))) {
+      const already = ["issued", "provider_unpaid_hold", "cancelled"].includes(String(d.value.shipment.dispatch_state))
+      if (!already && !(await reserveDailySpend(c.env, c.key.keyId, c.key.dailyIssueCapIdr, amount, now))) {
         throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini sudah tercapai.")
       }
-      const r = await vault.dispatchShipment(c.key.tenantId, s, c.actor, Date.now(), await platformOf(c.env, c.key.tenantId))
-      if (!r.ok) {
-        if (!already) await releaseDailySpend(c.env, c.key.keyId, amount, Date.now())
-        return vaultErr(r)
+      let r: Awaited<ReturnType<typeof vault.dispatchShipment>>
+      try {
+        r = await vault.dispatchShipment(c.key.tenantId, s, c.actor, now, await platformOf(c.env, c.key.tenantId))
+      } catch (e) {
+        if (!already) await releaseDailySpend(c.env, c.key.keyId, amount, now)
+        throw e
       }
+      // Only an issued order spends the cap; a balance-held one spends nothing yet (pay-unpaid reserves it then).
+      if (!already && (!r.ok || r.value.state !== "issued")) await releaseDailySpend(c.env, c.key.keyId, amount, now)
+      if (!r.ok) return vaultErr(r)
       return ok(r.value)
     },
   },
@@ -171,7 +177,22 @@ export const ROUTES: Route[] = [
     summary: "Bayar kiriman yang menunggu saldo Mengantar",
     idempotent: true,
     handler: async (c) => {
-      const r = await vaultFor(c.env, c.key.tenantId).payUnpaid(c.key.tenantId, slug.parse(c.params.slug), c.actor)
+      const s = slug.parse(c.params.slug)
+      const vault = vaultFor(c.env, c.key.tenantId)
+      const d = await vault.shipmentDetail(c.key.tenantId, s, c.actor)
+      if (!d.ok || !d.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
+      // Paying a held order spends Mengantar balance: it counts against this key's daily cap like an issue.
+      const now = Date.now()
+      const amount = Number(d.value.shipment.counter_due_idr ?? 0) + Number(d.value.quote?.effective_gerai_cost_idr ?? 0)
+      if (!(await reserveDailySpend(c.env, c.key.keyId, c.key.dailyIssueCapIdr, amount, now))) throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini sudah tercapai.")
+      let r: Awaited<ReturnType<typeof vault.payUnpaid>>
+      try {
+        r = await vault.payUnpaid(c.key.tenantId, s, c.actor)
+      } catch (e) {
+        await releaseDailySpend(c.env, c.key.keyId, amount, now)
+        throw e
+      }
+      if (!r.ok || r.value.state !== "issued") await releaseDailySpend(c.env, c.key.keyId, amount, now)
       if (!r.ok) return vaultErr(r)
       return ok(r.value)
     },
@@ -246,8 +267,22 @@ export const ROUTES: Route[] = [
     body: z.object({ prohibited_ack: z.literal(true).describe("Konfirmasi isi paket bukan barang terlarang") }),
     handler: async (c) => {
       const id = z.string().uuid().parse(c.params.id)
-      const r = await vaultFor(c.env, c.key.tenantId).bulkMaterialize(c.key.tenantId, id, c.actor, true)
-      if (!r.ok) return vaultErr(r)
+      const vault = vaultFor(c.env, c.key.tenantId)
+      // The whole batch is reserved against the daily cap before any INV is created (all ready rows).
+      const v = await vault.bulkView(c.key.tenantId, id)
+      if (!v.ok) return vaultErr(v)
+      if (!v.value) throw new AppError(404, "BATCH_NOT_FOUND", "Batch tidak ditemukan.")
+      const now = Date.now()
+      const amount = v.value.rows.filter((x) => x.state === "ready").reduce((a, x) => a + Number(x.counter_due_idr ?? 0) + Number((x as { effective_gerai_cost_idr?: number | null }).effective_gerai_cost_idr ?? (x.publish_shipping_idr ?? 0)), 0)
+      if (!(await reserveDailySpend(c.env, c.key.keyId, c.key.dailyIssueCapIdr, amount, now))) throw new AppError(429, "DAILY_CAP_REACHED", "Batas nilai kiriman harian kunci API ini tidak cukup untuk batch ini.")
+      const r = await vault.bulkMaterialize(c.key.tenantId, id, c.actor, true).catch(async (e) => {
+        await releaseDailySpend(c.env, c.key.keyId, amount, now)
+        throw e
+      })
+      if (!r.ok) {
+        await releaseDailySpend(c.env, c.key.keyId, amount, now)
+        return vaultErr(r)
+      }
       c.exec.waitUntil(enqueue(c.env, { kind: "dispatch", tenant_id: c.key.tenantId, batch_id: id }))
       return ok(r.value)
     },
@@ -300,7 +335,9 @@ export const ROUTES: Route[] = [
     body: ContactBody.extend({ store_name: z.string().max(60).optional() }),
     handler: async (c) => {
       const b = c.body as z.infer<typeof ContactBody> & { store_name?: string }
-      return contacts(c, { op: "update_sender", id: z.string().uuid().parse(c.params.id), input: { senderKind: b.store_name ? "reseller_dropship" : "walk_in", name: b.name, phone: b.phone, street: b.street, areaId: b.area_id, areaLabel: b.area_label, postalCode: b.postal_code, brandName: b.store_name } })
+      // An omitted store_name keeps the sender's kind and brand (partial update).
+      const brand = b.store_name === undefined ? {} : { senderKind: b.store_name ? ("reseller_dropship" as const) : ("walk_in" as const), brandName: b.store_name }
+      return contacts(c, { op: "update_sender", id: z.string().uuid().parse(c.params.id), input: { name: b.name, phone: b.phone, street: b.street, areaId: b.area_id, areaLabel: b.area_label, postalCode: b.postal_code, ...brand } })
     },
   },
   {
@@ -388,7 +425,8 @@ export const ROUTES: Route[] = [
     handler: async (c) => {
       const r = await vaultFor(c.env, c.key.tenantId).financeSync(c.key.tenantId, "manual")
       if (!r.ok) return vaultErr(r)
-      return ok(r.value)
+      // The synced Mengantar balance is owner money data: only with `finance:read`.
+      return ok(c.key.scopes.has("finance:read") ? r.value : { ...r.value, balance: undefined })
     },
   },
 ]

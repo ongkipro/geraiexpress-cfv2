@@ -1,3 +1,4 @@
+import { statusLabel } from "../../../lib/status"
 import { useState, type FormEvent } from "react"
 import { Link } from "@tanstack/react-router"
 import { SearchIcon } from "lucide-react"
@@ -74,7 +75,7 @@ export function CekResiPage() {
                     <li key={`h${j}`} className="text-base"><span className="tabular-nums text-muted-foreground">{h.date}</span> · {h.status ?? h.category}</li>
                   ))}
                   {!it.history?.length && it.events.length === 0 ? <li className="text-base text-muted-foreground">Belum ada riwayat perjalanan.</li> : null}
-                  {!it.history?.length ? it.events.map((e, j) => <li key={`e${j}`} className="text-base"><span className="tabular-nums text-muted-foreground">{when(e.event_at)}</span> · {e.raw_category ?? e.mapped_status}</li>) : null}
+                  {!it.history?.length ? it.events.map((e, j) => <li key={`e${j}`} className="text-base"><span className="tabular-nums text-muted-foreground">{when(e.event_at)}</span> · {statusLabel(e.mapped_status)}</li>) : null}
                 </ol>
               </li>
             ))}

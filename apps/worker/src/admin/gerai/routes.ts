@@ -5,7 +5,7 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { vaultFor } from "../../do/gerai-vault/stub"
 import { hostCache, platformHostOf } from "../../host/lookup"
-import { purgeHost } from "../../hostnames/service"
+import { purgeDomain } from "../../hostnames/service"
 import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
 import { hostOrigin } from "../../http/request"
@@ -166,7 +166,8 @@ export function registerGeraiAdmin(app: Hono<any>): void {
     if (!row) throw new AppError(404, "DOMAIN_NOT_FOUND", "Domain tidak ditemukan.")
     const now = Date.now()
     try {
-      await purgeHost(c.env, host, now)
+      // Root + www are one domain: deleting one deletes both (no orphan the gerai cannot manage).
+      await purgeDomain(c.env, row.tenant_id, now)
     } catch (e) {
       if (e instanceof CfError) throw new AppError(503, "CF_UNAVAILABLE", "Cloudflare belum bisa dihubungi. Coba lagi nanti.")
       throw e
@@ -180,8 +181,8 @@ export function registerGeraiAdmin(app: Hono<any>): void {
     const b = await body(c)
     const reason = requireReason(b.reason)
     const t = await c.env.DB.prepare(
-      `SELECT t.id, t.name, o.onboarding_state, a.seller_email, a.outlet_json FROM tenants t JOIN tenant_onboarding o ON o.tenant_id = t.id
-       JOIN tenant_applications a ON a.tenant_id = t.id WHERE t.slug = ?`,
+      `SELECT t.id, t.name, COALESCE(o.onboarding_state, 'not_connected') AS onboarding_state, a.seller_email, a.outlet_json FROM tenants t LEFT JOIN tenant_onboarding o ON o.tenant_id = t.id
+       JOIN tenant_applications a ON a.tenant_id = t.id WHERE t.slug = ? AND a.state = 'approved'`,
     )
       .bind(c.req.param("slug"))
       .first<{ id: string; name: string; onboarding_state: string; seller_email: string; outlet_json: string }>()

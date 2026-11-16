@@ -211,8 +211,9 @@ export function applyCheck(sql: SqlStorage, batchId: string, rowNo: number, c: R
   refreshCounts(sql, batchId, now)
 }
 
-export function totalsOf(rows: BulkRow[]): { ongkir: number; codCollected: number; codFee: number; senderPayable: number; due: number; estimated_margin_idr: number } {
-  const live = rows.filter((r) => r.state === "ready" || r.state === "created")
+export function totalsOf(rows: Array<BulkRow & { dispatch_state?: string | null }>): { ongkir: number; codCollected: number; codFee: number; senderPayable: number; due: number; estimated_margin_idr: number } {
+  // Cancelled INVs (`Batalkan yang Belum Terbit`) are no longer owed.
+  const live = rows.filter((r) => (r.state === "ready" || r.state === "created") && r.dispatch_state !== "cancelled")
   const sum = (f: (r: BulkRow) => number | null) => live.reduce((a, r) => a + (f(r) ?? 0), 0)
   return { ongkir: sum((r) => r.publish_shipping_idr), codCollected: sum((r) => r.cod_collection_total_idr), codFee: sum((r) => r.cod_fee_idr), senderPayable: sum((r) => r.sender_cod_payable_idr), due: sum((r) => r.counter_due_idr), estimated_margin_idr: sum((r) => r.estimated_margin_idr) }
 }
@@ -270,7 +271,8 @@ export function listBatches(sql: SqlStorage, limit = 50): Array<BatchRow & { sen
   return sql
     .exec<BatchRow & { sender_name: string | null; total_due_idr: number }>(
       `SELECT b.*, s.true_name AS sender_name,
-         (SELECT COALESCE(SUM(counter_due_idr), 0) FROM bulk_import_rows r WHERE r.batch_id = b.id AND r.state IN ('ready','created')) AS total_due_idr
+         (SELECT COALESCE(SUM(r.counter_due_idr), 0) FROM bulk_import_rows r LEFT JOIN shipments s2 ON s2.slug = r.shipment_slug
+           WHERE r.batch_id = b.id AND r.state IN ('ready','created') AND COALESCE(s2.dispatch_state, '') != 'cancelled') AS total_due_idr
        FROM bulk_import_batches b LEFT JOIN sender_contacts s ON s.id = b.sender_contact_id ORDER BY b.created_at DESC LIMIT ?`,
       Math.min(200, limit),
     )

@@ -130,10 +130,10 @@ function stubBlock(p: PdfPage, d: LabelData, y0: number) {
   p.text(PAD, y, 7.5, `${d.courierName} ${d.serviceName} · AWB ${d.awb} · ${d.destinationFallback}`.slice(0, 80))
   y += 3.8
   if (s.feeMode === "none") {
-    const parts = [`Ongkir ${idr(s.shippingIdr)}`, s.packingIdr ? `Packing ${idr(s.packingIdr)}` : null, s.promoIdr ? `Promo -${idr(s.promoIdr)}` : null, `TOTAL ${idr(s.totalIdr)}`].filter(Boolean)
+    const parts = [`Ongkir ${idr(s.shippingIdr)}`, s.packingIdr ? `Packing ${idr(s.packingIdr)}` : null, s.serviceFeeIdr ? `Layanan ${idr(s.serviceFeeIdr)}` : null, s.promoIdr ? `Promo -${idr(s.promoIdr)}` : null, `TOTAL ${idr(s.totalIdr)}`].filter(Boolean)
     p.text(PAD, y, 7.5, parts.join(" · "))
   } else {
-    p.text(PAD, y, 7.5, `COD · Tagih penerima ${idr(d.cod?.collectIdr ?? 0)}${s.packingIdr ? ` · Packing ${idr(s.packingIdr)}` : ""}`)
+    p.text(PAD, y, 7.5, `COD · Tagih penerima ${idr(d.cod?.collectIdr ?? 0)}${s.packingIdr ? ` · Packing ${idr(s.packingIdr)}` : ""}${s.serviceFeeIdr ? ` · Layanan ${idr(s.serviceFeeIdr)}` : ""}${s.promoIdr ? ` · Promo -${idr(s.promoIdr)}` : ""}`)
   }
   y += 4.6
   const pay = s.payment

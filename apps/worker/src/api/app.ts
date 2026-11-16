@@ -47,9 +47,13 @@ export type AppCtx = Context<{ Bindings: Env; Variables: Vars }>
 // Cloudflare's documented Turnstile test secrets look like "1x" + zeros + two letters.
 const isTurnstileTestKey = (k: string) => /^[123]x0{20,}[A-Za-z]{2}$/.test(k)
 
+const turnstileDev = (env: Env) => env.GX_ENV === "local" && isTurnstileTestKey(env.TURNSTILE_SECRET_KEY)
+
 async function turnstileOk(c: AppCtx, token: unknown): Promise<boolean> {
   // Cloudflare's documented test secrets locally: accept any non-empty token without a network call.
-  if (c.env.GX_ENV === "local" && isTurnstileTestKey(c.env.TURNSTILE_SECRET_KEY)) return typeof token === "string" && token.length > 0
+  if (turnstileDev(c.env)) return typeof token === "string" && token.length > 0
+  // No widget configured: fail closed (the page shows no widget, so nothing could pass Siteverify anyway).
+  if (!c.env.TURNSTILE_SITE_KEY) return false
   return verifyTurnstile(c.env.TURNSTILE_SECRET_KEY, typeof token === "string" ? token : undefined, clientIp(c.req.raw))
 }
 
@@ -99,6 +103,18 @@ async function body(c: AppCtx): Promise<Record<string, unknown>> {
 const now = () => Date.now()
 const COURIER_NAMES: Record<string, string> = { JT: "J&T", JNE: "JNE", SiCepat: "SiCepat", Sap: "SAP Express", iDexpress: "iDexpress", lion: "Lion Parcel", anteraja: "Anteraja", pos: "Pos Indonesia", spx: "SPX", ninja: "Ninja Xpress" }
 
+/** Raw R2 object keys (`t/<tenant>/…`) never leave the Worker; a `has_<name>` flag replaces each one. */
+function withoutStorageKeys<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(withoutStorageKeys) as T
+  if (v === null || typeof v !== "object") return v
+  const out: Record<string, unknown> = {}
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (k.endsWith("_r2_key")) out[`has_${k.slice(0, -7)}`] = x !== null && x !== undefined
+    else out[k] = withoutStorageKeys(x)
+  }
+  return out as T
+}
+
 export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   const app = new Hono<{ Bindings: Env; Variables: Vars }>().basePath("/api/app")
   // Handlers return plain Responses (envelope helpers); carry headers the guard set on the context (rolling cookie).
@@ -118,6 +134,9 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   app.notFound(() => fail(404, "NOT_FOUND", "Alamat tidak ditemukan."))
   const r = (method: "GET" | "POST", path: string, auth: AuthLevel, projection: "none" | "self" | "role", handler: (c: AppCtx) => Promise<Response>) =>
     register(app, { context: "app", method, path, auth, projection }, guard, (c) => handler(c as AppCtx))
+
+  // Public auth page config (spec 05 §1): the Turnstile site key the browser renders; null = local test keys (no widget).
+  r("GET", "/auth/config", "public", "none", async (c) => ok({ turnstileSiteKey: turnstileDev(c.env) ? null : c.env.TURNSTILE_SITE_KEY || null }))
 
   // Sign-up (PR-01): email → OTP → ticket → account.
   r("POST", "/auth/signup/request", "public", "none", async (c) => {
@@ -192,7 +211,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("GET", "/auth/invitations/:token", "public", "none", async (c) => ok(await viewInvitation(c.env, c.req.param("token"), now())))
   r("POST", "/auth/invitations/:token/accept", "public", "self", async (c) => {
     const b = await body(c)
-    const res = await acceptInvitation(c.env, { token: c.req.param("token"), name: b.name, password: b.password, deviceHash: await deviceHash(c), userAgent: c.req.header("user-agent") ?? null, now: now() })
+    const res = await acceptInvitation(c.env, { token: c.req.param("token"), name: b.name, password: b.password, deviceHash: await deviceHash(c), ipHash: await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), userAgent: c.req.header("user-agent") ?? null, now: now() })
     return ok({ userId: res.userId }, 201, { "set-cookie": setSessionCookie("app", isSecureRequest(c.req.raw, c.env.GX_ENV), res.sessionToken, res.maxAgeSeconds) })
   })
 
@@ -306,6 +325,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const slug = qr ? { ok: true as const, value: qr } : await vault.allocateSlug(m.tenantId, "draft")
     if (!slug.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const frozen = await vault.freezeQuote(m.tenantId, frozenFrom(slug.value, q, card))
+    if (!frozen.ok && frozen.refused === "SHIPMENT_LOCKED") throw new AppError(409, "SHIPMENT_LOCKED", "Kiriman ini sudah dibayar atau diterbitkan. Buka kiriman untuk melanjutkan.")
     if (!frozen.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const view = m.role === "gerai_admin" ? ownerCard(card) : cashierCard(card)
     return ok(projectFor(m.role, { slug: slug.value, quoteId: frozen.value, card: view, expiresAt: q.expiresAt }), 201)
@@ -329,7 +349,8 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!r.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
     const v = r.value
     // Kasir: no cost/margin/discount; owner sees the frozen cost and estimated margin.
-    const shipment = { ...v.shipment, effective_gerai_cost_idr: v.quote?.effective_gerai_cost_idr, estimated_profit_idr: v.quote?.estimated_margin_idr }
+    // `cod_credit_settled` is the role-safe boolean the counter needs (the amount itself is owner-only).
+    const shipment = { ...v.shipment, effective_gerai_cost_idr: v.quote?.effective_gerai_cost_idr, estimated_profit_idr: v.quote?.estimated_margin_idr, cod_credit_settled: v.shipment.reconciled_provider_cod_credit_idr !== null && v.shipment.reconciled_provider_cod_credit_idr !== undefined }
     return ok(projectFor(m.role, { shipment, quote: v.quote, sender: v.sender, recipient: v.recipient, receipts: v.receipts, events: v.events, preflight: v.preflight }))
   }
   const idemKey = (c: AppCtx) => {
@@ -374,7 +395,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
 
   // Kendala & Klaim (TASK-405, spec 04 §3): buckets, claim records + packet; outcomes and conflicts are owner-only.
-  const BUCKETS = ["tidak_bergerak", "gagal_antar", "selisih_berat", "bisa_klaim", "bertentangan"] as const
+  const BUCKETS = ["tidak_bergerak", "gagal_antar", "selisih_berat", "bisa_klaim", "bertentangan", "perlu_tindakan"] as const
   const exceptions = async (c: AppCtx, op: Parameters<GeraiVaultDO["exceptionsOp"]>[2]) => {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).exceptionsOp(m.tenantId, { userId: c.get("session").user.id, role: m.role }, op)
@@ -413,7 +434,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).returnsOp(m.tenantId, { userId: c.get("session").user.id, role: m.role }, op)
     if (!r.ok) return vaultErr(r)
-    return ok(projectFor(m.role, r.value))
+    return ok(projectFor(m.role, withoutStorageKeys(r.value)))
   }
   r("GET", "/returns", "app_member", "role", (c) => returns(c, { op: "desk" }))
   r("POST", "/returns/intake", "app_member", "role", async (c) => {
@@ -431,7 +452,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).pickupOp(m.tenantId, c.get("session").user.id, op)
     if (!r.ok) return vaultErr(r)
-    return ok(projectFor(m.role, r.value))
+    return ok(projectFor(m.role, withoutStorageKeys(r.value)))
   }
   const batchId = (c: AppCtx) => {
     const v = c.req.param("batch") ?? ""
@@ -472,6 +493,15 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).financeView(m.tenantId)
     if (!r.ok) return vaultErr(r)
+    return ok(r.value)
+  })
+  r("POST", "/finance/discrepancies/:id/resolve", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const reason = String((await body(c)).reason ?? "").trim()
+    if (reason.length < 5 || reason.length > 200) throw new AppError(422, "REASON_REQUIRED", "Tulis alasan (5–200 huruf), misalnya sudah dicek di Mengantar.", { reason: "Tulis alasan." })
+    const r = await vaultFor(c.env, m.tenantId).resolveDiscrepancy(m.tenantId, c.req.param("id") ?? "", c.get("session").user.id, reason)
+    if (!r.ok) return vaultErr(r)
+    if (!r.value.resolved) throw new AppError(404, "NOT_FOUND", "Selisih tidak ditemukan atau sudah selesai.")
     return ok(r.value)
   })
   r("POST", "/finance/sync", "app_owner", "role", async (c) => {
@@ -695,7 +725,8 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const b = await body(c)
     const rows = await domainRows(c.env, m.tenantId)
     if (!rows.length) throw new AppError(404, "NO_DOMAIN", "Belum ada domain sendiri.")
-    if (b.confirm !== rows.find((x) => x.role === "primary")?.hostname) throw new AppError(422, "CONFIRM_REQUIRED", "Ketik nama domain untuk konfirmasi.", { confirm: "Ketik nama domain persis." })
+    const confirmName = (rows.find((x) => x.role === "primary") ?? rows[0]!).hostname
+    if (b.confirm !== confirmName) throw new AppError(422, "CONFIRM_REQUIRED", "Ketik nama domain untuk konfirmasi.", { confirm: "Ketik nama domain persis." })
     try {
       for (const d of rows) await purgeHost(c.env, d.hostname, now())
     } catch (e) {
@@ -780,12 +811,21 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return r.value
   }
   r("GET", "/settings", "app_owner", "role", async (c) => ok(await settings(c)))
+  // POS defaults for the quote panel (owner and Kasir): active packing items, the counter service fee and whether
+  // the owner chose to show the margin on quick checks. No cost or margin values here (spec 03 §1, DEC-225).
+  r("GET", "/pos-config", "app_member", "role", async (c) => {
+    const v = await settings(c)
+    return ok({ packingItems: v.packing.items.filter((i) => i.active).map((i) => ({ name: i.name, priceIdr: i.priceIdr })), serviceFeeIdr: v.packing.serviceFeeEnabled ? v.packing.serviceFeeIdr : null, showCommission: v.receipt.showCommission })
+  })
   for (const form of ["profile", "business", "receipt", "packing", "cashier_payout"] as const) {
     r("POST", `/settings/${form.replace("_", "-")}`, "app_owner", "role", async (c) => {
       const m = c.get("membership")!
       const r = await vaultFor(c.env, m.tenantId).settingsWrite(m.tenantId, c.get("session").user.id, form, await body(c))
       if (!r.ok) return vaultErr(r)
-      return ok(await settings(c))
+      const v = await settings(c)
+      // The workspace header and Super Admin read the gerai name from D1: keep it in step with Profil Gerai.
+      if (form === "profile" && v.profile?.name) await c.env.DB.prepare("UPDATE tenants SET name = ?, updated_at = ? WHERE id = ?").bind(v.profile.name, now(), m.tenantId).run()
+      return ok(v)
     })
   }
   r("GET", "/members", "app_owner", "role", async (c) => {

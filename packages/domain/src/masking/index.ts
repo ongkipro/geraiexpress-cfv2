@@ -57,7 +57,7 @@ export const maskPhone = (p: string) => (p.length >= 8 ? `${p.slice(0, 4)}****${
  */
 export function printedIdentity(
   preset: MaskPreset,
-  x: { trueSender: Party; brand: { name: string | null; phone: string | null; hideOutlet: boolean }; outlet: Party; recipientPhone: string },
+  x: { trueSender: Party; brand: { name: string | null; phone: string | null; hideOutlet: boolean }; outlet: Party; recipientPhone: string; senderIsReseller?: boolean },
 ): PrintedIdentity {
   switch (preset) {
     case "standar_gerai":
@@ -65,7 +65,8 @@ export function printedIdentity(
     case "dropship_toko":
       return { sender: { name: x.brand.name ?? x.trueSender.name, phone: x.brand.phone ?? x.trueSender.phone }, recipientPhonePrinted: x.recipientPhone, showOutletBranding: false, showShippingFee: true }
     case "privasi_penerima_cod": {
-      const reseller = x.brand.name !== null
+      // Same rule as the quota (`isSenderMasked`): only a reseller sender prints a brand.
+      const reseller = x.senderIsReseller ?? x.brand.name !== null
       return {
         sender: reseller ? { name: x.brand.name!, phone: x.brand.phone ?? x.trueSender.phone } : x.trueSender,
         recipientPhonePrinted: maskPhone(x.recipientPhone),

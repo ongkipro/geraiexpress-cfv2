@@ -44,9 +44,13 @@ export function PickupQueue() {
   )
 }
 
+// One AudioContext for the page: browsers cap how many may exist, and the block alarm must keep working.
+let audio: AudioContext | null = null
 function beep(ok: boolean) {
   try {
-    const ctx = new AudioContext()
+    audio ??= new AudioContext()
+    const ctx = audio
+    if (ctx.state === "suspended") void ctx.resume()
     const o = ctx.createOscillator()
     const g = ctx.createGain()
     o.type = ok ? "sine" : "square"
@@ -194,8 +198,9 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
         const blob = await new Promise<Blob | null>((res) => canvas.current!.toBlob(res, "image/png"))
         if (blob) {
           const up = await fetch("/api/app/media?purpose=signature", { method: "POST", credentials: "same-origin", headers: { "content-type": "image/png" }, body: blob })
-          const j = (await up.json()) as { ok: boolean; data?: { id: string } }
-          signatureId = j.ok ? j.data!.id : null
+          const j = (await up.json().catch(() => null)) as { ok: boolean; data?: { id: string }; error?: { message: string } } | null
+          if (!j?.ok) throw new ApiError(up.status, { code: "SIGNATURE_UPLOAD_FAILED", message: "Tanda tangan gagal diunggah. Periksa koneksi lalu coba lagi.", field_errors: {} })
+          signatureId = j.data!.id
         }
       }
       await api(`/pickup/${batchId}/handover`, { body: { mode, driverName: name, driverPhone: phone, vehicleNo: plate, signatureId } })

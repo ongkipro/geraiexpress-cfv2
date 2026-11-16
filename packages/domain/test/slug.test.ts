@@ -9,10 +9,12 @@ describe("INV slug (DEC-211)", () => {
   it("generates 7 chars from the alphabet", () => {
     for (let i = 0; i < 1_000; i++) expect(isSlug(generateSlug())).toBe(true)
   })
-  it("10,000 slugs in one tenant → 0 duplicates", () => {
+  it("10,000 raw draws: collisions stay at the birthday bound (the allocator guarantees 0 duplicates)", () => {
+    // 30^7 ≈ 2.2e10 slugs: a raw duplicate among 10,000 draws has p ≈ 0.23 %, so asserting exactly zero here was a
+    // flaky test. The per-tenant guarantee (retry on collision) is proven by test/slug/allocator.test.ts (Workers).
     const seen = new Set<string>()
     for (let i = 0; i < 10_000; i++) seen.add(generateSlug())
-    expect(seen.size).toBe(10_000)
+    expect(10_000 - seen.size).toBeLessThanOrEqual(2) // P(≥ 3) ≈ 2e-9; a biased generator collides far more
   })
   it("rejects biased bytes (>= 240) instead of folding them", () => {
     let call = 0

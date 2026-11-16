@@ -48,6 +48,12 @@ describe("PartnerClient direct", () => {
     expect(await client.list()).toEqual({ kind: "maybe_sent", reason: "upstream_5xx" })
     expect(await client.regenerate("s1")).toEqual({ kind: "maybe_sent", reason: "timeout" })
   })
+
+  it("a 200 whose body cannot be read is maybe_sent (regenerate may have rotated the key) — never an error", async () => {
+    const fetchImpl = (async () => new Response("<html>truncated", { status: 200 })) as unknown as typeof fetch
+    const client = new PartnerClient({ transport: "direct", partnerId: "ongkirich", partnerSecret: "partner-secret", partnerOrigin: "https://partner.example", fetchImpl, now: () => 1_790_000_000_000 })
+    expect(await client.regenerate("s1")).toMatchObject({ kind: "maybe_sent" })
+  })
 })
 
 describe("PartnerClient through the relay program (local stub run)", () => {

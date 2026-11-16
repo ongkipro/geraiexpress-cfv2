@@ -74,9 +74,19 @@ export async function sendOne(env: MailEnv, row: Row, now: number): Promise<Disp
     emit("email.outbox", { template: row.template_id, outcome: "suppressed" }, { id: row.id }, { env: env.GX_ENV, now })
     return "suppressed"
   }
-  const to = await decryptString(env.KEK_SECRET, row.to_email_encrypted, "email")
-  const vars = JSON.parse(await decryptString(env.KEK_SECRET, row.payload_encrypted, "email")) as TemplateVars[TemplateId]
-  const msg = renderTemplate(row.template_id, vars, await legalFooter(env.DB))
+  let to: string
+  let vars: TemplateVars[TemplateId]
+  let msg: ReturnType<typeof renderTemplate>
+  try {
+    to = await decryptString(env.KEK_SECRET, row.to_email_encrypted, "email")
+    vars = JSON.parse(await decryptString(env.KEK_SECRET, row.payload_encrypted, "email")) as TemplateVars[TemplateId]
+    msg = renderTemplate(row.template_id, vars, await legalFooter(env.DB))
+  } catch {
+    // A row that cannot be decrypted or rendered never will be: terminal, so it can never block the batch.
+    await finish(env.DB, row.id, "failed", now, "E_RENDER", null).run()
+    emit("email.outbox", { template: row.template_id, outcome: "failed" }, { id: row.id, code: "E_RENDER" }, { env: env.GX_ENV, now, severity: "error" })
+    return "failed"
+  }
   if (env.GX_ENV === "local") localMailbox.set(`${row.to_email_hash}:${row.template_id}`, vars)
   const attempts = row.attempts + 1
   try {

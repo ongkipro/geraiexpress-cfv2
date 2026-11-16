@@ -52,22 +52,23 @@ export async function requestEmailChange(env: AuthEnv, userId: string, b: { emai
   const perUser = await throttle.hit(env.DB, `email-change-send:${userId}`, OTP_PER_EMAIL.limit, OTP_PER_EMAIL.windowMs, now)
   if (!perUser.allowed) throw tooMany(perUser.retryAfterMs)
   const otpId = crypto.randomUUID()
-  const taken = await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()
-  if (taken) {
-    // Do not reveal that the address has an account; the code simply never arrives.
-    emit("auth.otp", { outcome: "email_change_taken" }, {}, { env: env.GX_ENV, now })
-    return { otpId }
-  }
-  const code = newOtp()
   const expiresAt = now + OTP_TTL_MS
-  const mail = await enqueueEmailStatement(env, { templateId: "email_change_otp", toEmail: email, vars: { code }, expiresAt, now })
-  await env.DB.batch([
+  const taken = await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()
+  // A taken address gets an unmatchable row (no email): confirm then behaves exactly as for a free address.
+  const code = taken ? null : newOtp()
+  const stmts: D1PreparedStatement[] = [
+    env.DB.prepare("UPDATE email_otps SET expires_at = ?1 WHERE user_id = ?2 AND purpose = 'email_change' AND consumed_at IS NULL AND expires_at > ?1").bind(now, userId),
     env.DB.prepare(
       `INSERT INTO email_otps (id, purpose, email_hash, user_id, email_encrypted, code_hash, ip_hash, attempts, expires_at, created_at)
        VALUES (?1, 'email_change', ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8)`,
-    ).bind(otpId, eh, userId, await encryptString(env.KEK_SECRET, email, "otp"), await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`), ip, expiresAt, now),
-    mail.statement,
-  ])
+    ).bind(otpId, eh, userId, await encryptString(env.KEK_SECRET, email, "otp"), code ? await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`) : `existing:${crypto.randomUUID()}`, ip, expiresAt, now),
+  ]
+  if (code) stmts.push((await enqueueEmailStatement(env, { templateId: "email_change_otp", toEmail: email, vars: { code }, expiresAt, now })).statement)
+  await env.DB.batch(stmts)
+  if (taken) {
+    emit("auth.otp", { outcome: "email_change_taken" }, {}, { env: env.GX_ENV, now })
+    return { otpId }
+  }
   emit("auth.otp", { outcome: "email_change_sent" }, {}, { env: env.GX_ENV, now })
   return { otpId }
 }
@@ -86,11 +87,11 @@ export async function confirmEmailChange(env: AuthEnv, userId: string, keepHash:
     .first<{ code_hash: string; attempts: number; expires_at: number; consumed_at: number | null; email_encrypted: string }>()
   if (!row || row.consumed_at !== null || now >= row.expires_at) throw invalid()
   if ((await tokenHash(env.AUTH_SESSION_PEPPER, "otp", `${otpId}:${code}`)) !== row.code_hash) {
-    const attempts = row.attempts + 1
-    const stmts = [env.DB.prepare("UPDATE email_otps SET attempts = ? WHERE id = ?").bind(attempts, otpId)]
-    if (attempts >= OTP_MAX_WRONG) stmts.push(throttle.lock(env.DB, lockKey, now + OTP_LOCK_MS, now))
+    const wrong = await throttle.hit(env.DB, `email-change-wrong:${userId}`, OTP_MAX_WRONG - 1, OTP_LOCK_MS, now)
+    const stmts = [env.DB.prepare("UPDATE email_otps SET attempts = attempts + 1 WHERE id = ?").bind(otpId)]
+    if (!wrong.allowed) stmts.push(throttle.lock(env.DB, lockKey, now + OTP_LOCK_MS, now), throttle.clear(env.DB, `email-change-wrong:${userId}`))
     await env.DB.batch(stmts)
-    if (attempts >= OTP_MAX_WRONG) throw tooMany(OTP_LOCK_MS)
+    if (!wrong.allowed) throw tooMany(OTP_LOCK_MS)
     throw invalid()
   }
   const email = await decryptString(env.KEK_SECRET, row.email_encrypted, "otp")

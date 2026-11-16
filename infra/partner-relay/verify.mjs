@@ -7,6 +7,10 @@
 import { createHash, createHmac, randomUUID } from "node:crypto"
 
 const [base, flag] = process.argv.slice(2)
+if (flag !== undefined && flag !== "--partner-sandbox" && flag !== "--partner-production") {
+  console.error(`unknown flag ${flag} (use --partner-sandbox or --partner-production)`)
+  process.exit(2)
+}
 const secret = process.env.RELAY_SECRET
 if (!base || !secret) {
   console.error("usage: secrets-env run -- node infra/partner-relay/verify.mjs <relay base URL> [--partner-sandbox|--partner-production]")
@@ -17,6 +21,7 @@ const sign = (s, ts, id, target, body) => createHmac("sha256", s).update(`${ts}\
 async function forward({ target = "/api/partner/v1/sellers/list", body = "{}", ts = Math.floor(Date.now() / 1000), id = randomUUID(), sig, extra = {} } = {}) {
   ts = String(ts)
   const res = await fetch(`${base.replace(/\/$/, "")}/forward`, {
+    signal: AbortSignal.timeout(15_000),
     method: "POST",
     headers: { "content-type": "application/json", "x-relay-timestamp": String(ts), "x-relay-id": id, "x-relay-target": target, "x-relay-signature": sig ?? sign(secret, ts, id, target, body), ...extra },
     body,
@@ -37,7 +42,7 @@ const check = (name, ok, detail) => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name} — ${detail}`)
 }
 
-const h = await fetch(`${base.replace(/\/$/, "")}/healthz`)
+const h = await fetch(`${base.replace(/\/$/, "")}/healthz`, { signal: AbortSignal.timeout(15_000) })
 check("healthz", h.status === 200 && (await h.text()).includes('"ok":true'), `status ${h.status}`)
 let r = await forward({ sig: "0".repeat(64) })
 check("bad HMAC → 401 relay_auth_failed", r.status === 401 && r.code === "relay_auth_failed", `${r.status} ${r.code}`)

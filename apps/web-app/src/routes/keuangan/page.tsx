@@ -181,13 +181,39 @@ function Shifts({ rows }: { rows: Shift[] }) {
 }
 
 function Discrepancies({ rows }: { rows: Discrepancy[] }) {
-  if (!rows.length) return <EmptyState title="Tidak ada selisih" body="Semua mutasi Mengantar cocok dengan kiriman gerai." />
+  const [closing, setClosing] = useState<string | null>(null)
+  const [reason, setReason] = useState("")
+  const [done, setDone] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+  const open = rows.filter((x) => !done.has(x.id))
+  if (!open.length) return <EmptyState title="Tidak ada selisih" body="Semua mutasi Mengantar cocok dengan kiriman gerai." />
+  async function resolve(id: string) {
+    setError(null)
+    try {
+      await api(`/finance/discrepancies/${id}/resolve`, { body: { reason } })
+      setDone((d) => new Set(d).add(id))
+      setClosing(null)
+      setReason("")
+    } catch (e) {
+      setError(e instanceof ApiError ? e.body.message : "Gagal menyelesaikan selisih.")
+    }
+  }
   return (
     <ul className="divide-y rounded-lg border bg-card">
-      {rows.map((x) => (
-        <li key={x.id} className="flex flex-col gap-1 px-4 py-3 text-base">
-          <span className="font-medium">{KIND_LABEL[x.kind] ?? x.kind}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
+      {open.map((x) => (
+        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base">
+          <span className="font-medium">{KIND_LABEL[x.kind] ?? "Selisih"}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
           <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
+          {closing === x.id ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-base">Alasan (dicatat)<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className="h-11 rounded-md border border-input px-3" /></label>
+              <Button variant="outline" onClick={() => setClosing(null)}>Batal</Button>
+              <Button disabled={reason.trim().length < 5} onClick={() => resolve(x.id)}>Tandai Selesai</Button>
+            </div>
+          ) : (
+            <div><Button variant="outline" onClick={() => { setClosing(x.id); setReason("") }}>Tandai Selesai</Button></div>
+          )}
+          {closing === x.id && error ? <p role="alert" className="text-danger">{error}</p> : null}
         </li>
       ))}
     </ul>

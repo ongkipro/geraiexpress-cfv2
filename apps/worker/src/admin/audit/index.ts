@@ -55,8 +55,9 @@ export function registerSystem(app: Hono<any>): void {
     const where = ["a.at < ?1"]
     const binds: unknown[] = [before]
     if (action) {
-      where.push(`a.action LIKE ?${binds.length + 1}`)
-      binds.push(`${action.replace(/[%_]/g, "")}%`)
+      // Escape LIKE wildcards (never strip them: almost every action name has an underscore).
+      where.push(`a.action LIKE ?${binds.length + 1} ESCAPE '\\'`)
+      binds.push(`${action.replace(/[\\%_]/g, "\\$&")}%`)
     }
     if (tenant) {
       where.push(`(t.slug = ?${binds.length + 1} OR a.tenant_id = ?${binds.length + 1})`)

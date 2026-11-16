@@ -9,7 +9,7 @@ import { rp } from "../../kasir/quote-panel"
 
 // `Kendala & Klaim` (spec 04 §3): five sub-filters, per-courier claim countdown chips (Mengantar help 8140017),
 // claim records with a ready-to-send packet, owner notes on `Status Bertentangan`.
-type Bucket = "tidak_bergerak" | "gagal_antar" | "selisih_berat" | "bisa_klaim" | "bertentangan"
+type Bucket = "tidak_bergerak" | "gagal_antar" | "selisih_berat" | "bisa_klaim" | "bertentangan" | "perlu_tindakan"
 interface Row { slug: string; awb: string | null; courier: string; status: string; recipient: string | null; last_scan_at: number | null; band: string | null; claim_kind: string | null; countdown: { label: string; tone: string; expired: boolean } | null; claim: { id: string; status: string } | null; adjustment_idr: number | null; conflict_note: string | null }
 const BUCKETS: Array<{ id: Bucket; label: string }> = [
   { id: "tidak_bergerak", label: "Tidak Bergerak" },
@@ -17,6 +17,7 @@ const BUCKETS: Array<{ id: Bucket; label: string }> = [
   { id: "selisih_berat", label: "Selisih Berat / Cordest" },
   { id: "bisa_klaim", label: "Bisa Klaim" },
   { id: "bertentangan", label: "Status Bertentangan" },
+  { id: "perlu_tindakan", label: "Gagal Terbit / Diperiksa" },
 ]
 const BAND: Record<string, string> = { "48j-4h": "48 jam–4 hari", "5-14h": "5–14 hari", "15-30h": "15–30 hari", ">30h": "> 30 hari" }
 const CLAIM_STATUS: Record<string, string> = { draft: "Draf klaim", submitted: "Diajukan", approved: "Disetujui", rejected: "Ditolak", paid: "Dibayar", expired: "Kedaluwarsa" }

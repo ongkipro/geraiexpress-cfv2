@@ -41,8 +41,9 @@ export function createRelay({ secret, previousSecret = "", upstreamOrigin, fetch
     const t = now()
     for (const [k, at] of seen) if (t - at > DUP_TTL_MS) seen.delete(k)
     if (seen.has(id)) return json(409, "relay_duplicate")
-    seen.set(id, t)
+    // Busy is checked before the id is remembered: a refused call never reaches Mengantar, so its retry must pass.
     if (inFlight >= maxConcurrent) return json(503, "relay_busy")
+    seen.set(id, t)
     inFlight++
     const started = now()
     try {

@@ -23,8 +23,10 @@ Three layers, newest first:
    → `{ rows, sourceChecksum, restoredChecksum }`; they must be equal. The target must be a fresh name (an object that
    has tables is refused); the scratch object keeps the source tenant identity, is never routed by any host, and is
    only reachable through the ops token.
-3. D1: `wrangler d1 time-travel info geraiexpress-control-<env> --timestamp=<ISO>` and, in a scratch database,
-   `wrangler d1 export` + `wrangler d1 execute <scratch> --file` to prove a restorable copy.
+3. D1: `wrangler d1 time-travel info geraiexpress-control-<env> --timestamp=<ISO> --env <env>` and, into a scratch
+   database, `wrangler d1 export geraiexpress-control-<env> --remote --env <env> --output d1.sql` +
+   `wrangler d1 execute <scratch-db> --remote --file d1.sql` to prove a restorable copy (both default to `--local`
+   without `--remote`).
 4. Record RPO/RTO in `BUILD-LOG.md`.
 
 ## Local drill tools

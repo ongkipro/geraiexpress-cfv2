@@ -2,7 +2,7 @@ import { appApi } from "./api/app"
 import { ownerApi } from "./api/owner"
 import { serveSpa } from "./assets/spa"
 import { classify, hostShape, normalizeHost, probeSignature } from "./host/classify"
-import { d1HostLookup, hostCache, hostNames } from "./host/lookup"
+import { d1HostLookup, hostCache, hostNames, platformHostOf } from "./host/lookup"
 import { healthz, notFoundHtml, recoveryHtml, suspendedHtml } from "./http/pages"
 import { handleDevLastMail } from "./ops/dev-mail"
 import { handleDevPreview } from "./ops/dev-preview"
@@ -75,9 +75,10 @@ export default {
       if (path === "/mcp") return handlePublicMcp(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host })
       if (isApiFamily(path)) return notFoundHtml()
       // `www` twin of a root custom domain: permanent redirect to the primary (spec 11 §6 root_primary).
+      // Only once the root itself is an active custom host (spec 11 §6): never redirect `www` to the platform subdomain.
       if (ctx.role === "redirect" && (request.method === "GET" || request.method === "HEAD")) {
         const primary = await primaryHost(env, ctx.tenantId, ctx.tenantSlug)
-        if (primary !== ctx.host) return new Response(null, { status: 301, headers: { location: `https://${primary}${url.pathname}${url.search}`, "cache-control": "public, max-age=3600" } })
+        if (primary !== ctx.host && primary !== platformHostOf(env, ctx.tenantSlug)) return new Response(null, { status: 301, headers: { location: `https://${primary}${url.pathname}${url.search}`, "cache-control": "public, max-age=3600" } })
       }
       return handleMinisite(request, env, { tenantId: ctx.tenantId, tenantSlug: ctx.tenantSlug, host: ctx.host, canonicalHost: await primaryHost(env, ctx.tenantId, ctx.tenantSlug) })
     }

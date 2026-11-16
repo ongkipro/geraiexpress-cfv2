@@ -64,6 +64,7 @@ export function labelDataFrom(s: Row, opts: { quote: Row | null; lastPayment: Ro
     stub: {
       shippingIdr: Number(s.publish_shipping_idr ?? 0),
       packingIdr: Number(s.packing_addon_idr ?? 0),
+      serviceFeeIdr: Number(s.counter_service_fee_idr ?? 0),
       promoIdr: Number(s.promo_discount_idr ?? 0),
       totalIdr: Number(s.counter_due_idr ?? 0),
       payment,

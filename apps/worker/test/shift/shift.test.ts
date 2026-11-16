@@ -113,7 +113,11 @@ describe("sender COD payout (spec 03 §1.2)", () => {
     const tunaiPayout = list.find((r) => r.event === "sender_cod_payout" && r.method === "tunai")!
     const v = await post(`/shipments/${slug}/cod-payout`, t.cookie, { op: "void", receiptId: tunaiPayout.id, reason: "salah nominal" }, "po-void-xxxx")
     expect(v.status).toBe(200)
-    expect((await view(t.cookie)).totals).toMatchObject({ codPayoutTunai: 0, expectedCash: 200000 })
+    const tot = (await view(t.cookie)).totals as { codPayoutTunai: number; expectedCash: number; tunaiIn: number; voidTunai: number }
+    expect(tot).toMatchObject({ codPayoutTunai: 0, expectedCash: 200000 })
+    // The displayed lines add up to the drawer: Modal + Tunai masuk − Void − Pencairan COD = Seharusnya di laci.
+    const opening = (await view(t.cookie)).shift as unknown as { opening_float_idr: number }
+    expect(opening.opening_float_idr + tot.tunaiIn - tot.voidTunai - tot.codPayoutTunai).toBe(tot.expectedCash)
     const s = ((await (await appGet(`/shipments/${slug}`, t.cookie)).json()) as { data: { shipment: { sender_cod_paid_idr: number } } }).data.shipment
     expect(s.sender_cod_paid_idr).toBe(45000)
   })

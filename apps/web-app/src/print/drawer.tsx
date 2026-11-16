@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet"
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group"
 import { api } from "../lib/api"
-import { deviceDensity, FORMAT_LABEL, PAPER_HINT, fetchPrint, printBluetooth, printPdf, PrintError, type Format } from "./print"
+import { deviceDensity, FORMAT_LABEL, PAPER_HINT, fetchPrint, connectBluetooth, printPdf, PrintError, type Format } from "./print"
 
 // Print drawer (visual 04 §5): format, density, duplicate guard (`Cetak Ulang Label (sudah dicetak n×)` + reason),
 // preview of the exact PDF, PDF/system print fallback when Bluetooth is unavailable or fails.
@@ -44,11 +44,21 @@ export function PrintDrawer({ slug, printCount, firstPrintedAt, onPrinted }: { s
     setPending(true)
     setError(null)
     try {
-      const { blob } = await fetchPrint({ slugs: [slug], format, reason: reprint ? reason : undefined, density })
       if (format === "roll_58mm" && mode === "auto") {
-        const sent = await printBluetooth(new Uint8Array(await blob.arrayBuffer())).catch(() => false)
-        if (!sent) setError("Printer Bluetooth tidak tersedia. Gunakan Buka PDF / Cetak Sistem.")
-      } else printPdf(blob)
+        // Connect first: the print is recorded (print_count) only when the printer is really there.
+        const write = await connectBluetooth()
+        if (!write) {
+          setError("Printer Bluetooth tidak tersedia. Gunakan Buka PDF / Cetak Sistem.")
+          return
+        }
+        const { blob } = await fetchPrint({ slugs: [slug], format, reason: reprint ? reason : undefined, density })
+        await write(new Uint8Array(await blob.arrayBuffer()))
+      } else {
+        // 58 mm bytes are not a PDF: the system-print fallback uses the 10×15 label PDF.
+        const pdfFormat = format === "roll_58mm" ? "label_10x15_with_stub" : format
+        const { blob } = await fetchPrint({ slugs: [slug], format: pdfFormat, reason: reprint ? reason : undefined, density })
+        printPdf(blob)
+      }
       onPrinted()
     } catch (e) {
       setError(e instanceof PrintError ? e.message : "Gagal mencetak. Coba lagi.")

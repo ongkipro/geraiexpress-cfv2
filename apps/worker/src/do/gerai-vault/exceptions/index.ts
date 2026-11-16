@@ -5,7 +5,7 @@ import { claimDeadline, countdown, stuckBand, type Anchors, type ClaimKind } fro
 export type ExceptionError = { status: number; code: string; message: string; fields?: Record<string, string> }
 const err = (status: number, code: string, message: string, fields?: Record<string, string>): { ok: false; error: ExceptionError } => ({ ok: false, error: { status, code, message, fields } })
 
-export type Bucket = "tidak_bergerak" | "gagal_antar" | "selisih_berat" | "bisa_klaim" | "bertentangan"
+export type Bucket = "tidak_bergerak" | "gagal_antar" | "selisih_berat" | "bisa_klaim" | "bertentangan" | "perlu_tindakan"
 
 export type ExceptionRow = {
   slug: string
@@ -47,21 +47,28 @@ function anchorsOf(sql: SqlStorage, s: Ship): Anchors {
   return { lastStatusAt: s.last_provider_event_at, lostAt: first(["lost"]), pickedUpAt: pickedUp ?? s.issued_at, deliveredOrRtsAt: first(["delivered", "rts_in_transit", "provider_returned"]) }
 }
 
-/** Which claim the INV qualifies for (if any): lost → hilang; damaged at Meja Retur → rusak. */
+/** Which claim the INV qualifies for (if any): lost → hilang; damaged at Meja Retur → rusak; else any open claim. */
 function claimKindOf(sql: SqlStorage, s: Ship): ClaimKind | null {
   if (s.provider_status === "lost") return "hilang"
   const intake = sql.exec<{ condition: string }>("SELECT condition FROM return_intakes WHERE slug = ?", s.slug).toArray()[0]
   if (intake && intake.condition !== "baik") return "rusak"
-  return null
+  // A claim opened by hand (e.g. `isi_kurang`, or `rusak` on a delivered parcel) stays visible and manageable.
+  return (sql.exec<{ kind: ClaimKind }>("SELECT kind FROM shipment_claims WHERE shipment_slug = ? ORDER BY created_at DESC LIMIT 1", s.slug).toArray()[0]?.kind as ClaimKind | undefined) ?? null
 }
 
 const BUCKET_WHERE: Record<Bucket, string> = {
   tidak_bergerak: "s.status IN ('in_transit','handed_to_courier') AND s.last_provider_event_at IS NOT NULL AND s.last_provider_event_at < ?",
   gagal_antar: "s.status = 'undelivery_hold'",
   selisih_berat: "s.slug IN (SELECT shipment_slug FROM finance_discrepancies WHERE kind = 'adjustment' AND resolved_at IS NULL)",
-  bisa_klaim: "(s.provider_status = 'lost' OR s.slug IN (SELECT slug FROM return_intakes WHERE condition != 'baik'))",
+  bisa_klaim: "(s.provider_status = 'lost' OR s.slug IN (SELECT slug FROM return_intakes WHERE condition != 'baik') OR s.slug IN (SELECT shipment_slug FROM shipment_claims WHERE status NOT IN ('rejected','paid')))",
   bertentangan: "s.provider_status_conflict_at IS NOT NULL AND s.conflict_resolved_at IS NULL",
+  // Issuing/cancelling problems that need a person (also counted in the `Kendala & Klaim` tab badge).
+  perlu_tindakan: "s.dispatch_state IN ('failed','reconciliation_needed','cancel_unknown')",
 }
+
+/** The tab badge uses exactly the union of the bucket predicates, so the count always matches what the tab shows. */
+// `tidak_bergerak` uses the swept flag here (the stuck sweep sets `stuck_attention_at` at 48 h), the list re-checks live.
+export const KENDALA_WHERE = `(${(Object.keys(BUCKET_WHERE) as Bucket[]).map((b) => (b === "tidak_bergerak" ? "s.status IN ('in_transit','handed_to_courier') AND s.stuck_attention_at IS NOT NULL" : BUCKET_WHERE[b])).map((w) => `(${w})`).join(" OR ")})`
 
 export function bucketCounts(sql: SqlStorage, now: number): Record<Bucket, number> {
   const out = {} as Record<Bucket, number>

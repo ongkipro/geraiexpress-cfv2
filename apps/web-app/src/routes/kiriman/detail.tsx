@@ -287,8 +287,13 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
               <Input id="alasan-batal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
             </Field>
             <div className="flex flex-wrap gap-2">
-              {s.counter_payment_status === "paid" && owner ? (
-                <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => act(() => fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": newKey() }, body: JSON.stringify({ op: "void_payment", reason }) }))}>
+              {s.counter_payment_status === "paid" ? (
+                // Kasir may void within the paying shift; the server enforces it (spec 03 §1.1).
+                <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => act(async () => {
+                  const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": newKey() }, body: JSON.stringify({ op: "void_payment", reason }) })
+                  const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } } | null
+                  if (!j?.ok) throw new ApiError(res.status, j?.error ?? { code: "UNKNOWN", message: "Pembatalan pembayaran gagal.", field_errors: {} })
+                })}>
                   Batalkan Pembayaran
                 </Button>
               ) : null}
@@ -325,19 +330,24 @@ function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: ()
   const s = d.shipment
   const payable = Number(s.sender_cod_payable_idr ?? 0)
   const paid = Number((s as Record<string, unknown>).sender_cod_paid_idr ?? 0)
-  const settled = (s as Record<string, unknown>).reconciled_provider_cod_credit_idr !== null && (s as Record<string, unknown>).reconciled_provider_cod_credit_idr !== undefined
+  const settled = (s as Record<string, unknown>).cod_credit_settled === true
   const [amount, setAmount] = useState("")
   const [method, setMethod] = useState<"tunai" | "transfer">("tunai")
   const [override, setOverride] = useState("")
   const [msg, setMsg] = useState<string | null>(null)
-  const [key] = useState(newKey)
+  const [key, setKey] = useState(newKey)
   const remaining = payable - paid
   async function pay() {
     setMsg(null)
     const res = await fetch(`/api/app/shipments/${s.slug}/cod-payout`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ amountIdr: Number(amount.replace(/\D/g, "")), method, override: settled ? undefined : override }) })
     const j = (await res.json()) as { ok: boolean; error?: { message: string } }
     if (!j.ok) setMsg(j.error!.message)
-    else reload()
+    else {
+      // A partial payout is done: the next one is a new money event with its own key.
+      setKey(newKey())
+      setAmount("")
+      reload()
+    }
   }
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
