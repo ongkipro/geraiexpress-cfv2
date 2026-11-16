@@ -13,6 +13,7 @@ import { runChecks } from "./telemetry/checks"
 import { runDiscountVerifier } from "./pricing/rules"
 import { revokeExpiredRoutes } from "./do/gerai-vault/credentials/rotation"
 import { consumeWebhookBatch, handleMengantarWebhook, type WebhookMessage } from "./webhooks/ingest"
+import { consumeBulkBatch, type BulkMessage } from "./bulk/service"
 
 export { GeraiVaultDO } from "./do/gerai-vault"
 export { PartnerQuotaDO } from "./do/partner-quota"
@@ -89,6 +90,7 @@ export default {
   },
   async queue(batch, env): Promise<void> {
     if (batch.queue.startsWith("gx-mengantar-webhooks")) return consumeWebhookBatch(batch as MessageBatch<WebhookMessage>, env)
+    if (batch.queue.startsWith("gx-bulk")) return consumeBulkBatch(batch as MessageBatch<BulkMessage>, env)
     // Other consumers arrive with their tasks: acknowledge so nothing is redelivered into a missing handler.
     batch.ackAll()
   },

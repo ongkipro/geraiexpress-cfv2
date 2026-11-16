@@ -392,3 +392,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   needs a shift, partial 100.000 + 45.000 of 145.000 payable, over-payout 422, idempotent replay, transfer leaves the
   drawer untouched, tunai reversal puts cash back; Kasir payout only with `Kasir boleh bayar COD`, never a reversal.
   e2e at three viewports. Display fix: negative/zero money never renders as `Rp -0`.
+
+## 2026-11-16 — TASK-308 Paket Massal, Riwayat Massal, Cek Resi (M3)
+
+- Shipped: CSV/manual bulk entry for one sender, queued area match + quote, inline fixes, one INV per ready row,
+  serialized dispatch, one payment for the batch, batch history with `Cetak Semua` and `Batalkan yang Belum Terbit`,
+  and `Cek Resi` by INV/AWB/HP.
+- Evidence: CSV fixture with 5 rows → 2 `Siap`, 3 `Perlu Diperbaiki` (`Berat kosong`, `Kecamatan tidak ditemukan`,
+  ambiguous `Jawa` with two candidates); after fixes 4 ready; double `Buat` creates once; dispatch issues each INV
+  once (create calls = rows); Kasir view has no owner-only keys; batch payment is all-or-nothing (a pre-existing
+  conflicting key on row 2 leaves zero receipts and every INV unpaid) and replays by key; a provider rejection stays
+  on its row and is not retried; cancel-unissued cancels only the INV without AWB; foreign AWB → `Resi ini bukan
+  kiriman gerai Anda`. e2e at three viewports; mutation red.
+- Note: `runQuote` gained an optional per-call rate key/limit and a single-service filter for bulk rows.

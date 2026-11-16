@@ -16,6 +16,10 @@ import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
+import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
+import type { ValidRow } from "@gx/domain/bulk"
+import { normalizePhone08 } from "@gx/domain/contacts"
+import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import type { MaskPreset } from "@gx/domain/masking"
 import type { LabelData, LabelFormat } from "@gx/thermal-print"
@@ -116,6 +120,20 @@ export type ShiftView = {
   shifts: Array<ShiftRow & { totals: ShiftTotals }>
 }
 export type PayoutView = { id: string; amount_idr: number; method: string; shift_id: string | null; idempotency_key: string; shipment_slug: string; event: string; created_at: number }
+
+export type TrackItem = {
+  slug: string
+  awb: string | null
+  courier: string
+  service: string
+  status: string
+  dispatchState: string
+  recipient: string | null
+  area: string | null
+  createdAt: number
+  history: Array<{ date: string; status: string | null; category: string | null }> | null
+  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
+}
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -893,6 +911,273 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: this.ctx.storage.sql.exec("UPDATE shipments SET reconciled_provider_cod_credit_idr = ? WHERE slug = ? RETURNING slug", amountIdr, slug).toArray().length > 0 }
+  }
+
+  // ---- Paket Massal, Riwayat Massal, Cek Resi (TASK-308) ---------------------------------------------------------
+
+  async bulkCreate(tenantId: string, p: { senderId: string; source: "manual" | "csv"; fileName: string | null; maskPreset: string; codFeeMode: string; serviceCode: string; actorId: string }, rows: Array<{ raw: Record<string, string>; valid: ValidRow | null; errors: string[] }>): Promise<{ ok: true; value: { id: string } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const sender = readSender(sql, p.senderId)
+    if (!sender || sender.is_archived) return { ok: false, error: { status: 422, code: "INVALID_SENDER", message: "Pilih pengirim dari Kontak.", fields: { senderId: "Pilih pengirim dari Kontak." } } }
+    if (p.codFeeMode !== "none" && !sender.wa_verified_at) return { ok: false, error: { status: 422, code: "SENDER_NOT_VERIFIED", message: "Kiriman COD butuh WhatsApp pengirim yang sudah diverifikasi.", fields: { senderId: "Verifikasi WhatsApp pengirim dulu." } } }
+    const now = Date.now()
+    const b = this.ctx.storage.transactionSync(() => createBatch(sql, tenantId, p, rows, now))
+    this.ctx.storage.transactionSync(() => this.audit(tenantId, now, "user", p.actorId, "bulk.create", { batchId: b.id, rows: rows.length, source: p.source }))
+    return { ok: true, value: { id: b.id } }
+  }
+
+  async bulkView(tenantId: string, batchId: string): Promise<VaultResult<{ batch: BatchRow; sender: { id: string; name: string; phone: string; brand: string | null } | null; rows: Array<BulkRow & { dispatch_state: string | null; awb_number: string | null; counter_payment_status: string | null }>; totals: ReturnType<typeof totalsOf> } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const batch = readBatch(sql, batchId)
+    if (!batch) return { ok: true, value: null }
+    const sender = readSender(sql, batch.sender_contact_id)
+    const rows = sql
+      .exec<BulkRow & { dispatch_state: string | null; awb_number: string | null; counter_payment_status: string | null }>(
+        `SELECT r.*, s.dispatch_state, s.awb_number, s.counter_payment_status FROM bulk_import_rows r LEFT JOIN shipments s ON s.slug = r.shipment_slug
+         WHERE r.batch_id = ? AND r.state != 'removed' ORDER BY r.row_no`,
+        batchId,
+      )
+      .toArray()
+    return { ok: true, value: { batch, sender: sender ? { id: sender.id, name: sender.true_name, phone: sender.true_phone, brand: sender.display_brand_name } : null, rows, totals: totalsOf(rows) } }
+  }
+
+  async bulkList(tenantId: string): Promise<VaultResult<Array<BatchRow & { sender_name: string | null; total_due_idr: number }>>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: listBatches(this.ctx.storage.sql) }
+  }
+
+  /** Rows still waiting for area match + quote (the Worker's queue consumer checks them in chunks). */
+  async bulkPending(tenantId: string, batchId: string, limit: number): Promise<VaultResult<{ codFeeMode: string; serviceCode: string | null; rows: BulkRow[] } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const b = readBatch(sql, batchId)
+    if (!b) return { ok: true, value: null }
+    const rows = sql.exec<BulkRow>("SELECT * FROM bulk_import_rows WHERE batch_id = ? AND state = 'pending' ORDER BY row_no LIMIT ?", batchId, Math.min(50, limit)).toArray()
+    return { ok: true, value: { codFeeMode: b.cod_fee_mode, serviceCode: b.service_code, rows } }
+  }
+
+  async bulkApplyCheck(tenantId: string, batchId: string, rowNo: number, check: RowCheck): Promise<VaultResult<boolean>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    this.ctx.storage.transactionSync(() => applyCheck(this.ctx.storage.sql, batchId, rowNo, check, Date.now()))
+    return { ok: true, value: true }
+  }
+
+  async bulkEditRow(tenantId: string, batchId: string, rowNo: number, r: { raw: Record<string, string>; valid: ValidRow | null; errors: string[] }, area: { id: string; label: string } | null): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return this.ctx.storage.transactionSync(() => editRow(this.ctx.storage.sql, batchId, rowNo, r, area, Date.now()))
+  }
+
+  async bulkRemoveRow(tenantId: string, batchId: string, rowNo: number): Promise<{ ok: true } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return this.ctx.storage.transactionSync(() => removeRow(this.ctx.storage.sql, batchId, rowNo, Date.now()))
+  }
+
+  /**
+   * `Buat n Kiriman`: one INV per ready row (own slug + frozen quote + recipient contact), in one transaction. An
+   * expired row quote sends those rows back to `pending` and refuses the whole create (the caller re-checks).
+   */
+  async bulkMaterialize(tenantId: string, batchId: string, actorId: string, prohibitedAck: boolean): Promise<{ ok: true; value: { created: number } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    if (!prohibitedAck) return { ok: false, error: { status: 422, code: "PROHIBITED_ACK_REQUIRED", message: "Pastikan isi semua paket bukan barang terlarang.", fields: { prohibitedAck: "Wajib dicentang." } } }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    const b = readBatch(sql, batchId)
+    if (!b) return { ok: false, error: { status: 404, code: "BATCH_NOT_FOUND", message: "Batch tidak ditemukan." } }
+    if (b.state !== "ready") return { ok: false, error: { status: 409, code: "BATCH_NOT_READY", message: b.state === "checking" ? "Masih memeriksa baris. Tunggu sebentar." : "Batch ini tidak bisa dibuat lagi." } }
+    return this.ctx.storage.transactionSync((): { ok: true; value: { created: number } } | { ok: false; error: BulkError } => {
+      const rows = sql.exec<BulkRow>("SELECT * FROM bulk_import_rows WHERE batch_id = ? AND state = 'ready' ORDER BY row_no", batchId).toArray()
+      const expired = rows.filter((r) => !r.quote_json || (r.quoted_at ?? 0) + QUOTE_TTL_MS < now)
+      if (expired.length) {
+        for (const r of expired) sql.exec("UPDATE bulk_import_rows SET state = 'pending' WHERE batch_id = ? AND row_no = ?", batchId, r.row_no)
+        refreshCounts(sql, batchId, now)
+        return { ok: false, error: { status: 409, code: "QUOTE_EXPIRED", message: "Ongkir sebagian baris sudah kedaluwarsa dan sedang dihitung ulang. Tunggu sebentar lalu coba lagi." } }
+      }
+      let created = 0
+      for (const r of rows) {
+        const existing = sql
+          .exec<{ id: string }>("SELECT id FROM recipient_contacts WHERE phone = ? AND mengantar_area_id = ? AND street_address = ? AND is_archived = 0 LIMIT 1", r.recipient_phone, r.area_id, r.street)
+          .toArray()[0]
+        const contact = existing ? { ok: true as const, value: { id: existing.id } } : createRecipient(sql, tenantId, { name: r.recipient_name, phone: r.recipient_phone, street: r.street, areaId: r.area_id, areaLabel: r.area_label, postalCode: r.postal_code, note: r.note }, now)
+        if (!contact.ok) {
+          sql.exec("UPDATE bulk_import_rows SET state = 'needs_fix', errors_json = ? WHERE batch_id = ? AND row_no = ?", JSON.stringify(contact.errors.map((e) => e.message)), batchId, r.row_no)
+          continue
+        }
+        const slug = allocateSlug(this.ctx.storage, "draft", now)
+        const snap = { ...(JSON.parse(r.quote_json!) as FrozenQuote), shipment_slug: slug }
+        const cols = Object.keys(snap) as (keyof FrozenQuote)[]
+        sql.exec(`INSERT INTO quote_snapshots (id, tenant_id, ${cols.join(", ")}) VALUES (?, ?, ${cols.map(() => "?").join(", ")})`, crypto.randomUUID(), tenantId, ...cols.map((c) => snap[c] as SqlStorageValue))
+        const d = ensureDraft(sql, tenantId, slug, actorId, now)
+        if (!d.ok) throw new Error(d.error.code)
+        const e = setParties(sql, slug, { senderId: b.sender_contact_id, recipientId: contact.value.id, content: r.content ?? "Paket", prohibitedAck: true, maskPreset: b.mask_preset }, now)
+        if (e) throw new Error(e.code)
+        sql.exec("UPDATE shipments SET bulk_batch_id = ? WHERE slug = ?", batchId, slug)
+        sql.exec("UPDATE bulk_import_rows SET state = 'created', shipment_slug = ? WHERE batch_id = ? AND row_no = ?", slug, batchId, r.row_no)
+        created++
+      }
+      if (created === 0) return { ok: false, error: { status: 409, code: "NOTHING_READY", message: "Tidak ada baris yang siap dibuat." } }
+      refreshCounts(sql, batchId, now)
+      sql.exec("UPDATE bulk_import_batches SET state = 'dispatching', updated_at = ? WHERE id = ?", now, batchId)
+      this.audit(tenantId, now, "user", actorId, "bulk.materialize", { batchId, created })
+      return { ok: true, value: { created } }
+    })
+  }
+
+  private bulkChain: Promise<unknown> = Promise.resolve()
+
+  /**
+   * Issues the batch INVs at Mengantar one at a time (spec 04 / ADR-0004: AWBs are generated sequentially per seller
+   * account). Calls for any batch of this tenant are chained, so two batches never interleave. A failed row keeps its
+   * provider error and is never retried blindly. Returns `more: true` when the issue rate limit stopped the run.
+   */
+  async bulkDispatch(tenantId: string, batchId: string, platform: Platform): Promise<VaultResult<{ issued: number; failed: number; more: boolean }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const run = this.bulkChain.then(() => this.bulkDispatchRun(tenantId, batchId, platform))
+    this.bulkChain = run.catch(() => undefined)
+    return { ok: true, value: await run }
+  }
+
+  private async bulkDispatchRun(tenantId: string, batchId: string, platform: Platform): Promise<{ issued: number; failed: number; more: boolean }> {
+    const sql = this.ctx.storage.sql
+    let issued = 0
+    let failed = 0
+    for (;;) {
+      const row = sql
+        .exec<{ row_no: number; shipment_slug: string; created_by: string }>(
+          "SELECT r.row_no, r.shipment_slug, b.created_by FROM bulk_import_rows r JOIN bulk_import_batches b ON b.id = r.batch_id WHERE r.batch_id = ? AND r.state = 'created' AND r.dispatch_attempted_at IS NULL ORDER BY r.row_no LIMIT 1",
+          batchId,
+        )
+        .toArray()[0]
+      if (!row) break
+      const r = await this.dispatchShipment(tenantId, row.shipment_slug, row.created_by, Date.now(), platform)
+      if (!r.ok && r.error && ["ISSUE_RATE_LIMITED", "KEY_ROTATING", "DISPATCH_IN_PROGRESS"].includes(r.error.code)) return { issued, failed, more: true }
+      const error = r.ok ? null : (r.error?.message ?? "Gerai sedang diperbarui.")
+      sql.exec("UPDATE bulk_import_rows SET dispatch_attempted_at = ?, dispatch_error = ? WHERE batch_id = ? AND row_no = ?", Date.now(), error, batchId, row.row_no)
+      if (r.ok) issued++
+      else failed++
+    }
+    const left = sql
+      .exec<{ bad: number }>(
+        "SELECT COUNT(*) AS bad FROM bulk_import_rows r JOIN shipments s ON s.slug = r.shipment_slug WHERE r.batch_id = ? AND r.state = 'created' AND s.dispatch_state NOT IN ('issued','provider_unpaid_hold','cancelled')",
+        batchId,
+      )
+      .one().bad
+    sql.exec("UPDATE bulk_import_batches SET state = ?, updated_at = ? WHERE id = ? AND state = 'dispatching'", left > 0 ? "partially_failed" : "done", Date.now(), batchId)
+    return { issued, failed, more: false }
+  }
+
+  /** One counter payment for the whole batch (spec 01 §2.5): every INV receipt commits, or none does. */
+  async bulkPay(tenantId: string, p: { batchId: string; method: unknown; cashReceivedIdr?: unknown; idempotencyKey: string; actorId: string }): Promise<{ ok: true; value: { paid: number; totalIdr: number; changeIdr: number | null; replayed: boolean } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const now = Date.now()
+    try {
+      return this.ctx.storage.transactionSync(() => {
+        const shiftId = openShiftOf(sql, p.actorId)?.id ?? null
+        const r = payBatch(sql, tenantId, { ...p, shiftId }, now)
+        if (r.ok && !r.value.replayed) this.audit(tenantId, now, "user", p.actorId, "bulk.pay", { batchId: p.batchId, paid: r.value.paid, total: r.value.totalIdr, shiftId })
+        return r
+      })
+    } catch (e) {
+      if (e instanceof BatchPaymentAbort) return { ok: false, error: e.error }
+      throw e
+    }
+  }
+
+  /** `Batalkan yang Belum Terbit`: cancels batch INVs without an AWB (issued ones follow the normal cancel rules). */
+  async bulkCancelUnissued(tenantId: string, batchId: string, actorId: string): Promise<{ ok: true; value: { cancelled: number; skipped: number } } | { ok: false; refused?: VaultRefusal; error?: BulkError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const b = readBatch(sql, batchId)
+    if (!b) return { ok: false, error: { status: 404, code: "BATCH_NOT_FOUND", message: "Batch tidak ditemukan." } }
+    const now = Date.now()
+    if (["draft", "checking", "ready"].includes(b.state)) {
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE bulk_import_batches SET state = 'cancelled', updated_at = ? WHERE id = ?", now, batchId)
+        this.audit(tenantId, now, "user", actorId, "bulk.cancel", { batchId, cancelled: 0 })
+      })
+      return { ok: true, value: { cancelled: 0, skipped: 0 } }
+    }
+    const rows = sql
+      .exec<{ slug: string; dispatch_state: string; awb_number: string | null; counter_payment_status: string }>(
+        "SELECT s.slug, s.dispatch_state, s.awb_number, s.counter_payment_status FROM bulk_import_rows r JOIN shipments s ON s.slug = r.shipment_slug WHERE r.batch_id = ? AND r.state = 'created'",
+        batchId,
+      )
+      .toArray()
+    let cancelled = 0
+    let skipped = 0
+    for (const r of rows) {
+      if (r.awb_number || !["draft", "failed"].includes(r.dispatch_state)) continue
+      if (r.counter_payment_status === "paid") {
+        skipped++
+        continue
+      }
+      const c = await this.cancelShipment(tenantId, r.slug, actorId, "Batalkan yang belum terbit (Paket Massal)")
+      if (c.ok) cancelled++
+      else skipped++
+    }
+    const open = sql
+      .exec<{ n: number }>("SELECT COUNT(*) AS n FROM bulk_import_rows r JOIN shipments s ON s.slug = r.shipment_slug WHERE r.batch_id = ? AND r.state = 'created' AND s.dispatch_state != 'cancelled'", batchId)
+      .one().n
+    sql.exec("UPDATE bulk_import_batches SET state = CASE WHEN ? = 0 THEN 'cancelled' ELSE state END, updated_at = ? WHERE id = ?", open, now, batchId)
+    return { ok: true, value: { cancelled, skipped } }
+  }
+
+  private trackCache = new Map<string, { at: number; history: Array<{ date: string; status: string | null; category: string | null }> }>()
+
+  /**
+   * `Cek Resi` (spec 03 §1.4): INV, AWB or recipient phone of this gerai → shipments with their timeline (provider
+   * history read through `GET /order?tracking_id=`, cached 5 min). Nothing found for an AWB-like input = `foreign`.
+   */
+  async trackLookup(tenantId: string, q: string): Promise<VaultResult<{ kind: "found"; items: TrackItem[] } | { kind: "foreign"; awb: string } | { kind: "none" }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const raw = q.trim()
+    const slug = normalizeSlug(raw)
+    const phone = normalizePhone08(raw)
+    type S = { slug: string; awb_number: string | null; courier_code: string; service_code: string; status: string; dispatch_state: string; true_recipient_json: string | null; created_at: number; issued_at: number | null }
+    const cols = "slug, awb_number, courier_code, service_code, status, dispatch_state, true_recipient_json, created_at, issued_at"
+    let rows: S[] = []
+    if (slug) rows = sql.exec<S>(`SELECT ${cols} FROM shipments WHERE slug = ?`, slug).toArray()
+    if (!rows.length && phone) {
+      rows = sql
+        .exec<S>(`SELECT ${cols} FROM shipments WHERE recipient_contact_id IN (SELECT id FROM recipient_contacts WHERE phone = ?) AND dispatch_state != 'draft' ORDER BY created_at DESC LIMIT 20`, phone)
+        .toArray()
+    }
+    const awb = raw.replace(/\s+/g, "").toUpperCase()
+    if (!rows.length && /^[A-Z0-9]{8,30}$/.test(awb)) rows = sql.exec<S>(`SELECT ${cols} FROM shipments WHERE UPPER(awb_number) = ?`, awb).toArray()
+    if (!rows.length) return { ok: true, value: !phone && /^[A-Z0-9]{8,30}$/.test(awb) ? { kind: "foreign", awb } : { kind: "none" } }
+    const key = rows.length === 1 && rows[0]!.awb_number ? await this.sellerKey(tenantId) : null
+    const items: TrackItem[] = []
+    for (const r of rows) {
+      let history = this.trackCache.get(r.slug)
+      if (key && r.awb_number && (!history || history.at < Date.now() - 5 * 60_000)) {
+        try {
+          const o = await publicClient(this.env, key.key).getOrder({ trackingId: r.awb_number })
+          history = { at: Date.now(), history: (o?.history ?? []).map((h) => ({ date: h.date, status: typeof h.status === "string" ? h.status.slice(0, 200) : null, category: h.statusCategory ?? null })) }
+          this.trackCache.set(r.slug, history)
+        } catch {
+          // Provider down: show local events only.
+        }
+      }
+      const local = sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>("SELECT source, raw_category, mapped_status, event_at FROM shipment_events WHERE slug = ? ORDER BY event_at DESC LIMIT 30", r.slug).toArray()
+      const rec = r.true_recipient_json ? (JSON.parse(r.true_recipient_json) as { name?: string; area?: string }) : null
+      items.push({ slug: r.slug, awb: r.awb_number, courier: r.courier_code, service: r.service_code, status: r.status, dispatchState: r.dispatch_state, recipient: rec?.name ?? null, area: rec?.area ?? null, createdAt: r.created_at, history: history?.history ?? null, events: local })
+    }
+    return { ok: true, value: { kind: "found", items } }
   }
 
   // ---- Printing (TASK-306) ---------------------------------------------------------------------------------------

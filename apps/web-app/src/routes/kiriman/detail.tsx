@@ -16,7 +16,7 @@ import { PrintDrawer } from "../../print/drawer"
 // summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
 // owns every amount (frozen quote); the screen never computes money.
 type Method = "qris" | "tunai" | "transfer" | "later"
-interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; display_brand_name?: string | null; sender_kind?: string }
+export interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; display_brand_name?: string | null; sender_kind?: string }
 interface Detail {
   shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null; mask_preset: MaskPreset; mask_snapshot_json: string | null }
   quote: (Record<string, unknown> & { service_code: string; billable_weight_gram: number; expires_at: number; cod_fee_idr: number }) | null
@@ -91,7 +91,7 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
   )
 }
 
-function PartyPicker({ kind, value, onPick }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void }) {
+export function PartyPicker({ kind, value, onPick }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void }) {
   const [q, setQ] = useState("")
   const [items, setItems] = useState<Contact[]>([])
   useEffect(() => {

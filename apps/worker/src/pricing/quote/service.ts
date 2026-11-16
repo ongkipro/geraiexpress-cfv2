@@ -48,8 +48,8 @@ export interface QuoteResult {
 }
 
 /** Runs a quote for a tenant. Throws `AppError` 429 when the per-tenant quote limit is exceeded. */
-export async function runQuote(env: Env, tenantId: string, input: QuoteInput, now: number): Promise<QuoteResult> {
-  const limit = await hit(env.DB, `quote:${tenantId}`, QUOTES_PER_MINUTE, 60_000, now)
+export async function runQuote(env: Env, tenantId: string, input: QuoteInput, now: number, opts: { rateKey?: string; perMinute?: number; serviceCode?: string | null } = {}): Promise<QuoteResult> {
+  const limit = await hit(env.DB, opts.rateKey ?? `quote:${tenantId}`, opts.perMinute ?? QUOTES_PER_MINUTE, 60_000, now)
   if (!limit.allowed) throw new AppError(429, "QUOTE_RATE_LIMITED", "Terlalu banyak cek ongkir. Coba lagi sebentar lagi.", {}, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) })
   const vault = vaultFor(env, tenantId)
   const [catalog, prefs, rules] = await Promise.all([
@@ -61,7 +61,8 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
   const disabled = new Set(prefs.value.filter((p) => p.enabled === 0).map((p) => p.courier_code))
   const dropOff = new Set(prefs.value.filter((p) => p.pickup_mode === "drop_off_only").map((p) => p.courier_code))
   const assigned = new Map(rules.results.map((r) => [r.service_code, r.assigned_bps]))
-  const services = eligibleServices(catalog.results, disabled, input)
+  // Paket Massal quotes one chosen service per row (spec 03 §1.3): never fan out COD passes across the whole catalog.
+  const services = eligibleServices(opts.serviceCode ? catalog.results.filter((c) => c.service_code === opts.serviceCode) : catalog.results, disabled, input)
 
   // Pass 1: one Non-COD `courier=all` estimate per distinct provider weight (usually one).
   const weights = [...new Set(services.filter((s) => !s.reason).map((s) => s.weightKg))]

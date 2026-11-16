@@ -22,6 +22,8 @@ import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
+import { enqueue, parseRow, parseRows } from "../bulk/service"
+import { templateCsv } from "@gx/domain/bulk"
 import { vaultFor } from "../do/gerai-vault/stub"
 
 export interface Membership {
@@ -344,6 +346,115 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const r = await vaultFor(c.env, m.tenantId).payoutOp(m.tenantId, actorOf(c), op)
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
+  })
+
+  // Paket Massal, Riwayat Massal, Cek Resi (TASK-308, spec 03 §1.3–1.4, DEC-229). Rows are re-validated here; area
+  // match + quote run in the `gx-bulk` Queue; INVs dispatch serialized inside the tenant object.
+  const batchParam = (c: AppCtx) => {
+    const v = c.req.param("batch") ?? ""
+    if (!/^[0-9a-f-]{36}$/.test(v)) throw new AppError(404, "BATCH_NOT_FOUND", "Batch tidak ditemukan.")
+    return v
+  }
+  const bulkView = async (c: AppCtx, id: string) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).bulkView(m.tenantId, id)
+    if (!r.ok) return vaultErr(r)
+    if (!r.value) throw new AppError(404, "BATCH_NOT_FOUND", "Batch tidak ditemukan.")
+    const v = r.value
+    // Kasir: customer prices only (no margin) — the projection strips `estimated_margin_idr`.
+    const rows = v.rows.map((x) => ({ ...x, raw_json: undefined, quote_json: undefined, errors: x.errors_json ? (JSON.parse(x.errors_json) as string[]) : [], candidates: x.candidates_json ? (JSON.parse(x.candidates_json) as unknown[]) : [], errors_json: undefined, candidates_json: undefined, raw: JSON.parse(x.raw_json) as Record<string, string> }))
+    return ok(projectFor(m.role, { batch: v.batch, sender: v.sender, rows, totals: v.totals }))
+  }
+  r("GET", "/bulk/template.csv", "app_member", "none", async () => new Response(templateCsv(), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="template-paket-massal.csv"', "cache-control": "no-store" } }))
+  r("GET", "/bulk/services", "app_member", "none", async (c) => {
+    const m = c.get("membership")!
+    const [cat, prefs] = await Promise.all([
+      c.env.DB.prepare("SELECT service_code, courier_code, display_name, service_class, cod_supported FROM courier_service_catalog WHERE is_active = 1 ORDER BY sort_order").all<{ service_code: string; courier_code: string; display_name: string; service_class: string; cod_supported: number }>(),
+      vaultFor(c.env, m.tenantId).courierPrefs(m.tenantId),
+    ])
+    const off = new Set(prefs.ok ? prefs.value.filter((p) => p.enabled === 0).map((p) => p.courier_code) : [])
+    return ok({ items: cat.results.filter((x) => !off.has(x.courier_code)).map((x) => ({ code: x.service_code, name: x.display_name, cargo: x.service_class === "cargo", cod: x.cod_supported === 1 })) })
+  })
+  r("GET", "/bulk", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).bulkList(m.tenantId)
+    if (!r.ok) return vaultErr(r)
+    return ok(projectFor(m.role, { items: r.value }))
+  })
+  r("POST", "/bulk", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const b = await body(c)
+    const { source, rows } = parseRows(b)
+    const serviceCode = typeof b.serviceCode === "string" ? b.serviceCode : ""
+    const svc = await c.env.DB.prepare("SELECT service_code FROM courier_service_catalog WHERE service_code = ? AND is_active = 1").bind(serviceCode).first()
+    if (!svc) throw new AppError(422, "INVALID_SERVICE", "Pilih ekspedisi untuk semua baris.", { serviceCode: "Pilih ekspedisi." })
+    const codFeeMode = ["none", "buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(String(b.codFeeMode)) ? String(b.codFeeMode) : "none"
+    const maskPreset = ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"].includes(String(b.maskPreset)) ? String(b.maskPreset) : "standar_gerai"
+    const fileName = typeof b.fileName === "string" ? b.fileName.replace(/[^\w .()-]/g, "").slice(0, 80) || null : null
+    const r = await vaultFor(c.env, m.tenantId).bulkCreate(m.tenantId, { senderId: String(b.senderId ?? ""), source, fileName, maskPreset, codFeeMode, serviceCode, actorId: c.get("session").user.id }, rows)
+    if (!r.ok) return vaultErr(r)
+    c.executionCtx.waitUntil(enqueue(c.env, { kind: "check", tenant_id: m.tenantId, batch_id: r.value.id }))
+    return ok({ id: r.value.id }, 201)
+  })
+  r("GET", "/bulk/:batch", "app_member", "role", (c) => bulkView(c, batchParam(c)))
+  r("POST", "/bulk/:batch/recheck", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const id = batchParam(c)
+    c.executionCtx.waitUntil(enqueue(c.env, { kind: "check", tenant_id: m.tenantId, batch_id: id }))
+    return bulkView(c, id)
+  })
+  r("POST", "/bulk/:batch/rows/:row", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const id = batchParam(c)
+    const rowNo = Number(c.req.param("row"))
+    if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 200) throw new AppError(404, "ROW_NOT_FOUND", "Baris tidak ditemukan.")
+    const b = await body(c)
+    const vault = vaultFor(c.env, m.tenantId)
+    if (b.remove === true) {
+      const x = await vault.bulkRemoveRow(m.tenantId, id, rowNo)
+      if (!x.ok) return vaultErr(x)
+    } else {
+      const parsed = parseRow((b.cells && typeof b.cells === "object" ? b.cells : {}) as Record<string, unknown>, rowNo)
+      const area = typeof b.areaId === "string" && /^[0-9a-f]{24}$/.test(b.areaId) ? { id: b.areaId, label: typeof b.areaLabel === "string" ? b.areaLabel.slice(0, 160) : "" } : null
+      const x = await vault.bulkEditRow(m.tenantId, id, rowNo, parsed, area)
+      if (!x.ok) return vaultErr(x)
+      c.executionCtx.waitUntil(enqueue(c.env, { kind: "check", tenant_id: m.tenantId, batch_id: id }))
+    }
+    return bulkView(c, id)
+  })
+  r("POST", "/bulk/:batch/create", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const id = batchParam(c)
+    const b = await body(c)
+    const x = await vaultFor(c.env, m.tenantId).bulkMaterialize(m.tenantId, id, c.get("session").user.id, b.prohibitedAck === true)
+    if (!x.ok) {
+      if (x.error?.code === "QUOTE_EXPIRED") c.executionCtx.waitUntil(enqueue(c.env, { kind: "check", tenant_id: m.tenantId, batch_id: id }))
+      return vaultErr(x)
+    }
+    c.executionCtx.waitUntil(enqueue(c.env, { kind: "dispatch", tenant_id: m.tenantId, batch_id: id }))
+    return bulkView(c, id)
+  })
+  r("POST", "/bulk/:batch/pay", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const id = batchParam(c)
+    const b = await body(c)
+    const x = await vaultFor(c.env, m.tenantId).bulkPay(m.tenantId, { batchId: id, method: b.method, cashReceivedIdr: b.cashReceivedIdr, idempotencyKey: idemKey(c), actorId: c.get("session").user.id })
+    if (!x.ok) return vaultErr(x)
+    return ok(x.value)
+  })
+  r("POST", "/bulk/:batch/cancel-unissued", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const x = await vaultFor(c.env, m.tenantId).bulkCancelUnissued(m.tenantId, batchParam(c), c.get("session").user.id)
+    if (!x.ok) return vaultErr(x)
+    return ok(x.value)
+  })
+  r("GET", "/track", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const q = (c.req.query("q") ?? "").slice(0, 40)
+    if (q.trim().length < 4) throw new AppError(422, "QUERY_TOO_SHORT", "Ketik nomor INV, resi atau HP penerima.", { q: "Minimal 4 karakter." })
+    const x = await vaultFor(c.env, m.tenantId).trackLookup(m.tenantId, q)
+    if (!x.ok) return vaultErr(x)
+    return ok(x.value)
   })
 
   // Printing (TASK-306, DEC-224, DEC-229): exact-size PDFs (PC-first), 58 mm ESC/POS bytes, bulk ≤ 50. The first

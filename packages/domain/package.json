@@ -10,7 +10,8 @@
     "./status": "./src/status/index.ts",
     "./cashback": "./src/cashback/index.ts",
     "./contacts": "./src/contacts/index.ts",
-    "./masking": "./src/masking/index.ts"
+    "./masking": "./src/masking/index.ts",
+    "./bulk": "./src/bulk/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
