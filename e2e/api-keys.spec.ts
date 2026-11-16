@@ -23,7 +23,8 @@ test("API & MCP: kunci sekali tampil, dipakai, lalu dicabut", async ({ page, con
   const tokenEl = page.getByLabel("Kunci API baru")
   await expect(tokenEl).toHaveText(/^gx_live_/)
   const token = (await tokenEl.textContent())!
-  await page.screenshot({ path: `docs/evidence/TASK-503/api-mcp-${info.project.name}.png`, fullPage: true })
+  // Evidence shots only on request (GX_EVIDENCE=1), so a gate run never rewrites tracked files.
+  if (process.env.GX_EVIDENCE) await page.screenshot({ path: `docs/evidence/TASK-503/api-mcp-${info.project.name}.png`, fullPage: true })
 
   const ok = await request.get(`${APP}/api/v1/areas?q=tebet`, { headers: { authorization: `Bearer ${token}` } })
   expect(ok.status()).toBe(200)

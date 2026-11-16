@@ -28,7 +28,8 @@ test("Domain Sendiri: tambah, lihat record DNS, periksa lagi, hapus", async ({ p
     await page.getByRole("button", { name: "Periksa Lagi" }).click()
     await expect(page.locator("code:visible", { hasText: `_cf-custom-hostname.${domain}` }).first()).toBeVisible({ timeout: 1500 })
   }).toPass({ timeout: 20_000 })
-  await page.screenshot({ path: `docs/evidence/TASK-505/domain-e2e-${info.project.name}.png`, fullPage: true })
+  // Evidence shots only on request (GX_EVIDENCE=1), so a gate run never rewrites tracked files.
+  if (process.env.GX_EVIDENCE) await page.screenshot({ path: `docs/evidence/TASK-505/domain-e2e-${info.project.name}.png`, fullPage: true })
 
   await page.getByRole("button", { name: "Hapus Domain" }).click()
   await page.getByLabel(`Ketik ${domain} untuk konfirmasi`).fill("salah.id")

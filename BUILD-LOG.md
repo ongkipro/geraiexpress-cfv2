@@ -595,3 +595,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   0 fail/0 warn; mutations red; `pnpm check` green (unit 158, Workers 314).
 - Awaiting owner: a team test zone with Cloudflare for SaaS, `CF_SAAS_ZONE_ID` + zone-scoped token on staging, one
   real test domain through the lifecycle (spec 11 §2 step 5 staging note).
+
+## 2026-11-16 — TASK-599 M5 close
+
+- Integrated run on the final M5 surface: typecheck, lint, unit, build, worker, migrations, isolation, security
+  (bundle audit 0 `*.map` + red fixtures + security-check) PASS; e2e PASS (22 specs × 390/768/1280) recorded on a
+  frozen tree. Two earlier attempts failed on load-induced timeouts while other projects shared the machine (auth
+  reset-password 5 s wait; one worker run) — both re-ran green in isolation (auth 12/12 repeated, worker 316/316);
+  a third attempt was UNVERIFIED because two specs wrote evidence screenshots into tracked paths during the run, now
+  opt-in (`GX_EVIDENCE=1`).
+- Isolation matrix (spec 11 §8) now covers every surface: sessions/hosts/objects (M1), webhooks, media/contacts,
+  keyed-URL logs, `/lacak`, API keys, MCP (outlet + public), custom domains (pending probe-only, cross-gerai claim,
+  cookies/keys/API families refused on a custom host, suspend → 403).
+- `docs/SYSTEM-MAP.md` refreshed for M5. Live steps awaiting the owner: Turnstile widgets, a team Cloudflare test zone
+  + token for one real custom domain (TASK-505).
