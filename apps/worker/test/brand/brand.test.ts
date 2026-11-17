@@ -6,7 +6,18 @@ import { describe, expect, it } from "vitest"
 
 const APEX = "http://geraiexpress.localhost:8787"
 const get = (path: string, headers: Record<string, string> = {}) => exports.default.fetch(`${APEX}${path}`, { headers })
-const PAGES = ["/", "/fitur", "/cara-kerja", "/simulasi-kasir", "/hubungi-kami", "/ketentuan", "/privasi"]
+const PAGES = [
+  "/",
+  "/fitur",
+  "/ekspedisi",
+  "/cara-kerja",
+  "/biaya-dan-paket",
+  "/simulasi-kasir",
+  "/tanya-jawab",
+  "/hubungi-kami",
+  "/ketentuan",
+  "/privasi",
+]
 
 describe("brand site", () => {
   it("pages: 200, title pattern, description 120–155, canonical, single h1, no Set-Cookie even with an app cookie", async () => {
@@ -15,19 +26,23 @@ describe("brand site", () => {
       expect(r.status, p).toBe(200)
       expect(r.headers.get("set-cookie"), p).toBeNull()
       const h = await r.text()
-      expect(h, p).toMatch(/<title>[^<]+ - GeraiExpress<\/title>/)
+      const t = /<title>([^<]+) - GeraiExpress<\/title>/.exec(h)
+      expect(t, p).not.toBeNull()
+      const fullTitle = `${t![1]} - GeraiExpress`
+      expect(fullTitle.length, `${p} title: ${fullTitle.length}`).toBeGreaterThanOrEqual(55)
+      expect(fullTitle.length, `${p} title: ${fullTitle.length}`).toBeLessThanOrEqual(70)
       const d = /<meta name="description" content="([^"]+)">/.exec(h)![1]!
       expect(d.length, `${p}: ${d.length}`).toBeGreaterThanOrEqual(120)
       expect(d.length, `${p}: ${d.length}`).toBeLessThanOrEqual(155)
       expect(h).toContain(`<link rel="canonical" href="https://geraiexpress.localhost${p}">`)
-      expect(h.match(/<h1>/g)?.length, p).toBe(1)
+      expect(h.match(/<h1[\s>]/g)?.length, p).toBe(1)
       expect(h, p).not.toContain("noindex")
     }
     for (const p of ["/api/app/workspace", "/api/owner/overview", "/mcp", "/webhooks/mengantar/x", "/internal/ops/do-migrate"]) expect((await get(p)).status, p).toBe(404)
     expect((await get("/tidak-ada")).status).toBe(404)
   })
 
-  it("sitemap lists the seven pages; robots points to it", async () => {
+  it("sitemap lists all ten pages; robots points to it", async () => {
     const sm = await (await get("/sitemap.xml")).text()
     expect(sm.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true)
     expect([...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])).toEqual(PAGES.map((p) => `https://geraiexpress.localhost${p}`))
