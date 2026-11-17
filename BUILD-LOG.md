@@ -915,3 +915,7 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   flake also hit one focused e2e start; rerun passes.
 - Evidence capture: the open Select must be captured after the smooth scroll and its 0.12 s open animation settle,
   otherwise the listbox looks translucent over the segmented control (capture artifact, not a stacking bug).
+- CI on `24555a2` failed one test: the resize e2e (both motion modes in one test) passed in ~15 s locally with system
+  Chrome but hit the 60 s test timeout on CI's Playwright headless shell with software WebGL. Split into one test per
+  mode with `test.setTimeout(120_000)`; reproduced CI's browser locally (`CI=1`, chromium-headless-shell v1255):
+  16 s and 27 s. Assertions unchanged (follow-up ledger run `RUN-20261117T225517Z-a794f7bc`).

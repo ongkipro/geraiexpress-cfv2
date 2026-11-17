@@ -32,7 +32,7 @@ simulator); keyboard Select (`ArrowDown`, `Enter`) picks `Tebet` and returns foc
 - Worker `apps/worker/test/brand/brand.test.ts`: ten pages, no `Set-Cookie`, `BRAND_ASSETS` allow-list (GET/HEAD, type,
   cache, `nosniff`; `/app/…`, `/index.html`, `/assets/`, maps, `//`, `%2F`, `..`, Ninja, POST → 404), three.js only on
   `/`, no API calls in the demos, copy guards (no fixed discount %, KYC, unsupported services, support hours).
-- e2e `e2e/brand.spec.ts` (390/768/1280): pause freezes the scene clock and resumes; reduced motion starts frozen; resize
+- e2e `e2e/brand.spec.ts` (390/768/1280; the resize tests run once per motion mode on desktop, 120 s budget each): pause freezes the scene clock and resumes; reduced motion starts frozen; resize
   while paused / reduced motion repaints without advancing the clock, draws nothing while off-screen and repaints
   on return; 44 px pause target; logos load; no `/api` or
   `/mcp` request.

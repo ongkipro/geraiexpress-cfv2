@@ -93,9 +93,11 @@ async function scenePixels(page: import("@playwright/test").Page): Promise<numbe
   }, png)
 }
 
-test("Brand hero: ukuran layar berubah saat dijeda tetap menampilkan adegan", async ({ browser }, info) => {
-  test.skip(info.project.name !== "desktop-1280", "one viewport is enough for the resize path")
-  for (const reducedMotion of ["no-preference", "reduce"] as const) {
+// One test per mode: software WebGL on CI draws a few frames per second, so each mode gets its own 120 s budget.
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  test(`Brand hero: ukuran layar berubah saat dijeda tetap menampilkan adegan (${reducedMotion})`, async ({ browser }, info) => {
+    test.skip(info.project.name !== "desktop-1280", "one viewport is enough for the resize path")
+    test.setTimeout(120_000)
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion })
     const page = await ctx.newPage()
     await page.goto(`${APP.replace("app.", "")}/`)
@@ -124,5 +126,5 @@ test("Brand hero: ukuran layar berubah saat dijeda tetap menampilkan adegan", as
     expect(await stage.getAttribute("data-clock"), reducedMotion).toBe(clock)
     expect(await scenePixels(page), `${reducedMotion} back on-screen`).toBeGreaterThan(5000)
     await ctx.close()
-  }
-})
+  })
+}
