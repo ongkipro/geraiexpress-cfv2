@@ -5,7 +5,12 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { vaultFor } from "../../do/gerai-vault/stub"
 import { hostCache, platformHostOf } from "../../host/lookup"
-import { purgeDomain } from "../../hostnames/service"
+import { checkQuota, domainRows, pollHosts, purgeDomain, refreshHost } from "../../hostnames/service"
+import { hit } from "../../auth/throttle"
+import { runDiscountVerifier } from "../../pricing/rules"
+import type { FinanceMessage } from "../../cron/finance"
+
+const probeFetch = (url: string) => fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "user-agent": "GeraiExpress-Probe/1.0" } })
 import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
 import { hostOrigin } from "../../http/request"
@@ -174,6 +179,62 @@ export function registerGeraiAdmin(app: Hono<any>): void {
     }
     await auditStatement(c.env, { actorId: c.get("session").user.id, action: "hostname.delete", targetType: "hostname", targetId: host, tenantId: row.tenant_id, reason, now }).run()
     return ok({ deleted: true })
+  })
+
+  // `Periksa Status Domain` (DEC-244): refresh one hostname, or every pending/failing one plus the Cloudflare quota.
+  r("POST", "/domains/periksa", "owner_aal2", async (c) => {
+    const now = Date.now()
+    const lim = await hit(c.env.DB, `owner-domain-recheck:${c.get("session").user.id}`, 4, 60_000, now)
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum memeriksa domain lagi.")
+    const b = await body(c)
+    const host = typeof b.hostname === "string" && b.hostname ? b.hostname.toLowerCase() : null
+    let checked: number
+    try {
+      if (host) {
+        if (!(await refreshHost(c.env, host, now, { probeFetch }))) throw new AppError(404, "DOMAIN_NOT_FOUND", "Domain tidak ditemukan.")
+        checked = 1
+      } else {
+        checked = await pollHosts(c.env, now, probeFetch)
+        await checkQuota(c.env, now).catch(() => null)
+      }
+    } catch (e) {
+      if (e instanceof CfError) throw new AppError(503, "CF_UNAVAILABLE", "Cloudflare belum bisa dihubungi. Coba lagi nanti.")
+      throw e
+    }
+    await auditStatement(c.env, { actorId: c.get("session").user.id, action: "hostname.recheck", targetType: host ? "hostname" : "platform", targetId: host ?? undefined, reason: "Periksa status domain", metadata: { checked }, now }).run()
+    return ok({ checked, checkedAt: now })
+  })
+
+  // `Sinkron & Periksa Ulang` per gerai (DEC-244): onboarding read-back when unknown, finance sync and discount
+  // verification when connected, custom-domain refresh. Operational reads only — never touches shipments (DEC-209).
+  r("POST", "/gerai/:slug/sinkron", "owner_aal2", async (c) => {
+    const now = Date.now()
+    const t = await c.env.DB.prepare("SELECT t.id, COALESCE(o.onboarding_state, 'not_connected') AS onboarding_state FROM tenants t LEFT JOIN tenant_onboarding o ON o.tenant_id = t.id WHERE t.slug = ?")
+      .bind(c.req.param("slug"))
+      .first<{ id: string; onboarding_state: string }>()
+    if (!t) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
+    const lim = await hit(c.env.DB, `owner-gerai-sync:${t.id}`, 6, 60_000, now)
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum sinkron ulang gerai ini.")
+    let onboardingState = t.onboarding_state
+    if (onboardingState === "registration_unknown") onboardingState = (await reconcileRegistration(c.env, t.id, now)).state
+    // Finance: queue this gerai's regular cron sync (the system runs it in the tenant object) instead of calling the
+    // vault from Super Admin code — a sync may end by paying held batches, which a platform admin must never trigger
+    // directly (DEC-209, non-impersonation scan).
+    let financeSync: "queued" | "skipped" = "skipped"
+    if (onboardingState === "connected" || onboardingState === "byok_connected") {
+      await c.env.FINANCE_SYNC_QUEUE.send({ tenant_id: t.id, trigger: "cron" } satisfies FinanceMessage)
+      financeSync = "queued"
+      await c.env.DB.prepare("UPDATE tenant_discount_rules SET next_check_at = ? WHERE tenant_id = ?").bind(now, t.id).run()
+      await runDiscountVerifier(c.env, now, 1, t.id).catch(() => null)
+    }
+    let domainsChecked = 0
+    try {
+      for (const d of await domainRows(c.env, t.id)) if (await refreshHost(c.env, d.hostname, now, { probeFetch })) domainsChecked++
+    } catch (e) {
+      if (!(e instanceof CfError)) throw e
+    }
+    await auditStatement(c.env, { actorId: c.get("session").user.id, action: "tenant.sync_recheck", targetType: "tenant", targetId: t.id, tenantId: t.id, reason: "Sinkron & periksa ulang gerai", metadata: { onboardingState, financeSync, domainsChecked }, now }).run()
+    return ok({ syncedAt: now, onboardingState, financeSync, domainsChecked })
   })
 
   // Retry provisioning / resolve registration_unknown by read-back (never a blind re-register).

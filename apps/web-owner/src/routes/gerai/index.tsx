@@ -3,22 +3,38 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Input } from "@shared/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@shared/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
-import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
+import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, RecheckButton, ReloadButton, Section, StatusChip } from "../../components/page"
+import { MetricCard, MetricGrid } from "@shared/components/admin/page"
 import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
 
 type Tab = "pengajuan" | "direktori" | "domain"
+const nf = new Intl.NumberFormat("id-ID")
 
 interface AppItem { id: string; business_name: string; slug: string; area: string | null; submitted_at: number; state: string }
 interface GeraiItem { id: string; slug: string; name: string; status: string; onboarding_state: string | null; masking_enabled: number; approved_at: number | null }
+
+interface Summary { pending: number; active: number; suspended: number; onboarding: number }
 
 export function GeraiPage() {
   const { tab } = useSearch({ strict: false }) as { tab?: Tab }
   const navigate = useNavigate()
   const current: Tab = tab ?? "pengajuan"
+  const [tick, setTick] = useState(0)
+  const summary = useApi<Summary>("/gerai/summary")
+  const s = summary.data
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
-      <PageHead title="Gerai" />
+    <div className="flex flex-col gap-4 md:gap-5" key={tick}>
+      <PageHead title="Gerai" description="Pengajuan, direktori, dan domain mitra seluruh gerai.">
+        <ReloadButton onClick={() => { summary.reload(); setTick((t) => t + 1) }} />
+      </PageHead>
+      {/* DEC-244: platform-wide summary strip from /gerai/summary. */}
+      <MetricGrid>
+        <MetricCard label="Pengajuan baru" value={s ? nf.format(s.pending) : "—"} footer="Menunggu ditinjau" tone={s?.pending ? "warn" : undefined} to="/gerai" />
+        <MetricCard label="Gerai aktif" value={s ? nf.format(s.active) : "—"} footer="Mini-site dan ruang kerja aktif" to="/gerai?tab=direktori" />
+        <MetricCard label="Onboarding tertunda" value={s ? nf.format(s.onboarding) : "—"} footer="Pendaftaran seller belum pasti" tone={s?.onboarding ? "warn" : undefined} />
+        <MetricCard label="Gerai dibekukan" value={s ? nf.format(s.suspended) : "—"} footer="Mini-site menjawab 403" />
+      </MetricGrid>
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/gerai", search: { tab: v as Tab } })}>
         <TabsList aria-label="Bagian gerai">
           <TabsTrigger value="pengajuan">Pengajuan Baru</TabsTrigger>
@@ -70,7 +86,7 @@ function Applications() {
               <li key={a.id} className="py-3">
                 <Link to="/gerai/pengajuan/$id" params={{ id: a.id }} className="flex min-h-11 flex-col justify-center">
                   <span className="font-medium text-primary">{a.business_name}</span>
-                  <span className="text-base md:text-sm text-muted-foreground">{a.slug} · {formatDate(a.submitted_at)}</span>
+                  <span className="text-sm text-muted-foreground">{a.slug} · {formatDate(a.submitted_at)}</span>
                 </Link>
               </li>
             ))}
@@ -131,29 +147,64 @@ const DOMAIN_STATE: Record<string, { label: string; tone: "safe" | "warn" | "dan
 function Domains() {
   const { data, error, loading, reload } = useApi<{ items: DomainItem[]; quota: { used: number; allocated: number; checked_at: number } | null }>("/domains")
   const quota = data?.quota ? `Kuota Cloudflare ${data.quota.used}/${data.quota.allocated} · dicek ${formatDate(data.quota.checked_at)}` : "Kuota belum dicek"
+  const done = (d: unknown) => `Pemeriksaan selesai: ${(d as { checked?: number }).checked ?? 0} domain diperiksa.`
   return (
-    <Section title="Domain Mitra" aside={<span className="text-base md:text-sm text-muted-foreground tabular-nums">{quota}</span>}>
+    <Section title="Domain Mitra" aside={<span className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground tabular-nums">{quota}</span><RecheckButton size="sm" label="Periksa Semua Domain" path="/domains/periksa" onDone={reload} done={done} /></span>}>
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
         <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.geraimitra.com. Domain sendiri gerai Pro tampil di sini." />
       ) : (
-        <ul className="flex flex-col divide-y">
-          {data.items.map((d) => {
-            const st = DOMAIN_STATE[d.state] ?? { label: d.state, tone: "warn" as const }
-            return (
-              <li key={d.hostname} className="flex flex-col gap-2 py-3 text-base md:text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono break-all">{d.hostname}</span>
-                  <StatusChip tone={st.tone}>{st.label}</StatusChip>
-                  {d.role === "redirect" ? <span className="text-muted-foreground">www → domain utama</span> : null}
-                </div>
-                <p className="text-muted-foreground">
-                  <Link to="/gerai/$slug" params={{ slug: d.slug }} className="text-primary underline-offset-4 hover:underline">{d.name}</Link> · Cloudflare {d.cf_status ?? "—"} / SSL {d.cf_ssl_status ?? "—"} · probe terakhir {formatDate(d.probe_ok_at)}{d.probe_failures ? ` · gagal ${d.probe_failures}×` : ""}
-                </p>
-                <div><ReasonAction label="Hapus" confirmLabel="Hapus domain" variant="destructive" path={`/domains/${encodeURIComponent(d.hostname)}/delete`} onDone={reload} hint="Menghapus custom hostname di Cloudflare (berhenti ditagih). Mini-site gerai kembali ke alamat bawaan." /></div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200/85 md:block">
+            <Table>
+              <caption className="sr-only">Domain Mitra</caption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Domain</TableHead>
+                  <TableHead>Gerai</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden lg:table-cell">Cloudflare / SSL</TableHead>
+                  <TableHead className="hidden lg:table-cell">Probe terakhir</TableHead>
+                  <TableHead className="text-right"><span className="sr-only">Aksi</span></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.items.map((d) => {
+                  const st = DOMAIN_STATE[d.state] ?? { label: d.state, tone: "warn" as const }
+                  return (
+                    <TableRow key={d.hostname}>
+                      <TableCell><span className="font-mono break-all">{d.hostname}</span>{d.role === "redirect" ? <div className="text-xs text-muted-foreground">www → domain utama</div> : null}</TableCell>
+                      <TableCell><Link to="/gerai/$slug" params={{ slug: d.slug }} className="text-primary underline-offset-4 hover:underline">{d.name}</Link></TableCell>
+                      <TableCell><StatusChip tone={st.tone}>{st.label}</StatusChip></TableCell>
+                      <TableCell className="hidden text-muted-foreground lg:table-cell">{d.cf_status ?? "—"} / {d.cf_ssl_status ?? "—"}</TableCell>
+                      <TableCell className="hidden text-muted-foreground tabular-nums lg:table-cell">{formatDate(d.probe_ok_at)}{d.probe_failures ? ` · gagal ${d.probe_failures}×` : ""}</TableCell>
+                      <TableCell className="text-right">
+                        <span className="inline-flex gap-2">
+                          <RecheckButton size="sm" variant="ghost" label="Periksa Ulang" path="/domains/periksa" body={{ hostname: d.hostname }} onDone={reload} done={done} />
+                          <ReasonAction label="Hapus" confirmLabel="Hapus domain" variant="destructive" path={`/domains/${encodeURIComponent(d.hostname)}/delete`} onDone={reload} hint="Menghapus custom hostname di Cloudflare (berhenti ditagih). Mini-site gerai kembali ke alamat bawaan." />
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          <ul className="flex flex-col divide-y md:hidden">
+            {data.items.map((d) => {
+              const st = DOMAIN_STATE[d.state] ?? { label: d.state, tone: "warn" as const }
+              return (
+                <li key={d.hostname} className="flex flex-col gap-2 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2"><span className="font-mono break-all">{d.hostname}</span><StatusChip tone={st.tone}>{st.label}</StatusChip></div>
+                  <p className="text-xs text-muted-foreground"><Link to="/gerai/$slug" params={{ slug: d.slug }} className="text-primary">{d.name}</Link> · Cloudflare {d.cf_status ?? "—"} / SSL {d.cf_ssl_status ?? "—"}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <RecheckButton size="sm" label="Periksa Ulang" path="/domains/periksa" body={{ hostname: d.hostname }} onDone={reload} done={done} />
+                    <ReasonAction label="Hapus" confirmLabel="Hapus domain" variant="destructive" path={`/domains/${encodeURIComponent(d.hostname)}/delete`} onDone={reload} hint="Menghapus custom hostname di Cloudflare (berhenti ditagih). Mini-site gerai kembali ke alamat bawaan." />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
     </Section>
   )

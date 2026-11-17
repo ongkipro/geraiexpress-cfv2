@@ -2681,6 +2681,40 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Counts for the owner's `Status Operasional` page (DEC-244): stuck shipments, open finance discrepancies, finance
+   * sync state and print-setting review. No PII, no money amounts; the role guard sits on the route.
+   */
+  async statusCounts(tenantId: string): Promise<VaultResult<{ reconciliationNeeded: number; unpaidHold: number; failed24h: number; discrepancies: number; financeLastOkAt: number | null; financeLastRunAt: number | null; financeLastError: string | null; printFormat: string | null; outletReady: boolean; hasCoordinates: boolean }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const one = <T extends Record<string, SqlStorageValue>>(q: string, ...a: SqlStorageValue[]) => sql.exec<T>(q, ...a).one()
+    const ship = one<{ recon: number; hold: number; failed: number }>(
+      "SELECT COALESCE(SUM(dispatch_state = 'reconciliation_needed'), 0) AS recon, COALESCE(SUM(dispatch_state = 'provider_unpaid_hold'), 0) AS hold, COALESCE(SUM(dispatch_state = 'failed' AND updated_at >= ?), 0) AS failed FROM shipments",
+      Date.now() - 24 * 3600_000,
+    )
+    const disc = one<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE resolved_at IS NULL").n
+    const fin = sql.exec<{ ok: number | null; run: number | null; err: string | null }>("SELECT last_ok_at AS ok, last_run_at AS run, last_error AS err FROM finance_sync_state WHERE id = 1").toArray()[0]
+    const print = sql.exec<{ f: string | null }>("SELECT default_label_format AS f FROM tenant_settings LIMIT 1").toArray()[0]
+    const o = sql.exec<{ area: string | null; street: string | null; lat: number | null; lng: number | null }>("SELECT mengantar_area_id AS area, street_address AS street, latitude AS lat, longitude AS lng FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    return {
+      ok: true,
+      value: {
+        reconciliationNeeded: ship.recon,
+        unpaidHold: ship.hold,
+        failed24h: ship.failed,
+        discrepancies: disc,
+        financeLastOkAt: fin?.ok ?? null,
+        financeLastRunAt: fin?.run ?? null,
+        financeLastError: fin?.err ?? null,
+        printFormat: print?.f ?? null,
+        outletReady: !!(o?.area && o.street),
+        hasCoordinates: o?.lat != null && o?.lng != null,
+      },
+    }
+  }
+
   // ---- Backups (TASK-603, ADR-0006 §7) --------------------------------------------------------------------------
 
   /** Daily logical export to R2; skipped when today's (WIB) file exists; prunes files older than 35 days. */

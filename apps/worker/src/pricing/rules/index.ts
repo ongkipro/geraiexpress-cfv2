@@ -248,15 +248,16 @@ export async function recordObservation(env: Env, input: { tenantId: string; ser
  * tenant object (seller key never leaves it) and record the observation per service. Rules of a gerai without an
  * estimate (not connected, fenced key, provider error) still advance their schedule; only the SLA moves them.
  */
-export async function runDiscountVerifier(env: Env, now: number, limitTenants = 20): Promise<{ tenants: number; observed: number }> {
+export async function runDiscountVerifier(env: Env, now: number, limitTenants = 20, onlyTenantId: string | null = null): Promise<{ tenants: number; observed: number }> {
+  // `onlyTenantId` (DEC-244 targeted recheck): verify exactly that gerai, never whichever other one is most overdue.
   const due = (
     await env.DB.prepare(
       `SELECT r.tenant_id, MIN(r.next_check_at) AS due, json_extract(a.outlet_json, '$.areaId') AS area_id
        FROM tenant_discount_rules r JOIN tenants t ON t.id = r.tenant_id AND t.status = 'active'
        LEFT JOIN tenant_applications a ON a.tenant_id = r.tenant_id AND a.state = 'approved'
-       WHERE r.next_check_at IS NOT NULL AND r.next_check_at <= ? GROUP BY r.tenant_id ORDER BY due LIMIT ?`,
+       WHERE r.next_check_at IS NOT NULL AND r.next_check_at <= ?1 AND (?3 IS NULL OR r.tenant_id = ?3) GROUP BY r.tenant_id ORDER BY due LIMIT ?2`,
     )
-      .bind(now, limitTenants)
+      .bind(now, limitTenants, onlyTenantId)
       .all<{ tenant_id: string; area_id: string | null }>()
   ).results
   let observed = 0

@@ -8,7 +8,7 @@ type Legal = { legal_name: string | null; brand_name: string | null; nib: string
 const CSS = `:root{color-scheme:light;--ink:#203551;--muted:#55657D;--line:#E3E8F0;--blue:#2E47BA;--band:#F5F7FB}
 *{box-sizing:border-box}html{font-size:16px;-webkit-text-size-adjust:100%}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#fff;line-height:1.55}
 a{color:var(--blue)}.wrap{max-width:1080px;margin:0 auto;padding-left:20px;padding-right:20px}
-.top{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;min-height:68px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}.brand{font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;min-height:68px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}.brand{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;letter-spacing:-.01em}.brand img{height:22px;width:auto}
 .top nav{display:flex;flex-wrap:wrap;gap:0 18px;max-width:100%}@media(max-width:640px){.top nav{width:100%;order:2}}.top nav a{color:var(--ink);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;white-space:nowrap}.top nav a[aria-current=page]{color:var(--blue);font-weight:600}
 .cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border-radius:8px;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;border:0;font-size:16px;cursor:pointer}
 .cta.ghost{background:#fff;color:var(--blue);border:1px solid var(--blue)}.row{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px}
@@ -38,11 +38,11 @@ function shell(o: { path: string; title: string; description: string; host: stri
   const legalLines = [l?.legal_name, l?.nib ? `NIB ${l.nib}` : null, l?.pse_registration_number ? `Terdaftar PSE ${l.pse_registration_number}` : null, l?.registered_address].filter(Boolean) as string[]
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${e(o.title)} - ${e(brand)}</title><meta name="description" content="${e(o.description)}"><link rel="canonical" href="https://${e(o.host)}${o.path === "/" ? "/" : o.path}">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232E47BA'/%3E%3Cpath d='M9 12l7-4 7 4v9l-7 4-7-4z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 ${o.noindex ? '<meta name="robots" content="noindex">' : ""}<meta property="og:title" content="${e(o.title)} - ${e(brand)}"><meta property="og:description" content="${e(o.description)}"><meta property="og:type" content="website"><meta property="og:url" content="https://${e(o.host)}${o.path}">
 <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: brand, url: `https://${o.host}/`, ...(l?.legal_name ? { legalName: l.legal_name } : {}), ...(l?.support_email ? { email: l.support_email } : {}) }).replace(/</g, "\\u003c")}</script>
 <style>${CSS}</style></head><body>
-<header class="wrap top"><a class="brand" href="/">${e(brand)}</a><nav aria-label="Menu utama">${NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${t}</a>`).join("")}<a href="${e(o.appOrigin)}/masuk">Masuk</a></nav></header>
+<header class="wrap top"><a class="brand" href="/"><img src="/logo.svg" alt="" width="38" height="22">${e(brand)}</a><nav aria-label="Menu utama">${NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${t}</a>`).join("")}<a href="${e(o.appOrigin)}/masuk">Masuk</a></nav></header>
 <main>${o.body}</main>
 <footer><div class="wrap"><nav aria-label="Tautan bawah"><a href="/ketentuan">Ketentuan Layanan</a><a href="/privasi">Kebijakan Privasi</a><a href="/hubungi-kami">Hubungi Kami</a></nav>
 ${legalLines.length ? `<p style="margin:0">${legalLines.map(e).join(" · ")}</p>` : ""}<p style="margin:0">© ${new Date().getUTCFullYear()} ${e(brand)}. Jaringan agen kirim paket multi-ekspedisi.</p></div></footer>${o.script ?? ""}</body></html>`
@@ -139,10 +139,19 @@ const PAGES: Record<string, { title: string; description: string }> = {
   "/privasi": { title: "Kebijakan Privasi", description: "Bagaimana GeraiExpress mengolah data pribadi pengirim dan penerima sesuai UU PDP, termasuk pelacakan publik yang aman dan hak Anda." },
 }
 
+/** Brand files served on the apex from the Gerai app build (one copy of the official logo, DEC-244). */
+const BRAND_FILES: Record<string, string> = { "/logo.svg": "image/svg+xml", "/favicon.svg": "image/svg+xml", "/favicon.ico": "image/x-icon", "/apple-touch-icon.png": "image/png" }
+
 export async function handleBrand(request: Request, env: Env, host: string): Promise<Response> {
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/+$/, "") || "/"
   if (request.method !== "GET" && request.method !== "HEAD") return notFoundHtml()
+  const type = BRAND_FILES[path]
+  if (type) {
+    const res = await env.ASSETS.fetch(new Request(new URL(`/app${path}`, url.origin), { method: request.method }))
+    if (res.status !== 200) return notFoundHtml()
+    return new Response(res.body, { headers: { "content-type": type, "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" } })
+  }
   const apex = env.PLATFORM_APEX
   // One canonical brand host: `www.` redirects permanently to the apex.
   if (host === `www.${apex}`) return new Response(null, { status: 301, headers: { location: `https://${apex}${url.pathname}${url.search}`, "cache-control": "public, max-age=86400" } })

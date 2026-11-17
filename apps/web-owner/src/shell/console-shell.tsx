@@ -2,6 +2,8 @@ import { Outlet, useRouterState } from "@tanstack/react-router"
 import { ActivityIcon, LayoutDashboardIcon, ShieldCheckIcon, StoreIcon, TagIcon } from "lucide-react"
 import { AdminShell, ShellBrand, SidebarStatusCard, type Crumb, type ShellCommand, type ShellNavGroup, type ShellNavItem } from "@shared/components/admin/shell"
 import { StatusBadge } from "@shared/components/admin/page"
+import { OperationalStatusIcon } from "@shared/components/admin/operational-status"
+import { loadOwnerOps, OWNER_OPS_KEY } from "../routes/sistem/page"
 import { api } from "../lib/api"
 
 // Super Admin shell (visual 07 §2, DEC-209, DEC-236, DEC-239, DEC-241): the same AdminShell as Gerai Admin — 5 menus in
@@ -75,6 +77,9 @@ function crumbsOf(path: string, tab: string | undefined): Crumb[] {
   return child ? [{ label: section.label, to: section.to }, { label: child.label }] : [{ label: section.label }]
 }
 
+/** The platform marketing site: the console runs on `owner.<apex>`, the site on `<apex>` (same port locally). */
+const siteHost = () => location.host.replace(/^owner(-staging)?\./, (_m, stg: string | undefined) => (stg ? "staging." : ""))
+
 async function logout() {
   await api("/auth/logout", { body: {} }).catch(() => undefined)
   window.location.assign("/masuk")
@@ -119,7 +124,7 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
   const groups: ShellNavGroup[] = GROUPS.map((g) => ({ label: g.label, items: NAV.filter((n) => g.to.includes(n.to)).map(item) }))
   return (
     <AdminShell
-      brand={<ShellBrand mark="G" title="GeraiExpress" subtitle={`Konsol Platform · ${environment}`} />}
+      brand={<ShellBrand mark="G" logoSrc="/logo.svg" title="GeraiExpress" subtitle={`Konsol Platform · ${environment}`} />}
       navLabel="Menu Super Admin"
       groups={groups}
       commands={COMMANDS}
@@ -132,18 +137,21 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
           ]}
         />
       }
-      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout }}
+      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout, labelFrom: "2xl", externalLinks: [{ label: "Situs Utama GeraiExpress", sublabel: siteHost(), href: `${location.protocol}//${siteHost()}` }] }}
       crumbs={crumbsOf(path, tab)}
       toolbar={
         <>
-          {/* With Ukuran Teks enlarged the badge waits for xl so it never runs into the search at 1024 px (Sol R3);
-              the environment stays in the brand subtitle and the sidebar status block. */}
-          <StatusBadge tone={environment === "Produksi" ? "danger" : "muted"} className="in-data-text:hidden xl:in-data-text:inline-flex">{environment}</StatusBadge>
+          {/* The badge waits for xl at every text size so the right track never runs into the search, now that it also
+              holds the status icon (DEC-243 Sol R3, DEC-244; measured ≥ 48 px clear at 1280 px / 125 %). Below xl the
+              environment stays in the brand subtitle and the sidebar status block. */}
+          <StatusBadge tone={environment === "Produksi" ? "danger" : "muted"} className="hidden xl:inline-flex">{environment}</StatusBadge>
           {/* TOTP state also sits in the sidebar status block and the account menu; the topbar repeats it only where
               the right track has room (DEC-243 grid header, Sol R1 #1). */}
           <StatusBadge tone="safe" className="hidden 2xl:inline-flex">
             TOTP aktif
           </StatusBadge>
+          {/* DEC-244: platform health at a glance (cached 5 min, refreshed by `Periksa Ulang` on Sistem & Audit). */}
+          <OperationalStatusIcon to="/sistem" cacheKey={OWNER_OPS_KEY} load={loadOwnerOps} active={path === "/sistem" && (tab ?? "kesehatan") === "kesehatan"} />
         </>
       }
     >

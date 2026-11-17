@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpRightIcon, BellIcon, CalculatorIcon, ContactIcon, HomeIcon, MoreHorizontalIcon, PackageIcon, PlusIcon, QrCodeIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, TruckIcon, WalletIcon } from "lucide-react"
+import { ActivityIcon, BellIcon, GlobeIcon, CalculatorIcon, ContactIcon, HomeIcon, MoreHorizontalIcon, PackageIcon, PlusIcon, QrCodeIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, TruckIcon, WalletIcon } from "lucide-react"
 import { AdminShell, ShellBrand, SidebarStatusCard, type Crumb, type ShellCommand, type ShellNavGroup, type ShellNavItem } from "../components/admin/shell"
 import { FORMAT_LABEL, type Format } from "../print/print"
 import { CalloutAlert } from "../components/admin/page"
@@ -9,6 +9,8 @@ import { useSidebar } from "../components/ui/sidebar"
 import { api } from "../lib/api"
 import { COUNTER_STATUS_EVENT, useWorkspace } from "./workspace"
 import { LinkButton } from "../components/admin/link-button"
+import { OperationalStatusIcon } from "../components/admin/operational-status"
+import { loadGeraiOps, opsCacheKey } from "../routes/status/page"
 
 // Gerai workspace shell (visual 07 §1, DEC-213/225, DEC-236, DEC-239, DEC-241): the shared AdminShell — menus in three
 // groups (Keuangan owner only), `+ Kiriman Baru` + `Scan QR` as the sidebar quick-action row, counter status at the
@@ -133,6 +135,7 @@ const SECTIONS: Array<[RegExp, Crumb[]]> = [
   [/^\/notifikasi/, [{ label: "Notifikasi" }]],
   [/^\/akun/, [{ label: "Akun Saya" }]],
   [/^\/bantuan/, [{ label: "Bantuan & Panduan" }]],
+  [/^\/status/, [{ label: "Status Operasional" }]],
 ]
 
 const SETTINGS_TITLE: Record<string, string> = {
@@ -177,7 +180,7 @@ const GROUPS: Array<{ label: string; keys: string[] }> = [
 ]
 
 /** ⌘K commands: every menu and sub-tree screen the role sees, plus the counter tasks operators type for. */
-export function commandsFor(menus: string[]): ShellCommand[] {
+export function commandsFor(menus: string[], owner = false): ShellCommand[] {
   const out: ShellCommand[] = []
   for (const n of NAV) {
     if (!menus.includes(n.menu)) continue
@@ -188,6 +191,7 @@ export function commandsFor(menus: string[]): ShellCommand[] {
   out.push(
     { label: "Lacak INV, AWB atau HP", description: "Cek Resi", group: "Tugas", to: "/kasir/cek-resi", keywords: "cari resi awb inv lacak", icon: SearchIcon },
     { label: "Notifikasi", group: "Tugas", to: "/notifikasi", icon: BellIcon },
+    ...(owner ? [{ label: "Status Operasional", description: "Kesehatan & kesiapan gerai", group: "Tugas", to: "/status", keywords: "status kesehatan health periksa ulang webhook sinkron", icon: ActivityIcon }] : []),
   )
   return out
 }
@@ -210,6 +214,7 @@ function CounterStatus({ owner }: { owner: boolean }) {
   return (
     <SidebarStatusCard
       title="Status loket"
+      link={owner ? { to: "/status", label: "Lihat status" } : undefined}
       rows={[
         { label: "Label", value: format ? FORMAT_LABEL[format] : "—", tone: format ? "safe" : "muted" },
         ...(owner ? [{ label: "Mengantar", ...mengantar }] : []),
@@ -248,17 +253,17 @@ export function AppShell() {
       : undefined,
   })
   const groups: ShellNavGroup[] = GROUPS.map((g) => ({ label: g.label, items: NAV.filter((n) => g.keys.includes(n.key) && w.menus.includes(n.menu)).map(item) })).filter((g) => g.items.length)
-  const commands = useMemo(() => commandsFor(w.menus), [w.menus])
+  const owner = w.role === "gerai_admin"
+  const commands = useMemo(() => commandsFor(w.menus, owner), [w.menus, owner])
 
   const toolbar = (
     <>
-      <a href={`https://${w.tenant.miniSiteHost}`} target="_blank" rel="noreferrer" className="hidden h-8 items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/60 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 2xl:inline-flex">
-        Lihat Mini-Site <ArrowUpRightIcon aria-hidden className="size-3.5" />
-      </a>
       {/* Phones only: the sidebar (with its QR button) is a Sheet there, so the topbar carries the scan shortcut. */}
       <Button variant="ghost" size="icon" aria-label="Pindai QR" className="text-slate-500 md:hidden" onClick={() => navigate({ to: "/kasir" })}>
         <QrCodeIcon aria-hidden />
       </Button>
+      {/* DEC-244: owner only — Kasir never renders it nor calls /status. */}
+      {owner ? <OperationalStatusIcon to="/status" cacheKey={opsCacheKey(w.tenant.id)} load={loadGeraiOps} active={path === "/status"} /> : null}
       <LinkButton variant="ghost" size="icon" className="relative rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label={w.badges.notifications ? `Notifikasi, ${w.badges.notifications} belum dibaca` : "Notifikasi"} to="/notifikasi">
         <BellIcon aria-hidden />
         {w.badges.notifications ? (
@@ -295,7 +300,16 @@ export function AppShell() {
       navLabel="Menu utama"
       groups={groups}
       commands={commands}
-      user={{ name: w.user.name, email: w.user.email, role: w.role === "gerai_admin" ? "Pemilik" : "Kasir", onLogout: logout, profileTo: "/akun", helpTo: "/bantuan" }}
+      user={{
+        name: w.user.name,
+        email: w.user.email,
+        role: `${w.role === "gerai_admin" ? "Pemilik" : "Kasir"} · ${w.tenant.name}`,
+        onLogout: logout,
+        profileTo: "/akun",
+        helpTo: "/bantuan",
+        // DEC-244: the gerai's customer-facing mini-site, on every screen size (the topbar pill is gone).
+        externalLinks: [{ label: "Halaman Publik Gerai", sublabel: w.tenant.miniSiteHost, href: `https://${w.tenant.miniSiteHost}`, icon: GlobeIcon }],
+      }}
       crumbs={crumbsOf(path, tabStr)}
       toolbar={toolbar}
       bottomBar={commitFlow ? undefined : <BottomBar path={path} kiriman={w.badges.kiriman} />}

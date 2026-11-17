@@ -4,6 +4,7 @@ import { AdminBarChart } from "@shared/components/admin/bar-chart"
 import { EmptyState, ErrorState, LoadingState, MetricCard, MetricGrid, PageHeader, SectionCard, type StatusTone } from "@shared/components/admin/page"
 import { formatDate } from "../../components/page"
 import { useApi } from "../../lib/use-api"
+import { ReloadButton } from "../../components/page"
 import { LinkButton } from "@shared/components/admin/link-button"
 
 // Super Admin `Ringkasan` (visual 07 §3.3, DEC-236): the same MetricCard / SectionCard / bar chart as the Gerai
@@ -57,7 +58,11 @@ interface Attention {
 
 export function RingkasanPage() {
   const { data, error, loading, reload } = useApi<Overview>("/overview")
-  const header = <PageHeader title="Ringkasan" description="Semua gerai · waktu WIB" />
+  const header = (
+    <PageHeader title="Ringkasan" description="Semua gerai · waktu WIB">
+      <ReloadButton onClick={reload} />
+    </PageHeader>
+  )
   if (loading) return <div>{header}<LoadingState label="Memuat ringkasan" rows={4} /></div>
   if (error || !data) return <div>{header}<ErrorState message={error ?? "Gagal memuat ringkasan."} onRetry={reload} /></div>
   const k = data.kpi

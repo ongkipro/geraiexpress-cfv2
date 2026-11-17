@@ -868,3 +868,29 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   112 % and 125 % at 1024/1280/1536; mutations M38–M39 red.
 - R4 APPROVE. Integrated run `DEC-243` PASS 9/9 (r2 failed once on `minisite.spec.ts` tablet under load and passed on
   rerun); UI gates 0 fail on 45 routes (`docs/evidence/DEC-243/ui-gates.txt`).
+
+## 2026-11-17 — DEC-244 operational health, account links, Select, Super Admin recheck, logo
+
+- Worker: `status/gerai.ts` pure verdict builder (setup vs problem); vault `statusCounts`; `GET /api/app/status` +
+  `POST /api/app/status/recheck` (`app_owner`, 6/min). Owner: `platformHealth()` (signals + icon) behind
+  `/sistem/kesehatan` and `POST /sistem/kesehatan/periksa`; `POST /tarif/verifikasi-ulang`; `POST /gerai/:slug/sinkron`;
+  `POST /domains/periksa`; `POST /pengawasan/sinkron-keuangan` — all `owner_aal2`, rate-limited, audited.
+- UI: shared `OperationalStatusIcon` (cache 5 min, event-updated); Gerai `/status` page; `AccountMenu.externalLinks`;
+  `SidebarStatusCard.link`; `Select` restyle + `alignItemWithTrigger=false`; console `RecheckButton` / `ReloadButton`;
+  Gerai, detail, pengajuan, Tarif, Tarif gerai, Pengawasan, Sistem rebuilt on SectionCard / MetricGrid / tables.
+- Logo: `apps/web-{app,owner}/public/{logo.svg,favicon.svg,favicon.ico,apple-touch-icon.png}` (white / navy tile),
+  `<link rel=icon>` in both index.html, console `ShellBrand logoSrc`, `AuthCard` logo, brand site serves the files
+  from `/app/*` and drops the data-URI favicon; mini-sites unchanged (white-label).
+- Proof: worker `test/status` (4), `test/admin/recheck` (7), `test/spa` brand files; e2e DEC-244 ×2; M40–M44.
+- Gate r1 FAIL (non-impersonation scan: Super Admin code called `vault.financeSync`) → per-gerai sync now queues the
+  tenant's cron finance sync. Sol R1 REQUEST_CHANGES: targeted verifier could process another gerai (P1), duplicate
+  editor ids on phone (P2), pale Select border (P2) — fixed with tests and mutations M45–M47.
+- Sol R2 APPROVE. Gate r2 caught the owner status icon pushing the topbar right zone 0.5 px into the search at
+  1024 px / 125 % text → search track 220–320 px at enlarged text below xl; console env badge from xl at every text size,
+  console account name from 2xl (M48). The :55190 preview is restarted after each rebuild (wrangler dev loses its asset view when the
+  build empties `dist/`).
+- Final gate failed twice on `kendala.spec.ts` (signup refused): the e2e fixture derived each test's simulated IP from
+  only the test id's first char and length, so 8 admin-shell desktop tests and kendala shared one IP; the DEC-244
+  shell tests' extra signups exhausted the 10-OTP/hour limit. `e2e/fixtures.ts` now FNV-hashes the whole test id.
+- Gate r3 then failed on the packing-select geometry by 0.47 px: the popup was measured mid zoom-in. The test now waits
+  for `data-open` and a settled box (4/4 repeats; mutation M41 still red).

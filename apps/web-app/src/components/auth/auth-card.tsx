@@ -4,7 +4,11 @@ import type { ReactNode } from "react"
 export function AuthCard({ title, description, children, footer }: { title: string; description?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted px-4 py-10">
-      <p className="text-lg font-semibold text-primary">GeraiExpress</p>
+      {/* DEC-244 brand mark (official vector logo); the word stays text for screen readers and search. */}
+      <p className="flex items-center gap-2.5 text-lg font-semibold text-[#012676]">
+        <img src="/logo.svg" alt="" width={54} height={32} className="h-8 w-auto" />
+        GeraiExpress
+      </p>
       <section className="flex w-full max-w-[440px] flex-col gap-6 rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-2">
           <h1 className="text-[28px] leading-tight font-semibold">{title}</h1>

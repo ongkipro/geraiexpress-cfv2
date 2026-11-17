@@ -51,6 +51,9 @@ deferred to post-launch (TASK-704): no menu, command or status row; `/kasir/shif
 | **6** | **`Keuangan`** | Sidebar tree = in-page tabs (`?tab=`, DEC-241): `Ringkasan & Saldo` · `Mutasi Mengantar` · `Laba per Kiriman` · `Cadangan Retur` · `Selisih Sync` (`Kas Loket & Shift` deferred with Shift Loket, TASK-704) | **✓ (Exclusive)** | **✗ (Hidden & API-blocked)** | Dual-book accounting: local counter cash/QRIS + precision sync with Mengantar `GET /invoices` (`09-MENGANTAR-FINANCIAL-SYNC-AND-RECONCILIATION.md`). |
 | **7** | **`Pengaturan`** | `/pengaturan` · Settings sub-menu (DEC-223): **Gerai** `Profil Gerai` · `Mini-Site` · `Data Usaha` — **Operasional** `Ekspedisi Aktif` · `Printer & Struk` · `Packing & Biaya Tambahan` — **Akun & Akses** `Anggota` · `Mengantar` · `API & MCP` (`/pengaturan/<item>`) | **✓ (Full)** | Printer Bluetooth pair/test modal only | Configure `<slug>.geraimitra.com` + QR poster, toggle active couriers, set cardboard prices, manage staff invites, and issue OpenAPI/MCP keys. |
 
+Owner-only `/status` (`Status Operasional`, DEC-244) sits outside the menus: topbar icon beside the bell, `⌘K`, and the
+sidebar status link; API `GET /api/app/status`, `POST /api/app/status/recheck` (`app_owner`, recheck 6/min).
+
 Auth, onboarding, detail and sub-routes for every menu, with page content and role differences: `docs/visual/07-APP-SHELL-NAVIGATION-AND-PAGE-INVENTORY.md` §3.
 
 ---
@@ -62,6 +65,7 @@ All routes require `aal2` TOTP verification and enforce strict non-impersonation
 | # | Indonesian Menu | Route & In-Page Tabs | Core Platform Governance Responsibilities |
 |---:|---|---|---|
 | **1** | **`Ringkasan`** | `/` | Network-wide shipment volume, active outlets, pending applications, Mengantar webhook/sync health, and variance alerts. |
+| | *Recheck actions (DEC-244, `owner_aal2`, rate-limited, audited)* | `POST /sistem/kesehatan/periksa` · `POST /tarif/verifikasi-ulang` · `POST /gerai/:slug/sinkron` · `POST /domains/periksa` · `POST /pengawasan/sinkron-keuangan` | Operational reads and scheduled-job triggers only; none creates, pays, edits or cancels a gerai shipment (DEC-209). |
 | **2** | **`Gerai`** | `/gerai` · Tabs = sidebar sub-tree (DEC-241): `Pengajuan Baru` · `Direktori Gerai` · `Domain Mitra (*.geraimitra.com)` | Review applications → **`Setujui & Buka Akun Seller Mengantar`**, monitor per-outlet health/RTS %, toggle `Masking Aktif`, freeze outlets, inspect Cloudflare for SaaS SSL status. |
 | **3** | **`Tarif & Kurir`** | `/tarif` · Tabs = sidebar sub-tree (DEC-241): `Diskon & Cashback` · `Permintaan Mengantar` · `Kebijakan Diskon` | Set per-outlet × courier/service integer `bps` discounts & cashback (ceiling `max_discount_bps`, default 30 %; each rule verified against the observed Mengantar discount, DEC-230); maintain courier volumetric divisors, COD caps, and claim deadlines. |
 | **4** | **`Pengawasan`** | `/pengawasan` · Tabs = sidebar sub-tree (DEC-241): `Pantauan Kiriman` · `Radar Risiko COD` | Search any `INV` or AWB across tenants, monitor `reconciliation_needed` / `provider_unpaid_hold` / sync-mismatch queues, and audit cross-outlet COD phone RTS scores. |

@@ -28,6 +28,7 @@ import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
 import { CNAME_TARGET, domainRows, primaryHost, purgeHost, refreshHost, remedyOf, requestDomain } from "../hostnames/service"
 import { CfError } from "../hostnames/cloudflare"
 import { hit } from "../auth/throttle"
+import { buildGeraiStatus } from "../status/gerai"
 import { platformHostOf } from "../host/lookup"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { templateCsv } from "@gx/domain/bulk"
@@ -853,6 +854,42 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     ])
     if ((res[0]?.meta.changes ?? 0) === 0) throw new AppError(404, "MEMBER_NOT_FOUND", "Anggota tidak ditemukan atau sudah dicabut.")
     return ok({ revoked: true })
+  })
+
+  // `Status Operasional` (DEC-244): owner-only verdict + checklist + signals; Kasir never reaches it (app_owner).
+  const statusView = async (c: AppCtx) => {
+    const m = c.get("membership")!
+    const vault = vaultFor(c.env, m.tenantId)
+    const t = now()
+    const [conn, hook, health, counts, domains, host] = await Promise.all([vault.connectionView(m.tenantId), vault.webhookStatus(m.tenantId), vault.healthSnapshot(m.tenantId, t), vault.statusCounts(m.tenantId), domainRows(c.env, m.tenantId), primaryHost(c.env, m.tenantId, m.tenantSlug)])
+    return buildGeraiStatus({
+      now: t,
+      onboardingState: conn.ok ? (conn.value?.onboardingState ?? null) : null,
+      webhookState: hook.ok ? (hook.value?.webhookState ?? null) : null,
+      webhookLastEventAt: hook.ok ? (hook.value?.lastEventAt ?? null) : null,
+      health: health.ok ? health.value : null,
+      counts: counts.ok ? counts.value : null,
+      miniSiteHost: host,
+      domains: domains.map((d) => ({ hostname: d.hostname, state: d.state, lastCheckedAt: d.last_checked_at })),
+    })
+  }
+  r("GET", "/status", "app_owner", "role", async (c) => ok(await statusView(c)))
+  // `Periksa Ulang`: a real live check — finance sync (when connected) and custom-domain refresh — then the fresh view.
+  r("POST", "/status/recheck", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const lim = await hit(c.env.DB, `status-recheck:${m.tenantId}`, 6, 60_000, now())
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum memeriksa ulang.")
+    const vault = vaultFor(c.env, m.tenantId)
+    const conn = await vault.connectionView(m.tenantId)
+    const connected = conn.ok && (conn.value?.onboardingState === "connected" || conn.value?.onboardingState === "byok_connected")
+    if (connected) await vault.financeSync(m.tenantId, "manual", now())
+    try {
+      for (const d of await domainRows(c.env, m.tenantId)) await refreshHost(c.env, d.hostname, now(), { probeFetch: (u) => fetch(u, { redirect: "manual", signal: AbortSignal.timeout(10_000) }) })
+    } catch (e) {
+      if (!(e instanceof CfError)) throw e
+      // Cloudflare unavailable: the domain card keeps its last state; the rest of the check still answers.
+    }
+    return ok(await statusView(c))
   })
 
   r("GET", "/print/settings", "app_member", "role", async (c) => {

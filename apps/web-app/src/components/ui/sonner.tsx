@@ -43,3 +43,5 @@ const Toaster = ({ ...props }: ToasterProps) => {
 }
 
 export { Toaster }
+// One toast API for both consoles (web-owner imports it through `@shared`, without its own sonner dependency).
+export { toast } from "sonner"

@@ -56,4 +56,22 @@ describe("SPA shells via ASSETS (spec 07 §3.1)", () => {
   it("rejects unsafe methods on SPA hosts", async () => {
     expect((await exports.default.fetch(`${APP}/`, { method: "POST" })).status).toBe(405)
   })
+
+  it("DEC-244 brand files: white favicon on app, navy favicon on owner, logo on both and on the brand apex", async () => {
+    const appFav = await (await exports.default.fetch(`${APP}/favicon.svg`)).text()
+    const ownerFav = await (await exports.default.fetch(`${OWNER}/favicon.svg`)).text()
+    expect(appFav).toContain('fill="#fff"')
+    expect(ownerFav).toContain('fill="#012676"')
+    for (const origin of [APP, OWNER, "http://geraiexpress.localhost:8787"]) {
+      const logo = await exports.default.fetch(`${origin}/logo.svg`)
+      expect(logo.status, origin).toBe(200)
+      expect(await logo.text()).toContain('viewBox="0 0 1044 618"')
+      expect((await exports.default.fetch(`${origin}/favicon.ico`)).status, origin).toBe(200)
+    }
+    const shell = await (await exports.default.fetch(`${APP}/`)).text()
+    expect(shell).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg"')
+    const brand = await (await exports.default.fetch("http://geraiexpress.localhost:8787/")).text()
+    expect(brand).toContain('<img src="/logo.svg"')
+    expect(brand).not.toContain("data:image/svg+xml")
+  })
 })

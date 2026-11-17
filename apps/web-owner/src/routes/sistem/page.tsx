@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
+import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
+import { DataTableShell } from "@shared/components/admin/data-table"
+import { rememberOpsStatus, type OpsIcon } from "@shared/components/admin/operational-status"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Button } from "@shared/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
-import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
+import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, RecheckButton, ReloadButton, Section, StatusChip } from "../../components/page"
 import { api, ApiError } from "../../lib/api"
 import { useApi } from "../../lib/use-api"
 import { Textarea } from "@shared/components/ui/textarea"
@@ -22,7 +25,7 @@ export function SistemPage() {
   const current: Tab = tab ?? "kesehatan"
   return (
     <div className="flex flex-col gap-4 md:gap-5">
-      <PageHead title="Sistem & Audit" />
+      <PageHead title="Sistem & Audit" description="Kesehatan integrasi, log audit, akses admin, dan profil perusahaan." />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/sistem", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList aria-label="Bagian sistem">
@@ -38,6 +41,7 @@ export function SistemPage() {
   )
 }
 
+interface Signal { id: string; title: string; state: "healthy" | "degraded" | "unknown"; detail: string; lastAt: number | null }
 interface HealthData {
   relay: { transport: string; reachable: boolean | null; latencyMs: number | null }
   partnerQuota: { minute: number; day: number } | null
@@ -45,36 +49,80 @@ interface HealthData {
   onboarding: Array<{ onboarding_state: string; n: number }>
   email: Array<{ state: string; n: number }>
   tenantsInRecovery: number
+  signals: Signal[]
+  overall: { tone: "healthy" | "problem"; title: string; checkedAt: number }
+  icon: OpsIcon
 }
+export const OWNER_OPS_KEY = "gx:ops-status:owner:v1"
+export const loadOwnerOps = async (): Promise<OpsIcon | null> => (await api<HealthData>("/sistem/kesehatan")).icon
+const SIG: Record<Signal["state"], { tone: "safe" | "danger" | "muted"; label: string }> = { healthy: { tone: "safe", label: "Sehat" }, degraded: { tone: "danger", label: "Perlu dicek" }, unknown: { tone: "muted", label: "Belum ada data" } }
 
+// `Kesehatan & Relay` (DEC-244, AdsBookCMS OperationalStatus): verdict banner + `Periksa Ulang Semua Sinyal` (runs the
+// operator checks now and refreshes the topbar icon), five signal cards, the raw counters, and seller key rotation.
 function Health() {
   const { data, error, loading, reload } = useApi<HealthData>("/sistem/kesehatan")
-  if (loading) return <LoadingBlock />
-  if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat."} onRetry={reload} />
-  const relay = data.relay.reachable === null ? { tone: "muted" as const, label: data.relay.transport === "relay" ? "Belum diperiksa" : "Langsung (tanpa relay)" } : data.relay.reachable ? { tone: "safe" as const, label: `Terjangkau · ${data.relay.latencyMs} ms` } : { tone: "danger" as const, label: "Relay tidak terjangkau" }
+  const [fresh, setFresh] = useState<HealthData | null>(null)
+  const d = fresh ?? data
+  useEffect(() => {
+    if (data?.icon) rememberOpsStatus(OWNER_OPS_KEY, data.icon)
+  }, [data])
+  if (loading && !d) return <LoadingBlock />
+  if ((error || !data) && !d) return <ErrorBlock message={error ?? "Gagal memuat."} onRetry={reload} />
+  const h = d!
+  const problem = h.overall.tone === "problem"
   return (
-    <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
-      <Section title="Mengantar Partner API">
-        <dl className="flex flex-col gap-3 text-base md:text-sm">
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Jalur</dt><dd><StatusChip tone={relay.tone}>{relay.label}</StatusChip></dd></div>
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Kuota menit ini</dt><dd className="tabular-nums">{data.partnerQuota?.minute ?? "—"} / {data.partnerLimits.perMinute}</dd></div>
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Pendaftaran seller hari ini</dt><dd className="tabular-nums">{data.partnerQuota?.day ?? "—"} / {data.partnerLimits.registrationsPerDay}</dd></div>
-        </dl>
-      </Section>
-      <Section title="Data gerai & email">
-        <dl className="flex flex-col gap-3 text-base md:text-sm">
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Gerai dalam pemulihan</dt><dd className="tabular-nums">{data.tenantsInRecovery}</dd></div>
-          {data.onboarding.map((o) => (
-            <div key={o.onboarding_state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Seller: {ONBOARDING_LABEL[o.onboarding_state]?.label ?? o.onboarding_state}</dt><dd className="tabular-nums">{o.n}</dd></div>
-          ))}
-          {data.email.map((e) => (
-            <div key={e.state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Email 7 hari: {EMAIL_STATE[e.state] ?? e.state}</dt><dd className="tabular-nums">{e.n}</dd></div>
-          ))}
-        </dl>
-      </Section>
-      <Section title="Rotasi Kunci Seller">
-        <RotateKey />
-      </Section>
+    <div className="flex flex-col gap-4 md:gap-5">
+      <section aria-labelledby="sys-verdict" className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-4 md:p-5 ${problem ? "border-rose-200 bg-rose-50/60" : "border-emerald-200 bg-emerald-50/60"}`}>
+        <div className="flex min-w-0 items-start gap-3">
+          <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-full ${problem ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{problem ? <TriangleAlertIcon className="size-5" /> : <CircleCheckIcon className="size-5" />}</span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 id="sys-verdict" className="text-base font-semibold text-slate-950">{h.overall.title}</h2>
+            <p className="text-xs text-muted-foreground">Diperiksa {formatDate(h.overall.checkedAt)}</p>
+          </div>
+        </div>
+        <RecheckButton
+          label="Periksa Ulang Semua Sinyal"
+          path="/sistem/kesehatan/periksa"
+          onDone={(x) => {
+            const v = x as HealthData
+            setFresh(v)
+            rememberOpsStatus(OWNER_OPS_KEY, v.icon)
+          }}
+          done={(x) => ((x as HealthData).overall.tone === "problem" ? `Selesai: ${(x as HealthData).overall.title}.` : "Selesai: semua sinyal sehat.")}
+        />
+      </section>
+      <div className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
+        {h.signals.map((x) => (
+          <article key={x.id} aria-labelledby={`sig-${x.id}`} className="flex flex-col gap-2 rounded-xl border border-slate-200/85 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] md:p-5">
+            <div className="flex items-start justify-between gap-2"><h3 id={`sig-${x.id}`} className="text-sm font-semibold text-slate-950">{x.title}</h3><StatusChip tone={SIG[x.state].tone}>{SIG[x.state].label}</StatusChip></div>
+            <p className="text-sm text-slate-700">{x.detail}</p>
+            {x.lastAt ? <p className="mt-auto text-xs text-muted-foreground">Terakhir {formatDate(x.lastAt)}</p> : null}
+          </article>
+        ))}
+      </div>
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
+        <Section title="Mengantar Partner API">
+          <dl className="flex flex-col gap-3 text-sm">
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Jalur</dt><dd>{h.relay.reachable === null ? (h.relay.transport === "relay" ? "Belum diperiksa" : "Langsung (tanpa relay)") : h.relay.reachable ? `Terjangkau · ${h.relay.latencyMs} ms` : "Relay tidak terjangkau"}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Kuota menit ini</dt><dd className="tabular-nums">{h.partnerQuota?.minute ?? "—"} / {h.partnerLimits.perMinute}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Pendaftaran seller hari ini</dt><dd className="tabular-nums">{h.partnerQuota?.day ?? "—"} / {h.partnerLimits.registrationsPerDay}</dd></div>
+          </dl>
+        </Section>
+        <Section title="Data gerai & email">
+          <dl className="flex flex-col gap-3 text-sm">
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Gerai dalam pemulihan</dt><dd className="tabular-nums">{h.tenantsInRecovery}</dd></div>
+            {h.onboarding.map((o) => (
+              <div key={o.onboarding_state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Seller: {ONBOARDING_LABEL[o.onboarding_state]?.label ?? o.onboarding_state}</dt><dd className="tabular-nums">{o.n}</dd></div>
+            ))}
+            {h.email.map((e) => (
+              <div key={e.state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Email 7 hari: {EMAIL_STATE[e.state] ?? e.state}</dt><dd className="tabular-nums">{e.n}</dd></div>
+            ))}
+          </dl>
+        </Section>
+        <Section title="Rotasi Kunci Seller">
+          <RotateKey />
+        </Section>
+      </div>
     </div>
   )
 }
@@ -107,7 +155,7 @@ function RotateKey() {
   }
   return (
     <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-      <p className="text-base md:text-sm text-muted-foreground">Gunakan bila kunci API seller diduga bocor. Pengiriman gerai dijeda sebentar selama rotasi.</p>
+      <p className="text-sm text-muted-foreground">Gunakan bila kunci API seller diduga bocor. Pengiriman gerai dijeda sebentar selama rotasi.</p>
       <Field>
         <FieldLabel htmlFor="rot-slug">Alamat gerai</FieldLabel>
         <Input id="rot-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="berkahjaya" autoComplete="off" />
@@ -117,7 +165,7 @@ function RotateKey() {
         <Textarea id="rot-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
       </Field>
       <div><Button type="submit" variant="destructive" disabled={pending || slug.trim().length < 3 || reason.trim().length < 5}>{pending ? "Memproses…" : "Rotasi Kunci Seller"}</Button></div>
-      {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
+      {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-sm font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
     </form>
   )
 }
@@ -131,25 +179,35 @@ function AuditLog() {
   const { data, error, loading, reload } = useApi<{ items: AuditRow[] }>(path)
   const needsTotp = error?.includes("TOTP") || error?.toLowerCase().includes("verifikasi")
   return (
-    <Section title="Log audit">
+    <Section title="Log audit" aside={<ReloadButton size="sm" onClick={reload} />}>
       <form onSubmit={(e) => { e.preventDefault(); setPath(`/sistem/audit?action=${encodeURIComponent(action)}&tenant=${encodeURIComponent(tenant)}`) }} className="mb-4 grid gap-3 sm:grid-cols-3 sm:items-end" role="search">
         <Field><FieldLabel htmlFor="f-aksi">Aksi (awalan)</FieldLabel><Input id="f-aksi" value={action} onChange={(e) => setAction(e.target.value)} placeholder="pricing." /></Field>
         <Field><FieldLabel htmlFor="f-gerai">Gerai</FieldLabel><Input id="f-gerai" value={tenant} onChange={(e) => setTenant(e.target.value)} placeholder="berkahjaya" /></Field>
         <Button type="submit" variant="outline">Terapkan</Button>
       </form>
       {loading ? <LoadingBlock /> : error ? (
-        needsTotp ? <div className="flex flex-col items-start gap-3"><p className="text-base md:text-sm">Melihat log audit butuh verifikasi TOTP terbaru.</p><Button onClick={() => totpRedirect("/sistem?tab=audit")}>Verifikasi TOTP</Button></div> : <ErrorBlock message={error} onRetry={reload} />
+        needsTotp ? <div className="flex flex-col items-start gap-3"><p className="text-sm">Melihat log audit butuh verifikasi TOTP terbaru.</p><Button onClick={() => totpRedirect("/sistem?tab=audit")}>Verifikasi TOTP</Button></div> : <ErrorBlock message={error} onRetry={reload} />
       ) : !data?.items.length ? (
         <EmptyBlock title="Tidak ada catatan" body="Coba ubah filter." />
       ) : (
-        <ul className="divide-y">
-          {data.items.map((a) => (
-            <li key={a.id} className="flex flex-col gap-1 py-3 text-base md:text-sm">
-              <span className="flex flex-wrap justify-between gap-2"><span className="font-medium">{a.action}</span><span className="text-muted-foreground tabular-nums">{formatDate(a.at)}</span></span>
-              <span className="text-muted-foreground">{a.actor_name ?? a.actor_type}{a.tenant_slug ? ` · ${a.tenant_slug}` : ""}{a.reason ? ` · “${a.reason}”` : ""}</span>
-            </li>
-          ))}
-        </ul>
+        <DataTableShell
+          caption="Log audit"
+          rows={data.items}
+          rowKey={(a) => a.id}
+          columns={[
+            { key: "aksi", header: "Aksi", cell: (a) => <span className="font-mono text-xs">{a.action}</span> },
+            { key: "pelaku", header: "Pelaku", cell: (a) => a.actor_name ?? a.actor_type },
+            { key: "gerai", header: "Gerai", cell: (a) => a.tenant_slug ?? "—" },
+            { key: "alasan", header: "Alasan", cell: (a) => <span className="text-muted-foreground">{a.reason ?? "—"}</span>, wide: true },
+            { key: "waktu", header: "Waktu", align: "right", cell: (a) => <span className="text-muted-foreground">{formatDate(a.at)}</span> },
+          ]}
+          mobile={(a) => (
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="flex flex-wrap justify-between gap-2"><span className="font-mono text-xs font-medium">{a.action}</span><span className="text-xs text-muted-foreground tabular-nums">{formatDate(a.at)}</span></span>
+              <span className="text-xs text-muted-foreground">{a.actor_name ?? a.actor_type}{a.tenant_slug ? ` · ${a.tenant_slug}` : ""}{a.reason ? ` · “${a.reason}”` : ""}</span>
+            </div>
+          )}
+        />
       )}
     </Section>
   )
@@ -162,18 +220,18 @@ function Admins() {
   if (loading) return <LoadingBlock />
   if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat."} onRetry={reload} />
   return (
-    <Section title="Super Admin">
-      <ul className="divide-y">
-        {data.items.map((a) => (
-          <li key={a.user_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-base md:text-sm">
-            <span className="flex flex-col"><span className="font-medium">{a.name}{a.user_id === data.me ? " (Anda)" : ""}</span><span className="text-muted-foreground">{a.email}</span></span>
-            <span className="flex flex-wrap gap-2">
-              <StatusChip tone={a.totp_state === "active" ? "safe" : "warn"}>{a.totp_state === "active" ? "TOTP aktif" : "TOTP belum aktif"}</StatusChip>
-              <StatusChip tone={a.risk_review ? "primary" : "muted"}>{a.risk_review ? "Boleh lihat radar risiko" : "Tanpa radar risiko"}</StatusChip>
-            </span>
-          </li>
-        ))}
-      </ul>
+    <Section title="Super Admin" aside={<ReloadButton size="sm" onClick={reload} />}>
+      <DataTableShell
+        caption="Daftar Super Admin"
+        rows={data.items}
+        rowKey={(a) => a.user_id}
+        columns={[
+          { key: "nama", header: "Nama", cell: (a) => <span className="flex flex-col"><span className="font-medium">{a.name}{a.user_id === data.me ? " (Anda)" : ""}</span><span className="text-xs text-muted-foreground">{a.email}</span></span> },
+          { key: "totp", header: "TOTP", cell: (a) => <StatusChip tone={a.totp_state === "active" ? "safe" : "warn"}>{a.totp_state === "active" ? "TOTP aktif" : "TOTP belum aktif"}</StatusChip> },
+          { key: "risiko", header: "Radar risiko", cell: (a) => <StatusChip tone={a.risk_review ? "primary" : "muted"}>{a.risk_review ? "Boleh lihat" : "Tidak"}</StatusChip> },
+          { key: "status", header: "Status", cell: (a) => (a.status === "active" ? "Aktif" : a.status), wide: true },
+        ]}
+      />
     </Section>
   )
 }
@@ -232,7 +290,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
   return (
     <Section title="Profil perusahaan operator">
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <p className="text-base md:text-sm text-muted-foreground">Kosongkan bila belum ada. Halaman publik dan email hanya menampilkan isian yang sudah terisi.{data.updatedAt ? ` Terakhir diubah ${formatDate(data.updatedAt)}.` : ""}</p>
+        <p className="text-sm text-muted-foreground">Kosongkan bila belum ada. Halaman publik dan email hanya menampilkan isian yang sudah terisi.{data.updatedAt ? ` Terakhir diubah ${formatDate(data.updatedAt)}.` : ""}</p>
         <div className="grid gap-4 md:grid-cols-2">
           {Object.keys(PROFILE_LABEL).map((k) => (
             <Field key={k} data-invalid={errors[k] ? true : undefined}>
@@ -256,7 +314,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
             <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           </div>
         ) : null}
-        {msg ? <p role="status" className="text-base md:text-sm">{msg}</p> : null}
+        {msg ? <p role="status" className="text-sm">{msg}</p> : null}
       </form>
     </Section>
   )

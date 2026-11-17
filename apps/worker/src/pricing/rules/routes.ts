@@ -2,9 +2,10 @@
 // reason and is audited. These routes set commercial rules only; they never touch a gerai's shipments (DEC-209).
 import type { Hono } from "hono"
 import { register } from "../../api/registry"
-import { ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
-import { ok } from "../../http/envelope"
-import { courierBands, listRules, markRequested, platformPolicy, requestList, requestListCsv, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
+import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
+import { hit } from "../../auth/throttle"
+import { AppError, ok } from "../../http/envelope"
+import { courierBands, listRules, runDiscountVerifier, markRequested, platformPolicy, requestList, requestListCsv, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
   try {
@@ -33,6 +34,20 @@ export function registerPricingAdmin(app: Hono<any>): void {
     return ok({ items: rows.results })
   })
   r("GET", "/tarif/gerai/:tenantId", "owner_aal2", async (c) => ok(await listRules(c.env, c.req.param("tenantId") ?? "")))
+  // `Verifikasi Ulang Diskon` (DEC-244): make the chosen gerai's rules (or every unverified rule) due now and run the
+  // verifier immediately instead of waiting for the 5-minute cron. Reads Mengantar estimates only; rate-limited.
+  r("POST", "/tarif/verifikasi-ulang", "owner_aal2", async (c) => {
+    const now = Date.now()
+    const lim = await hit(c.env.DB, `owner-discount-recheck:${c.get("session").user.id}`, 6, 60_000, now)
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum verifikasi ulang.")
+    const b = await body(c)
+    const tenantId = typeof b.tenantId === "string" && b.tenantId ? b.tenantId : null
+    if (tenantId) await c.env.DB.prepare("UPDATE tenant_discount_rules SET next_check_at = ? WHERE tenant_id = ?").bind(now, tenantId).run()
+    else await c.env.DB.prepare("UPDATE tenant_discount_rules SET next_check_at = ? WHERE verification_state != 'sesuai'").bind(now).run()
+    const r = await runDiscountVerifier(c.env, now, tenantId ? 1 : 20, tenantId)
+    await auditStatement(c.env, { actorId: c.get("session").user.id, action: "pricing.discount_recheck", targetType: tenantId ? "tenant" : "platform", targetId: tenantId ?? undefined, tenantId, reason: "Verifikasi ulang diskon", metadata: r, now }).run()
+    return ok({ ...r, checkedAt: now })
+  })
   r("POST", "/tarif/gerai/:tenantId/:serviceCode", "owner_recent", async (c) => {
     const b = await body(c)
     const rule = await updateRule(c.env, { tenantId: c.req.param("tenantId") ?? "", serviceCode: c.req.param("serviceCode") ?? "", assignedBps: b.assignedBps, cashbackBps: b.cashbackBps, actorId: c.get("session").user.id, reason: requireReason(b.reason), now: Date.now() })

@@ -1,6 +1,6 @@
 import { forwardRef, Fragment, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
 import { Link, useLinkProps, useNavigate } from "@tanstack/react-router"
-import { ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
+import { ArrowUpRightIcon, ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, GlobeIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
 import { applyTextSize, storedTextSize, TEXT_SIZES, type TextSize } from "../../shell/workspace"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog"
@@ -164,8 +164,10 @@ export function AdminShell({
           {/* DEC-243 3-zone topbar. ≥ 1024 px it is a 3-column grid (1fr | 260–380 px | 1fr): the breadcrumb lives in
               its own flexible track, so a longer trail never moves the search bar — it sits at the same x on every page.
               The right track holds only what fits beside it: an avatar-only account chip below xl and the labelled
-              pills (mini-site, TOTP) from 2xl, so utilities never run into the search (Sol R1 DEC-243 #1). */}
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)] lg:gap-4">
+              pills (mini-site, TOTP) from 2xl, so utilities never run into the search (Sol R1 DEC-243 #1). With enlarged
+              text below xl the search track narrows to 220–320 px (still fixed per page) so the owner's status icon,
+              bell and avatar fit at 125 % (DEC-244). */}
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)] lg:gap-4 lg:in-data-text:grid-cols-[minmax(0,1fr)_minmax(220px,320px)_minmax(0,1fr)] xl:in-data-text:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)]">
             <div className="flex min-w-0 items-center gap-2">
               <SidebarTrigger className="size-11 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 md:size-9" />
               <span aria-hidden className="hidden h-4 w-px shrink-0 bg-slate-200 md:block" />
@@ -407,6 +409,10 @@ export interface NavUserProps {
   onLogout: () => void
   profileTo?: string
   helpTo?: string
+  /** DEC-244: public pages opened in a new tab (Gerai: `Halaman Publik Gerai`; console: `Situs Utama GeraiExpress`). */
+  externalLinks?: Array<{ label: string; sublabel?: string; href: string; icon?: typeof UserIcon }>
+  /** Breakpoint from which the chip shows name + role (DEC-243/244: the console's busier right track waits for 2xl). */
+  labelFrom?: "xl" | "2xl"
 }
 
 const initials = (name: string) =>
@@ -418,27 +424,27 @@ const initials = (name: string) =>
     .join("") || "?"
 
 /** Top-right account chip (AdsBookCMS / TokoPhi): avatar + name/role; menu with profile, text size, help and Keluar. */
-export function AccountMenu({ name, email, role, status, onLogout, profileTo, helpTo }: NavUserProps) {
+export function AccountMenu({ name, email, role, status, onLogout, profileTo, helpTo, externalLinks, labelFrom = "xl" }: NavUserProps) {
   const [textSize, setTextSize] = useState<TextSize>(storedTextSize)
   useEffect(() => applyTextSize(textSize), [textSize])
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Menu akun"
-        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent py-0.5 pr-1 pl-1 text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:border-slate-200 data-popup-open:bg-slate-100 md:min-h-9 md:min-w-0 xl:pr-2"
+        className={cn("flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent py-0.5 pr-1 pl-1 text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:border-slate-200 data-popup-open:bg-slate-100 md:min-h-9 md:min-w-0", labelFrom === "2xl" ? "2xl:pr-2" : "xl:pr-2")}
       >
         <span aria-hidden className="grid size-8 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white md:size-7">
           {initials(name)}
         </span>
         {/* Name + role only at normal text size: with Ukuran Teks enlarged (root rem 18/20 px) the labelled chip no
             longer fits beside the fixed-width search (Sol R2 DEC-243), so the chip stays avatar-only. */}
-        <span className="hidden min-w-0 flex-col text-left leading-tight xl:flex in-data-text:hidden!">
+        <span className={cn("hidden min-w-0 flex-col text-left leading-tight in-data-text:hidden!", labelFrom === "2xl" ? "2xl:flex" : "xl:flex")}>
           <span className="max-w-32 truncate text-xs font-semibold text-slate-900">{name}</span>
           <span className="text-xs text-slate-500">{role}</span>
         </span>
-        <ChevronDownIcon aria-hidden className="hidden size-3.5 text-slate-400 xl:block in-data-text:hidden!" />
+        <ChevronDownIcon aria-hidden className={cn("hidden size-3.5 text-slate-400 in-data-text:hidden!", labelFrom === "2xl" ? "2xl:block" : "xl:block")} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8} className="w-64">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-72">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
             <span className="truncate text-sm font-semibold text-slate-900">{name}</span>
@@ -448,6 +454,20 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
               {status ? <> · {status}</> : null}
             </span>
           </DropdownMenuLabel>
+          {externalLinks?.map((l) => {
+            const Icon = l.icon ?? GlobeIcon
+            return (
+              <DropdownMenuItem key={l.href} render={<a href={l.href} target="_blank" rel="noreferrer" />} className="items-start">
+                <Icon aria-hidden className="mt-0.5" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span>{l.label}</span>
+                  {l.sublabel ? <span className="truncate text-xs text-muted-foreground">{l.sublabel}</span> : null}
+                </span>
+                <ArrowUpRightIcon aria-hidden className="mt-0.5 size-3.5 text-muted-foreground" />
+                <span className="sr-only">(buka di tab baru)</span>
+              </DropdownMenuItem>
+            )
+          })}
           {profileTo ? (
             <DropdownMenuItem render={<Link to={profileTo} />}>
               <UserIcon aria-hidden /> Profil Saya
@@ -480,12 +500,19 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
 }
 
 /** Sidebar brand: rounded-xl mark + name + secondary line; only the mark on the icon rail. */
-export function ShellBrand({ title, subtitle, mark }: { title: string; subtitle: ReactNode; mark: string }) {
+export function ShellBrand({ title, subtitle, mark, logoSrc }: { title: string; subtitle: ReactNode; mark: string; logoSrc?: string }) {
   return (
     <div className="flex h-12 items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground group-data-[collapsible=icon]:size-8">
-        {mark}
-      </span>
+      {/* Console: the GeraiExpress logo (DEC-244). Gerai workspace: the tenant's own initial (white-label, DEC-202). */}
+      {logoSrc ? (
+        <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/85 bg-white p-1 group-data-[collapsible=icon]:size-8">
+          <img src={logoSrc} alt="" className="h-auto w-full" />
+        </span>
+      ) : (
+        <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground group-data-[collapsible=icon]:size-8">
+          {mark}
+        </span>
+      )}
       <div className="flex min-w-0 flex-col leading-tight group-data-[collapsible=icon]:hidden">
         <span className="truncate text-sm font-semibold tracking-tight text-slate-950">{title}</span>
         <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
@@ -495,10 +522,13 @@ export function ShellBrand({ title, subtitle, mark }: { title: string; subtitle:
 }
 
 /** Compact status card for the sidebar foot: label/value rows with a status dot each. */
-export function SidebarStatusCard({ title, rows }: { title: string; rows: Array<{ label: string; value: ReactNode; tone: "safe" | "warn" | "muted" }> }) {
+export function SidebarStatusCard({ title, rows, link }: { title: string; rows: Array<{ label: string; value: ReactNode; tone: "safe" | "warn" | "muted" }>; link?: { to: string; label: string } }) {
   return (
     <div className="border-t border-slate-200/80 px-2 pt-3">
-      <p className="mb-1.5 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{title}</p>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{title}</p>
+        {link ? <Link to={link.to} className="inline-flex min-h-11 items-center text-xs font-medium text-primary underline-offset-4 hover:underline md:min-h-6">{link.label}</Link> : null}
+      </div>
       <ul className="flex flex-col gap-1">
         {rows.map((r) => (
           <li key={r.label} className="flex items-center justify-between gap-2 text-xs">

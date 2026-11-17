@@ -25,8 +25,8 @@ const maskPhone = (p: string) => (p.length > 4 ? `${p.slice(0, 4)}-xxxx-${p.slic
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1 py-2 sm:grid-cols-[220px_1fr]">
-      <dt className="text-base md:text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-base md:text-sm">{children}</dd>
+      <dt className="text-xs text-muted-foreground sm:text-sm">{label}</dt>
+      <dd className="text-sm">{children}</dd>
     </div>
   )
 }
@@ -59,13 +59,14 @@ export function PengajuanPage() {
           <ul className="flex flex-col gap-3">
             <li><StatusChip tone={data.slugReady ? "safe" : "danger"}>{data.slugReady ? "Alamat gerai siap" : "Alamat gerai sudah dipakai"}</StatusChip></li>
             <li><StatusChip tone="primary">Jalur Partner: {data.partnerTransport === "relay" ? "relay IPv4 statis" : "langsung (sandbox)"}</StatusChip></li>
-            <li className="text-base md:text-sm text-muted-foreground">Menyetujui akan membuka akun seller Mengantar atas nama gerai, mengaktifkan {data.slug}.geraimitra.com, dan mengirim email keputusan.</li>
+            <li className="text-sm text-muted-foreground">Menyetujui akan membuka akun seller Mengantar atas nama gerai, mengaktifkan {data.slug}.geraimitra.com, dan mengirim email keputusan.</li>
           </ul>
           {!decided ? (
-            <p className="mt-6 text-base md:text-sm text-muted-foreground md:hidden">Persetujuan sebaiknya dilakukan di layar ≥ 768 px (tablet atau komputer) agar data bisa diperiksa utuh.</p>
+            <p className="mt-6 text-xs text-muted-foreground md:hidden">Disarankan memeriksa data di layar ≥ 768 px (tablet atau komputer) sebelum menyetujui.</p>
           ) : null}
+          {/* DEC-244: the decision is available on every viewport (the note above only advises a larger screen). */}
           {!decided ? (
-            <div className="mt-6 hidden flex-col gap-3 md:flex">
+            <div className="mt-4 flex flex-col gap-3 md:mt-6">
               <ReasonAction label="Setujui & Buka Akun Seller Mengantar" confirmLabel="Setujui sekarang" path={`/gerai/applications/${data.id}/approve`} onDone={reload} hint="Memerlukan TOTP dalam 15 menit terakhir." />
               <ReasonAction label="Tolak pengajuan" confirmLabel="Tolak" variant="outline" path={`/gerai/applications/${data.id}/reject`} onDone={reload} hint="Alasan dikirim ke pemohon lewat email." />
             </div>

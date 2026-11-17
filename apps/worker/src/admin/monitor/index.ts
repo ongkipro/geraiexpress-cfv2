@@ -7,6 +7,8 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { hmacSha256Hex } from "../../crypto"
 import { AppError, ok } from "../../http/envelope"
+import { hit } from "../../auth/throttle"
+import { enqueueFinanceSync } from "../../cron/finance"
 
 /** Indonesian mobile number → canonical `62…` digits, or null when it is not one. */
 export function canonicalPhone(raw: unknown): string | null {
@@ -53,6 +55,17 @@ export function registerMonitor(app: Hono<any>): void {
     ).all<{ status: string; n: number }>()
     const webhookIssues = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM tenant_discount_rules WHERE verification_state = 'selisih'").first<{ n: number }>()
     return ok({ queues: rows.results, discountMismatch: webhookIssues?.n ?? 0 })
+  })
+
+  // `Jalankan Sync Keuangan Semua Gerai` (DEC-244): the same fan-out as the 15-minute cron, on demand. Each gerai
+  // still serializes its own sync inside its object; rate-limited to respect Mengantar quotas.
+  r("POST", "/pengawasan/sinkron-keuangan", "owner_aal2", async (c) => {
+    const now = Date.now()
+    const lim = await hit(c.env.DB, "owner-finance-fanout", 2, 5 * 60_000, now)
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Sinkron keuangan semua gerai baru saja dijalankan. Coba lagi beberapa menit lagi.")
+    const enqueued = await enqueueFinanceSync(c.env, "cron")
+    await auditStatement(c.env, { actorId: c.get("session").user.id, action: "finance.fanout", targetType: "platform", reason: "Sinkron keuangan semua gerai", metadata: { enqueued }, now }).run()
+    return ok({ enqueued, checkedAt: now })
   })
 
   r("POST", "/pengawasan/risiko", "owner_recent", async (c) => {

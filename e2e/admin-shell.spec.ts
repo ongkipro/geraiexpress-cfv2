@@ -250,3 +250,104 @@ test("DEC-243: utilitas topbar tidak menimpa pencarian; navigasi bulan di HP ≥
     }
   }
 })
+
+// DEC-244: account menu public page link (owner + Kasir), owner-only operational status icon → /status → Periksa Ulang,
+// the packing Select opens below its trigger with prices on the right, and the Super Admin recheck actions.
+test("DEC-244: Halaman Publik Gerai, status operasional, packing select", async ({ page, context }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "desktop flows")
+  await seeded(page, "e2e-rapi-g")
+  await page.goto(`${APP}/`)
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await page.getByRole("button", { name: "Menu akun" }).click()
+  const pub = page.getByRole("menuitem", { name: /Halaman Publik Gerai/ })
+  await expect(pub).toHaveAttribute("target", "_blank")
+  await expect(pub).toHaveAttribute("href", /^https:\/\/r[a-z0-9]+\.geraimitra\.localhost/)
+  await page.keyboard.press("Escape")
+
+  const icon = page.getByRole("link", { name: /^Status operasional/ })
+  await expect(icon).toHaveAttribute("data-status-tone", /setup|problem|healthy/)
+  await icon.click()
+  await expect(page).toHaveURL(/\/status$/)
+  await expect(page.getByRole("heading", { name: "Status Operasional", level: 1 })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Kesiapan Loket" })).toBeVisible()
+  const rechecked = page.waitForResponse((r) => r.url().endsWith("/api/app/status/recheck") && r.request().method() === "POST", { timeout: 30_000 })
+  await page.getByRole("button", { name: "Periksa Ulang" }).first().click()
+  expect((await rechecked).status()).toBe(200)
+  await expect(page.getByText("Pemeriksaan ulang selesai.")).toBeVisible({ timeout: 10_000 })
+
+  // Packing catalogue so the POS shows the select (a fresh gerai has none).
+  const papi = page.context().request
+  expect((await papi.post(`${APP}/api/app/settings/packing`, { headers: { origin: APP, "content-type": "application/json" }, data: { items: [{ id: null, name: "Bubble wrap", priceIdr: 3000, active: true }], serviceFeeEnabled: false, serviceFeeIdr: null } })).status()).toBe(200)
+  await page.goto(`${APP}/kasir`)
+  const trigger = page.locator("#packing")
+  await trigger.evaluate((e) => window.scrollBy(0, e.getBoundingClientRect().top - 200))
+  // Sol R1 #3: the idle trigger keeps the ≥ 3:1 input border token (not a pale slate-200).
+  await page.mouse.move(0, 0)
+  expect(await trigger.evaluate((e) => getComputedStyle(e).borderTopColor)).toBe(await page.evaluate(() => { const i = document.createElement("input"); i.className = "border border-input"; document.body.append(i); const c = getComputedStyle(i).borderTopColor; i.remove(); return c }))
+  await trigger.click()
+  const t = (await trigger.boundingBox())!
+  // The popup zooms in (data-open:zoom-in-95): measure once its box has settled.
+  const content = page.locator("[data-slot=select-content]")
+  await expect(content).toHaveAttribute("data-open", "")
+  await expect.poll(async () => { const a = (await content.boundingBox())!.y; await page.waitForTimeout(80); return Math.abs((await content.boundingBox())!.y - a) }).toBeLessThan(0.1)
+  const popup = (await content.boundingBox())!
+  // A dropdown below the field (alignItemWithTrigger=false), not a list laid over the trigger.
+  expect(popup.y).toBeGreaterThanOrEqual(t.y + t.height)
+  await expect(page.getByRole("option", { name: /Bubble wrap\s*\+Rp\s?3\.000/ })).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  // Kasir: same public page link, no status icon, /status refused by the API.
+  const k = await context.browser()!.newContext()
+  const kp = await k.newPage()
+  const api = page.context().request
+  const h = { origin: APP, "content-type": "application/json" }
+  const kasir = uniqueEmail("e2e-rapi-k")
+  expect((await api.post(`${APP}/api/app/members/invitations`, { headers: h, data: { email: kasir } })).status()).toBe(201)
+  const { link } = await lastMail(page.context().request, kasir, "kasir_invite")
+  await kp.goto(link!)
+  await kp.getByLabel("Nama lengkap").fill("Kasir Rapi")
+  await kp.getByLabel("Buat kata sandi").fill("kasir-rapi-kuat-1")
+  await kp.getByRole("button", { name: "Buat Akun" }).click()
+  await expect(kp.getByRole("heading", { name: "Tugas Loket Hari Ini" })).toBeVisible()
+  await expect(kp.getByRole("link", { name: /^Status operasional/ })).toHaveCount(0)
+  await kp.getByRole("button", { name: "Menu akun" }).click()
+  await expect(kp.getByRole("menuitem", { name: /Halaman Publik Gerai/ })).toHaveAttribute("target", "_blank")
+  expect((await kp.request.get(`${APP}/api/app/status`)).status()).toBe(403)
+  await k.close()
+})
+
+test("DEC-244: Super Admin periksa ulang, verifikasi diskon, antrean sinkronisasi", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "desktop console")
+  await seeded(page, "e2e-rapi-h")
+  const ops = (await import("node:fs")).readFileSync(".dev.vars", "utf8").match(/^OPS_TOKEN=(.*)$/m)![1]!.trim().replace(/^(["'])(.*)\1$/, "$2")
+  const admin = await seededAdmin(page)
+  const go = (to: string) => page.goto(`${OWNER}/internal/dev/preview?token=${ops}&as=${encodeURIComponent(admin)}&to=${encodeURIComponent(to)}`)
+  await go("/sistem")
+  await expect(page.getByRole("link", { name: /^Status operasional/ })).toBeVisible()
+  // The recheck runs real operator checks (relay, alerts, email retries, quota): wait for its answer, not a toast race.
+  const answered = page.waitForResponse((r) => r.url().endsWith("/api/owner/sistem/kesehatan/periksa") && r.request().method() === "POST", { timeout: 30_000 })
+  await page.getByRole("button", { name: "Periksa Ulang Semua Sinyal" }).click()
+  expect((await answered).status()).toBe(200)
+  await expect(page.getByRole("button", { name: "Periksa Ulang Semua Sinyal" })).toBeEnabled()
+  await go("/tarif")
+  const verified = page.waitForResponse((r) => r.url().endsWith("/api/owner/tarif/verifikasi-ulang") && r.request().method() === "POST", { timeout: 30_000 })
+  await page.getByRole("button", { name: "Verifikasi Ulang Diskon" }).click()
+  expect((await verified).status()).toBe(200)
+  await expect(page.getByText(/^Verifikasi selesai: \d+ gerai/)).toBeVisible({ timeout: 10_000 })
+  // Sol R1 #2: on a phone the visible discount editor owns its labels (no duplicate ids with the hidden table).
+  const tenant = await page.evaluate(async () => (await (await fetch("/api/owner/tarif/gerai")).json()) as { data: { items: Array<{ id: string }> } })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await go(`/tarif/${tenant.data.items[0]!.id}`)
+  await page.getByRole("button", { name: "Ubah" }).first().click()
+  const label = page.getByText("Alasan (wajib, dicatat di log audit)").filter({ visible: true })
+  await label.click()
+  await expect(page.locator("textarea:focus")).toBeVisible()
+  expect(await page.evaluate(() => { const ids = [...document.querySelectorAll("[id]")].map((e) => e.id); return ids.length - new Set(ids).size })).toBe(0)
+  await page.setViewportSize({ width: 1280, height: 800 })
+
+  await go("/pengawasan")
+  await expect(page.getByRole("heading", { name: "Antrean Sinkronisasi" })).toBeVisible()
+  await expect(page.getByText("Perlu dicocokkan")).toBeVisible()
+  await page.getByRole("button", { name: "Menu akun" }).click()
+  await expect(page.getByRole("menuitem", { name: /Situs Utama GeraiExpress/ })).toHaveAttribute("target", "_blank")
+})

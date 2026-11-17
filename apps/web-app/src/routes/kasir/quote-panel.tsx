@@ -274,7 +274,7 @@ export function QuotePanel({
           <Field>
             <FieldLabel htmlFor="packing">Packing (opsional)</FieldLabel>
             <Select
-              items={[{ value: "", label: "Tanpa packing" }, ...pos.packingItems.map((i) => ({ value: i.name, label: `${i.name} · ${rp(i.priceIdr)}` }))]}
+              items={[{ value: "", label: "Tanpa packing" }, ...pos.packingItems.map((i) => ({ value: i.name, label: `${i.name} (+${rp(i.priceIdr)})` }))]}
               value={packing}
               onValueChange={(v) => setPacking((v as string | null) ?? "")}
             >
@@ -283,10 +283,15 @@ export function QuotePanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="">Tanpa packing</SelectItem>
+                  {/* Name left, price right (DEC-244); the trigger shows the plain `items` label. */}
+                  <SelectItem value="">
+                    <span className="truncate">Tanpa packing</span>
+                    <span className="ml-auto pl-3 text-xs font-medium text-muted-foreground tabular-nums">Rp0</span>
+                  </SelectItem>
                   {pos.packingItems.map((i) => (
                     <SelectItem key={i.name} value={i.name}>
-                      {i.name} · {rp(i.priceIdr)}
+                      <span className="truncate">{i.name}</span>
+                      <span className="ml-auto pl-3 text-xs font-medium text-muted-foreground tabular-nums">+{rp(i.priceIdr)}</span>
                     </SelectItem>
                   ))}
                 </SelectGroup>

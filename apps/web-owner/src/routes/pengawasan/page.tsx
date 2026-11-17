@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from "react"
-import { useNavigate, useSearch } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Button } from "@shared/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
-import { EmptyBlock, formatDate, PageHead, Section, StatusChip } from "../../components/page"
+import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, PageHead, RecheckButton, ReloadButton, Section, StatusChip } from "../../components/page"
+import { MetricCard, MetricGrid, SectionCard } from "@shared/components/admin/page"
+import { DataTableShell } from "@shared/components/admin/data-table"
+import { useApi } from "../../lib/use-api"
 import { api, ApiError } from "../../lib/api"
 import { Textarea } from "@shared/components/ui/textarea"
 
@@ -35,7 +38,7 @@ export function PengawasanPage() {
   const current: Tab = tab ?? "kiriman"
   return (
     <div className="flex flex-col gap-4 md:gap-5">
-      <PageHead title="Pengawasan" />
+      <PageHead title="Pengawasan" description="Pantauan kiriman lintas gerai (hanya baca) dan radar risiko COD." />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/pengawasan", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList aria-label="Bagian pengawasan">
@@ -44,8 +47,45 @@ export function PengawasanPage() {
           </TabsList>
         </div>
       </Tabs>
-      {current === "kiriman" ? <ShipmentSearch /> : <RiskRadar />}
+      {current === "kiriman" ? (
+        <>
+          <SyncQueues />
+          <ShipmentSearch />
+        </>
+      ) : (
+        <RiskRadar />
+      )}
     </div>
+  )
+}
+
+interface Antrean { queues: Array<{ status: string; n: number }>; discountMismatch: number }
+const nf = new Intl.NumberFormat("id-ID")
+
+/** `Antrean Sinkronisasi` (DEC-244): the cross-tenant stuck queues from `/pengawasan/antrean`, plus the finance fan-out. */
+function SyncQueues() {
+  const { data, error, loading, reload } = useApi<Antrean>("/pengawasan/antrean")
+  const n = (status: string) => data?.queues.find((q) => q.status === status)?.n ?? 0
+  return (
+    <SectionCard
+      title="Antrean Sinkronisasi"
+      description="Kiriman yang menunggu penyelesaian di semua gerai."
+      action={
+        <span className="flex flex-wrap gap-2">
+          <ReloadButton size="sm" onClick={reload} />
+          <RecheckButton size="sm" label="Sync Keuangan Semua Gerai" busyLabel="Menjadwalkan…" path="/pengawasan/sinkron-keuangan" onDone={reload} done={(d) => `${(d as { enqueued: number }).enqueued} gerai dijadwalkan sinkron keuangan.`} />
+        </span>
+      }
+    >
+      {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : (
+        <MetricGrid>
+          <MetricCard label="Perlu dicocokkan" value={nf.format(n("reconciliation_needed"))} footer="Status penerbitan belum pasti" tone={n("reconciliation_needed") ? "warn" : undefined} />
+          <MetricCard label="Menunggu saldo" value={nf.format(n("provider_unpaid_hold"))} footer="Saldo Mengantar gerai kurang" tone={n("provider_unpaid_hold") ? "warn" : undefined} />
+          <MetricCard label="Sedang diterbitkan" value={nf.format(n("issuing_in_flight"))} footer="Permintaan resi berjalan" />
+          <MetricCard label="Diskon belum sesuai" value={nf.format(data?.discountMismatch ?? 0)} footer="Lihat Tarif › Permintaan" tone={data?.discountMismatch ? "warn" : undefined} to="/tarif?tab=permintaan" />
+        </MetricGrid>
+      )}
+    </SectionCard>
   )
 }
 
@@ -73,21 +113,24 @@ function ShipmentSearch() {
         </Field>
         <Button type="submit" disabled={q.trim().length < 4}>Cari</Button>
       </form>
-      {error ? <p role="alert" className="mt-3 text-base md:text-sm text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
       {items === null ? null : items.length === 0 ? (
         <EmptyBlock title="Tidak ditemukan" body="Periksa kembali INV atau nomor resi." />
       ) : (
-        <ul className="mt-4 divide-y">
-          {items.map((h) => (
-            <li key={`${h.tenant_slug}:${h.slug}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm">
-              <span className="flex flex-col">
-                <span className="font-medium tabular-nums">INV {h.slug.toUpperCase()} · {h.tenant_name}</span>
-                <span className="text-muted-foreground tabular-nums">{h.courier_code ?? "—"} · {h.awb_number ?? "belum ada resi"} · {formatDate(h.updated_at)}</span>
-              </span>
-              <StatusChip tone="muted">{STATUS_LABEL[h.status] ?? h.status}</StatusChip>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4">
+          <DataTableShell
+            caption="Hasil pencarian kiriman"
+            rows={items}
+            rowKey={(h) => `${h.tenant_slug}:${h.slug}`}
+            columns={[
+              { key: "inv", header: "INV", cell: (h) => <span className="font-medium tabular-nums">INV {h.slug.toUpperCase()}</span> },
+              { key: "gerai", header: "Gerai", cell: (h) => <Link to="/gerai/$slug" params={{ slug: h.tenant_slug }} className="text-primary underline-offset-4 hover:underline">{h.tenant_name}</Link> },
+              { key: "resi", header: "Kurir & resi", cell: (h) => <span className="tabular-nums">{h.courier_code ?? "—"} · {h.awb_number ?? "belum ada resi"}</span> },
+              { key: "status", header: "Status", cell: (h) => <StatusChip tone="muted">{STATUS_LABEL[h.status] ?? h.status}</StatusChip> },
+              { key: "update", header: "Diperbarui", cell: (h) => <span className="text-muted-foreground tabular-nums">{formatDate(h.updated_at)}</span>, wide: true },
+            ]}
+          />
+        </div>
       )}
     </Section>
   )
@@ -117,7 +160,7 @@ function RiskRadar() {
   return (
     <Section title="Radar Risiko COD">
       <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-        <p className="text-base md:text-sm text-muted-foreground">Nomor diubah menjadi kode acak di server; setiap pencarian dicatat di log audit beserta alasannya.</p>
+        <p className="text-sm text-muted-foreground">Nomor diubah menjadi kode acak di server; setiap pencarian dicatat di log audit beserta alasannya.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field data-invalid={error ? true : undefined}>
             <FieldLabel htmlFor="hp-risiko">Nomor HP penerima</FieldLabel>
@@ -137,10 +180,10 @@ function RiskRadar() {
           <EmptyBlock title="Belum ada riwayat" body="Nomor ini belum pernah menerima kiriman COD di jaringan." />
         ) : (
           <div className="mt-4 flex flex-col gap-3">
-            <p className="text-base md:text-sm tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
+            <p className="text-sm tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
             <ul className="divide-y">
               {result.items.map((r) => (
-                <li key={r.tenant_name} className="flex flex-wrap justify-between gap-2 py-2 text-base md:text-sm tabular-nums">
+                <li key={r.tenant_name} className="flex flex-wrap justify-between gap-2 py-2 text-sm tabular-nums">
                   <span>{r.tenant_name}</span>
                   <span>{r.delivered_count} terkirim · {r.rts_count} retur · {formatDate(r.last_event_at)}</span>
                 </li>

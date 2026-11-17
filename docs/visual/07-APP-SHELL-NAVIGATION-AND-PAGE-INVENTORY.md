@@ -48,7 +48,8 @@
 | Header (DEC-243) | ≥ 1024 px a 3-column grid `minmax(0,1fr) · minmax(260px,380px) · minmax(0,1fr)`: **left** sidebar trigger + divider + breadcrumb (navigation only; separators are sibling `<li>`s, the current crumb is `aria-current="page"` text); **centre** the `⌘K`/`Ctrl K` search bar, at the same x on every page whatever the breadcrumb length; **right** notifications, divider, account chip (avatar only below 1280 px), mini-site pill from 1536 px — the right track never runs into the search (GPT-6.1 Sol R1). Below 1024 px: flex row, search becomes an icon button; `Pindai QR` icon only on phones (the sidebar quick-action row has it elsewhere) | Menu duplication, a second QR icon on desktop |
 | Page body | Title row → in-page tabs → filters/toolbar → content → sticky action bar when the page has a commit action | A second navigation sidebar |
 
-Account menu (`Ani ▾`): `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`
+Account menu (`Ani ▾`, DEC-244): header (name, email, `Pemilik · <gerai>` / `Kasir · <gerai>`) · `Halaman Publik Gerai` (the
+gerai's mini-site host, new tab; Super Admin: `Situs Utama GeraiExpress`) · `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`
 (same three steps as `docs/visual/01`) · `Bantuan & Panduan` · `Keluar`. Text size scales the root rem (never
 `zoom`, never locks browser zoom).
 
@@ -145,6 +146,7 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | `/kasir/layar-pelanggan` | O K (paired device) | Layar Pelanggan | — | outlet logo → locked line items → total (40 px) → outlet QRIS → `Terima kasih` | P1 (PR-22); no navigation, no cost fields |
 | `/pengaturan/<item>` | O (K: `printer`) | Pengaturan › <item> | `Simpan` in sticky save bar, only when dirty | TokoPhi rail (DEC-240): framed `Card` rail (group labels, icon tile + title + one-line subtitle, amber dot on `Mengantar` while the webhook is inactive) + gerai summary card (owner) beside a flush-left `max-w-4xl` column of `SectionCard`s with 2-col form grids; phones: `← Semua Pengaturan` back link | 403 for Kasir except `printer` |
 | `/akun` | O K | Akun Saya | `Simpan` | profile (name, phone) → `Ganti Kata Sandi` → `Ganti Email` (OTP to new email, spec 12) → active sessions with `Keluar dari perangkat ini/lainnya` → text-size preference | opened from the account menu, not the sidebar |
+| `/status` | O | Status Operasional (DEC-244) | `Periksa Ulang` (live: finance sync + domain refresh, 6/min) | verdict banner (emerald/amber/rose: healthy / setup / problem) → `Perlu Ditangani` (degraded signals with direct actions) → `Kesiapan Loket` checklist (`n/5 siap`) → `Semua Sinyal Sistem` 2-col cards (penerbitan resi, webhook, sinkron saldo, halaman publik & domain). Topbar icon beside the bell (owner only; cached 5 min, no polling) and `Lihat status` in the sidebar status | Kasir: no icon, route 403, API 403 |
 | `/bantuan` | O K | Bantuan & Panduan | `Hubungi Bantuan` (WhatsApp) | searchable guides: first setup, printer on PC (100 mm driver, paper size, 100 % scale), custom domain DNS, COD flow, returns | opened from the account menu |
 | `/notifikasi` | O K | Notifikasi | `Tandai Semua Dibaca` | grouped by day; each item deep-links | — |
 | `*` 403 / 404 / offline | O K | — | `Kembali ke Dashboard` | plain explanation + who can grant access (403) | Offline: POS queues nothing silently; shows `Koneksi terputus` banner |
@@ -154,12 +156,12 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 | Route | Title | Primary | Content blocks (order) |
 |---|---|---|---|
 | `/` | Ringkasan | — | 4 KPI (gerai aktif, kiriman hari ini, pengajuan, sync/relay health) → alerts list → volume trend |
-| `/gerai` | Gerai | — | tabs `Pengajuan Baru · Direktori Gerai · Domain Mitra` |
+| `/gerai` | Gerai | `Muat Ulang` | 4-tile summary (pengajuan baru, gerai aktif, onboarding tertunda, dibekukan) → tabs `Pengajuan Baru · Direktori Gerai · Domain Mitra` (DEC-244: domains table with per-row `Periksa Ulang` + `Periksa Semua Domain`) |
 | `/gerai/pengajuan/:id` | Gerai › Pengajuan › Berkah Jaya | `Setujui & Buka Akun Seller Mengantar` | applicant data → pickup map → relay status → slug readiness → reject with reason |
 | `/gerai/:slug` | Gerai › Berkah Jaya | — (read-only data) | health, RTS %, Mengantar connection/webhook state; controls (TOTP + reason): masking toggle, `Kuota masking harian`, freeze |
 | `/tarif` | Tarif & Kurir | `Simpan Perubahan` (TOTP + reason) | tabs `Diskon & Cashback Gerai · Katalog & Aturan Kurir · Kebijakan Diskon`; assigned vs observed bps editor with status `Belum diterapkan / Sesuai / Selisih` and `Tandai sudah diminta ke Mengantar`; policy tab holds default / minimum / maximum per courier (all 20 % default now) |
-| `/pengawasan` | Pengawasan | — | tabs `Pantauan Kiriman & Sync · Radar Risiko COD`; cross-tenant search is read-only |
-| `/sistem` | Sistem & Audit | `Simpan` on `Profil Perusahaan` only (TOTP + reason) | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan` |
+| `/pengawasan` | Pengawasan | — | tabs `Pantauan Kiriman & Sync · Radar Risiko COD`; DEC-244: `Antrean Sinkronisasi` 4-tile grid (`/pengawasan/antrean`) with `Muat Ulang` and `Sync Keuangan Semua Gerai`, search hits in a table linking to the gerai; cross-tenant search is read-only |
+| `/sistem` | Sistem & Audit | `Periksa Ulang Semua Sinyal` (DEC-244); `Simpan` on `Profil Perusahaan` (TOTP + reason) | tabs `Kesehatan Integrasi & Relay · Log Audit · Akses Admin · Profil Perusahaan`; health = verdict banner + 5 signal cards (Partner API & relay, diskon & antrean, onboarding & pemulihan, email 7 hari, kuota domain) feeding the topbar status icon; audit and admins as tables with `Muat Ulang` |
 
 ### 3.4 Public (`geraiexpress.com`, `<slug>.geraimitra.com`)
 

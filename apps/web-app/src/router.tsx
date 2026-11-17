@@ -28,6 +28,7 @@ import { KirimanPage } from "./routes/kiriman/index/page"
 import { ManifestPage } from "./routes/kiriman/pickup/page"
 import { KeuanganPage } from "./routes/keuangan/page"
 import { PengaturanIndexPage } from "./routes/pengaturan/index/shared"
+import { StatusPage } from "./routes/status/page"
 import { ProfilGeraiPage } from "./routes/pengaturan/profil/page"
 import { DataUsahaPage } from "./routes/pengaturan/data-usaha/page"
 import { PrinterPage } from "./routes/pengaturan/printer/page"
@@ -134,7 +135,8 @@ const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: 
 const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: PengaturanIndexPage })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: AkunPage })
 const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: BantuanPage })
-const comingSoonRoutes = [miniSiteRoute, apiMcpRoute, manifestRoute, profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute] as const
+const statusRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/status", component: ownerOnly(StatusPage) })
+const comingSoonRoutes = [miniSiteRoute, apiMcpRoute, manifestRoute, profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })
