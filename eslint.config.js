@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint"
 import { defineConfig, globalIgnores } from "eslint/config"
 
 export default defineConfig([
-  globalIgnores(["**/dist", "**/.wrangler", "**/node_modules", "prototype/**", "apps/worker/worker-configuration.d.ts", "test-results", "playwright-report"]),
+  globalIgnores(["**/dist", "**/.wrangler", "**/node_modules", "prototype/**", "apps/worker/worker-configuration.d.ts", "test-results", "playwright-report", "apps/*/public/**/*.min.js"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [js.configs.recommended, tseslint.configs.recommended],
