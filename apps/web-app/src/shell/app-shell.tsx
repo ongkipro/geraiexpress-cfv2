@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpRightIcon, BellIcon, ContactIcon, HomeIcon, MoreHorizontalIcon, PackageIcon, PlusIcon, QrCodeIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, TruckIcon, WalletIcon } from "lucide-react"
+import { ArrowUpRightIcon, BellIcon, CalculatorIcon, ContactIcon, HomeIcon, MoreHorizontalIcon, PackageIcon, PlusIcon, QrCodeIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, TruckIcon, WalletIcon } from "lucide-react"
 import { AdminShell, ShellBrand, SidebarStatusCard, type Crumb, type ShellCommand, type ShellNavGroup, type ShellNavItem } from "../components/admin/shell"
 import { FORMAT_LABEL, type Format } from "../print/print"
 import { CalloutAlert } from "../components/admin/page"
@@ -19,7 +19,7 @@ import { LinkButton } from "../components/admin/link-button"
 // that job, including the specialist tabs of a page (`/kiriman?tab=pickup`). Pengaturan stays one entry — its ten
 // pages have their own left rail. `Shift Loket` is deferred to post-launch (TASK-704): no menu, command or status row.
 type NavChild = { to: string; label: string }
-type NavDef = { key: string; menu: string; to: string; label: string; icon: typeof HomeIcon; children?: NavChild[] }
+type NavDef = { key: string; menu: string; to: string; label: string; icon: typeof HomeIcon; children?: NavChild[]; defaultOpen?: boolean }
 const NAV: NavDef[] = [
   { key: "dashboard", menu: "dashboard", to: "/", label: "Dashboard", icon: HomeIcon },
   {
@@ -28,6 +28,8 @@ const NAV: NavDef[] = [
     to: "/kasir",
     label: "Buat Pengiriman",
     icon: PackageIcon,
+    // DEC-243: the four counter tools (this tree + Cek Ongkir & Resi) are always visible on load.
+    defaultOpen: true,
     children: [
       { to: "/kasir", label: "Kiriman Satuan" },
       { to: "/kasir/multi", label: "Paket Massal" },
@@ -39,7 +41,9 @@ const NAV: NavDef[] = [
     menu: "buat-pengiriman",
     to: "/kasir/cek-cepat",
     label: "Cek Ongkir & Resi",
-    icon: SearchIcon,
+    // A calculator, not the topbar's search glass (DEC-243).
+    icon: CalculatorIcon,
+    defaultOpen: true,
     children: [
       { to: "/kasir/cek-cepat", label: "Cek Ongkir" },
       { to: "/kasir/cek-resi", label: "Cek Resi" },
@@ -229,6 +233,7 @@ export function AppShell() {
     label: n.label,
     icon: n.icon,
     active: section === n.key,
+    defaultOpen: n.defaultOpen,
     badge:
       n.key === "kiriman" && w.badges.kiriman > 0
         ? { content: w.badges.kiriman, label: `${w.badges.kiriman} kiriman perlu tindakan` }
@@ -247,14 +252,14 @@ export function AppShell() {
 
   const toolbar = (
     <>
-      <a href={`https://${w.tenant.miniSiteHost}`} target="_blank" rel="noreferrer" className="hidden h-9 items-center gap-1 rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-slate-100 hover:text-slate-900 xl:inline-flex">
+      <a href={`https://${w.tenant.miniSiteHost}`} target="_blank" rel="noreferrer" className="hidden h-8 items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/60 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 2xl:inline-flex">
         Lihat Mini-Site <ArrowUpRightIcon aria-hidden className="size-3.5" />
       </a>
-      <span aria-hidden className="mx-1 hidden h-5 w-px bg-slate-200 xl:block" />
-      <Button variant="ghost" size="icon" aria-label="Pindai QR" className="text-muted-foreground" onClick={() => navigate({ to: "/kasir" })}>
+      {/* Phones only: the sidebar (with its QR button) is a Sheet there, so the topbar carries the scan shortcut. */}
+      <Button variant="ghost" size="icon" aria-label="Pindai QR" className="text-slate-500 md:hidden" onClick={() => navigate({ to: "/kasir" })}>
         <QrCodeIcon aria-hidden />
       </Button>
-      <LinkButton variant="ghost" size="icon" className="relative text-muted-foreground" aria-label={w.badges.notifications ? `Notifikasi, ${w.badges.notifications} belum dibaca` : "Notifikasi"} to="/notifikasi">
+      <LinkButton variant="ghost" size="icon" className="relative rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label={w.badges.notifications ? `Notifikasi, ${w.badges.notifications} belum dibaca` : "Notifikasi"} to="/notifikasi">
         <BellIcon aria-hidden />
         {w.badges.notifications ? (
           <span className="absolute -top-0.5 -right-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-xs leading-none font-semibold text-white tabular-nums ring-2 ring-white" aria-hidden>

@@ -43,10 +43,11 @@ test("Pengaturan dan Akun Saya", async ({ page, context, request }) => {
 })
 
 // DEC-242: the Pengaturan rail is a secondary sidebar — scrolling the form never moves it, and the rail scrolls on its
-// own (wheel over it) without scrolling the page, on a short 1280×720 laptop screen.
+// own (wheel over it) without scrolling the page. Since DEC-243 the single-card rail fits a 1280×720 laptop, so the
+// independent-scroll bound is proven on an ultra-short 1280×560 window.
 test("Pengaturan: rail tetap diam saat form digulir dan bisa digulir sendiri", async ({ page, context, request }, info) => {
   test.skip(info.project.name !== "desktop-1280", "rail is desktop only (≥ 1024 px)")
-  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.setViewportSize({ width: 1280, height: 560 })
   const email = uniqueEmail("e2e-rail")
   const api = context.request
   const h = { origin: APP, "content-type": "application/json" }

@@ -136,8 +136,12 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
       crumbs={crumbsOf(path, tab)}
       toolbar={
         <>
-          <StatusBadge tone={environment === "Produksi" ? "danger" : "muted"}>{environment}</StatusBadge>
-          <StatusBadge tone="safe" className="hidden sm:inline-flex">
+          {/* With Ukuran Teks enlarged the badge waits for xl so it never runs into the search at 1024 px (Sol R3);
+              the environment stays in the brand subtitle and the sidebar status block. */}
+          <StatusBadge tone={environment === "Produksi" ? "danger" : "muted"} className="in-data-text:hidden xl:in-data-text:inline-flex">{environment}</StatusBadge>
+          {/* TOTP state also sits in the sidebar status block and the account menu; the topbar repeats it only where
+              the right track has room (DEC-243 grid header, Sol R1 #1). */}
+          <StatusBadge tone="safe" className="hidden 2xl:inline-flex">
             TOTP aktif
           </StatusBadge>
         </>

@@ -16,14 +16,14 @@ One component, one behaviour everywhere.
 ### 1.1 Trigger (closed)
 
 ```text
-[📅 7 hari terakhir · 8 – 14 Nov 2026  ▾]        ← outline button, h-11 (phone) / h-10 (desktop), 16 px text
+[📅 7 hari terakhir · 8 – 14 Nov 2026  ▾]        ← outline button, h-11 / 16 px (phone), h-9 / 14 px (desktop)
 [📅 1 – 31 Okt 2026  ▾]                            ← custom range shows only the dates
 ```
 
 - Label = preset name + resolved dates; a custom range shows dates only.
 - `aria-label`: `Periode: 7 hari terakhir, 8 sampai 14 November 2026`.
 
-### 1.2 Open — desktop ≥ 768 px (`Popover`, aligned to the trigger's end)
+### 1.2 Open — desktop ≥ 768 px (`Popover`, aligned to the trigger's end; DEC-243 compact, ~640 px wide)
 
 ```text
 ┌──────────────────────┬─────────────────────────────────────────────────────────────────────┐
@@ -36,10 +36,13 @@ One component, one behaviour everywhere.
 │   Bulan ini          │  26  27  28  29  30  31          23░ 24░ 25░ 26░ 27░ 28░ 29░        │
 │   Bulan lalu         │                                  30░                                │
 │   90 hari terakhir   ├─────────────────────────────────────────────────────────────────────┤
-│                      │  Dari [ 08/11/2026 ]   Sampai [ 14/11/2026 ]   7 hari               │
-│                      │                                        [Batal]  [Terapkan]          │
+│                      │  Dari [08/11/2026] – Sampai [14/11/2026]           [Batal][Terapkan]│
 └──────────────────────┴─────────────────────────────────────────────────────────────────────┘
   [n] = selected range · ░ = future (disabled) · today (14 Nov) has a ring
+  DEC-243 (AdsBookCMS AdminDateRangeFilter proportions): preset column 160 px (`p-1.5`, 32 px rows, 12 px text,
+  check on the active preset); day cells ~31 px (`--cell-size: 1.95rem`, pinned so the column cannot stretch them),
+  12 px day numbers, 11 px weekday heads, 12 px between months; one footer row with 32 px date inputs and `Batal` /
+  `Terapkan` (32 px); no day-span pill (owner edit). Phones keep the bottom sheet with 44 px cells and month navigation.
 ```
 
 ### 1.3 Open — phone < 768 px (`Drawer`/bottom sheet, full width)
@@ -110,21 +113,22 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │                     │ │ AKUN & AKSES           │  │ Tampilkan komisi …        [● on ]          ││
 │                     │ │ [#] Anggota            │  └────────────────────────────────────────────┘│
 │                     │ │ [#] Mengantar      •   │                                                │
-│                     │ │ [#] API & MCP        ↕ │  ← the rail scrolls on its own                 │
+│                     │ │ [#] API & MCP          │  ← one card, fits without scrolling (DEC-243)  │
 │                     │ └────────────────────────┘                                                │
-│                     │ ┌ (SJ) Sinar Jaya Cell ──┐  Ada perubahan belum disimpan [Batal][Simpan]  │
-│                     │ │ ● Mengantar terhubung  │  ← only when dirty                             │
-│                     │ └────────────────────────┘                                                │
+│                     │                             Ada perubahan belum disimpan [Batal][Simpan]  │
+│                     │                             ← only when dirty                             │
+│                     │                                                                           │
 └─────────────────────┴───────────────────────────────────────────────────────────────────────────┘
    rail: white Card, group labels 12 px uppercase, rows = 32 px icon tile + 14 px title + 12 px subtitle,
    current row primary tint + aria-current="page", amber dot on Mengantar while the webhook is inactive;
-   owner summary card below. Content: flush-left, max 896 px, SectionCards with 2-col form grids.
+   no summary card (DEC-243: identity and Mengantar state already sit in the shell sidebar). Content:
+   flush-left, max 896 px, SectionCards with 2-col form grids.
 ```
 
 **Rail scroll (DEC-242).** The rail is a secondary sidebar: `sticky` at `top: 84px` (64 px topbar + 20 px) with
 `max-height: calc(100dvh − 6.5rem)`, `overflow-y: auto`, `overscroll-behavior-y: contain` and the quiet
-`thin-scrollbar` utility. Scrolling the form never moves the rail; on a short laptop screen (1280×720, 1366×768) the
-rail scrolls by itself to reach `API & MCP` and the summary card without scrolling the page. The settings grid
+`thin-scrollbar` utility. Scrolling the form never moves the rail. Since DEC-243 the single-card rail fits a 1366×768 laptop
+without scrolling; on an ultra-short window the bound still lets it scroll by itself without scrolling the page. The settings grid
 row reaches over the main area's 32 px bottom padding (grid `-mb-8`, content `pb-8`); otherwise sticky, bounded by its
 grid area, would push the rail up at the end of a long page. The POS summary
 on `/kasir` uses the same bound.

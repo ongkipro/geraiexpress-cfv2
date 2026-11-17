@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
+import { forwardRef, Fragment, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
 import { Link, useLinkProps, useNavigate } from "@tanstack/react-router"
 import { ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
 import { applyTextSize, storedTextSize, TEXT_SIZES, type TextSize } from "../../shell/workspace"
@@ -16,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible"
-import { Separator } from "../ui/separator"
 import {
   Sidebar,
   SidebarContent,
@@ -55,6 +54,8 @@ export interface ShellNavItem {
   /** Numeric badge (count) or a node (e.g. a warning icon); both carry their own accessible label. */
   badge?: { content: ReactNode; label: string } | null
   children?: Array<{ to: string; label: string; active: boolean }>
+  /** DEC-243: start expanded on every load (primary counter tools), still collapsible by the chevron. */
+  defaultOpen?: boolean
 }
 
 /**
@@ -160,29 +161,37 @@ export function AdminShell({
           {sidebarStatus ? <SidebarFooter className="p-3 group-data-[collapsible=icon]:hidden">{sidebarStatus}</SidebarFooter> : null}
         </Sidebar>
         <SidebarInset className="min-w-0 bg-background">
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5">
-            <SidebarTrigger aria-label="Buka atau ciutkan menu" className="size-11 text-muted-foreground md:size-9" />
-            <Separator orientation="vertical" className="mx-1 hidden h-5! md:block" />
-            <SiteBreadcrumb crumbs={crumbs} />
+          {/* DEC-243 3-zone topbar. ≥ 1024 px it is a 3-column grid (1fr | 260–380 px | 1fr): the breadcrumb lives in
+              its own flexible track, so a longer trail never moves the search bar — it sits at the same x on every page.
+              The right track holds only what fits beside it: an avatar-only account chip below xl and the labelled
+              pills (mini-site, TOTP) from 2xl, so utilities never run into the search (Sol R1 DEC-243 #1). */}
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)] lg:gap-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <SidebarTrigger className="size-11 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 md:size-9" />
+              <span aria-hidden className="hidden h-4 w-px shrink-0 bg-slate-200 md:block" />
+              <SiteBreadcrumb crumbs={crumbs} />
+            </div>
             <button
               type="button"
+              data-shell-search
               onClick={() => setSearchOpen(true)}
-              className="group mx-2 hidden h-9 w-full max-w-sm flex-1 items-center gap-2.5 rounded-lg bg-slate-100/80 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:flex xl:mx-6"
+              className="group hidden h-9 w-full items-center gap-2.5 rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 text-left text-sm text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition-colors hover:border-slate-300 hover:bg-slate-100/70 hover:text-slate-800 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:flex"
             >
-              <SearchIcon aria-hidden className="size-4 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate">Cari menu, INV, AWB…</span>
-              <kbd className="rounded bg-white px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground ring-1 ring-slate-200">⌘K</kbd>
+              <SearchIcon aria-hidden className="size-4 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate">Cari menu, INV, resi, atau HP…</span>
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-xs font-medium text-slate-500">{shortcutLabel()}</kbd>
             </button>
-            <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-1.5">
+            <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1 md:gap-1.5 lg:ml-0">
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                aria-label="Cari menu, INV atau AWB"
-                className="grid size-11 place-items-center rounded-lg text-muted-foreground hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:size-9 lg:hidden"
+                aria-label="Cari menu, INV, resi, atau HP"
+                className="grid size-11 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:size-9 lg:hidden"
               >
                 <SearchIcon aria-hidden className="size-[18px]" />
               </button>
               {toolbar}
+              <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-slate-200/80 sm:block" />
               <AccountMenu {...user} />
             </div>
           </header>
@@ -201,7 +210,7 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
   const close = () => isMobile && setOpenMobile(false)
   // DEC-237: a menu with children is a collapsible tree (sidebar-07); it opens when the section is active and the
   // chevron toggles it without navigating. Without children: a plain link.
-  const [open, setOpen] = useState(n.active)
+  const [open, setOpen] = useState(n.defaultOpen ?? n.active)
   // Entering the section opens the tree (state adjusted during render, not in an effect).
   const [wasActive, setWasActive] = useState(n.active)
   if (n.active !== wasActive) {
@@ -255,17 +264,25 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
   )
 }
 
+/** `⌘K` on Apple devices, `Ctrl K` elsewhere (the shortcut accepts both). */
+function shortcutLabel() {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘K" : "Ctrl K"
+}
+
 /** Section → page breadcrumb (navigation, not a title): muted parents, the current page darker, 14px. */
 function SiteBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
   const last = crumbs.at(-1)
   return (
     <Breadcrumb className="min-w-0 shrink" aria-label="Lokasi halaman">
       <BreadcrumbList className="flex-nowrap gap-1 text-sm sm:gap-1.5">
+        {/* Item and separator are sibling <li>s (DEC-243): a separator nested inside an item is invalid HTML. */}
         {crumbs.slice(0, -1).map((c) => (
-          <BreadcrumbItem key={c.label} className="hidden md:inline-flex">
-            {c.to ? <BreadcrumbLink className="text-muted-foreground hover:text-slate-900" render={<NavLink target={c.to} />}>{c.label}</BreadcrumbLink> : <span className="text-muted-foreground">{c.label}</span>}
-            <BreadcrumbSeparator />
-          </BreadcrumbItem>
+          <Fragment key={c.label}>
+            <BreadcrumbItem className="hidden md:inline-flex">
+              {c.to ? <BreadcrumbLink className="text-muted-foreground hover:text-slate-900" render={<NavLink target={c.to} />}>{c.label}</BreadcrumbLink> : <span className="text-muted-foreground">{c.label}</span>}
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="hidden md:inline-flex" />
+          </Fragment>
         ))}
         {last ? (
           <BreadcrumbItem className="min-w-0">
@@ -408,16 +425,18 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Menu akun"
-        className="ml-0.5 flex h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full pr-1 pl-0.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:bg-slate-100 md:h-9 lg:pr-2.5"
+        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent py-0.5 pr-1 pl-1 text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:border-slate-200 data-popup-open:bg-slate-100 md:min-h-9 md:min-w-0 xl:pr-2"
       >
-        <span aria-hidden className="grid size-8 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+        <span aria-hidden className="grid size-8 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white md:size-7">
           {initials(name)}
         </span>
-        <span className="hidden min-w-0 flex-col text-left leading-tight lg:flex">
-          <span className="max-w-36 truncate text-sm font-medium text-slate-900">{name}</span>
-          <span className="text-xs text-muted-foreground">{role}</span>
+        {/* Name + role only at normal text size: with Ukuran Teks enlarged (root rem 18/20 px) the labelled chip no
+            longer fits beside the fixed-width search (Sol R2 DEC-243), so the chip stays avatar-only. */}
+        <span className="hidden min-w-0 flex-col text-left leading-tight xl:flex in-data-text:hidden!">
+          <span className="max-w-32 truncate text-xs font-semibold text-slate-900">{name}</span>
+          <span className="text-xs text-slate-500">{role}</span>
         </span>
-        <ChevronDownIcon aria-hidden className="hidden size-3.5 text-slate-400 lg:block" />
+        <ChevronDownIcon aria-hidden className="hidden size-3.5 text-slate-400 xl:block in-data-text:hidden!" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-64">
         <DropdownMenuGroup>

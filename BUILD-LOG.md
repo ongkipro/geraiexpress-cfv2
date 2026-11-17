@@ -843,3 +843,28 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   R2 APPROVE. Integrated run `DEC-240` PASS 9/9; UI gates 0 fail on 45 routes (`docs/evidence/DEC-240/ui-gates.txt`).
 - Gate r2 failed e2e once: `/kiriman/cetak-massal` painted a late Belum Cetak response over Sudah Cetak (same stale-
   response race as the Kiriman list); fixed with the request-generation guard. Integrated run `DEC-240` r3 PASS 9/9.
+
+## 2026-11-17 — DEC-243 precision polish (rail, trees, topbar, period popover)
+
+- `routes/pengaturan/index/shared.tsx`: `GeraiSummary` removed; rail card `p-1.5`, rows `py-1.5`; rail 604 px tall at
+  1366×768 (no scroll). DEC-242 rail proof moved to a 1280×560 window.
+- `components/admin/shell.tsx`: `ShellNavItem.defaultOpen`; header = `lg:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)]`
+  (search x = 658 px on `/`, `/pengaturan/ekspedisi`, `/kiriman?tab=retur`, `/kasir/cek-resi` at 1440); breadcrumb
+  item/separator siblings; `BreadcrumbPage` without `role="link"`; account chip pill; `⌘K`/`Ctrl K` label by platform.
+- `shell/app-shell.tsx`: trees `defaultOpen`, `CalculatorIcon`, QR icon phones only, mini-site pill.
+- `components/period-filter/period-filter.tsx`: `h-9` trigger, `w-40` presets with check (no day-span pill, owner edit), `--cell-size:1.95rem` with
+  cells pinned (`flex-none`; the shared Calendar stretched `w-full` cells to 36 px), one footer row; popover 708 → 640 px.
+- Proof: `e2e/admin-shell.spec.ts` DEC-243 test; mutations M30–M33 red (`docs/evidence/DEC-243/mutations.md`).
+- Review: GPT-6.1 Sol R1 REQUEST_CHANGES — P1 right-zone utilities overlapped the centred search at 1024–1279 px
+  (console badges 167 px into it); P2 phone sheet month navigation 38 px. Fixed: right track holds only what fits
+  (avatar-only chip below xl, mini-site / TOTP pills from 2xl), phone cells back to 44 px; non-intersection e2e for both
+  consoles at 1024–1920 px with a long owner name; mutations M34–M37 red. First gate run failed on a recovery-spec
+  sync wait under load (timeout raised to 15 s).
+- Sol R2 REQUEST_CHANGES: at Ukuran Teks 125 % the labelled account chip still touched the search at 1280 px; the chip
+  is now avatar-only whenever `html[data-text]` is set (enlarged-text e2e sweep, mutation M38).
+- Sol R3 REQUEST_CHANGES: the console environment badge still ran into the search at 1024 px with 125 % text; hidden
+  at enlarged text below xl (environment stays in the brand and sidebar status). The header e2e now waits for the
+  sidebar width animation after a text-size reload before measuring (`searchGap`); the console sweep covers normal,
+  112 % and 125 % at 1024/1280/1536; mutations M38–M39 red.
+- R4 APPROVE. Integrated run `DEC-243` PASS 9/9 (r2 failed once on `minisite.spec.ts` tablet under load and passed on
+  rerun); UI gates 0 fail on 45 routes (`docs/evidence/DEC-243/ui-gates.txt`).

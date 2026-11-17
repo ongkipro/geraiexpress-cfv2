@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
 import { Link, Navigate, useRouterState } from "@tanstack/react-router"
-import { ArrowLeftIcon, Building2Icon, ChevronRightIcon, ExternalLinkIcon, GlobeIcon, KeyRoundIcon, PackageIcon, PrinterIcon, ShieldIcon, StoreIcon, TruckIcon, UsersIcon, WebhookIcon, type LucideIcon } from "lucide-react"
+import { ArrowLeftIcon, Building2Icon, ChevronRightIcon, GlobeIcon, KeyRoundIcon, PackageIcon, PrinterIcon, ShieldIcon, StoreIcon, TruckIcon, UsersIcon, WebhookIcon, type LucideIcon } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "../../../components/ui/button"
 import { Card } from "../../../components/ui/card"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { isOwner, refreshCounterStatus, useWorkspace, type Workspace } from "../../../shell/workspace"
 import { api, ApiError } from "../../../lib/api"
-import { StatusBadge } from "../../../components/admin/page"
 
 // Pengaturan (visual 08 §2, DEC-223, DEC-240 — TokoPhi settings rail): ≥ 1024 px a framed left rail (icon, title,
-// one-line subtitle) + gerai summary card beside the section; `/pengaturan` itself opens the first section there. Phones
+// one-line subtitle) beside the section, one card only (DEC-243: identity and Mengantar state already sit in the
+// shell); `/pengaturan` itself opens the first section there. Phones
 // get a grouped directory on `/pengaturan` and a `Semua Pengaturan` back link on each section. Kasir sees only
 // `Printer & Struk`.
 interface SettingsItem { to: string; label: string; hint: string; icon: LucideIcon; owner: boolean }
@@ -58,7 +58,7 @@ function SettingsLink({ item, active, warn, size }: { item: SettingsItem; active
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-lg transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        size === "rail" ? "px-2.5 py-2" : "min-h-16 px-4 py-3",
+        size === "rail" ? "px-2.5 py-1.5" : "min-h-16 px-4 py-3",
         active ? "bg-primary/8 text-primary" : "text-slate-900 hover:bg-slate-50",
       )}
     >
@@ -75,42 +75,6 @@ function SettingsLink({ item, active, warn, size }: { item: SettingsItem; active
   )
 }
 
-/** Owner rail foot: gerai identity, mini-site link and the Mengantar connection state. */
-function GeraiSummary() {
-  const w = useWorkspace()
-  const [m, setM] = useState<{ sellerId: string | null; webhookState: string | null } | null>(null)
-  useEffect(() => {
-    api<{ sellerId: string | null; webhookState: string | null }>("/settings/mengantar").then(setM).catch(() => setM(null))
-  }, [])
-  const initials = w.tenant.name.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join("")
-  return (
-    <Card className="gap-3 p-4 md:p-4">
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">{initials}</span>
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold text-slate-950">{w.tenant.name}</span>
-          <a href={`https://${w.tenant.miniSiteHost}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground hover:text-primary">
-            <span className="truncate">{w.tenant.miniSiteHost}</span>
-            <ExternalLinkIcon aria-hidden className="size-3 shrink-0" />
-          </a>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
-        {m === null ? (
-          <StatusBadge tone="muted">Memeriksa Mengantar…</StatusBadge>
-        ) : !m.sellerId ? (
-          <StatusBadge tone="muted">Mengantar belum terhubung</StatusBadge>
-        ) : (
-          <>
-            <StatusBadge tone="safe">Mengantar terhubung</StatusBadge>
-            <StatusBadge tone={m.webhookState === "active" ? "safe" : "warn"}>{m.webhookState === "active" ? "Webhook aktif" : "Webhook belum aktif"}</StatusBadge>
-          </>
-        )}
-      </div>
-    </Card>
-  )
-}
-
 /** Section page frame: rail (≥ 1024 px) + the section's own `h1`, description and cards (flush-left, max 896 px). */
 export function SettingsLayout({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) {
   const w = useWorkspace()
@@ -122,12 +86,12 @@ export function SettingsLayout({ title, description, actions, children }: { titl
           (100dvh − 6.5rem), so scrolling the form never moves it, while the rail itself scrolls when it is taller than
           the screen. The grid row reaches over the main area's 32 px bottom padding (grid `lg:-mb-8`, content column `lg:pb-8`):
           sticky is bounded by its grid area, and without that the rail is pushed up 12 px at the end of the page. */}
-      <aside aria-label="Navigasi pengaturan" data-settings-rail className="thin-scrollbar hidden space-y-4 lg:sticky lg:top-[5.25rem] lg:block lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
-        <Card className="gap-0 p-2 md:p-2">
+      <aside aria-label="Navigasi pengaturan" data-settings-rail className="thin-scrollbar hidden lg:sticky lg:top-[5.25rem] lg:block lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
+        <Card className="gap-0 p-1.5 md:p-1.5">
           <nav aria-label="Menu pengaturan">
             {visibleGroups(owner).map((g) => (
-              <div key={g.label} className="pb-1 not-first:mt-1 not-first:border-t not-first:border-slate-100 not-first:pt-1">
-                <p className="px-2.5 pt-2 pb-1 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label}</p>
+              <div key={g.label} className="not-first:mt-1 not-first:border-t not-first:border-slate-100 not-first:pt-1">
+                <p className="px-2.5 pt-1.5 pb-1 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label}</p>
                 <ul className="flex flex-col gap-0.5">
                   {g.items.map((i) => (
                     <li key={i.to}>
@@ -139,7 +103,6 @@ export function SettingsLayout({ title, description, actions, children }: { titl
             ))}
           </nav>
         </Card>
-        {owner ? <GeraiSummary /> : null}
       </aside>
       <div className="flex w-full max-w-4xl min-w-0 flex-col gap-4 md:gap-5 lg:pb-8">
         <div className="flex flex-col gap-3">

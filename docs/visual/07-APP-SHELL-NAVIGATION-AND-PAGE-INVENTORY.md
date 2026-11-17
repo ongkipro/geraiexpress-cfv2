@@ -17,7 +17,7 @@
 
 ```text
 ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
-│ [B] Berkah Jaya    │ [≡] Dashboard   [🔍 Cari menu, INV, AWB…  ⌘K]  Mini-Site↗ [QR] [🔔3] (BA)Ani▾│ ← topbar 64 px, white
+│ [B] Berkah Jaya    │ [≡] Dashboard    [Q Cari menu, INV, resi…  Ctrl K]   Mini-Site↗ [B3] (BA)Ani▾│ ← topbar 64 px, 3-column grid (DEC-243)
 │ berkahjaya.gerai…  │                                                                              │
 │ [+ Kiriman Baru][⌗]│ ← quick-action row (dashboard-01 NavMain)                                    │
 ├────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
@@ -45,8 +45,7 @@
 | Sidebar header | Outlet logo + name (`▾` opens the outlet switcher only when the user is a member of >1 tenant, PR-24), mini-site link | Promo, upgrade banners |
 | Sidebar nav | 7 menus in three groups (DEC-241): **Utama** `Dashboard` · `Buat Pengiriman` ▸ `Kiriman Satuan` · `Paket Massal` · `Cek Ongkir & Resi` ▸ `Cek Ongkir` · `Cek Resi`; **Operasional** `Kiriman` ▸ `Daftar Kiriman` · `Pickup & Surat Jalan` · `Cetak Resi Massal` · `Riwayat Massal` · `Meja Retur` · `Kendala & Klaim`, `Kontak` ▸ `Data Pengirim` · `Data Penerima`; **Administrasi** `Keuangan` ▸ `Ringkasan & Saldo` · `Mutasi Mengantar` · `Laba per Kiriman` · `Cadangan Retur` · `Selisih Sync` (owner), `Pengaturan` (one entry; its 10 pages have their own rail). Collapsible tree (shadcn `sidebar-07`) that opens when its section is active; tab-backed children (`/kiriman?tab=retur`) are active only on their tab. Badge counts only on `Kiriman`; `⚠` on `Pengaturan` while the webhook is inactive | Third-level links, settings pages, external links, `Shift Loket` (deferred, TASK-704) |
 | Sidebar footer | `Status loket`: label format + Mengantar connection (owner) | Logout (lives in the account menu), shift state (deferred, DEC-241) |
-| Header left | Sidebar trigger + breadcrumb whose last crumb is the page `h1` (`Buat Pengiriman › Kiriman Satuan`, `Kiriman › INV 8K4M2P7`; DEC-236); pages never repeat a breadcrumb in the body | Menu duplication |
-| Header right | Global search (INV, AWB, phone; `Ctrl+K`), notifications, account menu, **`📷 Scan QR`** and **`+ Kiriman Baru`** — primary style only on `Dashboard`, `/kasir` and `/kiriman`; on every page that has its own primary action (§3) it renders as an outline button, and it is hidden on `/kiriman/:slug` | More than one primary button per screen |
+| Header (DEC-243) | ≥ 1024 px a 3-column grid `minmax(0,1fr) · minmax(260px,380px) · minmax(0,1fr)`: **left** sidebar trigger + divider + breadcrumb (navigation only; separators are sibling `<li>`s, the current crumb is `aria-current="page"` text); **centre** the `⌘K`/`Ctrl K` search bar, at the same x on every page whatever the breadcrumb length; **right** notifications, divider, account chip (avatar only below 1280 px), mini-site pill from 1536 px — the right track never runs into the search (GPT-6.1 Sol R1). Below 1024 px: flex row, search becomes an icon button; `Pindai QR` icon only on phones (the sidebar quick-action row has it elsewhere) | Menu duplication, a second QR icon on desktop |
 | Page body | Title row → in-page tabs → filters/toolbar → content → sticky action bar when the page has a commit action | A second navigation sidebar |
 
 Account menu (`Ani ▾`): `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`

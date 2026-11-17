@@ -25,7 +25,7 @@ test("Menunggu Saldo → isi saldo → sinkronkan → resi terbit otomatis", asy
   await api.post(`${APP}/api/app/dev/mock-invoices`, { headers: h, data: { topUp: 200_000 } })
   await page.goto(`${APP}/keuangan`)
   await page.getByRole("button", { name: "Sinkronkan Sekarang" }).click()
-  await expect(page.getByText(/Sinkron selesai/)).toBeVisible()
+  await expect(page.getByText(/Sinkron selesai/)).toBeVisible({ timeout: 15_000 })
   await page.goto(`${APP}/kiriman/${slug}`)
   await expect(page.getByText("Resi terbit", { exact: true }).first()).toBeVisible()
   await expect(page.getByText(/AWB JT/)).toBeVisible()

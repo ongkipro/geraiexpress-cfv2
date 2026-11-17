@@ -1,18 +1,54 @@
 import type { Page } from "@playwright/test"
 import { expect, test } from "./fixtures"
-import { APP, lastMail, uniqueEmail } from "./helpers"
+import { APP, OWNER, lastMail, uniqueEmail } from "./helpers"
 
 // DEC-239 shell + POS keyboard behaviour (GPT-6.1 Sol review R1 #1, #3, #7): the courier radio group always has a tab
 // stop in the visible category and arrows move from the focused row; the ⌘K palette keeps the active option in view;
 // the sidebar counter status follows a saved label format. DEC-241: sidebar taxonomy and the deferred Shift Loket.
-async function seeded(page: Page, prefix: string) {
+async function seeded(page: Page, prefix: string, name = "Bu Rapi") {
   const api = page.context().request
   const email = uniqueEmail(prefix)
   const h = { origin: APP, "content-type": "application/json" }
   const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
   const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(page.context().request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
-  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Rapi", password: "rapi-e2e-kuat-1" } })
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name, password: "rapi-e2e-kuat-1" } })
   expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `r${Date.now().toString(36)}`, name: "Gerai Rapi", connect: true } })).status()).toBe(201)
+}
+
+/**
+ * Right-zone gap to the search once layout has settled: the sidebar animates its width after a reload at a new text
+ * size, so measure only when two readings 150 ms apart agree.
+ */
+async function searchGap(page: Page) {
+  const read = () =>
+    page.evaluate(() => {
+      const h = document.querySelector("header")!
+      const s = h.querySelector("[data-shell-search]")!.getBoundingClientRect()
+      const left = h.children[0]!.getBoundingClientRect()
+      const right = [...h.children[2]!.children].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0)
+      return { x: s.left, before: s.left - left.right, after: Math.min(...right.map((r) => r.left)) - s.right }
+    })
+  let prev = await read()
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(150)
+    const next = await read()
+    if (next.x === prev.x && next.after === prev.after) return next
+    prev = next
+  }
+  return prev
+}
+
+/** A local Super Admin (bootstrap allows more than one on GX_ENV=local) for the console preview login. */
+async function seededAdmin(page: Page) {
+  const api = page.context().request
+  const email = uniqueEmail("e2e-rapi-sa")
+  const h = { origin: APP, "content-type": "application/json" }
+  const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
+  const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(page.context().request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Admin Konsol Contoh Panjang", password: "rapi-sa-kuat-1" } })
+  const ops = (await import("node:fs")).readFileSync(".dev.vars", "utf8").match(/^OPS_TOKEN=(.*)$/m)![1]!.trim().replace(/^(["'])(.*)\1$/, "$2")
+  expect((await api.post(`${OWNER}/internal/ops/bootstrap-admin`, { headers: { authorization: `Bearer ${ops}`, "content-type": "application/json" }, data: { email } })).status()).toBe(201)
+  return email
 }
 
 test("courier rows: one tab stop per category, arrows move from the focused row", async ({ page }, info) => {
@@ -79,7 +115,9 @@ test("sidebar: Buat Pengiriman, Cek Ongkir & Resi, and Kiriman sub-tree follow t
   await page.goto(`${APP}/kasir/cek-resi`)
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
   await expect(nav.getByRole("link", { name: "Cek Resi" })).toHaveAttribute("aria-current", "page")
-  await expect(nav.getByRole("link", { name: "Kiriman Satuan" })).toBeHidden()
+  // DEC-243: the counter trees are open on every page, but only the current section is marked.
+  await expect(nav.getByRole("link", { name: "Kiriman Satuan" })).toBeVisible()
+  await expect(nav.getByRole("link", { name: "Kiriman Satuan" })).not.toHaveAttribute("aria-current", "page")
   await expect(page.getByRole("navigation", { name: "Lokasi halaman" })).toContainText("Cek Ongkir & Resi")
   await expect(nav.getByRole("link", { name: "Shift Loket" })).toHaveCount(0)
 
@@ -127,4 +165,88 @@ test("Pengaturan: error cabut kunci tampil di dialog; /pengaturan ikut lebar lay
   await expect(page).toHaveURL(/\/pengaturan$/)
   await page.setViewportSize({ width: 1280, height: 800 })
   await expect(page).toHaveURL(/\/pengaturan\/profil$/)
+})
+
+// DEC-243: the topbar search sits at the same x on every page (3-column grid header), the breadcrumb is valid HTML
+// (no <li> inside an <li>), both counter trees are open on load, and the settings rail is one card that fits without
+// scrolling on a 1440×900 screen.
+test("DEC-243: search tidak bergeser, breadcrumb valid, pohon kasir terbuka, rail tanpa gulir", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "desktop header")
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await seeded(page, "e2e-rapi-e")
+  const search = page.locator("[data-shell-search]")
+  const xs: number[] = []
+  for (const to of ["/", "/pengaturan/ekspedisi", "/kiriman?tab=retur", "/kasir/cek-resi"]) {
+    await page.goto(`${APP}${to}`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    const box = (await search.boundingBox())!
+    xs.push(box.x)
+    expect(await page.locator("[data-slot=breadcrumb-item] li").count()).toBe(0)
+  }
+  expect(new Set(xs).size).toBe(1)
+
+  const nav = page.getByRole("navigation", { name: "Menu utama" })
+  await page.goto(`${APP}/keuangan`)
+  for (const name of ["Kiriman Satuan", "Paket Massal", "Cek Ongkir", "Cek Resi"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible()
+
+  // The rail must fit a common 1366×768 laptop without scrolling (the duplicate summary card is gone).
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto(`${APP}/pengaturan/printer`)
+  const rail = page.locator("[data-settings-rail]")
+  await expect(rail.getByRole("link", { name: /API & MCP/ })).toBeVisible()
+  expect(await rail.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
+  await expect(rail.getByText("Mengantar terhubung")).toHaveCount(0)
+})
+
+// Sol R1 (DEC-243) #1: no topbar control may run into the search bar at narrow desktop widths (expanded sidebar,
+// long owner name); #2: the phone period sheet keeps 44 px month-navigation targets.
+test("DEC-243: utilitas topbar tidak menimpa pencarian; navigasi bulan di HP ≥ 44 px", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "desktop + phone viewports set in the test")
+  await seeded(page, "e2e-rapi-f", "Ibu Kartika Sekar Ayuningtyas Wulandari")
+  for (const width of [1024, 1100, 1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto(`${APP}/pengaturan/ekspedisi`)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    const gap = await searchGap(page)
+    expect(gap.before, `left zone overlaps search at ${width}px`).toBeGreaterThanOrEqual(0)
+    expect(gap.after, `right zone overlaps search at ${width}px`).toBeGreaterThanOrEqual(0)
+  }
+
+  // Sol R2: the same holds with Ukuran Teks enlarged (root rem 18 / 20 px), long name included.
+  for (const size of ["besar", "sangat-besar"]) {
+    await page.evaluate((v) => localStorage.setItem("gx-text-size", v), size)
+    for (const width of [1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 800 })
+      await page.goto(`${APP}/pengaturan/ekspedisi`)
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+      const { after } = await searchGap(page)
+      expect(after, `right zone overlaps search at ${width}px, text ${size}`).toBeGreaterThanOrEqual(0)
+    }
+  }
+  await page.evaluate(() => localStorage.removeItem("gx-text-size"))
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${APP}/`)
+  await page.getByRole("button", { name: /^Periode:/ }).click()
+  for (const name of [/bulan sebelumnya/i, /bulan berikutnya/i]) {
+    const box = (await page.getByRole("dialog").getByRole("button", { name }).boundingBox())!
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44)
+  }
+
+  // The Super Admin console (environment + TOTP pills on the right) under the same rule, via the local preview login
+  // (last: seeding the admin signs this browser context in as that user on app.).
+  const ops = (await import("node:fs")).readFileSync(".dev.vars", "utf8").match(/^OPS_TOKEN=(.*)$/m)![1]!.trim().replace(/^(["'])(.*)\1$/, "$2")
+  const admin = await seededAdmin(page)
+  // Normal and both enlarged text sizes (Sol R3: the console's environment badge at 125 % / 1024 px).
+  for (const size of [null, "besar", "sangat-besar"]) {
+    for (const width of [1024, 1280, 1536]) {
+      await page.setViewportSize({ width, height: 800 })
+      await page.goto(`${OWNER}/internal/dev/preview?token=${ops}&as=${encodeURIComponent(admin)}&to=%2Fgerai`)
+      await page.evaluate((v) => (v ? localStorage.setItem("gx-text-size", v) : localStorage.removeItem("gx-text-size")), size)
+      await page.reload()
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+      const { after } = await searchGap(page)
+      expect(after, `console right zone overlaps search at ${width}px, text ${size ?? "normal"}`).toBeGreaterThanOrEqual(0)
+    }
+  }
 })
