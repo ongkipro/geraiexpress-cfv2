@@ -62,7 +62,7 @@ export function PenerimaPage() {
           )
         ) : (
           <>
-            <div className="hidden md:block">
+            <div className="hidden overflow-hidden rounded-xl border border-slate-200/85 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -89,7 +89,7 @@ export function PenerimaPage() {
                 <li key={r.id}>
                   <button type="button" onClick={() => setEditing(r)} className="flex min-h-11 w-full flex-col items-start gap-2 px-4 py-3 text-left">
                     <span className="font-medium">{r.name} <span className="font-normal text-muted-foreground tabular-nums">· {r.phone}</span></span>
-                    <span className="text-base text-muted-foreground">{r.subdistrict_name ?? "—"} · {r.street_address}</span>
+                    <span className="text-base md:text-sm text-muted-foreground">{r.subdistrict_name ?? "—"} · {r.street_address}</span>
                     <RiskChip badge={r.risk.badge} delivered={r.cod_delivered_count} rts={r.cod_rts_count} rtsBps={r.risk.rtsBps} />
                   </button>
                 </li>
@@ -144,7 +144,7 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
       <AreaPicker label="Kecamatan tujuan" value={area} onChange={setArea} error={errors.areaId} />
       <TextField label="Alamat lengkap" name="street" value={street} onChange={setStreet} error={errors.street} hint="Nama jalan, nomor rumah, RT/RW." required maxLength={200} />
       <TextField label="Patokan (opsional)" name="note" value={note} onChange={setNote} maxLength={200} />
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
         {recipient && canArchive ? <Button type="button" variant="outline" onClick={async () => { await api(`/contacts/recipients/${recipient.id}/archive`, { body: {} }); onSaved() }}>Arsipkan</Button> : null}

@@ -71,22 +71,22 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
   const cod = s.cod_fee_mode !== "none"
   return (
     <SectionCard id="ringkasan" title="Ringkasan (terkunci)">
-      <dl className="flex flex-col gap-2 text-base tabular-nums">
-        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ekspedisi</dt><dd>{s.courier_code} · {d.quote?.service_code}</dd></div>
-        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Berat ditagih</dt><dd>{((d.quote?.billable_weight_gram ?? 0) / 1000).toLocaleString("id-ID")} kg</dd></div>
-        {Number(s.item_quantity ?? 1) > 1 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Jumlah barang</dt><dd>{String(s.item_quantity)}</dd></div> : null}
-        {d.quote && Number(d.quote.declared_value_idr ?? 0) > 0 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Nilai barang</dt><dd>{rp(Number(d.quote.declared_value_idr))}</dd></div> : null}
-        {d.quote && Number(d.quote.is_dangerous_goods ?? 0) === 1 ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Barang berbahaya</dt><dd>Ya (DG)</dd></div> : null}
-        {s.delivery_instruction ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Instruksi kurir</dt><dd className="text-right">{String(s.delivery_instruction)}</dd></div> : null}
-        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ongkir</dt><dd>{rp(s.publish_shipping_idr)}</dd></div>
-        {s.packing_addon_idr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Packing</dt><dd>{rp(s.packing_addon_idr)}</dd></div> : null}
+      <dl className="flex flex-col gap-2 text-base md:text-sm tabular-nums">
+        <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Ekspedisi</dt><dd>{s.courier_code} · {d.quote?.service_code}</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Berat ditagih</dt><dd>{((d.quote?.billable_weight_gram ?? 0) / 1000).toLocaleString("id-ID")} kg</dd></div>
+        {Number(s.item_quantity ?? 1) > 1 ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Jumlah barang</dt><dd>{String(s.item_quantity)}</dd></div> : null}
+        {d.quote && Number(d.quote.declared_value_idr ?? 0) > 0 ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Nilai barang</dt><dd>{rp(Number(d.quote.declared_value_idr))}</dd></div> : null}
+        {d.quote && Number(d.quote.is_dangerous_goods ?? 0) === 1 ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Barang berbahaya</dt><dd>Ya (DG)</dd></div> : null}
+        {s.delivery_instruction ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Instruksi kurir</dt><dd className="text-right">{String(s.delivery_instruction)}</dd></div> : null}
+        <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Ongkir</dt><dd>{rp(s.publish_shipping_idr)}</dd></div>
+        {s.packing_addon_idr ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Packing</dt><dd>{rp(s.packing_addon_idr)}</dd></div> : null}
         {cod ? (
           <>
-            <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ditagih kurir ke penerima</dt><dd>{rp(s.cod_collection_total_idr)}</dd></div>
-            {s.cod_fee_mode !== "dfod" ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Cair ke pengirim</dt><dd>{rp(s.sender_cod_payable_idr)}</dd></div> : null}
+            <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Ditagih kurir ke penerima</dt><dd>{rp(s.cod_collection_total_idr)}</dd></div>
+            {s.cod_fee_mode !== "dfod" ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Cair ke pengirim</dt><dd>{rp(s.sender_cod_payable_idr)}</dd></div> : null}
           </>
         ) : null}
-        <div className="flex justify-between gap-3 border-t pt-2 text-lg font-semibold"><dt>Bayar di loket</dt><dd>{rp(s.counter_due_idr)}</dd></div>
+        <div className="flex justify-between gap-3 border-t pt-2 text-sm font-semibold md:text-base"><dt>Bayar di loket</dt><dd>{rp(s.counter_due_idr)}</dd></div>
         {owner && typeof s.estimated_profit_idr === "number" ? <div className="flex justify-between gap-3 text-muted-foreground"><dt>Estimasi laba</dt><dd>{rp(s.estimated_profit_idr)}</dd></div> : null}
       </dl>
     </SectionCard>
@@ -111,13 +111,13 @@ export function PartyPicker({ kind, value, onPick }: { kind: "senders" | "recipi
       <ul className="flex flex-col divide-y border-y" aria-label={`Pilihan ${label.toLowerCase()}`}>
         {items.map((c) => (
           <li key={c.id}>
-            <button type="button" aria-pressed={value?.id === c.id} onClick={() => onPick(c)} className={`flex min-h-11 w-full flex-col items-start px-3 py-2 text-left text-base ${value?.id === c.id ? "bg-primary/10 font-medium" : "hover:bg-muted"}`}>
+            <button type="button" aria-pressed={value?.id === c.id} onClick={() => onPick(c)} className={`flex min-h-11 w-full flex-col items-start px-3 py-2 text-left text-base md:text-sm ${value?.id === c.id ? "bg-primary/10 font-medium" : "hover:bg-muted"}`}>
               <span>{c.display_brand_name ?? c.true_name ?? c.name}</span>
               <span className="text-muted-foreground tabular-nums">{c.true_phone ?? c.phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}{kind === "senders" ? (c.wa_verified_at ? " · WA terverifikasi" : " · WA belum diverifikasi") : ""}</span>
             </button>
           </li>
         ))}
-        {items.length === 0 ? <li className="px-3 py-2 text-base text-muted-foreground">Tidak ada. Tambah lewat menu Kontak.</li> : null}
+        {items.length === 0 ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Tidak ada. Tambah lewat menu Kontak.</li> : null}
       </ul>
     </div>
   )
@@ -169,20 +169,20 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
   const primary = needPay ? `Tandai Lunas & Cetak · ${rp(due)}` : s.counter_payment_status === "unpaid" ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
   const busy = s.dispatch_state === "issuing_in_flight" || s.dispatch_state === "reconciliation_needed"
   return (
-    <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-      <div className="flex flex-col gap-6">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">
+      <div className="flex flex-col gap-4 md:gap-5">
         <SectionCard id="pengirim" title="3. Pengirim">
           <div className="flex flex-col gap-3">
           <PartyPicker kind="senders" value={sender} onPick={setSender} />
-          {errors.senderId ? <p role="alert" className="text-base text-danger">{errors.senderId}</p> : null}
+          {errors.senderId ? <p role="alert" className="text-base md:text-sm text-danger">{errors.senderId}</p> : null}
           <PresetPicker value={preset} onChange={setPreset} cod={s.cod_fee_mode !== "none"} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
-          {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
+          {errors.maskPreset ? <p role="alert" className="text-base md:text-sm text-danger">{errors.maskPreset}</p> : null}
         </div>
         </SectionCard>
         <SectionCard id="penerima" title="4. Penerima & isi paket">
           <div className="flex flex-col gap-3">
           <PartyPicker kind="recipients" value={recipient} onPick={setRecipient} />
-          {errors.recipientId ? <p role="alert" className="text-base text-danger">{errors.recipientId}</p> : null}
+          {errors.recipientId ? <p role="alert" className="text-base md:text-sm text-danger">{errors.recipientId}</p> : null}
           <Field data-invalid={errors.content ? true : undefined}>
             <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
             <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
@@ -191,16 +191,16 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           <CheckboxField checked={ack} onCheckedChange={setAck}>
             Isi paket bukan barang terlarang atau berbahaya
           </CheckboxField>
-          {errors.prohibitedAck ? <p role="alert" className="text-base text-danger">{errors.prohibitedAck}</p> : null}
+          {errors.prohibitedAck ? <p role="alert" className="text-base md:text-sm text-danger">{errors.prohibitedAck}</p> : null}
         </div>
         </SectionCard>
       </div>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 md:gap-5">
         <Summary d={d} owner={owner} />
         <SectionCard id="bayar" title="5. Catat pembayaran">
           <div className="flex flex-col gap-3">
           {s.counter_payment_status === "not_required" ? (
-            <p className="text-base text-muted-foreground">Tidak ada yang dibayar di loket.</p>
+            <p className="text-base md:text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
           ) : (
             <>
               <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="w-full flex-wrap">
@@ -213,21 +213,21 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
                 <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
                   <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
                   <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
-                  {cashNum >= due ? <p className="text-base tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
+                  {cashNum >= due ? <p className="text-base md:text-sm tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
                 </Field>
               ) : null}
-              {method === "qris" || method === "transfer" ? <p className="text-base text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
+              {method === "qris" || method === "transfer" ? <p className="text-base md:text-sm text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
             </>
           )}
           {d.preflight?.balance_sufficient === false ? (
-            <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base font-medium">
+            <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base md:text-sm font-medium">
               {owner && d.preflight.synced_balance_idr != null && d.preflight.estimated_debit_idr != null
                 ? `Saldo Mengantar tercatat ${rp(d.preflight.synced_balance_idr)}, estimasi debet ${rp(d.preflight.estimated_debit_idr)}. Kiriman akan disimpan sebagai Menunggu Saldo sampai saldo diisi.`
                 : "Saldo pengiriman gerai belum mencukupi untuk menerbitkan resi sekarang. Kiriman akan disimpan sebagai Menunggu Saldo — silakan beri tahu pemilik gerai."}
             </p>
           ) : null}
-          {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
-          {busy ? <p role="status" className="text-base text-warn">Status penerbitan sedang dipastikan ke Mengantar. Jangan buat ulang kiriman ini.</p> : null}
+          {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
+          {busy ? <p role="status" className="text-base md:text-sm text-warn">Status penerbitan sedang dipastikan ke Mengantar. Jangan buat ulang kiriman ini.</p> : null}
           <Button className="hidden md:inline-flex" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>
             <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
           </Button>
@@ -235,7 +235,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
         </SectionCard>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card p-3 md:hidden">
-        <span className="flex flex-col text-base tabular-nums"><span className="text-muted-foreground">Total</span><strong>{rp(due)}</strong></span>
+        <span className="flex flex-col text-base md:text-sm tabular-nums"><span className="text-muted-foreground">Total</span><strong>{rp(due)}</strong></span>
         <Button className="flex-1" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>
           {pending ? "Memproses…" : needPay ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
         </Button>
@@ -263,13 +263,13 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
     }
   }
   return (
-    <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">
       <Panel className="flex flex-col gap-4">
         {s.dispatch_state === "issued" ? (
           <>
-            <p className="flex items-center gap-2 text-lg font-semibold text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
-            <p className="text-base tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
-            <p className="text-base">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
+            <p className="flex items-center gap-2 text-sm font-semibold md:text-base text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
+            <p className="text-base md:text-sm tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
+            <p className="text-base md:text-sm">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
             {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
             {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
             <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
@@ -277,14 +277,14 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
           </>
         ) : s.dispatch_state === "provider_unpaid_hold" ? (
           <>
-            <p className="text-lg font-semibold text-warn">Menunggu saldo Mengantar</p>
-            <p className="text-base">Kiriman sudah tercatat di Mengantar tetapi resi belum terbit karena saldo kurang. Isi saldo, lalu tekan tombol di bawah. Label belum bisa dicetak.</p>
+            <p className="text-sm font-semibold md:text-base text-warn">Menunggu saldo Mengantar</p>
+            <p className="text-base md:text-sm">Kiriman sudah tercatat di Mengantar tetapi resi belum terbit karena saldo kurang. Isi saldo, lalu tekan tombol di bawah. Label belum bisa dicetak.</p>
             <div><Button onClick={() => act(() => api(`/shipments/${s.slug}/pay-unpaid`, { body: {} }))} disabled={pending}>Bayar ke Mengantar & Terbitkan Resi</Button></div>
           </>
         ) : (
-          <p className="text-lg font-semibold">Kiriman dibatalkan</p>
+          <p className="text-sm font-semibold md:text-base">Kiriman dibatalkan</p>
         )}
-        {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+        {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
         {s.dispatch_state !== "cancelled" ? (
           <div className="flex flex-col gap-2 border-t pt-4">
             <Field>
@@ -330,13 +330,13 @@ function SimulateStatus({ slug, reload }: { slug: string; reload: () => void }) 
   }
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
-      <p className="text-base font-medium">Simulasi status (sandbox)</p>
+      <p className="text-base md:text-sm font-medium">Simulasi status (sandbox)</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={pending} onClick={() => go("ON DELIVERY")}>Sedang diantar</Button>
         <Button variant="outline" disabled={pending} onClick={() => go("DELIVERED")}>Terkirim</Button>
         <Button variant="outline" disabled={pending} onClick={() => go("RTS")}>Retur</Button>
       </div>
-      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}
     </div>
   )
 }
@@ -346,8 +346,8 @@ function Reveal({ slug, preset }: { slug: string; preset: MaskPreset }) {
   const [reason, setReason] = useState("")
   const [who, setWho] = useState<{ name: string; phone: string; brand: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  if (who) return <p className="rounded-lg bg-muted px-3 py-2 text-base">Pengirim asli: <strong>{who.name}</strong> · {who.phone}{who.brand ? ` (toko ${who.brand})` : ""}</p>
-  if (!open) return <div><Button variant="outline" onClick={() => setOpen(true)}>Lihat Pengirim Asli</Button> <span className="text-base text-muted-foreground">Label: {PRESET_LABEL[preset]}</span></div>
+  if (who) return <p className="rounded-lg bg-muted px-3 py-2 text-base md:text-sm">Pengirim asli: <strong>{who.name}</strong> · {who.phone}{who.brand ? ` (toko ${who.brand})` : ""}</p>
+  if (!open) return <div><Button variant="outline" onClick={() => setOpen(true)}>Lihat Pengirim Asli</Button> <span className="text-base md:text-sm text-muted-foreground">Label: {PRESET_LABEL[preset]}</span></div>
   return (
     <form onSubmit={async (e) => { e.preventDefault(); setError(null); try { setWho(await api(`/shipments/${slug}/reveal-sender`, { body: { reason } })) } catch (err) { setError(err instanceof ApiError ? err.body.message : "Gagal.") } }} className="flex flex-col gap-2 border-t pt-3" noValidate>
       <Field data-invalid={error ? true : undefined}>
@@ -385,10 +385,10 @@ function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: ()
   }
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      <p className="text-base font-medium tabular-nums">Hak COD pengirim {rp(payable)} · sudah dibayar {rp(paid)} · sisa {rp(remaining)}</p>
+      <p className="text-base md:text-sm font-medium tabular-nums">Hak COD pengirim {rp(payable)} · sudah dibayar {rp(paid)} · sisa {rp(remaining)}</p>
       {remaining > 0 ? (
         <>
-          {!settled ? <p className="text-base text-muted-foreground">Dana COD belum masuk ke saldo Mengantar.{owner ? " Pemilik bisa bayar lebih dulu dengan alasan." : ""}</p> : null}
+          {!settled ? <p className="text-base md:text-sm text-muted-foreground">Dana COD belum masuk ke saldo Mengantar.{owner ? " Pemilik bisa bayar lebih dulu dengan alasan." : ""}</p> : null}
           <div className="flex flex-wrap items-end gap-2">
             <Field><FieldLabel htmlFor="cair">Nominal pencairan</FieldLabel><Input id="cair" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="w-40 tabular-nums" /></Field>
             <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as "tunai" | "transfer")} variant="outline" aria-label="Cara pencairan">
@@ -400,7 +400,7 @@ function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: ()
           <div><Button variant="outline" onClick={pay} disabled={!amount}>Cairkan ke Pengirim</Button></div>
         </>
       ) : null}
-      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}
     </div>
   )
 }

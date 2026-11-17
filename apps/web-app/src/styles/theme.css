@@ -1,4 +1,6 @@
-/* Direction A (DESIGN.md, DEC-222): system UI stack, clean white + Mengantar blue, light only. Shared by both SPAs. */
+/* Direction A (DESIGN.md, DEC-222) on the DEC-239 desk scale: system UI stack, Mengantar blue, light only. The page
+   canvas is cool slate #F6F7F9; sidebar, topbar and cards are white and sit on it (AdsBookCMS / TokoPhi / dashboard-01
+   surface model). Shared by both SPAs. */
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -53,14 +55,14 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.25);
-  --radius-2xl: calc(var(--radius) * 1.25);
-  --radius-3xl: calc(var(--radius) * 1.25);
-  --radius-4xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+  --radius-3xl: calc(var(--radius) * 1.5);
+  --radius-4xl: calc(var(--radius) * 1.5);
 }
 
 :root {
   color-scheme: light;
-  --background: #ffffff;
+  --background: #f6f7f9;
   --foreground: #203551;
   --card: #ffffff;
   --card-foreground: #203551;
@@ -70,12 +72,12 @@
   --primary-foreground: #ffffff;
   --secondary: #eef1fb;
   --secondary-foreground: #2e47ba;
-  --muted: #f5f7fa;
+  --muted: #f1f5f9;
   --muted-foreground: #55657d;
   --accent: #eef1fb;
   --accent-foreground: #2e47ba;
   --destructive: #c92a2a;
-  --border: #e3e8f0;
+  --border: #e2e8f0;
   --input: #7b879c;
   --ring: #2e47ba;
   --chart-1: #2e47ba;
@@ -109,6 +111,6 @@ html[data-text="sangat-besar"] { font-size: 125%; }
 @layer base {
   * { @apply border-border outline-ring/50; }
   html { @apply font-sans; font-size: 16px; }
-  body { @apply bg-background text-foreground; }
+  body { @apply bg-background text-sm text-foreground; }
   .num { font-variant-numeric: tabular-nums; }
 }

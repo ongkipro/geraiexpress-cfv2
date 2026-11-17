@@ -68,17 +68,17 @@ export function PaketMassalPage() {
   return (
     <div className="pb-24 md:pb-0">
       <PageTitle title="Paket Massal" description="Satu pengirim, banyak paket, satu kali bayar di loket. Maksimal 200 baris." />
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 md:gap-5">
         <SectionCard id="pengirim" title="1. Pengirim">
           {sender ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-base"><span className="font-medium">{sender.display_brand_name ?? sender.true_name}</span> <span className="text-muted-foreground tabular-nums">{sender.true_phone}</span></p>
+              <p className="text-base md:text-sm"><span className="font-medium">{sender.display_brand_name ?? sender.true_name}</span> <span className="text-muted-foreground tabular-nums">{sender.true_phone}</span></p>
               <Button variant="outline" onClick={() => setSender(null)}>Ganti</Button>
             </div>
           ) : (
             <PartyPicker kind="senders" value={sender} onPick={setSender} />
           )}
-          {errors.senderId ? <p role="alert" className="mt-2 text-base text-danger">{errors.senderId}</p> : null}
+          {errors.senderId ? <p role="alert" className="mt-2 text-base md:text-sm text-danger">{errors.senderId}</p> : null}
         </SectionCard>
 
         <SectionCard id="layanan" title="2. Ekspedisi & COD untuk semua baris">
@@ -87,30 +87,30 @@ export function PaketMassalPage() {
           <ToggleGroup value={[mode]} onValueChange={(v) => v[0] && setMode(v[0])} variant="outline" aria-label="Mode COD" className="flex-wrap">
             {MODES.map((m) => <ToggleGroupItem key={m.id} value={m.id}>{m.label}</ToggleGroupItem>)}
           </ToggleGroup>
-          <p className="text-base text-muted-foreground">Baris dengan nominal COD memakai mode COD di atas; baris tanpa COD dikirim biasa.</p>
+          <p className="text-base md:text-sm text-muted-foreground">Baris dengan nominal COD memakai mode COD di atas; baris tanpa COD dikirim biasa.</p>
         </div>
         </SectionCard>
 
         <SectionCard id="baris" title="3. Daftar paket">
           <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 text-base font-medium focus-within:ring-2 focus-within:ring-ring">
+            <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium focus-within:ring-2 focus-within:ring-ring">
               <UploadIcon aria-hidden className="size-4" /> Unggah CSV
               <input type="file" accept=".csv,text/csv" className="sr-only" onChange={pick} />
             </label>
-            <a href="/api/app/bulk/template.csv" className="inline-flex h-11 items-center gap-2 px-2 text-base text-primary underline-offset-4 hover:underline"><DownloadIcon aria-hidden className="size-4" /> Unduh Template</a>
+            <a href="/api/app/bulk/template.csv" className="inline-flex h-11 items-center gap-2 px-2 text-base md:text-sm text-primary underline-offset-4 hover:underline"><DownloadIcon aria-hidden className="size-4" /> Unduh Template</a>
           </div>
-          {errors.file ? <p role="alert" className="text-base text-danger">{errors.file}</p> : null}
+          {errors.file ? <p role="alert" className="text-base md:text-sm text-danger">{errors.file}</p> : null}
           {file ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-l-4 border-primary py-1 pl-3">
-              <p className="text-base">Berkas <span className="font-medium">{file.name}</span> siap diperiksa.</p>
+              <p className="text-base md:text-sm">Berkas <span className="font-medium">{file.name}</span> siap diperiksa.</p>
               <Button variant="ghost" onClick={() => setFile(null)}>Pakai isian manual</Button>
             </div>
           ) : (
             <ol className="flex flex-col divide-y border-y">
               {rows.map((r, i) => (
                 <li key={i} className="grid gap-3 py-4 md:grid-cols-6">
-                  <p className="text-base font-medium md:col-span-6">Baris {i + 1}</p>
+                  <p className="text-base md:text-sm font-medium md:col-span-6">Baris {i + 1}</p>
                   <Field className="md:col-span-2"><FieldLabel htmlFor={`n${i}`}>Nama penerima</FieldLabel><Input id={`n${i}`} value={r.name} onChange={(e) => set(i, "name", e.target.value)} /></Field>
                   <Field className="md:col-span-2"><FieldLabel htmlFor={`p${i}`}>No HP</FieldLabel><Input id={`p${i}`} inputMode="tel" value={r.phone} onChange={(e) => set(i, "phone", e.target.value)} /></Field>
                   <Field className="md:col-span-2"><FieldLabel htmlFor={`k${i}`}>Kecamatan/Kota</FieldLabel><Input id={`k${i}`} value={r.areaText} onChange={(e) => set(i, "areaText", e.target.value)} /></Field>
@@ -129,10 +129,10 @@ export function PaketMassalPage() {
         </div>
         </SectionCard>
 
-        {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+        {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
         <div className="flex flex-wrap gap-2">
           <Button size="lg" disabled={pending || !sender || !service} onClick={submit}>{pending ? "Memeriksa…" : "Periksa Baris"}</Button>
-          <Link to="/kiriman/massal" className="inline-flex h-11 items-center px-2 text-base text-primary underline-offset-4 hover:underline">Riwayat Massal</Link>
+          <Link to="/kiriman/massal" className="inline-flex h-11 items-center px-2 text-base md:text-sm text-primary underline-offset-4 hover:underline">Riwayat Massal</Link>
         </div>
       </div>
     </div>

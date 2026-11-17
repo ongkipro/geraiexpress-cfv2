@@ -38,7 +38,7 @@ export function AreaPicker({ label, value, onChange, error, endpoint = "/areas" 
         <ul className="flex flex-col divide-y rounded-lg border" aria-label="Hasil pencarian wilayah">
           {areas.map((a) => (
             <li key={a.id}>
-              <button type="button" className="flex min-h-11 w-full items-center px-3 text-left text-base hover:bg-muted" onClick={() => { onChange(a); setQuery(a.label); setAreas([]) }}>
+              <button type="button" className="flex min-h-11 w-full items-center px-3 text-left text-base md:text-sm hover:bg-muted" onClick={() => { onChange(a); setQuery(a.label); setAreas([]) }}>
                 {a.label}{a.postalCode ? ` · ${a.postalCode}` : ""}
               </button>
             </li>

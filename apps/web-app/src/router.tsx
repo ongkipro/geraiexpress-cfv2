@@ -54,7 +54,7 @@ function NotFound() {
     <main className="flex min-h-svh items-center justify-center p-4">
       <div className="flex w-full max-w-[440px] flex-col gap-2 text-center">
         <h1 className="text-[28px] leading-tight font-semibold">Halaman tidak ditemukan</h1>
-        <p className="text-base text-muted-foreground">Alamat yang Anda buka tidak tersedia.</p>
+        <p className="text-base md:text-sm text-muted-foreground">Alamat yang Anda buka tidak tersedia.</p>
       </div>
     </main>
   )

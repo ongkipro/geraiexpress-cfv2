@@ -34,7 +34,7 @@ export function PengawasanPage() {
   const navigate = useNavigate()
   const current: Tab = tab ?? "kiriman"
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Pengawasan" />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/pengawasan", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -73,13 +73,13 @@ function ShipmentSearch() {
         </Field>
         <Button type="submit" disabled={q.trim().length < 4}>Cari</Button>
       </form>
-      {error ? <p role="alert" className="mt-3 text-base text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-base md:text-sm text-danger">{error}</p> : null}
       {items === null ? null : items.length === 0 ? (
         <EmptyBlock title="Tidak ditemukan" body="Periksa kembali INV atau nomor resi." />
       ) : (
         <ul className="mt-4 divide-y">
           {items.map((h) => (
-            <li key={`${h.tenant_slug}:${h.slug}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base">
+            <li key={`${h.tenant_slug}:${h.slug}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm">
               <span className="flex flex-col">
                 <span className="font-medium tabular-nums">INV {h.slug.toUpperCase()} · {h.tenant_name}</span>
                 <span className="text-muted-foreground tabular-nums">{h.courier_code ?? "—"} · {h.awb_number ?? "belum ada resi"} · {formatDate(h.updated_at)}</span>
@@ -117,7 +117,7 @@ function RiskRadar() {
   return (
     <Section title="Radar Risiko COD">
       <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-        <p className="text-base text-muted-foreground">Nomor diubah menjadi kode acak di server; setiap pencarian dicatat di log audit beserta alasannya.</p>
+        <p className="text-base md:text-sm text-muted-foreground">Nomor diubah menjadi kode acak di server; setiap pencarian dicatat di log audit beserta alasannya.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field data-invalid={error ? true : undefined}>
             <FieldLabel htmlFor="hp-risiko">Nomor HP penerima</FieldLabel>
@@ -137,10 +137,10 @@ function RiskRadar() {
           <EmptyBlock title="Belum ada riwayat" body="Nomor ini belum pernah menerima kiriman COD di jaringan." />
         ) : (
           <div className="mt-4 flex flex-col gap-3">
-            <p className="text-base tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
+            <p className="text-base md:text-sm tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
             <ul className="divide-y">
               {result.items.map((r) => (
-                <li key={r.tenant_name} className="flex flex-wrap justify-between gap-2 py-2 text-base tabular-nums">
+                <li key={r.tenant_name} className="flex flex-wrap justify-between gap-2 py-2 text-base md:text-sm tabular-nums">
                   <span>{r.tenant_name}</span>
                   <span>{r.delivered_count} terkirim · {r.rts_count} retur · {formatDate(r.last_event_at)}</span>
                 </li>

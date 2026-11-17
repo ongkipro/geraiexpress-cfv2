@@ -59,20 +59,20 @@ export function NotifikasiPage() {
       {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat notifikasi" /> : data.items.length === 0 ? (
         <Panel className="p-0 md:p-0"><EmptyState title="Belum ada notifikasi" body="Kabar penting soal kiriman, penjemputan dan akun Mengantar akan tampil di sini." /></Panel>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 md:gap-5">
           {[...groups.entries()].map(([k, items]) => (
             <Panel key={k} aria-labelledby={`hari-${k}`} className="p-0 md:p-0">
-              <h3 id={`hari-${k}`} className="border-b px-4 py-3 text-lg font-semibold">{dayLabel(items[0]!.createdAt)}</h3>
+              <h2 id={`hari-${k}`} className="border-b px-4 py-3 text-sm font-semibold md:text-base">{dayLabel(items[0]!.createdAt)}</h2>
               <ul className="divide-y">
                 {items.map((i) => {
                   const inner = (
                     <span className="flex items-start gap-3">
                       <span className={`mt-2 size-2 shrink-0 rounded-full ${i.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden />
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className={`text-base ${i.readAt ? "" : "font-semibold"}`}>{i.title}</span>
-                        {i.body ? <span className="text-base text-muted-foreground">{i.body}</span> : null}
+                        <span className={`text-base md:text-sm ${i.readAt ? "" : "font-semibold"}`}>{i.title}</span>
+                        {i.body ? <span className="text-base md:text-sm text-muted-foreground">{i.body}</span> : null}
                       </span>
-                      <span className="shrink-0 text-base text-muted-foreground tabular-nums">{time(i.createdAt)}</span>
+                      <span className="shrink-0 text-base md:text-sm text-muted-foreground tabular-nums">{time(i.createdAt)}</span>
                       <span className="sr-only">{i.readAt ? "sudah dibaca" : "belum dibaca"}</span>
                     </span>
                   )

@@ -112,18 +112,18 @@ export function KirimanPage() {
         {owner ? <AnchorButton variant="outline" href={exportHref}><DownloadIcon aria-hidden data-icon="inline-start" /> Ekspor CSV</AnchorButton> : null}
       </PageTitle>
       <nav aria-label="Status kiriman" className="-mx-4 mb-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
+        <ul className="flex w-max gap-0.5 rounded-lg bg-slate-100/90 p-1">
           {TABS.map((t) => {
             const active = t.id === tab
             const count = t.id === "massal" ? null : data?.counts[t.id]
-            const cls = `flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${active ? "bg-card font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`
+            const cls = `flex h-11 items-center gap-1.5 rounded-md px-3 text-base whitespace-nowrap md:h-8 md:text-sm ${active ? "bg-white font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]" : "text-muted-foreground hover:text-slate-900"}`
             return (
               <li key={t.id}>
                 {t.id === "massal" ? (
                   <Link to="/kiriman/massal" className={cls}>{t.label}</Link>
                 ) : (
                   <Link to="/kiriman" search={{ ...search, tab: t.id === "semua" ? undefined : t.id } as never} aria-current={active ? "page" : undefined} className={cls}>
-                    {t.label}{count !== undefined && count !== null ? <span className="tabular-nums text-muted-foreground">({count})</span> : null}
+                    {t.label}{count !== undefined && count !== null ? <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-slate-100 text-slate-600" : "text-muted-foreground"}`}>{count}</span> : null}
                   </Link>
                 )}
               </li>
@@ -147,7 +147,7 @@ export function KirimanPage() {
       {tab === "pickup" ? <PickupQueue /> : null}
       {tab === "retur" ? <MejaRetur /> : null}
       {tab === "kendala" ? <Kendala /> : null}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 text-base font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 text-base md:text-sm font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
       {tab === "pickup" || tab === "retur" || tab === "kendala" ? null : error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
         filtered ? (
           <EmptyState title="Tidak ada yang cocok" body="Tidak ada kiriman dengan pencarian atau filter ini." action={<Button variant="outline" onClick={() => { setQ(""); go({ q: undefined, cetak: undefined }) }}>Hapus Filter</Button>} />
@@ -155,29 +155,30 @@ export function KirimanPage() {
           <EmptyState title="Belum ada kiriman di sini" body="Kiriman yang resinya terbit akan muncul di daftar ini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />
         )
       ) : (
-        <SectionCard id="daftar-kiriman" title="Daftar kiriman" description={`${rows.length} kiriman ditampilkan`}>
+        <SectionCard id="daftar-kiriman" title="Daftar kiriman" description={`${rows.length} kiriman ditampilkan`} flush>
           <DataTableShell
+            bare
             caption="Daftar kiriman"
             rows={rows}
             rowKey={(r) => r.slug}
             footer={cursor ? <Button variant="outline" onClick={loadMore}>Muat Lebih Banyak</Button> : undefined}
             columns={[
-              { key: "inv", header: "INV", cell: (r) => <><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link><span className="block text-muted-foreground tabular-nums">{time(r.created_at)}</span></> },
-              { key: "kurir", header: "Kurir & resi", cell: (r) => <>{r.courier_code}<span className="block text-muted-foreground tabular-nums">{r.awb_number ?? "Resi belum terbit"}{r.print_count ? ` · ${r.print_count}× cetak` : ""}</span></> },
-              { key: "pihak", header: "Pengirim → Penerima", wide: true, className: "whitespace-normal", cell: (r) => <>{r.sender_brand ?? r.sender ?? "—"}<span className="block text-muted-foreground">→ {r.recipient ?? "—"}{r.recipient_area ? ` (${r.recipient_area.split(",")[0]})` : ""}</span></> },
-              { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => <>{rp(r.counter_due_idr)}<span className="block text-muted-foreground">{MODE[r.cod_fee_mode] ?? r.cod_fee_mode}{r.cod_collection_total_idr ? ` ${rp(r.cod_collection_total_idr)}` : ""}</span>{owner && r.estimated_margin_idr != null ? <span className="block text-muted-foreground">laba {rp(r.estimated_margin_idr)}</span> : null}</> },
+              { key: "inv", header: "INV", cell: (r) => <><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link><span className="block text-xs text-muted-foreground tabular-nums">{time(r.created_at)}</span></> },
+              { key: "kurir", header: "Kurir & resi", cell: (r) => <>{r.courier_code}<span className="block text-xs text-muted-foreground tabular-nums">{r.awb_number ?? "Resi belum terbit"}{r.print_count ? ` · ${r.print_count}× cetak` : ""}</span></> },
+              { key: "pihak", header: "Pengirim → Penerima", wide: true, className: "whitespace-normal", cell: (r) => <>{r.sender_brand ?? r.sender ?? "—"}<span className="block text-xs text-muted-foreground">→ {r.recipient ?? "—"}{r.recipient_area ? ` (${r.recipient_area.split(",")[0]})` : ""}</span></> },
+              { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => <>{rp(r.counter_due_idr)}<span className="block text-xs text-muted-foreground">{MODE[r.cod_fee_mode] ?? r.cod_fee_mode}{r.cod_collection_total_idr ? ` ${rp(r.cod_collection_total_idr)}` : ""}</span>{owner && r.estimated_margin_idr != null ? <span className="block text-xs text-muted-foreground">laba {rp(r.estimated_margin_idr)}</span> : null}</> },
               { key: "bayar", header: "Pembayaran", cell: (r) => <Payment r={r} /> },
               { key: "status", header: "Status", cell: (r) => <StatusBadge tone={r.dispatch_state === "issued" ? "primary" : r.dispatch_state === "cancelled" ? "muted" : "warn"}>{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</StatusBadge> },
-              { key: "aksi", header: <span className="sr-only">Aksi</span>, align: "right", cell: (r) => (r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null) },
+              { key: "aksi", header: <span className="sr-only">Aksi</span>, align: "right", cell: (r) => (r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" size="sm" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null) },
             ]}
             mobile={(r) => (
-              <div className="flex flex-col gap-1.5 text-base">
+              <div className="flex flex-col gap-1.5 text-base md:text-sm">
                 <div className="flex items-baseline justify-between gap-2">
                   <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
-                  <span className="text-muted-foreground tabular-nums">{time(r.created_at)}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{time(r.created_at)}</span>
                 </div>
                 <p>{r.courier_code} · <span className="tabular-nums">{r.awb_number ?? "Resi belum terbit"}</span></p>
-                <p className="text-muted-foreground">{r.sender_brand ?? r.sender ?? "—"} → {r.recipient ?? "—"}</p>
+                <p className="text-xs text-muted-foreground">{r.sender_brand ?? r.sender ?? "—"} → {r.recipient ?? "—"}</p>
                 <p className="flex flex-wrap items-center gap-2 tabular-nums">{rp(r.counter_due_idr)} <Payment r={r} /> <StatusBadge tone={r.dispatch_state === "issued" ? "primary" : r.dispatch_state === "cancelled" ? "muted" : "warn"}>{statusLabel(r.dispatch_state === "issued" ? r.status : r.dispatch_state)}</StatusBadge></p>
                 {r.counter_payment_status === "unpaid" && r.dispatch_state !== "cancelled" ? <Button variant="outline" className="mt-1 w-fit" onClick={() => markPaid(r)}>Tandai Lunas</Button> : null}
               </div>

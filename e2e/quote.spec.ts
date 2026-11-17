@@ -32,7 +32,7 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Buat Kiriman dari Tarif Ini" }).click()
   await expect(page).toHaveURL(/\/kasir\?.*packing=Plastik/)
-  await expect(page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Terpilih" })).toBeVisible()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
   await expect(page.getByRole("checkbox", { name: /Biaya layanan loket/ })).not.toBeChecked()
   // Plastik Rp 1.000 + J&T Rp 12.500, no counter fee.
   await expect(page.getByText("Rp 13.500").first()).toBeVisible()
@@ -53,6 +53,6 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   // DEC-237: the result prefills Kiriman Satuan (no INV until the POS primary); the chosen service stays selected.
   await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Buat Kiriman dari Tarif Ini" }).click()
   await expect(page).toHaveURL(/\/kasir\?/)
-  await expect(page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Terpilih" })).toBeVisible()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
   await expect(page.getByLabel("Harga barang (COD)")).toHaveValue("150.000")
 })

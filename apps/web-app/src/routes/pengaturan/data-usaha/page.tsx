@@ -48,10 +48,10 @@ export function DataUsahaPage() {
   return (
     <SettingsLayout title="Data Usaha" description="Semua isian boleh dikosongkan. Data ini dipakai bila Anda meminta faktur atas nama usaha.">
       <Card>
-        <CardHeader><CardTitle className="text-lg">Badan usaha</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Badan usaha</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4">
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-base font-medium">Bentuk usaha</legend>
+            <legend className="mb-1 text-base md:text-sm font-medium">Bentuk usaha</legend>
             <ChoiceGroup label="Bentuk usaha" value={f.entityType || null} onValueChange={(v) => set({ entityType: v })} choices={ENTITIES.map(([id, label]) => ({ value: id, label }))} />
           </fieldset>
           {field("legalName", "Nama resmi")}
@@ -60,12 +60,12 @@ export function DataUsahaPage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">NPWP</CardTitle>
-          <CardDescription className="text-base">Disimpan terenkripsi. Setelah disimpan, hanya 4 angka terakhir yang ditampilkan.</CardDescription>
+          <CardTitle className="text-base md:text-sm">NPWP</CardTitle>
+          <CardDescription className="text-base md:text-sm">Disimpan terenkripsi. Setelah disimpan, hanya 4 angka terakhir yang ditampilkan.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {f.npwpMasked && !f.clearNpwp ? <p className="text-base tabular-nums">Tersimpan: <span className="font-medium">{f.npwpMasked}</span></p> : null}
-          {f.clearNpwp ? <p className="text-base text-danger">NPWP akan dihapus saat disimpan.</p> : null}
+          {f.npwpMasked && !f.clearNpwp ? <p className="text-base md:text-sm tabular-nums">Tersimpan: <span className="font-medium">{f.npwpMasked}</span></p> : null}
+          {f.clearNpwp ? <p className="text-base md:text-sm text-danger">NPWP akan dihapus saat disimpan.</p> : null}
           <Field data-invalid={s.fields.npwp ? true : undefined}>
             <FieldLabel htmlFor="npwp">{f.npwpMasked ? "Ganti NPWP" : "NPWP"}</FieldLabel>
             <Input id="npwp" type={showNpwp ? "text" : "password"} autoComplete="off" inputMode="numeric" value={f.npwp} onChange={(e) => set({ npwp: e.target.value, clearNpwp: false })} className="tabular-nums" />
@@ -78,7 +78,7 @@ export function DataUsahaPage() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-lg">Penanggung jawab</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Penanggung jawab</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4">
           {field("picName", "Nama")}
           {field("picRole", "Jabatan")}

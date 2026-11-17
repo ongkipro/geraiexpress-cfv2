@@ -21,14 +21,14 @@ export function WeightInput({ gram, onChange, error }: { gram: number; onChange:
     <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>Berat paket</FieldLabel>
       <div className="flex flex-wrap items-center gap-2">
-        <Input id={id} inputMode="decimal" value={text} onChange={(e) => set(e.target.value)} className="w-32 tabular-nums" aria-describedby={`${id}-h`} />
+        <Input id={id} inputMode="decimal" value={text} onChange={(e) => set(e.target.value)} className="w-24 tabular-nums" aria-describedby={`${id}-h`} />
         <ToggleGroup value={[unit]} onValueChange={(v) => { const u = (v[0] ?? unit) as "gram" | "kg"; setUnit(u); setText(u === "gram" ? String(gram) : String(gram / 1000).replace(".", ",")) }} variant="outline" aria-label="Satuan berat">
           <ToggleGroupItem value="gram">gram</ToggleGroupItem>
           <ToggleGroupItem value="kg">kg</ToggleGroupItem>
         </ToggleGroup>
         <div className="flex flex-wrap gap-1" aria-label="Pilihan cepat">
           {[500, 1000, 2000, 5000].map((g) => (
-            <button key={g} type="button" onClick={() => { onChange(g); setText(unit === "gram" ? String(g) : String(g / 1000)) }} className="h-11 rounded-lg border px-3 text-base tabular-nums md:h-10">
+            <button key={g} type="button" onClick={() => { onChange(g); setText(unit === "gram" ? String(g) : String(g / 1000)) }} className="h-11 rounded-lg border border-slate-200 bg-white px-2.5 text-base md:text-sm text-slate-600 tabular-nums hover:bg-slate-50 hover:text-slate-900 md:h-9 md:text-sm">
               {g >= 1000 ? `${g / 1000} kg` : `${g} g`}
             </button>
           ))}

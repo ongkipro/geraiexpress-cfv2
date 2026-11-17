@@ -17,7 +17,7 @@ export function GeraiPage() {
   const navigate = useNavigate()
   const current: Tab = tab ?? "pengajuan"
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Gerai" />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/gerai", search: { tab: v as Tab } })}>
         <TabsList aria-label="Bagian gerai">
@@ -39,7 +39,7 @@ function Applications() {
         <EmptyBlock title="Tidak ada pengajuan baru" body="Pengajuan gerai yang masuk akan tampil di sini." />
       ) : (
         <>
-          <div className="hidden md:block">
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200/85 md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -70,7 +70,7 @@ function Applications() {
               <li key={a.id} className="py-3">
                 <Link to="/gerai/pengajuan/$id" params={{ id: a.id }} className="flex min-h-11 flex-col justify-center">
                   <span className="font-medium text-primary">{a.business_name}</span>
-                  <span className="text-base text-muted-foreground">{a.slug} · {formatDate(a.submitted_at)}</span>
+                  <span className="text-base md:text-sm text-muted-foreground">{a.slug} · {formatDate(a.submitted_at)}</span>
                 </Link>
               </li>
             ))}
@@ -89,7 +89,7 @@ function Directory() {
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
         <EmptyBlock title={q ? "Tidak ada gerai yang cocok" : "Belum ada gerai aktif"} body={q ? "Ubah kata kunci pencarian." : "Gerai yang disetujui akan tampil di sini."} />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/85">
           <Table>
             <TableHeader>
               <TableRow>
@@ -132,7 +132,7 @@ function Domains() {
   const { data, error, loading, reload } = useApi<{ items: DomainItem[]; quota: { used: number; allocated: number; checked_at: number } | null }>("/domains")
   const quota = data?.quota ? `Kuota Cloudflare ${data.quota.used}/${data.quota.allocated} · dicek ${formatDate(data.quota.checked_at)}` : "Kuota belum dicek"
   return (
-    <Section title="Domain Mitra" aside={<span className="text-base text-muted-foreground tabular-nums">{quota}</span>}>
+    <Section title="Domain Mitra" aside={<span className="text-base md:text-sm text-muted-foreground tabular-nums">{quota}</span>}>
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : !data?.items.length ? (
         <EmptyBlock title="Belum ada domain sendiri" body="Setiap gerai aktif memakai alamat <slug>.geraimitra.com. Domain sendiri gerai Pro tampil di sini." />
       ) : (
@@ -140,7 +140,7 @@ function Domains() {
           {data.items.map((d) => {
             const st = DOMAIN_STATE[d.state] ?? { label: d.state, tone: "warn" as const }
             return (
-              <li key={d.hostname} className="flex flex-col gap-2 py-3 text-base">
+              <li key={d.hostname} className="flex flex-col gap-2 py-3 text-base md:text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono break-all">{d.hostname}</span>
                   <StatusChip tone={st.tone}>{st.label}</StatusChip>

@@ -21,7 +21,7 @@ export function SistemPage() {
   const navigate = useNavigate()
   const current: Tab = tab ?? "kesehatan"
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Sistem & Audit" />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/sistem", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -53,22 +53,22 @@ function Health() {
   if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat."} onRetry={reload} />
   const relay = data.relay.reachable === null ? { tone: "muted" as const, label: data.relay.transport === "relay" ? "Belum diperiksa" : "Langsung (tanpa relay)" } : data.relay.reachable ? { tone: "safe" as const, label: `Terjangkau · ${data.relay.latencyMs} ms` } : { tone: "danger" as const, label: "Relay tidak terjangkau" }
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
       <Section title="Mengantar Partner API">
-        <dl className="flex flex-col gap-3 text-base">
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Jalur</dt><dd><StatusChip tone={relay.tone}>{relay.label}</StatusChip></dd></div>
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Kuota menit ini</dt><dd className="tabular-nums">{data.partnerQuota?.minute ?? "—"} / {data.partnerLimits.perMinute}</dd></div>
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Pendaftaran seller hari ini</dt><dd className="tabular-nums">{data.partnerQuota?.day ?? "—"} / {data.partnerLimits.registrationsPerDay}</dd></div>
+        <dl className="flex flex-col gap-3 text-base md:text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Jalur</dt><dd><StatusChip tone={relay.tone}>{relay.label}</StatusChip></dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Kuota menit ini</dt><dd className="tabular-nums">{data.partnerQuota?.minute ?? "—"} / {data.partnerLimits.perMinute}</dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Pendaftaran seller hari ini</dt><dd className="tabular-nums">{data.partnerQuota?.day ?? "—"} / {data.partnerLimits.registrationsPerDay}</dd></div>
         </dl>
       </Section>
       <Section title="Data gerai & email">
-        <dl className="flex flex-col gap-3 text-base">
-          <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Gerai dalam pemulihan</dt><dd className="tabular-nums">{data.tenantsInRecovery}</dd></div>
+        <dl className="flex flex-col gap-3 text-base md:text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Gerai dalam pemulihan</dt><dd className="tabular-nums">{data.tenantsInRecovery}</dd></div>
           {data.onboarding.map((o) => (
-            <div key={o.onboarding_state} className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Seller: {ONBOARDING_LABEL[o.onboarding_state]?.label ?? o.onboarding_state}</dt><dd className="tabular-nums">{o.n}</dd></div>
+            <div key={o.onboarding_state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Seller: {ONBOARDING_LABEL[o.onboarding_state]?.label ?? o.onboarding_state}</dt><dd className="tabular-nums">{o.n}</dd></div>
           ))}
           {data.email.map((e) => (
-            <div key={e.state} className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Email 7 hari: {EMAIL_STATE[e.state] ?? e.state}</dt><dd className="tabular-nums">{e.n}</dd></div>
+            <div key={e.state} className="flex flex-wrap justify-between gap-2"><dt className="text-xs text-muted-foreground">Email 7 hari: {EMAIL_STATE[e.state] ?? e.state}</dt><dd className="tabular-nums">{e.n}</dd></div>
           ))}
         </dl>
       </Section>
@@ -107,7 +107,7 @@ function RotateKey() {
   }
   return (
     <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
-      <p className="text-base text-muted-foreground">Gunakan bila kunci API seller diduga bocor. Pengiriman gerai dijeda sebentar selama rotasi.</p>
+      <p className="text-base md:text-sm text-muted-foreground">Gunakan bila kunci API seller diduga bocor. Pengiriman gerai dijeda sebentar selama rotasi.</p>
       <Field>
         <FieldLabel htmlFor="rot-slug">Alamat gerai</FieldLabel>
         <Input id="rot-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="berkahjaya" autoComplete="off" />
@@ -117,7 +117,7 @@ function RotateKey() {
         <Textarea id="rot-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
       </Field>
       <div><Button type="submit" variant="destructive" disabled={pending || slug.trim().length < 3 || reason.trim().length < 5}>{pending ? "Memproses…" : "Rotasi Kunci Seller"}</Button></div>
-      {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
+      {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
     </form>
   )
 }
@@ -138,13 +138,13 @@ function AuditLog() {
         <Button type="submit" variant="outline">Terapkan</Button>
       </form>
       {loading ? <LoadingBlock /> : error ? (
-        needsTotp ? <div className="flex flex-col items-start gap-3"><p className="text-base">Melihat log audit butuh verifikasi TOTP terbaru.</p><Button onClick={() => totpRedirect("/sistem?tab=audit")}>Verifikasi TOTP</Button></div> : <ErrorBlock message={error} onRetry={reload} />
+        needsTotp ? <div className="flex flex-col items-start gap-3"><p className="text-base md:text-sm">Melihat log audit butuh verifikasi TOTP terbaru.</p><Button onClick={() => totpRedirect("/sistem?tab=audit")}>Verifikasi TOTP</Button></div> : <ErrorBlock message={error} onRetry={reload} />
       ) : !data?.items.length ? (
         <EmptyBlock title="Tidak ada catatan" body="Coba ubah filter." />
       ) : (
         <ul className="divide-y">
           {data.items.map((a) => (
-            <li key={a.id} className="flex flex-col gap-1 py-3 text-base">
+            <li key={a.id} className="flex flex-col gap-1 py-3 text-base md:text-sm">
               <span className="flex flex-wrap justify-between gap-2"><span className="font-medium">{a.action}</span><span className="text-muted-foreground tabular-nums">{formatDate(a.at)}</span></span>
               <span className="text-muted-foreground">{a.actor_name ?? a.actor_type}{a.tenant_slug ? ` · ${a.tenant_slug}` : ""}{a.reason ? ` · “${a.reason}”` : ""}</span>
             </li>
@@ -165,7 +165,7 @@ function Admins() {
     <Section title="Super Admin">
       <ul className="divide-y">
         {data.items.map((a) => (
-          <li key={a.user_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-base">
+          <li key={a.user_id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-base md:text-sm">
             <span className="flex flex-col"><span className="font-medium">{a.name}{a.user_id === data.me ? " (Anda)" : ""}</span><span className="text-muted-foreground">{a.email}</span></span>
             <span className="flex flex-wrap gap-2">
               <StatusChip tone={a.totp_state === "active" ? "safe" : "warn"}>{a.totp_state === "active" ? "TOTP aktif" : "TOTP belum aktif"}</StatusChip>
@@ -232,7 +232,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
   return (
     <Section title="Profil perusahaan operator">
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <p className="text-base text-muted-foreground">Kosongkan bila belum ada. Halaman publik dan email hanya menampilkan isian yang sudah terisi.{data.updatedAt ? ` Terakhir diubah ${formatDate(data.updatedAt)}.` : ""}</p>
+        <p className="text-base md:text-sm text-muted-foreground">Kosongkan bila belum ada. Halaman publik dan email hanya menampilkan isian yang sudah terisi.{data.updatedAt ? ` Terakhir diubah ${formatDate(data.updatedAt)}.` : ""}</p>
         <div className="grid gap-4 md:grid-cols-2">
           {Object.keys(PROFILE_LABEL).map((k) => (
             <Field key={k} data-invalid={errors[k] ? true : undefined}>
@@ -256,7 +256,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
             <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           </div>
         ) : null}
-        {msg ? <p role="status" className="text-base">{msg}</p> : null}
+        {msg ? <p role="status" className="text-base md:text-sm">{msg}</p> : null}
       </form>
     </Section>
   )

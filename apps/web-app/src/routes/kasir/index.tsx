@@ -11,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
-import { CheckboxField, Panel, SectionCard } from "../../components/admin/page"
+import { CheckboxField, Panel } from "../../components/admin/page"
 import { PresetPicker, type MaskPreset } from "../../components/masking/preset-picker"
 import { PrintDrawer } from "../../print/drawer"
 import { AnchorButton } from "../../components/admin/link-button"
@@ -19,7 +19,7 @@ import { PartyPicker, type Contact } from "../kiriman/detail"
 import { RecipientForm } from "../kontak/penerima"
 import { SenderForm } from "../kontak/pengirim"
 import { RiskChip, type RiskBadge } from "../kontak/shared"
-import { QuotePanel, rp, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
+import { QuotePanel, StepTitle, rp, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
 import { LinkButton } from "../../components/admin/link-button"
 
 // `Buat Pengiriman › Kiriman Satuan` (DEC-237, visual 05, DESIGN.md C4): one counter screen. Left 60 %: destination &
@@ -57,13 +57,17 @@ function ScanBox({ onClaim }: { onClaim: (c: Claim) => void }) {
     }
   }
   return (
-    <Panel as="form" onSubmit={go} className="flex flex-wrap items-end gap-2 md:p-4" role="search">
-      <label className="flex min-w-0 flex-1 flex-col gap-1 text-base font-medium">Pindai QR pelanggan atau ketik INV
-        <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="INV 8K4M2P7" autoComplete="off" />
-      </label>
-      <Button type="submit" variant="outline"><QrCodeIcon aria-hidden /> Buka</Button>
-      {msg ? <p role="alert" className="w-full text-base text-danger">{msg}</p> : null}
-    </Panel>
+    <form onSubmit={go} className="flex w-full flex-col gap-1 sm:w-auto" role="search">
+      <div className="flex items-center gap-1.5">
+        <label className="relative min-w-0 flex-1 sm:w-72">
+          <span className="sr-only">Pindai QR pelanggan atau ketik INV</span>
+          <QrCodeIcon aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-400" />
+          <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Pindai QR atau ketik INV" autoComplete="off" className="pl-8" />
+        </label>
+        <Button type="submit" variant="outline">Buka Draf</Button>
+      </div>
+      {msg ? <p role="alert" className="text-xs text-danger">{msg}</p> : null}
+    </form>
   )
 }
 
@@ -80,17 +84,17 @@ function RecipientRisk({ phone }: { phone: string }) {
     }
   }, [phone])
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       {local ? <RiskChip badge={local.badge} delivered={local.delivered} rts={local.rts} rtsBps={local.rtsBps} /> : null}
       {score?.state === "ok" ? (
-        <Badge variant="outline" className="h-auto gap-1.5 bg-card py-1 text-sm text-foreground">
-          Skor Mengantar <strong className="tabular-nums">{score.grade ? `${score.approximate ? "≈" : ""}${score.grade}` : "belum ada"}</strong>
+        <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white text-slate-700">
+          Skor Mengantar <strong className="text-slate-900 tabular-nums">{score.grade ? `${score.approximate ? "≈" : ""}${score.grade}` : "belum ada"}</strong>
           {score.grade ? <span className="text-muted-foreground tabular-nums">· {score.total} COD, {score.rts} retur</span> : null}
         </Badge>
       ) : score?.state === "forbidden" ? (
-        <span className="text-sm text-muted-foreground">Skor Mengantar belum aktif untuk akun ini.</span>
+        <span className="text-xs text-muted-foreground">Skor Mengantar belum aktif untuk akun ini.</span>
       ) : score?.state === "limited" ? (
-        <span className="text-sm text-muted-foreground">Batas cek skor Mengantar hari ini habis.</span>
+        <span className="text-xs text-muted-foreground">Batas cek skor Mengantar hari ini habis.</span>
       ) : null}
     </div>
   )
@@ -102,17 +106,17 @@ function ChosenParty({ c, kind, destinationId, onClear, onChange }: { c: Contact
   const areaMismatch = kind === "recipients" && destinationId && r.mengantar_area_id && r.mengantar_area_id !== destinationId
   const phone = c.true_phone ?? c.phone ?? ""
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col">
-          <span className="text-base font-medium">{c.display_brand_name ? `${c.display_brand_name} · ${c.true_name}` : (c.true_name ?? c.name)}</span>
-          <span className="text-base text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}</span>
-          {kind === "recipients" && c.street_address ? <span className="text-base text-muted-foreground">{c.street_address}</span> : null}
+    <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-sm font-semibold text-slate-900">{c.display_brand_name ? `${c.display_brand_name} · ${c.true_name}` : (c.true_name ?? c.name)}</span>
+          <span className="truncate text-xs text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}</span>
+          {kind === "recipients" && c.street_address ? <span className="line-clamp-2 text-xs text-muted-foreground">{c.street_address}</span> : null}
         </div>
-        <Button type="button" variant="outline" onClick={onClear}>Ganti</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClear}>Ganti</Button>
       </div>
-      {kind === "senders" ? (c.wa_verified_at ? <span className="text-sm text-safe">WhatsApp terverifikasi di loket</span> : <VerifySender c={c} onVerified={onChange} />) : null}
-      {areaMismatch ? <p role="alert" className="text-base font-medium text-danger">Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.</p> : null}
+      {kind === "senders" ? (c.wa_verified_at ? <span className="flex items-center gap-1.5 text-xs font-medium text-safe"><CheckCircle2Icon aria-hidden className="size-3.5" />WhatsApp terverifikasi di loket</span> : <VerifySender c={c} onVerified={onChange} />) : null}
+      {areaMismatch ? <p role="alert" className="text-xs font-medium text-danger">Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.</p> : null}
       {kind === "recipients" && phone ? <RecipientRisk phone={phone} /> : null}
     </div>
   )
@@ -131,15 +135,15 @@ function VerifySender({ c, onVerified }: { c: Contact; onVerified: (c: Contact) 
     }
   }
   return (
-    <div className="flex flex-col gap-2 border-t pt-2">
-      <p className="text-base text-muted-foreground">WhatsApp belum diverifikasi (wajib untuk COD dan label masking). Kirim pesan uji, lalu tanyakan ke pengirim.</p>
-      <div className="flex flex-wrap gap-2">
-        <AnchorButton variant="outline" href={`https://wa.me/${phone}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer">
+    <div className="flex flex-col gap-2 border-t border-slate-200 pt-2">
+      <p className="text-xs text-muted-foreground">WhatsApp belum diverifikasi (wajib untuk COD dan label masking). Kirim pesan uji, lalu tanyakan ke pengirim.</p>
+      <div className="flex flex-wrap gap-1.5">
+        <AnchorButton variant="outline" size="sm" href={`https://wa.me/${phone}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer">
           <MessageCircleIcon aria-hidden /> Kirim pesan uji
         </AnchorButton>
-        <Button type="button" variant="outline" onClick={verify}>Pengirim sudah menerima</Button>
+        <Button type="button" variant="outline" size="sm" onClick={verify}>Pengirim sudah menerima</Button>
       </div>
-      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="text-xs text-danger">{msg}</p> : null}
     </div>
   )
 }
@@ -155,13 +159,13 @@ function PartyStep({ kind, value, onPick, error, destination }: { kind: "senders
     if (r?.item) onPick(r.item)
   }
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-base font-semibold">{label}</h4>
-        <Button type="button" variant="ghost" onClick={() => setAdding(true)}><PlusIcon aria-hidden /> {label} baru</Button>
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{label}</h3>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>
       </div>
       {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} /> : <PartyPicker kind={kind} value={value} onPick={onPick} />}
-      {error ? <p role="alert" className="text-base text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       <Sheet open={adding} onOpenChange={setAdding}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader><SheetTitle>{label} baru</SheetTitle></SheetHeader>
@@ -318,14 +322,15 @@ export function KasirPage() {
   const initial = claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : fromQuick
 
   return (
-    <div className="pb-28 lg:pb-0">
-      <PageTitle title="Kiriman Satuan" description="Satu layar: cek ongkir, pilih ekspedisi, isi pengirim & penerima, bayar, cetak." />
-      <div className="mb-6"><ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} /></div>
+    <div className="flex flex-col gap-4 pb-28 lg:pb-0">
+      <PageTitle title="Kiriman Satuan" description="Cek ongkir, pilih ekspedisi, isi pihak, bayar dan cetak — satu layar.">
+        <ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} />
+      </PageTitle>
       {claim ? (
-        <p role="status" className="mb-4 border-l-4 border-primary py-1 pl-3 text-base">Kiriman dari rumah <span className="font-medium tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
+        <p role="status" className="rounded-lg border border-primary/20 bg-accent px-3 py-2 text-sm text-slate-700">Kiriman dari rumah <span className="font-semibold tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
       ) : null}
-      <div className="grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
-        <div className="flex min-w-0 flex-col gap-6">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] xl:gap-5">
+        <div className="flex min-w-0 flex-col gap-4">
           <QuotePanel
             key={`${claim?.slug ?? "baru"}-${round}`}
             initial={initial}
@@ -337,12 +342,15 @@ export function KasirPage() {
               setSel(keep ? { req, card: frozen && frozen.sig === JSON.stringify([req, keep.serviceCode]) ? frozen.card : keep } : null)
             }}
           />
-          <SectionCard id="pihak" title="3. Pengirim, label & penerima">
-            <div className="flex flex-col gap-6">
+          <Panel className="flex flex-col gap-4" aria-labelledby="pihak-judul">
+            <StepTitle n={3} id="pihak-judul" title="Pengirim, penerima & isi paket" />
+            <div className="grid gap-4 md:grid-cols-2">
               <PartyStep kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null} />
-              <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
-              {errors.maskPreset ? <p role="alert" className="text-base text-danger">{errors.maskPreset}</p> : null}
               <PartyStep kind="recipients" value={recipient} onPick={setRecipient} error={errors.recipientId} destination={sel?.req ?? null} />
+            </div>
+            <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+            {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
+            <div className="flex flex-col gap-4">
               <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
                 <Field data-invalid={errors.content ? true : undefined}>
                   <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
@@ -363,72 +371,90 @@ export function KasirPage() {
               <CheckboxField checked={ack} onCheckedChange={setAck}>
                 Isi paket bukan barang terlarang atau berbahaya
               </CheckboxField>
-              {errors.prohibitedAck ? <p role="alert" className="text-base text-danger">{errors.prohibitedAck}</p> : null}
+              {errors.prohibitedAck ? <p role="alert" className="text-xs text-danger">{errors.prohibitedAck}</p> : null}
             </div>
-          </SectionCard>
+          </Panel>
         </div>
 
-        <div className="flex flex-col gap-6 lg:sticky lg:top-20">
-          <SectionCard id="ringkasan" title="Ringkasan & Pembayaran">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+          <Panel className="flex flex-col gap-4 p-0 md:p-0" aria-labelledby="ringkasan-judul">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5 md:px-5">
+              <h2 id="ringkasan-judul" className="text-sm font-semibold text-slate-950 md:text-base">Ringkasan & Pembayaran</h2>
+              {frozen ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">INV {frozen.slug.toUpperCase()}</span> : null}
+            </div>
             {card && sel ? (
-              <div className="flex flex-col gap-4">
-                <dl className="flex flex-col gap-2 text-base tabular-nums">
-                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ekspedisi</dt><dd className="text-right">{card.name}</dd></div>
-                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Berat ditagih</dt><dd>{(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg</dd></div>
-                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ongkir publish</dt><dd>{rp(card.publishShippingIdr)}</dd></div>
-                  {sel.req.packingIdr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Packing</dt><dd>{rp(sel.req.packingIdr)}</dd></div> : null}
-                  {sel.req.serviceFeeIdr ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Biaya layanan loket</dt><dd>{rp(sel.req.serviceFeeIdr)}</dd></div> : null}
+              <div className="flex flex-col gap-4 px-4 pb-4 md:px-5 md:pb-5">
+                <div className="flex items-center gap-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900">{card.name}</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">Berat ditagih {(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg{card.eta ? ` · ${card.eta}` : ""}</span>
+                  </span>
+                </div>
+                <dl className="flex flex-col gap-1.5 text-sm tabular-nums">
+                  <Row label="Ongkir publish" value={rp(card.publishShippingIdr)} />
+                  {sel.req.packingIdr ? <Row label="Packing" value={rp(sel.req.packingIdr)} /> : null}
+                  {sel.req.serviceFeeIdr ? <Row label="Biaya layanan loket" value={rp(sel.req.serviceFeeIdr)} /> : null}
                   {cod ? (
                     <>
-                      <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Ditagih kurir ke penerima</dt><dd>{rp(card.codCollectionTotalIdr)}</dd></div>
-                      {sel.req.mode !== "dfod" ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Estimasi cair ke pengirim</dt><dd>{rp(card.senderCodPayableIdr)}</dd></div> : null}
+                      <Row label="Ditagih kurir ke penerima" value={rp(card.codCollectionTotalIdr)} />
+                      {sel.req.mode !== "dfod" ? <Row label="Estimasi cair ke pengirim" value={rp(card.senderCodPayableIdr)} /> : null}
                     </>
                   ) : null}
-                  <div className="flex justify-between gap-3 border-t pt-2 text-lg font-semibold"><dt>Bayar di loket</dt><dd>{rp(due)}</dd></div>
-                  {owner && card.providerNetShippingIdr !== undefined ? (
-                    <>
-                      <div className="flex justify-between gap-3 text-muted-foreground"><dt>Modal Mengantar</dt><dd>{rp(card.providerNetShippingIdr)}</dd></div>
-                      <div className="flex justify-between gap-3 text-muted-foreground"><dt>Estimasi laba</dt><dd>{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
-                    </>
-                  ) : null}
+                  <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-slate-300 pt-2.5">
+                    <dt className="text-sm font-semibold text-slate-900">Bayar di loket</dt>
+                    <dd className="text-lg font-bold text-slate-950">{rp(due)}</dd>
+                  </div>
                 </dl>
+                {owner && card.providerNetShippingIdr !== undefined ? (
+                  <dl className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs tabular-nums">
+                    <div><dt className="text-muted-foreground">Modal Mengantar</dt><dd className="text-sm font-medium text-slate-800">{rp(card.providerNetShippingIdr)}</dd></div>
+                    <div><dt className="text-muted-foreground">Estimasi laba</dt><dd className="text-sm font-semibold text-safe">{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
+                  </dl>
+                ) : null}
                 {due > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="w-full flex-wrap">
-                      <ToggleGroupItem value="qris">QRIS gerai</ToggleGroupItem>
-                      <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
-                      <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
-                      <ToggleGroupItem value="later">Bayar nanti</ToggleGroupItem>
+                  <div className="flex flex-col gap-2.5">
+                    <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="grid w-full grid-cols-2 gap-1.5">
+                      <ToggleGroupItem value="qris" className="w-full">QRIS gerai</ToggleGroupItem>
+                      <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
+                      <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
+                      <ToggleGroupItem value="later" className="w-full">Bayar nanti</ToggleGroupItem>
                     </ToggleGroup>
                     {method === "tunai" ? (
                       <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
                         <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
                         <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
-                        {cashNum >= due ? <p className="text-base tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
+                        <div className="flex flex-wrap gap-1">
+                          {[due, Math.ceil(due / 10000) * 10000, Math.ceil(due / 50000) * 50000, 100000].filter((v, i, a) => v >= due && a.indexOf(v) === i).slice(0, 3).map((v) => (
+                            <button key={v} type="button" onClick={() => setCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-7 md:text-xs">
+                              {v === due ? "Uang pas" : rp(v)}
+                            </button>
+                          ))}
+                        </div>
+                        {cashNum >= due ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
                         {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
                       </Field>
                     ) : null}
-                    {method === "qris" || method === "transfer" ? <p className="text-base text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
+                    {method === "qris" || method === "transfer" ? <p className="text-xs text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
                   </div>
                 ) : (
-                  <p className="text-base text-muted-foreground">Tidak ada yang dibayar di loket.</p>
+                  <p className="text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
                 )}
-                {frozen ? <p className="text-base text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
-                {locked ? <p role="alert" className="border-l-4 border-warn py-1 pl-3 text-base">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
-                {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
-                <Button className="hidden lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
+                {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
+                {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
+                {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
+                <Button className="hidden w-full lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
                   <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
                 </Button>
               </div>
             ) : (
-              <p className="text-base text-muted-foreground">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
+              <p className="px-4 pb-5 text-sm text-muted-foreground md:px-5">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
             )}
-          </SectionCard>
+          </Panel>
         </div>
       </div>
       {card ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card p-3 lg:hidden">
-          <span className="flex flex-col text-base tabular-nums"><span className="text-muted-foreground">Bayar di loket</span><strong>{rp(due)}</strong></span>
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur lg:hidden">
+          <span className="flex flex-col text-sm tabular-nums"><span className="text-xs text-muted-foreground">Bayar di loket</span><strong className="text-base md:text-sm">{rp(due)}</strong></span>
           <Button className="flex-1" size="lg" onClick={submit} disabled={disabled}>
             {pending ? "Memproses…" : payNow ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
           </Button>
@@ -438,23 +464,32 @@ export function KasirPage() {
   )
 }
 
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right text-slate-800">{value}</dd>
+    </div>
+  )
+}
+
 function IssuedPanel({ issued, prints, onPrinted, onNew }: { issued: Issued; prints: number; onPrinted: () => void; onNew: () => void }) {
   const ok = issued.state === "issued"
   return (
     <div>
       <PageTitle title="Kiriman Satuan" description={`INV ${issued.slug.toUpperCase()}`} />
-      <Panel className="flex max-w-2xl flex-col gap-4">
+      <Panel className="flex max-w-2xl flex-col gap-3">
         {ok ? (
           <>
-            <p className="flex items-center gap-2 text-lg font-semibold text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
-            <p className="text-base tabular-nums">{issued.courier} · AWB <strong className="font-mono">{issued.awb}</strong></p>
-            <p className="text-base">{issued.paid ? "LUNAS" : "BELUM DIBAYAR"}</p>
+            <p className="flex items-center gap-2 text-sm font-semibold md:text-base text-safe"><CheckCircle2Icon aria-hidden className="size-5" /> Resi terbit</p>
+            <p className="text-sm tabular-nums">{issued.courier} · AWB <strong className="font-mono">{issued.awb}</strong></p>
+            <p className="text-sm font-medium">{issued.paid ? "LUNAS" : "BELUM DIBAYAR"}</p>
             <div><PrintDrawer slug={issued.slug} printCount={prints} firstPrintedAt={null} onPrinted={onPrinted} /></div>
           </>
         ) : (
           <>
-            <p className="text-lg font-semibold text-warn">{issued.state === "provider_unpaid_hold" ? "Menunggu saldo Mengantar" : "Status penerbitan sedang dipastikan"}</p>
-            <p className="text-base">Kiriman sudah tercatat. Lanjutkan di halaman kiriman; jangan buat ulang kiriman ini.</p>
+            <p className="text-sm font-semibold md:text-base text-warn">{issued.state === "provider_unpaid_hold" ? "Menunggu saldo Mengantar" : "Status penerbitan sedang dipastikan"}</p>
+            <p className="text-sm">Kiriman sudah tercatat. Lanjutkan di halaman kiriman; jangan buat ulang kiriman ini.</p>
           </>
         )}
         <div className="flex flex-wrap gap-2 border-t pt-4">

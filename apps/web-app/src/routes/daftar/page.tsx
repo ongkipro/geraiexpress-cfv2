@@ -105,7 +105,7 @@ export function DaftarPage() {
             <ul className="flex flex-col divide-y rounded-lg border" aria-label="Hasil pencarian wilayah">
               {areas.map((a) => (
                 <li key={a.id}>
-                  <button type="button" className="flex min-h-11 w-full items-center px-3 text-left text-base hover:bg-muted" onClick={() => { setArea(a); setQuery(a.label) }}>
+                  <button type="button" className="flex min-h-11 w-full items-center px-3 text-left text-base md:text-sm hover:bg-muted" onClick={() => { setArea(a); setQuery(a.label) }}>
                     {a.label}{a.postalCode ? ` · ${a.postalCode}` : ""}
                   </button>
                 </li>
@@ -117,7 +117,7 @@ export function DaftarPage() {
             <TextField label="Latitude (opsional)" name="latitude" inputMode="decimal" value={lat} onChange={setLat} error={fieldErrors.latitude} hint="Contoh: -6.9456" />
             <TextField label="Longitude (opsional)" name="longitude" inputMode="decimal" value={lng} onChange={setLng} error={fieldErrors.longitude} hint="Contoh: 107.5703" />
           </div>
-          <p className="text-base text-muted-foreground">Titik koordinat dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
+          <p className="text-base md:text-sm text-muted-foreground">Titik koordinat dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           <TextField label="Nama penanggung jawab" name="picName" value={picName} onChange={setPicName} required maxLength={80} />
           <TextField label="HP penanggung jawab" name="picPhone" inputMode="numeric" value={picPhone} onChange={setPicPhone} error={fieldErrors.picPhone} required />
           <Button type="submit" size="lg" disabled={!area}>Lanjut</Button>
@@ -126,10 +126,10 @@ export function DaftarPage() {
       ) : null}
       {step === 5 ? (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-          <dl className="flex flex-col gap-2 text-base">
-            <div><dt className="text-muted-foreground">Gerai</dt><dd className="font-medium">{businessName} · {slug}.geraimitra.com</dd></div>
-            <div><dt className="text-muted-foreground">Titik jemput</dt><dd>{street}, {area?.label}</dd></div>
-            <div><dt className="text-muted-foreground">Akun Mengantar</dt><dd>{sellerEmail}</dd></div>
+          <dl className="flex flex-col gap-2 text-base md:text-sm">
+            <div><dt className="text-xs text-muted-foreground">Gerai</dt><dd className="font-medium">{businessName} · {slug}.geraimitra.com</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Titik jemput</dt><dd>{street}, {area?.label}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Akun Mengantar</dt><dd>{sellerEmail}</dd></div>
           </dl>
           <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
             <span>Saya setuju GeraiExpress membuat akun seller Mengantar atas nama gerai saya dengan email di atas, dan saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun Mengantar tersebut.</span>

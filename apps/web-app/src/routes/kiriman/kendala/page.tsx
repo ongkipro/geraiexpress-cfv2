@@ -56,12 +56,12 @@ export function Kendala() {
     <div className="mb-6 flex flex-col gap-4">
       <div role="group" aria-label="Jenis kendala" className="flex flex-wrap gap-2">
         {BUCKETS.map((b) => (
-          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => setBucket(b.id)} className={`h-11 rounded-full border px-4 text-base md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
+          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => setBucket(b.id)} className={`h-11 rounded-full border px-4 text-base md:text-sm md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
             {b.label}{d ? <span className="ml-1 tabular-nums text-muted-foreground">({d.counts[b.id]})</span> : null}
           </button>
         ))}
       </div>
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
       {!d ? <LoadingState label="Memuat kendala" /> : d.rows.length === 0 ? (
         <EmptyState title="Tidak ada kendala" body="Kiriman di kategori ini akan muncul di sini." />
       ) : (
@@ -69,7 +69,7 @@ export function Kendala() {
           {d.rows.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} act={act} />)}
         </ul>
       )}
-      <p className="text-base text-muted-foreground">Batas klaim mengikuti ketentuan Mengantar per ekspedisi. Batas berbasis hari kerja ditampilkan sebagai hari kalender, jadi bisa lebih cepat dari sebenarnya.</p>
+      <p className="text-base md:text-sm text-muted-foreground">Batas klaim mengikuti ketentuan Mengantar per ekspedisi. Batas berbasis hari kerja ditampilkan sebagai hari kalender, jadi bisa lebih cepat dari sebenarnya.</p>
     </div>
   )
 }
@@ -80,19 +80,19 @@ function KendalaRow({ r, bucket, owner, act }: { r: Row; bucket: Bucket; owner: 
     <Panel as="li" className="flex flex-col gap-2 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
-        <span className="text-base text-muted-foreground tabular-nums">{r.courier} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
+        <span className="text-base md:text-sm text-muted-foreground tabular-nums">{r.courier} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
       </div>
-      <p className="text-base">
+      <p className="text-base md:text-sm">
         Scan terakhir {when(r.last_scan_at)}{r.band ? ` · tidak bergerak ${BAND[r.band]}` : ""}
         {r.adjustment_idr ? <span className="font-medium"> · penyesuaian Mengantar {rp(r.adjustment_idr)}</span> : null}
       </p>
       {r.claim_kind ? (
         <div className="flex flex-wrap items-center gap-2">
-          {r.countdown ? <span className={`inline-flex h-8 items-center rounded-full px-3 text-base font-medium ${TONE[r.countdown.tone]}`}>{r.countdown.expired ? "Kedaluwarsa" : `Bisa Klaim — ${r.countdown.label}`}</span> : null}
+          {r.countdown ? <span className={`inline-flex h-8 items-center rounded-full px-3 text-base md:text-sm font-medium ${TONE[r.countdown.tone]}`}>{r.countdown.expired ? "Kedaluwarsa" : `Bisa Klaim — ${r.countdown.label}`}</span> : null}
           {r.claim ? (
             <>
-              <span className="text-base">Klaim {r.claim_kind}: {CLAIM_STATUS[r.claim.status] ?? r.claim.status}</span>
-              <a href={`/api/app/claims/${r.claim.id}/packet`} target="_blank" rel="noopener" className="text-base text-primary underline-offset-4 hover:underline">Paket klaim</a>
+              <span className="text-base md:text-sm">Klaim {r.claim_kind}: {CLAIM_STATUS[r.claim.status] ?? r.claim.status}</span>
+              <a href={`/api/app/claims/${r.claim.id}/packet`} target="_blank" rel="noopener" className="text-base md:text-sm text-primary underline-offset-4 hover:underline">Paket klaim</a>
               {r.claim.status === "draft" ? <Button variant="outline" onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "submitted" } }), "Klaim ditandai sudah diajukan ke Mengantar.")}>Tandai Sudah Diajukan</Button> : null}
               {owner && r.claim.status === "submitted" ? (
                 <>
@@ -108,7 +108,7 @@ function KendalaRow({ r, bucket, owner, act }: { r: Row; bucket: Bucket; owner: 
       ) : null}
       {bucket === "bertentangan" && owner ? (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-0 flex-1 flex-col gap-1 text-base">Catatan pengecekan<Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></label>
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-base md:text-sm">Catatan pengecekan<Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></label>
           <Button variant="outline" onClick={() => act(() => api(`/shipments/${r.slug}/conflict-note`, { body: { note, resolve: true } }), "Catatan disimpan dan kendala ditutup.")}>Simpan & Tutup</Button>
         </div>
       ) : null}

@@ -12,7 +12,7 @@ test("Pengaturan dan Akun Saya", async ({ page, context, request }) => {
   expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `s${Date.now().toString(36)}`, name: "Gerai Atur", connect: true } })).status()).toBe(201)
 
   await page.goto(`${APP}/pengaturan/data-usaha`)
-  await expect(page.getByRole("heading", { name: "Data Usaha", level: 2 }).last()).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Data Usaha", level: 1 }).last()).toBeVisible()
   await expect(page.getByText("Ada perubahan belum disimpan")).toHaveCount(0)
   await page.getByLabel("Nama resmi").fill("UD Atur Jaya")
   await page.getByLabel("NPWP", { exact: true }).fill("01.234.567.8-901.234")
@@ -29,7 +29,7 @@ test("Pengaturan dan Akun Saya", async ({ page, context, request }) => {
   await expect(page.getByText("Perubahan tersimpan.")).toBeVisible()
 
   await page.goto(`${APP}/akun`)
-  await expect(page.getByRole("heading", { name: "Akun Saya", level: 2 })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Akun Saya", level: 1 })).toBeVisible()
   await expect(page.getByText("· perangkat ini")).toBeVisible()
   await page.getByLabel("Kata sandi saat ini").first().fill("salah-sekali-1")
   await page.getByLabel("Kata sandi baru").fill("sandi-baru-kuat-9")

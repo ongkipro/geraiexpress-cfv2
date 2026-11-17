@@ -35,7 +35,7 @@ export function ProfilGeraiPage() {
   return (
     <SettingsLayout title="Profil Gerai" description="Nama dan alamat ini dipakai untuk penjemputan kurir dan struk pelanggan.">
       <Card>
-        <CardHeader><CardTitle className="text-lg">Identitas</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Identitas</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4">
           {field("name", "Nama gerai")}
           {field("whatsapp", "WhatsApp gerai", "Tampil di struk bila pelanggan perlu menghubungi gerai.", { inputMode: "tel" })}
@@ -43,7 +43,7 @@ export function ProfilGeraiPage() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-lg">Alamat jemput</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Alamat jemput</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4">
           <AreaPicker label="Kecamatan" value={f.area} onChange={(a) => set({ area: a, postalCode: a?.postalCode ?? f.postalCode })} error={s.fields.areaId} />
           {field("street", "Alamat lengkap")}
@@ -52,7 +52,7 @@ export function ProfilGeraiPage() {
             {field("latitude", "Latitude", "Contoh: -6.9456", { inputMode: "decimal", className: "tabular-nums" })}
             {field("longitude", "Longitude", "Contoh: 107.5703", { inputMode: "decimal", className: "tabular-nums" })}
           </div>
-          <p className="text-base text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
+          <p className="text-base md:text-sm text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
         </CardContent>
       </Card>
       <Notice msg={s.msg} />

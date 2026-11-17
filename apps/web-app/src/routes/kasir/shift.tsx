@@ -4,7 +4,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "../../component
 import { Input } from "../../components/ui/input"
 import { api, ApiError } from "../../lib/api"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
-import { isOwner, useWorkspace } from "../../shell/workspace"
+import { isOwner, refreshCounterStatus, useWorkspace } from "../../shell/workspace"
 import { rp } from "./quote-panel"
 import { ChoiceGroup, SectionCard, Panel } from "../../components/admin/page"
 
@@ -39,10 +39,10 @@ export function ShiftPage() {
       <PageTitle title="Shift Loket" description={v.shift ? `Dibuka ${time(v.shift.opened_at)}` : "Buka shift sebelum menerima uang tunai."} />
       {v.shift && v.totals ? <OpenShift shift={v.shift} totals={v.totals} onClosed={load} /> : <OpenForm onOpened={load} />}
       <SectionCard id="riwayat" className="mt-6" title={<>{isOwner(w) ? "Riwayat shift semua kasir" : "Riwayat shift Anda"}</>}>
-        {history.length === 0 ? <p className="text-base text-muted-foreground">Belum ada shift yang ditutup.</p> : (
+        {history.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Belum ada shift yang ditutup.</p> : (
           <ul className="divide-y">
             {history.map((s) => (
-              <li key={s.id} className="flex flex-wrap justify-between gap-2 py-2 text-base tabular-nums">
+              <li key={s.id} className="flex flex-wrap justify-between gap-2 py-2 text-base md:text-sm tabular-nums">
                 <span>{time(s.opened_at)} → {time(s.closed_at)}</span>
                 <span className={s.variance_idr ? "font-medium text-danger" : "text-muted-foreground"}>{s.variance_idr ? `Selisih ${rp(Math.abs(s.variance_idr))} (${s.variance_idr > 0 ? "lebih" : "kurang"})` : "Pas"}</span>
               </li>
@@ -64,6 +64,7 @@ function OpenForm({ onOpened }: { onOpened: () => void }) {
     setError(null)
     try {
       await api("/shift/open", { body: { openingFloatIdr: digits(float) } })
+      refreshCounterStatus()
       onOpened()
     } catch (err) {
       setError(err instanceof ApiError ? err.body.message : "Gagal membuka shift.")
@@ -96,6 +97,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
     setError(null)
     try {
       await api("/shift/close", { body: { countedCashIdr: digits(counted), reasonCode: reason || undefined, note: note || undefined } })
+      refreshCounterStatus()
       onClosed()
     } catch (err) {
       setError(err instanceof ApiError ? err.body.message : "Gagal menutup shift.")
@@ -104,23 +106,23 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
     }
   }
   const row = (label: string, value: number, strong = false) => (
-    <div className={`flex justify-between gap-3 ${strong ? "border-t pt-2 text-lg font-semibold" : ""}`}><dt className={strong ? "" : "text-muted-foreground"}>{label}</dt><dd>{rp(value)}</dd></div>
+    <div className={`flex justify-between gap-3 ${strong ? "border-t pt-2 text-base md:text-sm font-semibold" : ""}`}><dt className={strong ? "" : "text-muted-foreground"}>{label}</dt><dd>{rp(value)}</dd></div>
   )
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
       <SectionCard id="laci" title="Isi laci (langsung)">
-        <dl className="flex flex-col gap-2 text-base tabular-nums">
+        <dl className="flex flex-col gap-2 text-base md:text-sm tabular-nums">
           {row("Modal awal", shift.opening_float_idr)}
           {row("Tunai masuk", totals.tunaiIn)}
           {row("Void tunai", -totals.voidTunai || 0)}
           {row("Pencairan COD tunai", -totals.codPayoutTunai || 0)}
           {row("Seharusnya di laci", totals.expectedCash, true)}
-          <div className="flex justify-between gap-3 pt-2"><dt className="text-muted-foreground">QRIS tercatat</dt><dd>{rp(totals.qris)}</dd></div>
-          <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Transfer tercatat</dt><dd>{rp(totals.transfer)}</dd></div>
+          <div className="flex justify-between gap-3 pt-2"><dt className="text-xs text-muted-foreground">QRIS tercatat</dt><dd>{rp(totals.qris)}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Transfer tercatat</dt><dd>{rp(totals.transfer)}</dd></div>
         </dl>
       </SectionCard>
       <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <h3 className="text-lg font-semibold">Tutup shift</h3>
+        <h2 className="text-sm font-semibold md:text-base">Tutup shift</h2>
         <Field>
           <FieldLabel htmlFor="hitung">Uang tunai fisik dihitung</FieldLabel>
           <Input id="hitung" inputMode="numeric" value={counted} onChange={(e) => setCounted(fmtIn(e.target.value))} className="w-48 tabular-nums" />
@@ -129,7 +131,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
         {variance !== null && variance !== 0 ? (
           <>
             <fieldset className="flex flex-col gap-2">
-              <legend className="mb-1 text-base font-medium">Alasan selisih</legend>
+              <legend className="mb-1 text-base md:text-sm font-medium">Alasan selisih</legend>
               <ChoiceGroup label="Alasan selisih" value={reason || null} onValueChange={setReason} choices={REASONS.map(([id, label]) => ({ value: id, label }))} />
             </fieldset>
             <Field>
@@ -138,7 +140,7 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
             </Field>
           </>
         ) : null}
-        {error ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{error}</p> : null}
+        {error ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{error}</p> : null}
         <div><Button type="submit" size="lg" disabled={pending || !counted}>{pending ? "Menutup…" : "Tutup Shift"}</Button></div>
       </Panel>
     </div>

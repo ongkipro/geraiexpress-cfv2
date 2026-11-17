@@ -91,7 +91,7 @@ export function KeuanganPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       {header}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`-mt-2 text-base font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`-mt-2 text-base md:text-sm font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
       <MetricGrid>
         <MetricCard label="Saldo Mengantar (sync)" value={s.balance === null ? "Belum tersinkron" : rp(s.balance)} footer="Top-up dilakukan di aplikasi Mengantar" />
         <MetricCard label="Saldo aman tersedia" value={s.safeBalance === null ? "—" : rp(s.safeBalance)} footer={`Cadangan retur ${rp(s.reserve)}`} />
@@ -107,11 +107,11 @@ export function KeuanganPage() {
         </CalloutAlert>
       ) : null}
       <nav aria-label="Bagian keuangan" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <ul className="flex w-max gap-1 rounded-lg bg-muted p-1">
+        <ul className="flex w-max gap-0.5 rounded-lg bg-slate-100/90 p-1">
           {TABS.map((t) => (
             <li key={t.id}>
-              <Link to="/keuangan" search={{ tab: t.id === "ringkasan" ? undefined : t.id } as never} aria-current={t.id === tab ? "page" : undefined} className={`flex h-11 items-center gap-2 rounded-md px-4 text-base md:h-10 ${t.id === tab ? "bg-card font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}>
-                {t.label}{t.id === "selisih" && d.discrepancies.length ? <span className="tabular-nums text-danger">({d.discrepancies.length})</span> : null}
+              <Link to="/keuangan" search={{ tab: t.id === "ringkasan" ? undefined : t.id } as never} aria-current={t.id === tab ? "page" : undefined} className={`flex h-11 items-center gap-1.5 rounded-md px-3 text-base whitespace-nowrap md:h-8 md:text-sm ${t.id === tab ? "bg-white font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]" : "text-muted-foreground hover:text-slate-900"}`}>
+                {t.label}{t.id === "selisih" && d.discrepancies.length ? <span className="rounded-full bg-danger-bg px-1.5 text-xs font-semibold text-danger tabular-nums">{d.discrepancies.length}</span> : null}
               </Link>
             </li>
           ))}
@@ -119,7 +119,7 @@ export function KeuanganPage() {
       </nav>
       {tab === "ringkasan" ? (
         <SectionCard id="laba" title="Ringkasan laba" description="30 hari terakhir · dua angka laba tidak pernah dijumlahkan">
-          <div className="grid gap-6 sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
+          <div className="grid gap-5 sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
             <Figure label="Estimasi Laba" value={rp(s.estimated_margin_idr)} note="Dari selisih tarif saat resi terbit" />
             <Separator orientation="vertical" className="hidden sm:block" />
             <Figure label="Laba Kas" value={rp(s.cash_profit_idr)} note="Sudah lunas dan cocok dengan Mengantar" />
@@ -140,9 +140,9 @@ export function KeuanganPage() {
 function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-base text-muted-foreground">{label}</p>
-      <p className="text-[28px] leading-tight font-bold tabular-nums">{value}</p>
-      <p className="text-base text-muted-foreground">{note}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl leading-none font-bold tracking-[-0.02em] text-slate-950 tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{note}</p>
     </div>
   )
 }
@@ -166,7 +166,7 @@ function Mutations({ rows }: { rows: Mutation[] }) {
           { key: "saldo", header: "Saldo", align: "right", wide: true, cell: (m) => (m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)) },
         ]}
         mobile={(m) => (
-          <div className="flex flex-col gap-1 text-base">
+          <div className="flex flex-col gap-1 text-base md:text-sm">
             <span className="flex justify-between gap-2"><span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
             <span className="text-muted-foreground tabular-nums">{when(m.provider_created_at)} · {m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span>
             <span className="text-muted-foreground tabular-nums">Saldo {m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)}{m.link_state === "unlinked" || m.link_state === "partial" ? " · belum cocok semua" : ""}</span>
@@ -239,7 +239,7 @@ function Discrepancies({ rows }: { rows: Discrepancy[] }) {
     <SectionCard id="selisih" title="Selisih Sync" description="Mutasi Mengantar yang belum cocok dengan kiriman gerai" flush>
     <ul className="divide-y">
       {open.map((x) => (
-        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base md:px-6">
+        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base md:text-sm md:px-6">
           <span className="font-medium">{KIND_LABEL[x.kind] ?? "Selisih"}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
           <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
           {closing === x.id ? (

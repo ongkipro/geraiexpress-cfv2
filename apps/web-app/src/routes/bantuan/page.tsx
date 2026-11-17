@@ -51,11 +51,11 @@ export function BantuanPage() {
     return GUIDES.filter((g) => words.every((w) => `${g.title} ${g.steps.join(" ")}`.toLowerCase().includes(w)))
   }, [q])
   const contact = support?.whatsapp
-    ? <a href={`https://wa.me/${support.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10"><MessageCircleIcon aria-hidden className="size-4" /> Hubungi Bantuan</a>
-    : <a href={`mailto:${support?.email ?? "bantuan@geraiexpress.com"}`} className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Hubungi Bantuan</a>
+    ? <a href={`https://wa.me/${support.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-9 md:text-sm"><MessageCircleIcon aria-hidden className="size-4" /> Hubungi Bantuan</a>
+    : <a href={`mailto:${support?.email ?? "bantuan@geraiexpress.com"}`} className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-9 md:text-sm">Hubungi Bantuan</a>
   return (
-    <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 pb-24 md:pb-0">
-      <PageTitle title="Bantuan & Panduan">{contact}</PageTitle>
+    <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 pb-24 md:gap-5 md:pb-0">
+      <PageTitle title="Bantuan & Panduan" description="Panduan singkat untuk pekerjaan sehari-hari di loket." />
       <Field>
         <FieldLabel htmlFor="cari-panduan">Cari panduan</FieldLabel>
         <div className="relative">
@@ -63,18 +63,25 @@ export function BantuanPage() {
           <Input id="cari-panduan" type="search" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="printer, COD, retur…" />
         </div>
       </Field>
-      {list.length === 0 ? <p className="text-base text-muted-foreground">Tidak ada panduan yang cocok. Coba kata lain atau hubungi bantuan.</p> : null}
+      {list.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada panduan yang cocok. Coba kata lain atau hubungi bantuan.</p> : null}
       <div className="flex flex-col gap-3">
         {list.map((g) => (
           <Panel as="details" key={g.id} open={q.length > 0}>
-            <summary className="flex min-h-11 cursor-pointer items-center text-lg font-semibold">{g.title}</summary>
-            <ol className="mt-3 flex list-decimal flex-col gap-2 pl-6 text-base">
+            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold md:text-base">{g.title}</summary>
+            <ol className="mt-3 flex list-decimal flex-col gap-2 pl-6 text-base md:text-sm">
               {g.steps.map((s) => <li key={s}>{s}</li>)}
             </ol>
-            {g.link ? <Link to={g.link.to} className="mt-3 inline-flex text-base text-primary underline-offset-4 hover:underline">{g.link.label}</Link> : null}
+            {g.link ? <Link to={g.link.to} className="mt-2 inline-flex min-h-11 items-center text-base font-medium text-primary underline-offset-4 hover:underline md:min-h-9 md:text-sm">{g.link.label}</Link> : null}
           </Panel>
         ))}
       </div>
+      <Panel className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h2 className="text-sm font-semibold md:text-base">Masih butuh bantuan?</h2>
+          <p className="text-sm text-muted-foreground">Tim GeraiExpress siap membantu lewat WhatsApp atau email.</p>
+        </div>
+        {contact}
+      </Panel>
     </div>
   )
 }

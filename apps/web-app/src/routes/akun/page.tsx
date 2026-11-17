@@ -64,7 +64,7 @@ function ProfileCard({ p, onSaved }: { p: Account["profile"]; onSaved: () => voi
   }
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Profil</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base md:text-sm">Profil</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={save} className="flex flex-col gap-4" noValidate>
           <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="ak-name">Nama</FieldLabel><Input id="ak-name" value={name} onChange={(e) => setName(e.target.value)} />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
@@ -98,7 +98,7 @@ function PasswordCard() {
   }
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Ganti Kata Sandi</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base md:text-sm">Ganti Kata Sandi</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={save} className="flex flex-col gap-4" noValidate>
           <Field data-invalid={fields.current ? true : undefined}><FieldLabel htmlFor="pw-cur">Kata sandi saat ini</FieldLabel><Input id="pw-cur" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />{fields.current ? <FieldError>{fields.current}</FieldError> : null}</Field>
@@ -152,8 +152,8 @@ function EmailCard({ current, onChanged }: { current: string; onChanged: () => v
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Ganti Email</CardTitle>
-        <CardDescription className="text-base">Email sekarang: {current}. Kode verifikasi dikirim ke email baru.</CardDescription>
+        <CardTitle className="text-base md:text-sm">Ganti Email</CardTitle>
+        <CardDescription className="text-base md:text-sm">Email sekarang: {current}. Kode verifikasi dikirim ke email baru.</CardDescription>
       </CardHeader>
       <CardContent>
         {otpId ? (
@@ -189,11 +189,11 @@ function SessionsCard({ sessions, onChanged }: { sessions: Session[]; onChanged:
   const others = sessions.filter((s) => !s.current)
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Perangkat yang masuk</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base md:text-sm">Perangkat yang masuk</CardTitle></CardHeader>
       <CardContent className="flex flex-col gap-3">
         <ul className="divide-y">
           {sessions.map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base">
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm">
               <span><span className="font-medium">{s.device}</span>{s.current ? " · perangkat ini" : ""}<span className="block text-muted-foreground">Terakhir aktif {when(s.lastSeenAt)}</span></span>
               {s.current ? null : <Button variant="outline" onClick={() => revoke({ id: s.id })}>Keluarkan</Button>}
             </li>
@@ -210,7 +210,7 @@ function TextSizeCard() {
   const [size, setSize] = useState<TextSize>(storedTextSize)
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Ukuran teks</CardTitle><CardDescription className="text-base">Berlaku di perangkat ini.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="text-base md:text-sm">Ukuran teks</CardTitle><CardDescription className="text-base md:text-sm">Berlaku di perangkat ini.</CardDescription></CardHeader>
       <CardContent>
         <ToggleGroup value={[size]} onValueChange={(v) => {
           const s = (v[0] as TextSize) ?? size

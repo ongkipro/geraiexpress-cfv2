@@ -7,6 +7,10 @@ The visual language of `geraiexpress-cfv2` is **calm, high-contrast, Apple-clean
 ## 1. Core Ergonomic Rules
 
 1. **One Primary Action per Screen:** a single `#0066CC` primary button anchors each view. No decorative gradients, auto-carousels, or promo pop-ups blocking counter inputs.
+> **Signed-in consoles: desk scale (DEC-239, 2026-11-17)** — desktop 14 px body/inputs, 12 px labels and captions
+> (floor), 24 px titles and figures, 36 px controls; phones keep 16 px inputs and 44 px targets; `Ukuran Teks` raises
+> everything by 12.5 % or 25 %. Rules 2–3 below still govern public pages and the phone counter.
+
 2. **40+ Eye Comfort & Instant Font Scaling:**
    - Body and input text minimum **`16px`** (`17px` on public reading pages); secondary metadata minimum `14px` (never `10–11px` low-contrast micro-text for operational facts).
    - Top-bar quick text-scale toggle in `app.geraiexpress.com`: **`Normal (100%)` · `Besar (112%)` · `Sangat Besar (125%)`** persisted in `localStorage`.

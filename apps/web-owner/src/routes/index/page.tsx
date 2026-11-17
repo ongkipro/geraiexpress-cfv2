@@ -1,6 +1,7 @@
-import { ArrowRightIcon } from "lucide-react"
+import { Link } from "@tanstack/react-router"
+import { ActivityIcon, ArrowRightIcon, ChevronRightIcon, InboxIcon, PackageIcon, StoreIcon } from "lucide-react"
 import { AdminBarChart } from "@shared/components/admin/bar-chart"
-import { EmptyState, ErrorState, LoadingState, MetricCard, MetricGrid, PageHeader, SectionCard, StatusBadge, type StatusTone } from "@shared/components/admin/page"
+import { EmptyState, ErrorState, LoadingState, MetricCard, MetricGrid, PageHeader, SectionCard, type StatusTone } from "@shared/components/admin/page"
 import { formatDate } from "../../components/page"
 import { useApi } from "../../lib/use-api"
 import { LinkButton } from "@shared/components/admin/link-button"
@@ -49,7 +50,7 @@ interface Attention {
   tone: StatusTone
   label: string
   detail?: string
-  to?: string
+  to: string
   search?: Record<string, string>
   action?: string
 }
@@ -72,13 +73,14 @@ export function RingkasanPage() {
     }),
   ].filter((x): x is Attention => x !== null)
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       {header}
       <MetricGrid>
-        <MetricCard label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
-        <MetricCard label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" />
-        <MetricCard label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
+        <MetricCard icon={StoreIcon} label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
+        <MetricCard icon={PackageIcon} label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" />
+        <MetricCard icon={InboxIcon} label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
         <MetricCard
+          icon={ActivityIcon}
           label="Kesehatan sinkron & relay"
           value={k.health === "ok" ? "Baik" : "Perlu dicek"}
           footer={k.partnerQuota ? `Kuota Partner: ${k.partnerQuota.minute}/60 per menit` : "Relay & kuota Partner"}
@@ -86,8 +88,8 @@ export function RingkasanPage() {
           tone={k.health === "ok" ? undefined : "warn"}
         />
       </MetricGrid>
-      <div className="grid gap-6 xl:grid-cols-5">
-        <SectionCard id="volume" className="xl:col-span-3" title="Kiriman 14 hari terakhir" description={`${nf.format(total14)} paket · per hari · semua gerai`}>
+      <div className="grid items-start gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+        <SectionCard id="volume" title="Kiriman 14 hari terakhir" description={`${nf.format(total14)} paket · per hari · semua gerai`}>
           <AdminBarChart
             data={data.series}
             xKey="day"
@@ -98,13 +100,12 @@ export function RingkasanPage() {
         </SectionCard>
         <SectionCard
           id="perhatian"
-          className="xl:col-span-2"
           title="Perlu perhatian"
           description={rows.length > 6 ? `${nf.format(rows.length)} peringatan 7 hari terakhir · 6 teratas` : "Peringatan 7 hari terakhir"}
           flush
           footer={
             rows.length > 6 ? (
-              <LinkButton variant="outline" to="/sistem">
+              <LinkButton variant="outline" size="sm" to="/sistem">
                 Lihat semua di Sistem & Audit <ArrowRightIcon aria-hidden data-icon="inline-end" />
               </LinkButton>
             ) : undefined
@@ -113,19 +114,17 @@ export function RingkasanPage() {
           {rows.length === 0 ? (
             <EmptyState title="Semua aman" body="Tidak ada peringatan dalam 7 hari terakhir." />
           ) : (
-            <ul className="flex flex-col divide-y">
+            <ul className="flex flex-col divide-y divide-slate-100">
               {rows.slice(0, 6).map((r) => (
-                <li key={r.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <StatusBadge tone={r.tone} className="w-fit">{r.tone === "danger" ? "Kritis" : r.tone === "warn" ? "Perlu dicek" : "Uji"}</StatusBadge>
-                    <span className="text-base">{r.label}</span>
-                    {r.detail ? <span className="text-base text-muted-foreground tabular-nums">{r.detail}</span> : null}
-                  </div>
-                  {r.to ? (
-                    <LinkButton variant="outline" size="sm" to={r.to} search={r.search as never}>
-                      {r.action} <ArrowRightIcon aria-hidden data-icon="inline-end" />
-                    </LinkButton>
-                  ) : null}
+                <li key={r.key}>
+                  <Link to={r.to} search={r.search as never} aria-label={`${r.label} — ${r.action}`} className="group flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:px-5">
+                    <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${r.tone === "danger" ? "bg-danger" : r.tone === "warn" ? "bg-warn" : "bg-slate-400"}`} />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-sm text-slate-800">{r.label}</span>
+                      <span className="truncate text-xs text-muted-foreground tabular-nums">{r.tone === "danger" ? "Kritis" : r.tone === "warn" ? "Perlu dicek" : "Uji"}{r.detail ? ` · ${r.detail}` : ""}</span>
+                    </span>
+                    <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-slate-300 group-hover:text-muted-foreground" />
+                  </Link>
                 </li>
               ))}
             </ul>

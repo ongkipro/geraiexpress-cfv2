@@ -37,7 +37,7 @@ export function AturSandiPage() {
       {done ? (
         <div className="flex flex-col gap-5">
           <FormAlert tone="safe">Kata sandi sudah diganti. Semua perangkat lain sudah dikeluarkan dari akun.</FormAlert>
-          <Link to="/masuk" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground">Masuk</Link>
+          <Link to="/masuk" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground">Masuk</Link>
         </div>
       ) : (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>

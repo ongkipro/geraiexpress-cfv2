@@ -38,7 +38,7 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
   const preset = PRESETS.find((x) => x.id === value.preset)
   const aria = `Periode: ${preset ? `${preset.label}, ` : ""}${rangeLabel(value, true)}`
   const trigger = (
-    <Button variant="outline" aria-label={aria} className="h-11 justify-between gap-2 text-base md:h-10">
+    <Button variant="outline" aria-label={aria} className="h-11 justify-between gap-2 text-base md:text-sm md:h-10">
       <CalendarIcon aria-hidden /> <span className="tabular-nums">{triggerLabel(value)}</span> <ChevronDownIcon aria-hidden />
     </Button>
   )
@@ -101,14 +101,14 @@ function Body({ value, onPick, onCancel, months, chips }: { value: Period; onPic
   const presetList = chips ? (
     <div role="group" aria-label="Pilihan cepat" className="flex flex-wrap gap-2 px-4">
       {PRESETS.map((p) => (
-        <button key={p.id} type="button" aria-pressed={value.preset === p.id} onClick={() => choosePreset(p.id)} className={`h-11 rounded-full border px-4 text-base ${value.preset === p.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{p.label}</button>
+        <button key={p.id} type="button" aria-pressed={value.preset === p.id} onClick={() => choosePreset(p.id)} className={`h-11 rounded-full border px-4 text-base md:text-sm ${value.preset === p.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>{p.label}</button>
       ))}
     </div>
   ) : (
     <div className="flex w-48 flex-col gap-1 border-r p-3">
       <p className="px-2 pb-1 text-sm font-semibold text-muted-foreground">Periode (WIB)</p>
       {PRESETS.map((p) => (
-        <button key={p.id} type="button" aria-pressed={value.preset === p.id} onClick={() => choosePreset(p.id)} className={`h-10 rounded-md px-2 text-left text-base ${value.preset === p.id ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"}`}>{p.label}</button>
+        <button key={p.id} type="button" aria-pressed={value.preset === p.id} onClick={() => choosePreset(p.id)} className={`h-10 rounded-md px-2 text-left text-base md:text-sm ${value.preset === p.id ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"}`}>{p.label}</button>
       ))}
     </div>
   )
@@ -118,7 +118,7 @@ function Body({ value, onPick, onCancel, months, chips }: { value: Period; onPic
       <div className="flex flex-wrap items-end gap-3 border-t pt-3">
         <Field className="w-36"><FieldLabel htmlFor="periode-dari">Dari</FieldLabel><Input id="periode-dari" value={dari} inputMode="numeric" placeholder="dd/mm/yyyy" onChange={(e) => { setDari(e.target.value); setError(null) }} /></Field>
         <Field className="w-36"><FieldLabel htmlFor="periode-sampai">Sampai</FieldLabel><Input id="periode-sampai" value={sampai} inputMode="numeric" placeholder="dd/mm/yyyy" onChange={(e) => { setSampai(e.target.value); setError(null) }} /></Field>
-        {span ? <p className="pb-2 text-base text-muted-foreground tabular-nums">{span} hari</p> : null}
+        {span ? <p className="pb-2 text-base md:text-sm text-muted-foreground tabular-nums">{span} hari</p> : null}
       </div>
       {error ? <FieldError>{error}</FieldError> : null}
       {chips ? null : (

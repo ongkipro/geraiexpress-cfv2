@@ -30,11 +30,11 @@ function DeviceCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Printer di perangkat ini</CardTitle>
-        <CardDescription className="text-base">Untuk PC: pasang driver printer thermal 100 mm, ukuran kertas sesuai label, dan skala cetak 100% (Ukuran sebenarnya). Pilihan di kartu ini langsung tersimpan di perangkat ini saja.</CardDescription>
+        <CardTitle className="text-base md:text-sm">Printer di perangkat ini</CardTitle>
+        <CardDescription className="text-base md:text-sm">Untuk PC: pasang driver printer thermal 100 mm, ukuran kertas sesuai label, dan skala cetak 100% (Ukuran sebenarnya). Pilihan di kartu ini langsung tersimpan di perangkat ini saja.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <p className="text-base font-medium">Ketebalan cetak</p>
+        <p className="text-base md:text-sm font-medium">Ketebalan cetak</p>
         <ToggleGroup value={[density]} onValueChange={(v) => {
           const d = (v[0] as "normal" | "tebal") ?? density
           setDensity(d)
@@ -43,7 +43,7 @@ function DeviceCard() {
           <ToggleGroupItem value="normal">Normal</ToggleGroupItem>
           <ToggleGroupItem value="tebal">Tebal</ToggleGroupItem>
         </ToggleGroup>
-        <p className="text-base text-muted-foreground">Pilih Tebal bila barcode di kertas thermal tipis tampak pudar.</p>
+        <p className="text-base md:text-sm text-muted-foreground">Pilih Tebal bila barcode di kertas thermal tipis tampak pudar.</p>
       </CardContent>
     </Card>
   )
@@ -56,8 +56,8 @@ function KasirFormatInfo() {
   }, [])
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Format label gerai</CardTitle></CardHeader>
-      <CardContent><p className="text-base">{fmt ? `${FORMAT_LABEL[fmt]} — ${PAPER_HINT[fmt]}.` : "Memuat…"} Format bawaan diatur oleh pemilik gerai.</p></CardContent>
+      <CardHeader><CardTitle className="text-base md:text-sm">Format label gerai</CardTitle></CardHeader>
+      <CardContent><p className="text-base md:text-sm">{fmt ? `${FORMAT_LABEL[fmt]} — ${PAPER_HINT[fmt]}.` : "Memuat…"} Format bawaan diatur oleh pemilik gerai.</p></CardContent>
     </Card>
   )
 }
@@ -74,20 +74,20 @@ function ReceiptForm() {
   return (
     <>
       <Card>
-        <CardHeader><CardTitle className="text-lg">Format label bawaan</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Format label bawaan</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           <ChoiceGroup label="Format label bawaan" layout="column" value={f.defaultLabelFormat} onValueChange={(x) => set({ defaultLabelFormat: x })} choices={FORMATS.map((x) => ({ value: x, label: FORMAT_LABEL[x], description: PAPER_HINT[x] }))} />
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-lg">Isi struk</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Isi struk</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Field data-invalid={s.fields.unboxingRemark ? true : undefined}>
             <FieldLabel htmlFor="remark">Catatan video unboxing</FieldLabel>
             <Input id="remark" value={f.unboxingRemark} maxLength={50} onChange={(e) => set({ unboxingRemark: e.target.value })} />
             {s.fields.unboxingRemark ? <FieldError>{s.fields.unboxingRemark}</FieldError> : <FieldDescription>{f.unboxingRemark.length}/50 karakter. Kosongkan untuk menyembunyikan baris ini.</FieldDescription>}
           </Field>
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
             Tampilkan komisi di Cek Ongkir Cepat (khusus pemilik)
             <Switch checked={f.showCommission} onCheckedChange={(v) => set({ showCommission: v })} />
           </label>

@@ -25,7 +25,7 @@ async function quoteJt(page: Page, cod = false) {
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   if (cod) await page.getByLabel("Harga barang (COD)").fill("150000")
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
-  await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Pilih", exact: true }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
 }
 async function parties(page: Page) {
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
@@ -70,7 +70,7 @@ test("the frozen card is the only amount paid; re-selecting the old card is refu
   const slug = /INV ([0-9A-Z]{7})/.exec(await page.getByText(/INV [0-9A-Z]{7} · draf/).innerText())![1]!.toLowerCase()
   // Re-select the same (pre-freeze, Rp 12.500) card: the summary must stay on the frozen Rp 15.000, and the next
   // press may only proceed with that amount on screen (the payment records the INV's frozen due).
-  await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Terpilih" }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
   await expect(page.locator("dl > div").filter({ has: page.getByRole("term").filter({ hasText: /^Bayar di loket$/ }) }).getByRole("definition")).toHaveText("Rp 15.000")
   const d = ((await (await api.get(`${APP}/api/app/shipments/${slug}`)).json()) as { data: { shipment: { counter_payment_status: string } } }).data
   expect(d.shipment.counter_payment_status).toBe("unpaid")

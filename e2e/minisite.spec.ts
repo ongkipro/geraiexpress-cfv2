@@ -31,10 +31,10 @@ test("Mini-site: QR dari rumah → kasir buka INV yang sama → lacak tanpa data
 
   await page.goto(`${APP}/kasir`)
   await page.getByLabel("Pindai QR pelanggan atau ketik INV").fill(`${site}/kirim/${slug}`)
-  await page.getByRole("button", { name: "Buka", exact: true }).click()
+  await page.getByRole("button", { name: "Buka Draf", exact: true }).click()
   await expect(page.getByText(`INV ${slug.toUpperCase()}`).first()).toBeVisible()
   await page.getByRole("button", { name: "Cek Ongkir" }).click()
-  await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Pilih", exact: true }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
   // The QR's sender and recipient are already on the POS (DEC-237): the counter only confirms and pays.
   await expect(page.getByText("Rina Kartika").first()).toBeVisible()
 

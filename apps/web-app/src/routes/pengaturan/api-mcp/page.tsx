@@ -58,10 +58,10 @@ export function ApiMcpPage() {
     <SettingsLayout title="API & MCP" description="Hubungkan toko online, bot WhatsApp, atau asisten AI ke gerai Anda.">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Alamat integrasi</CardTitle>
-          <CardDescription className="text-base">Berikan alamat ini bersama kunci API kepada pengembang integrasi.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Alamat integrasi</CardTitle>
+          <CardDescription className="text-base md:text-sm">Berikan alamat ini bersama kunci API kepada pengembang integrasi.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-base">
+        <CardContent className="flex flex-col gap-2 text-base md:text-sm">
           <p>API: <span className="font-mono break-all">{origin}/api/v1</span> · <a href="/api/v1/docs" target="_blank" rel="noopener" className="text-primary underline-offset-4 hover:underline">Dokumentasi API</a></p>
           <p>MCP: <span className="font-mono break-all">{origin}/mcp</span></p>
         </CardContent>
@@ -69,11 +69,11 @@ export function ApiMcpPage() {
       {created ? (
         <Card className="border-primary">
           <CardHeader>
-            <CardTitle className="text-lg">Kunci {created.name} dibuat</CardTitle>
-            <CardDescription className="text-base">Salin sekarang. Kunci ini hanya ditampilkan sekali dan tidak bisa dilihat lagi.</CardDescription>
+            <CardTitle className="text-base md:text-sm">Kunci {created.name} dibuat</CardTitle>
+            <CardDescription className="text-base md:text-sm">Salin sekarang. Kunci ini hanya ditampilkan sekali dan tidak bisa dilihat lagi.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <p className="font-mono text-base break-all" aria-label="Kunci API baru">{created.token}</p>
+            <p className="font-mono text-base md:text-sm break-all" aria-label="Kunci API baru">{created.token}</p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(created.token).then(() => setMsg({ tone: "safe", text: "Kunci disalin." }))}><CopyIcon aria-hidden /> Salin Kunci</Button>
               <Button variant="ghost" onClick={() => setCreated(null)}>Sudah Saya Simpan</Button>
@@ -83,12 +83,12 @@ export function ApiMcpPage() {
       ) : null}
       <CreateKey scopes={d.scopes} onCreated={(x) => { setCreated(x); setMsg(null); load() }} />
       <Card>
-        <CardHeader><CardTitle className="text-lg">Kunci aktif ({live.length})</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Kunci aktif ({live.length})</CardTitle></CardHeader>
         <CardContent>
-          {live.length === 0 ? <p className="text-base text-muted-foreground">Belum ada kunci aktif.</p> : (
+          {live.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Belum ada kunci aktif.</p> : (
             <ul className="divide-y">
               {live.map((k) => (
-                <li key={k.id} className="flex flex-col gap-2 py-3 text-base">
+                <li key={k.id} className="flex flex-col gap-2 py-3 text-base md:text-sm">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span><span className="font-medium">{k.name}</span> <span className="font-mono text-muted-foreground">{k.token_prefix}…</span></span>
                     <span className="text-muted-foreground">Terakhir dipakai: {when(k.last_used_at)}</span>
@@ -137,12 +137,12 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
   }
   return (
     <Card>
-      <CardHeader><CardTitle className="text-lg">Buat kunci baru</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base md:text-sm">Buat kunci baru</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="key-name">Nama kunci</FieldLabel><Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Toko Shopify Nisa" />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
           <fieldset className="flex flex-col gap-1">
-            <legend className="mb-1 text-base font-medium">Izin</legend>
+            <legend className="mb-1 text-base md:text-sm font-medium">Izin</legend>
             {scopes.map((s) => (
               <CheckboxField key={s} checked={picked.has(s)} onCheckedChange={(on) => setPicked((p) => { const n = new Set(p); if (on) n.add(s); else n.delete(s); return n })}>
                 {SCOPE_LABEL[s] ?? s}
@@ -153,7 +153,7 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
           {issue ? (
             <Field data-invalid={fields.dailyIssueCapIdr ? true : undefined}><FieldLabel htmlFor="key-cap">Batas nilai kiriman per hari (Rp)</FieldLabel><Input id="key-cap" inputMode="numeric" className="w-48 tabular-nums" value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} />{fields.dailyIssueCapIdr ? <FieldError>{fields.dailyIssueCapIdr}</FieldError> : <FieldDescription>Wajib untuk izin terbitkan resi.</FieldDescription>}</Field>
           ) : null}
-          {fields.form && !Object.keys(fields).some((k) => k !== "form") ? <p role="alert" className="text-base text-danger">{fields.form}</p> : null}
+          {fields.form && !Object.keys(fields).some((k) => k !== "form") ? <p role="alert" className="text-base md:text-sm text-danger">{fields.form}</p> : null}
           <div><Button type="submit" disabled={pending || !name.trim()}>Buat Kunci</Button></div>
         </form>
       </CardContent>

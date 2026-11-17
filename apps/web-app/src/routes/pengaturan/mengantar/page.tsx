@@ -37,7 +37,7 @@ function StatusChip({ state }: { state: Settings["webhookState"] }) {
   const s = STATE[state ?? "unconfigured"]
   const dot = s.tone === "safe" ? "bg-safe" : s.tone === "warn" ? "bg-warn" : s.tone === "danger" ? "bg-danger" : "bg-muted-foreground"
   return (
-    <Badge variant="outline" className="h-8 gap-2 px-3 text-base font-medium">
+    <Badge variant="outline" className="h-8 gap-2 px-3 text-base md:text-sm font-medium">
       <span className={`size-2 rounded-full ${dot}`} aria-hidden />
       {s.label}
     </Badge>
@@ -89,8 +89,8 @@ export function PengaturanMengantarPage() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-[880px] flex-col gap-6 px-4 py-6 md:px-8">
       <div className="flex flex-col gap-2">
-        <h2 className="text-[28px] leading-tight font-bold tracking-[-0.02em]">Mengantar</h2>
-        <p className="text-base text-muted-foreground">Hubungkan kabar status kiriman dari Mengantar ke gerai Anda.</p>
+        <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">Mengantar</h1>
+        <p className="text-base md:text-sm text-muted-foreground">Hubungkan kabar status kiriman dari Mengantar ke gerai Anda.</p>
       </div>
 
       {error ? <FormAlert>{error}</FormAlert> : null}
@@ -106,23 +106,23 @@ export function PengaturanMengantarPage() {
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <CardTitle className="text-lg">Status webhook</CardTitle>
-                <CardDescription className="text-base">{STATE[data.webhookState ?? "unconfigured"].help}</CardDescription>
+                <CardTitle className="text-base md:text-sm">Status webhook</CardTitle>
+                <CardDescription className="text-base md:text-sm">{STATE[data.webhookState ?? "unconfigured"].help}</CardDescription>
               </div>
               <StatusChip state={data.webhookState} />
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-base sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-base md:text-sm sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <dt className="text-muted-foreground">Kabar terakhir diterima</dt>
+                  <dt className="text-xs text-muted-foreground">Kabar terakhir diterima</dt>
                   <dd className="tabular-nums">{fmt(data.lastEventAt)}</dd>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <dt className="text-muted-foreground">Pemeriksaan status terakhir</dt>
+                  <dt className="text-xs text-muted-foreground">Pemeriksaan status terakhir</dt>
                   <dd className="tabular-nums">{fmt(data.lastPolledAt)}</dd>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <dt className="text-muted-foreground">Akun Mengantar</dt>
+                  <dt className="text-xs text-muted-foreground">Akun Mengantar</dt>
                   <dd>{data.sellerId ? `Terhubung${data.environment === "sandbox" ? " (sandbox)" : ""}` : "Belum terhubung"}</dd>
                 </div>
               </dl>
@@ -132,19 +132,19 @@ export function PengaturanMengantarPage() {
           {data.webhookUrl ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Atur webhook di Mengantar</CardTitle>
-                <CardDescription className="text-base">Tiga langkah, cukup sekali.</CardDescription>
+                <CardTitle className="text-base md:text-sm">Atur webhook di Mengantar</CardTitle>
+                <CardDescription className="text-base md:text-sm">Tiga langkah, cukup sekali.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-6">
-                <ol className="flex list-decimal flex-col gap-2 pl-6 text-base">
+              <CardContent className="flex flex-col gap-4 md:gap-5">
+                <ol className="flex list-decimal flex-col gap-2 pl-6 text-base md:text-sm">
                   <li>Buka Mengantar › Pengaturan › Akun › Integrasi Public API.</li>
                   <li>Tempel URL di bawah pada kolom Webhook URL, lalu simpan.</li>
                   <li>Salin Webhook Secret yang muncul di Mengantar dan simpan di formulir ini.</li>
                 </ol>
                 <div className="flex flex-col gap-2">
-                  <span className="text-base font-medium" id="wh-url-label">URL webhook gerai</span>
+                  <span className="text-base md:text-sm font-medium" id="wh-url-label">URL webhook gerai</span>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <code aria-labelledby="wh-url-label" className="flex min-h-11 flex-1 items-center rounded-lg border border-input bg-muted px-3 py-2 font-mono text-base break-all">
+                    <code aria-labelledby="wh-url-label" className="flex min-h-11 flex-1 items-center rounded-lg border border-input bg-muted px-3 py-2 font-mono text-base md:text-sm break-all">
                       {data.webhookUrl}
                     </code>
                     <Button type="button" variant="outline" size="lg" className="h-11" onClick={copy}>
@@ -152,7 +152,7 @@ export function PengaturanMengantarPage() {
                       {copied ? "Tersalin" : "Salin URL"}
                     </Button>
                   </div>
-                  <p className="text-base text-muted-foreground">Rahasiakan URL ini; jangan bagikan ke pihak lain.</p>
+                  <p className="text-base md:text-sm text-muted-foreground">Rahasiakan URL ini; jangan bagikan ke pihak lain.</p>
                 </div>
                 <form onSubmit={save} className="flex flex-col gap-4" noValidate>
                   <TextField

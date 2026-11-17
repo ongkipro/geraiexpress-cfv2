@@ -15,7 +15,7 @@ test("Domain Sendiri: tambah, lihat record DNS, periksa lagi, hapus", async ({ p
 
   const domain = `${slug}-${info.project.name.replace(/[^a-z0-9]/g, "")}.id`
   await page.goto(`${APP}/pengaturan/mini-site`)
-  await expect(page.getByRole("heading", { name: "Mini-Site", level: 2 }).last()).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Mini-Site", level: 1 }).last()).toBeVisible()
   await page.getByLabel("Domain").fill(domain)
   await expect(page.getByRole("radio", { name: new RegExp(`^${domain.replace(".", "\\.")} \\(www`) })).toHaveAttribute("aria-checked", "true")
   await page.getByRole("button", { name: "Tambah Domain" }).click()

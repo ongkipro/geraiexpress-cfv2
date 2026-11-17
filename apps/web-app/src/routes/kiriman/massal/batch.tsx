@@ -73,7 +73,7 @@ export function BatchPage() {
 function Totals({ v, owner }: { v: BulkView; owner: boolean }) {
   const t = v.totals
   const item = (label: string, value: number) => (
-    <div className="flex flex-col"><dt className="text-base text-muted-foreground">{label}</dt><dd className="text-lg font-semibold tabular-nums">{rp(value)}</dd></div>
+    <div className="flex flex-col"><dt className="text-base md:text-sm text-muted-foreground">{label}</dt><dd className="text-sm font-semibold md:text-base tabular-nums">{rp(value)}</dd></div>
   )
   return (
     <Panel as="dl" className="grid grid-cols-2 gap-4 md:grid-cols-5">
@@ -87,11 +87,11 @@ function Totals({ v, owner }: { v: BulkView; owner: boolean }) {
 }
 
 function ReadyList({ rows, owner }: { rows: BulkRow[]; owner: boolean }) {
-  if (!rows.length) return <p className="py-4 text-base text-muted-foreground">Belum ada baris yang siap.</p>
+  if (!rows.length) return <p className="py-4 text-base md:text-sm text-muted-foreground">Belum ada baris yang siap.</p>
   return (
     <ItemList>
       {rows.map((r) => (
-        <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
+        <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base md:text-sm">
           <span><span className="text-muted-foreground tabular-nums">#{r.row_no}</span> <span className="font-medium">{r.recipient_name}</span> · {r.area_label}</span>
           <span className="tabular-nums">{(r.weight_gram ?? 0).toLocaleString("id-ID")} g{r.cod_goods_idr ? ` · COD ${rp(r.cod_collection_total_idr ?? 0)}` : ""} · <span className="font-medium">{rp(r.counter_due_idr ?? 0)}</span>{owner && r.estimated_margin_idr != null ? <span className="text-muted-foreground"> · laba {rp(r.estimated_margin_idr)}</span> : null}</span>
         </li>
@@ -101,7 +101,7 @@ function ReadyList({ rows, owner }: { rows: BulkRow[]; owner: boolean }) {
 }
 
 function FixList({ batch, rows, onChange }: { batch: string; rows: BulkRow[]; onChange: (v: BulkView) => void }) {
-  if (!rows.length) return <p className="py-4 text-base text-muted-foreground">Semua baris sudah benar.</p>
+  if (!rows.length) return <p className="py-4 text-base md:text-sm text-muted-foreground">Semua baris sudah benar.</p>
   return (
     <ItemList className="flex flex-col">
       {rows.map((r) => <FixRow key={r.row_no} batch={batch} r={r} onChange={onChange} />)}
@@ -126,16 +126,16 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
       setPending(false)
     }
   }
-  if (r.state === "pending") return <li className="px-4 py-3 text-base text-muted-foreground">#{r.row_no} {r.recipient_name ?? r.raw.name} · sedang diperiksa…</li>
+  if (r.state === "pending") return <li className="px-4 py-3 text-base md:text-sm text-muted-foreground">#{r.row_no} {r.recipient_name ?? r.raw.name} · sedang diperiksa…</li>
   return (
     <li className="flex flex-col gap-3 p-4">
-      <p className="text-base"><span className="text-muted-foreground tabular-nums">#{r.row_no}</span> <span className="font-medium">{r.recipient_name ?? (r.raw.name || "Tanpa nama")}</span></p>
+      <p className="text-base md:text-sm"><span className="text-muted-foreground tabular-nums">#{r.row_no}</span> <span className="font-medium">{r.recipient_name ?? (r.raw.name || "Tanpa nama")}</span></p>
       <ul className="flex flex-col gap-1">
-        {r.errors.map((e) => <li key={e} className="border-l-4 border-danger pl-3 text-base font-medium text-danger">{e}</li>)}
+        {r.errors.map((e) => <li key={e} className="border-l-4 border-danger pl-3 text-base md:text-sm font-medium text-danger">{e}</li>)}
       </ul>
       {r.candidates.length ? (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-base font-medium">Pilih kecamatan yang benar</legend>
+          <legend className="mb-1 text-base md:text-sm font-medium">Pilih kecamatan yang benar</legend>
           <ChoiceGroup
             label={`Kecamatan baris ${r.row_no}`}
             layout="column"
@@ -156,7 +156,7 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
         <Field><FieldLabel htmlFor={`fa${r.row_no}`}>Alamat</FieldLabel><Input id={`fa${r.row_no}`} value={cells.street ?? ""} onChange={(e) => set("street", e.target.value)} /></Field>
         <Field><FieldLabel htmlFor={`fb${r.row_no}`}>Berat (gram)</FieldLabel><Input id={`fb${r.row_no}`} inputMode="numeric" className="tabular-nums" value={cells.weightGram ?? ""} onChange={(e) => set("weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
       </div>
-      {msg ? <p role="alert" className="text-base text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={pending} onClick={() => save(false)}>Simpan & Periksa</Button>
         <Button variant="ghost" disabled={pending} onClick={() => save(true)}>Hapus baris</Button>
@@ -185,8 +185,8 @@ function CreateBar({ batch, n, pendingRows, onDone }: { batch: string; n: number
       <CheckboxField checked={ack} onCheckedChange={setAck}>
         Isi semua paket bukan barang terlarang
       </CheckboxField>
-      {pendingRows ? <p className="text-base text-muted-foreground">Masih memeriksa sebagian baris…</p> : null}
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+      {pendingRows ? <p className="text-base md:text-sm text-muted-foreground">Masih memeriksa sebagian baris…</p> : null}
+      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div><Button size="lg" disabled={pending || n === 0 || !ack} onClick={create}>{pending ? "Membuat…" : `Buat ${n} Kiriman`}</Button></div>
     </Panel>
   )
@@ -196,7 +196,7 @@ function CreatedList({ rows }: { rows: BulkRow[] }) {
   return (
     <ItemList className="mt-6">
       {rows.map((r) => (
-        <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base">
+        <li key={r.row_no} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-base md:text-sm">
           <span>
             <Link to="/kiriman/$slug" params={{ slug: r.shipment_slug! }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.shipment_slug!.toUpperCase()}</Link> · {r.recipient_name} · {r.area_label}
           </span>
@@ -255,11 +255,11 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
   }
   return (
     <Panel as="div" className="mt-6 flex flex-col gap-4">
-      <p className="text-base font-medium">{v.batch.state === "dispatching" ? `Menerbitkan resi… ${issued.length} dari ${v.rows.filter((r) => r.state === "created").length}` : `${issued.length} resi terbit`}</p>
+      <p className="text-base md:text-sm font-medium">{v.batch.state === "dispatching" ? `Menerbitkan resi… ${issued.length} dari ${v.rows.filter((r) => r.state === "created").length}` : `${issued.length} resi terbit`}</p>
       {paid ? (
-        <p className="text-base text-safe font-medium">Batch sudah lunas{v.batch.change_idr ? ` · kembalian ${rp(v.batch.change_idr)}` : ""}.</p>
+        <p className="text-base md:text-sm text-safe font-medium">Batch sudah lunas{v.batch.change_idr ? ` · kembalian ${rp(v.batch.change_idr)}` : ""}.</p>
       ) : v.batch.counter_payment_status === "not_required" || v.totals.due === 0 ? (
-        <p className="text-base font-medium">Tidak ada pembayaran di loket untuk batch ini (semua COD).</p>
+        <p className="text-base md:text-sm font-medium">Tidak ada pembayaran di loket untuk batch ini (semua COD).</p>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
           <ToggleGroup value={[method]} onValueChange={(x) => x[0] && setMethod(x[0] as typeof method)} variant="outline" aria-label="Cara bayar">
@@ -271,7 +271,7 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
           <Button size="lg" disabled={pending || (method === "tunai" && !cash)} onClick={pay}>Tandai Lunas {rp(v.totals.due)}</Button>
         </div>
       )}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={issued.length === 0} onClick={printAll}><PrinterIcon aria-hidden /> Cetak Semua ({issued.length})</Button>
         {unissued.length ? <Button variant="ghost" onClick={cancelUnissued}>Batalkan yang Belum Terbit ({unissued.length})</Button> : null}

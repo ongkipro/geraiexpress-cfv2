@@ -1,7 +1,7 @@
 # DESIGN.md — GeraiExpress v2 signed-in workspace
 
 Surface: admin
-Brief: `design/brief.md`. Size contract: `design/admin-contract.json` (**comfort**). Full tokens and wireframes:
+Brief: `design/brief.md`. Size contract: `design/admin-contract.json` (**desk**, DEC-239 — volum-default / AdsBookCMS / TokoPhi scale). Full tokens and wireframes:
 `docs/visual/01` (tokens), `docs/visual/07` (shell and page inventory), `docs/visual/02`, `05`, `06` (bodies).
 
 ## Direction
@@ -20,10 +20,13 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
 
 ### Composition contract
 
-- C1: desktop shell = 256 px sidebar (6 menus; `Buat Pengiriman` and `Kontak` are Collapsible trees, DEC-237) + 64 px
-  header with sidebar trigger, breadcrumb (last crumb = page `h1`), search, scan and `+ Kiriman Baru`; account menu
-  (`NavUser`) in the sidebar footer; content max 1440 px (visual 07 §1.1). Super Admin uses the same `AdminShell`
-  (DEC-236).
+- C1: desktop shell (DEC-239) = white 256 px sidebar: brand mark + name/domain, quick-action row (`+ Kiriman Baru` +
+  Scan QR) on Gerai, menus grouped `UTAMA · OPERASIONAL · ADMINISTRASI` (Super Admin `PLATFORM · TATA KELOLA · SISTEM`)
+  with a left accent bar on the active item, `Buat Pengiriman` and `Kontak` as Collapsible trees with dot sub-items
+  (DEC-237), and a status block at the foot (Shift + label format; Super Admin: environment + TOTP). White 64 px topbar:
+  trigger + breadcrumb (navigation only), `⌘K` command pill (jump to any menu or task), page actions, and the account
+  chip at the right (profile, Ukuran Teks, bantuan, Keluar). The page owns its single `h1` (`PageHeader`); content on the
+  `#F6F7F9` canvas, max 1480 px. Super Admin uses the same `AdminShell` (DEC-236).
 - C0: one kit for both consoles (DEC-236): `apps/web-app/src/components/admin/` — `PageHeader`, `SectionCard`,
   `Panel`, `ItemList`, `MetricCard`, `StatusBadge` (dot + label), `CalloutAlert`, state blocks, `DataTableShell`,
   `AdminBarChart`, `CheckboxField`, `ChoiceGroup`, `DetailList`; Sonner for toasts. No hand-rolled cards or controls.
@@ -32,29 +35,42 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
 - C3: list pages = title → in-page tabs with counts → filter bar → table; tables become cards under 768 px.
 - C4: POS = 60/40 split at ≥ 1024 px (inputs left, sticky `Ringkasan & Pembayaran` right); single column on phones;
   one primary issues without leaving `/kasir` (DEC-237).
-- C5: dashboard (owner) = period filter: presets + calendar range (default 7 hari terakhir, visual 08 §1) → 4 KPI → shipment chart → shipment history →
-  courier table + `Perlu tindakan`; Kasir home has no money totals.
+- C5: dashboard (owner) = period filter: presets + calendar range (default 7 hari terakhir, visual 08 §1) → one strip of
+  6 KPI tiles (Kiriman, Tercatat dibayar, Belum dibayar, Saldo aman, Estimasi Laba, Laba Kas — the two profits never
+  summed) → chart beside `Perlu tindakan` (one row per open queue) → recent shipments beside courier performance →
+  top senders + sources; Kasir home has no money totals.
+- C7: KPI tile (TokoPhi `kpi-tile`) = 12 px muted icon + label, delta pill right (glyph + word, never colour alone),
+  24 px bold tabular figure, one 12 px caption.
+- C8: POS rows (DEC-239) = compact selectable courier rows (radio, whole row is the hit area, ~56 px: dot, courier mark,
+  service + medal, ETA · billable kg · rule hint, price right); payment = 2×2 grid, never a 3 + 1 wrap.
 - C6: settings = left settings menu + one form per route on desktop; grouped list of rows → item page on phones
   (visual 08 §2); never a row of horizontal tabs.
 
 ## Tokens
 
 ### Colour
-Clean white + Mengantar blue, light only (DEC-222): canvas/cards `#FFFFFF` with `#E3E8F0` hairlines; accent
+Mengantar blue, light only (DEC-222) on the DEC-239 surface model: page canvas cool slate `#F6F7F9`; sidebar, topbar
+(`white/95` + blur) and cards white with `#E2E8F0` hairlines (`slate-200/85`) and a 1px `0 1px 2px rgba(15,23,42,.03)`
+shadow; accent
 `#2E47BA`, tint `#EEF1FB`; ink `#203551`, muted `#55657D`; inputs `#7B879C`; chart Non-COD `#2E47BA`, COD `#E07A2F`
 (always with legend). `color-scheme: light`; no dark palette at launch.
 Status pairs as in `docs/visual/01` §2 (safe, warn, danger, pickup-warn).
 
 ### Type
 System UI stack (`-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif`); mono only for INV,
-AWB and thermal preview. Scale: 14 (meta floor) · 16 (body, inputs, table) · 18 (section) · 28 (page title, KPI).
+AWB and thermal preview. Desk scale (DEC-239): 12 (labels, captions, table heads uppercase, badges — the floor) · 14
+(body, inputs, buttons, sidebar, table cells) · 16 (card titles) · 24 (page title `h1`, KPI figures, bold tabular). On
+phones inputs stay 16 and every control 44 px; controls 36 px on desktop (32/40 allowed), table head 40, rows 48.
 `tabular-nums` for money and weights. User text size: 100 / 112 / 125 % via root rem.
 
 ### Radius
-6 px controls, 8 px cards and dialogs; full radius only for avatars and status dots.
+6–8 px controls, 10 px (`rounded-xl`) cards and panels, 8 px courier rows and menus; full radius for avatars, status
+dots, delta pills and count badges.
 
 ### Spacing
-Base 4 px; related 8, section 24; page padding 16 × 24.
+Base 4 px; KPI tile 16/20 padding with 12 between groups and 4 inside a group; grid gap 10–12 (tiles) and 16–20
+(cards); page padding 16 (phone) × 24–32 (desk), content max 1480 px. Charts: bars `maxBarSize 28`, radius 4, dashed
+`#E2E8F0` gridlines, 12 px `#64748B` ticks, legend dots above the plot.
 
 ### Motion
 Colour/opacity transitions ≤ 150 ms; none on scroll; reduced motion removes all transforms.

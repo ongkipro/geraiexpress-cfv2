@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { Button } from "@shared/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
@@ -33,20 +33,17 @@ export function TarifGeraiPage() {
   if (loading) return <LoadingBlock />
   if (error || !data) return <ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} />
   return (
-    <div className="flex flex-col gap-6">
-      <nav aria-label="Navigasi halaman" className="text-base text-muted-foreground">
-        <Link to="/tarif" className="text-primary underline-offset-4 hover:underline">Tarif & Kurir</Link> › {data.tenant.name}
-      </nav>
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title={data.tenant.name} />
       <Section title="Diskon & cashback per layanan">
-        <p className="mb-4 text-base text-muted-foreground">Pelanggan loket selalu membayar tarif publik. Diskon berlaku setelah tim Mengantar menerapkannya (biasanya ≤ {data.applySlaMinutes} menit); status diperiksa otomatis.</p>
+        <p className="mb-4 text-base md:text-sm text-muted-foreground">Pelanggan loket selalu membayar tarif publik. Diskon berlaku setelah tim Mengantar menerapkannya (biasanya ≤ {data.applySlaMinutes} menit); status diperiksa otomatis.</p>
         <ul className="divide-y">
           {data.items.map((r) => (
             <li key={r.service_code} className="flex flex-col gap-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="text-base font-medium">{r.display_name}</span>
-                  <span className="text-base text-muted-foreground tabular-nums">
+                  <span className="text-base md:text-sm font-medium">{r.display_name}</span>
+                  <span className="text-base md:text-sm text-muted-foreground tabular-nums">
                     Diminta {pct(r.assigned_bps)} · teramati {pct(r.observed_bps)}{r.observed_at ? ` (${formatDate(r.observed_at)})` : ""} · cashback {pct(r.cashback_bps)}
                   </span>
                 </div>
@@ -90,11 +87,11 @@ function RuleEditor({ tenantId, rule, onDone, onCancel }: { tenantId: string; ru
       <div className="grid gap-3 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`d-${rule.service_code}`}>Diskon gerai ({pct(rule.band.minBps)}–{pct(rule.band.maxBps)})</FieldLabel>
-          <div className="flex items-center gap-2"><Input id={`d-${rule.service_code}`} inputMode="decimal" value={assigned} onChange={(e) => setAssigned(e.target.value)} className="tabular-nums" /><span className="text-base text-muted-foreground">%</span></div>
+          <div className="flex items-center gap-2"><Input id={`d-${rule.service_code}`} inputMode="decimal" value={assigned} onChange={(e) => setAssigned(e.target.value)} className="tabular-nums" /><span className="text-base md:text-sm text-muted-foreground">%</span></div>
         </Field>
         <Field>
           <FieldLabel htmlFor={`c-${rule.service_code}`}>Cashback</FieldLabel>
-          <div className="flex items-center gap-2"><Input id={`c-${rule.service_code}`} inputMode="decimal" value={cashback} onChange={(e) => setCashback(e.target.value)} className="tabular-nums" /><span className="text-base text-muted-foreground">%</span></div>
+          <div className="flex items-center gap-2"><Input id={`c-${rule.service_code}`} inputMode="decimal" value={cashback} onChange={(e) => setCashback(e.target.value)} className="tabular-nums" /><span className="text-base md:text-sm text-muted-foreground">%</span></div>
         </Field>
       </div>
       <Field data-invalid={error ? true : undefined}>

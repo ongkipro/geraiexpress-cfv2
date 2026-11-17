@@ -785,3 +785,33 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   R3 APPROVE. The preview then showed a cached `time_id` Mengantar refused (`invalid pickup time`) blocking every
   issue: that refusal now drops the cached slot (test + mutation M14); R4 APPROVE. Integrated run `DEC-236-238` PASS 9/9 (e2e re-recorded on an unchanged tree after a doc edit during the
   first run marked it UNVERIFIED). Archive `docs/review/dec-236-238/`.
+
+## 2026-11-17 — DEC-239 desk-scale visual precision (AdsBookCMS + TokoPhi + dashboard-01)
+
+- Owner verdict on the DEC-236 screens: "berantakan, tidak rapi". Diagnosis against AdsBookCMS (`AdminShell`,
+  `AppSidebar`, `DashboardRevenueChart`), TokoPhi (`kpi-tile`) and dashboard-01: one 16 px size for every role (no
+  hierarchy), white-on-white surfaces, a duplicate title (topbar h1 + page h2), a crowded topbar, the account at the
+  sidebar foot, half-empty profit/action cards, fat chart bars on sparse data, tall courier boxes with a `Pilih` button
+  each, and a 3 + 1 payment wrap.
+- Contract → desk (`design/admin-contract.json`, from `volum-default`): 12 px floor, 14 px desk text/inputs, 36 px
+  controls (32/40), 40 px table head, radius 4–12; phones keep 16 px inputs and 44 px targets. Theme canvas `#F6F7F9`.
+- Primitives recalibrated once (button, input, select, textarea, table, tabs, toggle, card `rounded-xl` + 1 px shadow,
+  badge pill, field, sidebar, menus, dialogs, alert). Every `bg-background` that must stay white (outline button,
+  switch thumb, calendar, active tab) now says `bg-white`, since the background token is the canvas.
+- Shell: grouped sidebar with accent bar and dot sub-items, Gerai quick-action row, counter/environment status block,
+  topbar breadcrumb (navigation only), `⌘K` command palette over a Dialog (no new dependency), account chip with
+  profile, Ukuran Teks, bantuan, Keluar. `PageHeader` renders the page's only `h1`; nested card titles are `h2`.
+- Kit: `MetricCard` = TokoPhi tile (icon + 12 px label, delta pill, 24 px figure, 12 px caption); `AdminBarChart`
+  `maxBarSize 28`, dashed grid, 12 px ticks, legend dots; `DataTableShell` `bare` mode inside flush cards; the Kiriman
+  and Keuangan section navs use the same segmented style (white active item, count pills).
+- Pages: owner dashboard 6-tile KPI strip (Estimasi Laba and Laba Kas separate tiles), chart beside `Perlu tindakan`,
+  recent beside courier performance; Super Admin Ringkasan with icon tiles and a link-row attention list; in-page
+  breadcrumbs removed from owner detail pages (the topbar shows them). POS: QR bar in the page header, 2-column step 1,
+  compact selectable courier rows (radio group, arrow keys, ~56 px), side-by-side sender/recipient cards, receipt-style
+  summary with dashed total divider, owner cost inset and a 2×2 payment grid with quick cash buttons.
+- e2e selectors updated for the radio rows, page `h1` and count pills.
+- Review: GPT-6.1 Sol R1 REQUEST_CHANGES — courier radio group lost its tab stop after a category switch and moved
+  arrows from the selection, `slate-500`/`slate-400` text below 4.5:1 on the canvas (P1); ⌘K active option off-screen,
+  courier rules truncated, COD fee line dropped, 38 px phone account trigger, stale sidebar counter status (P2). All
+  fixed (`e2e/admin-shell.spec.ts`, mutations M15–M18; muted text on `--muted-foreground`; dropdown triggers in the
+  phone target check). R2 APPROVE. Integrated run `DEC-239` PASS 9/9; UI gates 0 fail on 43 routes.

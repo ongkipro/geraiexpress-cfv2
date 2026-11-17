@@ -1,12 +1,13 @@
 # 07 — App Shell, Navigation Placement & Page Inventory (`geraiexpress-cfv2`)
 
 - **Related:** `DEC-212`, `DEC-213`, `DEC-218`, `docs/spec/06-DOMAINS-MENUS-AND-ROUTES.md` (routes),
-  `design/admin-contract.json` (size contract **comfort**), `docs/visual/01` (tokens)
+  `design/admin-contract.json` (size contract **desk**, DEC-239), `docs/visual/01` (tokens)
 - **Purpose:** one place that says *where* every navigation element sits, *what* every page contains, and *who*
   sees it. Wireframes in `02`, `05`, `06` show page bodies; this file owns the frame around them.
-- All visible strings are normative Indonesian. Sizes follow the comfort contract: body 16 px, nothing visible
-  under 14 px, all form inputs and selects 44 px (only navigation, tabs and menu items may be 40 px on desktop), sidebar links 40 px / 16 px, header 64 px; every touch
-  target on phones ≥ 44 px (`h-11 md:h-10`).
+- All visible strings are normative Indonesian. Sizes follow the desk contract (DEC-239, AdsBookCMS / TokoPhi /
+  dashboard-01): desktop body, inputs, buttons, sidebar links and table cells 14 px; labels, captions, uppercase table
+  heads and badges 12 px (the floor); page titles and KPI figures 24 px; controls 36 px; header 64 px; on phones inputs
+  16 px and every touch target ≥ 44 px (`h-11 md:h-9`). `Ukuran Teks` 100/112/125 % in the account menu.
 
 ---
 
@@ -16,24 +17,24 @@
 
 ```text
 ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
-│ [G] Berkah Jaya  ▾ │ Dashboard          [🔍 Cari INV / AWB / HP  Ctrl+K]  [🔔 3] [Ani ▾]          │ ← header 64 px
-│ berkahjaya.geraimi…│                                          [📷 Scan QR]  [+ Kiriman Baru]      │
+│ [B] Berkah Jaya    │ [≡] Dashboard   [🔍 Cari menu, INV, AWB…  ⌘K]  Mini-Site↗ [QR] [🔔3] (BA)Ani▾│ ← topbar 64 px, white
+│ berkahjaya.gerai…  │                                                                              │
+│ [+ Kiriman Baru][⌗]│ ← quick-action row (dashboard-01 NavMain)                                    │
 ├────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
-│ ● Dashboard        │                                                                              │
-│ ○ Buat Pengiriman  │   PAGE BODY (max width 1440, padding 24 × 16)                                │
-│ ○ Kiriman      22  │   page title 28 px · in-page tabs under the title · then content             │
-│ ○ Kontak         ▾ │                                                                              │
-│    Pengirim        │                                                                              │
-│    Penerima        │                                                                              │
-│ ○ Keuangan         │   (hidden for Kasir, also blocked by the API)                                │
-│ ○ Pengaturan       │                                                                              │
-│                    │                                                                              │
+│ UTAMA              │  canvas #F6F7F9 · max width 1480 · padding 24–32                             │
+│ ▌Dashboard         │  Dashboard (h1 24 px)                              [Periode ▾]               │
+│  Buat Pengiriman ▸ │  [KPI][KPI][KPI][KPI][KPI][KPI]  ← white rounded-xl tiles, 24 px figures     │
+│ OPERASIONAL        │  [Grafik pengiriman ············] [Perlu tindakan ···]                       │
+│  Kiriman       22  │  [Riwayat pengiriman ···········] [Performa ekspedisi]                       │
+│  Kontak          ▸ │                                                                              │
+│ ADMINISTRASI       │                                                                              │
+│  Keuangan          │   (hidden for Kasir, also blocked by the API)                                │
+│  Pengaturan     ⚠  │                                                                              │
 │ ────────────────── │                                                                              │
-│ 🟢 Printer POS-58  │ ← sidebar footer: device status, not navigation                              │
-│ Shift Pagi · Ani   │                                                                              │
-│ [« Ciutkan]        │                                                                              │
+│ STATUS LOKET       │ ← sidebar foot: device/counter status, not navigation                        │
+│ Shift ● Buka       │                                                                              │
+│ Label ● 10×15      │                                                                              │
 └────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
-  sidebar 256 px (rail 56 px when collapsed; label tooltips on hover AND focus)
 ```
 
 **Placement rules**
@@ -166,19 +167,19 @@ public fields of `platform_legal_profile` (never NPWP); mini-site footers show t
 
 ---
 
-## 4. shadcn Component Map (comfort contract, primitives edited once)
+## 4. shadcn Component Map (desk contract DEC-239, primitives edited once)
 
-| Frame element | shadcn component | Comfort edits (in the owned file, never per call) |
+| Frame element | shadcn component | Desk edits (in the owned file, never per call) |
 |---|---|---|
-| Sidebar | `Sidebar`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuSub` | `SidebarMenuButton` `h-11 md:h-10 text-base`; rail `size-10!`; `SIDEBAR_WIDTH_ICON 3.5rem` |
-| Header search | `Command` in `Dialog` (`Ctrl+K`) | input `h-11 text-base` |
-| Account / outlet menu | `DropdownMenu` | items `h-11 md:h-10 text-base` |
-| In-page tabs | `Tabs` | trigger `h-11 md:h-10 text-base` |
-| Tables | `Table` (+ TanStack for sorting/pagination) | head `h-11 text-sm font-medium`, cell `px-3 py-2 text-base`, `tabular-nums` for money/weights |
-| Forms | `Field`, `Input`, `Select`, `Textarea`, `ToggleGroup` (gram/kg) | `h-11 text-base` everywhere |
-| Status | `Badge` | `text-sm`, icon + text + color |
-| Mobile drawer / sheets | `Sheet`, `Drawer` | title `text-lg` |
-| Toasts | `Sonner` | `text-base` |
+| Sidebar | `Sidebar`, `SidebarGroupLabel`, `SidebarMenu`, `SidebarMenuButton`, `SidebarMenuSub` | button `h-11 md:h-9 text-base md:text-sm`, active accent bar; group label 12 px uppercase; sub-items `md:h-8` with dots; rail `size-10!`; `SIDEBAR_WIDTH_ICON 3.5rem` |
+| Header search | `⌘K` pill → command list in `Dialog` (`Ctrl/⌘+K`) | pill `h-9 bg-slate-100/80`; input `h-12 text-sm`; rows `min-h-11` |
+| Account menu (top right) | `DropdownMenu` | chip `h-9` avatar + name/role; items `text-base md:text-sm` |
+| In-page tabs | `Tabs` | list `bg-slate-100/90 p-1`, trigger `h-11 md:h-8 text-sm`, active white + 1 px shadow |
+| Tables | `Table` (+ TanStack for sorting/pagination) | head `h-10 text-xs uppercase tracking-wider bg-slate-50/90`, cell `h-12 px-3 text-sm`, `tabular-nums` for money/weights |
+| Forms | `Field`, `Input`, `Select`, `Textarea`, `ToggleGroup` (gram/kg) | `h-11 md:h-9 text-base md:text-sm`, white fill, labels 14 px, help 12 px |
+| Status | `Badge` | `text-xs` pill, dot + text (never colour alone) |
+| Mobile drawer / sheets | `Sheet`, `Drawer` | title `text-base` |
+| Toasts | `Sonner` | `text-sm` |
 
 Acceptance: `dotuiux check <url> --surface admin` and
 `admin-geometry.mjs <url> --contract design/admin-contract.json --viewports 390,1366,1536` exit 0 on every route

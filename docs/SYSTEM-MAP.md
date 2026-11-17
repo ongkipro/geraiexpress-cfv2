@@ -3,7 +3,7 @@
 One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
 end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
 
-Updated: 2026-11-17 — **DEC-236/237/238**: one shadcn/ui `base-nova` admin kit for both consoles (`apps/web-app/src/components/admin/`), `Buat Pengiriman` sidebar tree + single-screen 60/40 POS on `/kasir`, Mengantar Public API v2.0.0 parity (pickup `time_id`/`volume`, `PICKUP_PIC`, pinpoint, `SAP`/`JTEco`, courier limits, Pos COD guard, `discountExtra`, receiver score, dropshippers, sandbox simulation). Earlier: DEC-234/235 (`geraimitra.com`, relay on `99ribu-prod`). Production steps and TASK-604 await the owner (`STATUS.md`).
+Updated: 2026-11-17 — **DEC-239**: desk-scale visual precision for both consoles (AdsBookCMS / TokoPhi / dashboard-01: 14/12/24 px, `#F6F7F9` canvas, `⌘K` topbar + account chip, grouped sidebar, KPI tiles, selectable POS courier rows). **DEC-236/237/238**: one shadcn/ui `base-nova` admin kit for both consoles (`apps/web-app/src/components/admin/`), `Buat Pengiriman` sidebar tree + single-screen 60/40 POS on `/kasir`, Mengantar Public API v2.0.0 parity (pickup `time_id`/`volume`, `PICKUP_PIC`, pinpoint, `SAP`/`JTEco`, courier limits, Pos COD guard, `discountExtra`, receiver score, dropshippers, sandbox simulation). Earlier: DEC-234/235 (`geraimitra.com`, relay on `99ribu-prod`). Production steps and TASK-604 await the owner (`STATUS.md`).
 
 ## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
 

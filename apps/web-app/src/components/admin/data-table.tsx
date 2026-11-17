@@ -25,6 +25,7 @@ export function DataTableShell<T>({
   toolbar,
   footer,
   className,
+  bare,
 }: {
   columns: Array<Column<T>>
   rows: T[]
@@ -37,6 +38,8 @@ export function DataTableShell<T>({
   toolbar?: ReactNode
   footer?: ReactNode
   className?: string
+  /** Inside a flush SectionCard: no own border/radius — the card is the frame. */
+  bare?: boolean
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-3", className)}>
@@ -45,7 +48,7 @@ export function DataTableShell<T>({
         (empty ?? null)
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-lg border md:block">
+          <div className={cn("hidden overflow-hidden md:block", !bare && "rounded-xl border border-slate-200/85 bg-white")}>
             <Table>
               <caption className="sr-only">{caption}</caption>
               <TableHeader>
@@ -59,7 +62,7 @@ export function DataTableShell<T>({
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
-                  <TableRow key={rowKey(r)}>
+                  <TableRow key={rowKey(r)} className="hover:bg-slate-50/80">
                     {columns.map((c) => (
                       <TableCell key={c.key} className={cn(c.align === "right" && "text-right tabular-nums", c.wide && "hidden lg:table-cell", c.className)}>
                         {c.cell(r)}
@@ -70,16 +73,16 @@ export function DataTableShell<T>({
               </TableBody>
             </Table>
           </div>
-          <ul className="flex flex-col divide-y rounded-lg border md:hidden" aria-label={caption}>
+          <ul className={cn("flex flex-col divide-y divide-slate-100 md:hidden", !bare && "rounded-xl border border-slate-200/85 bg-white")} aria-label={caption}>
             {rows.map((r) => (
               <li key={rowKey(r)} className="px-4 py-3">
                 {mobile ? (
                   mobile(r)
                 ) : (
-                  <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-base">
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
                     {columns.map((c) => (
                       <div key={c.key} className="contents">
-                        <dt className="text-muted-foreground">{c.header}</dt>
+                        <dt className="text-xs text-muted-foreground">{c.header}</dt>
                         <dd className={cn("min-w-0 break-words", c.align === "right" && "tabular-nums")}>{c.cell(r)}</dd>
                       </div>
                     ))}
@@ -90,7 +93,7 @@ export function DataTableShell<T>({
           </ul>
         </>
       )}
-      {footer ? <div className="flex flex-wrap items-center justify-between gap-2 text-base text-muted-foreground">{footer}</div> : null}
+      {footer ? <div className={cn("flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground", bare && "px-4 pb-4 md:px-5")}>{footer}</div> : null}
     </div>
   )
 }

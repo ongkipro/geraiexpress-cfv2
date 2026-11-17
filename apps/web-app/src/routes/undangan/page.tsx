@@ -53,7 +53,7 @@ export function UndanganPage() {
     return (
       <AuthCard title="Gabung sebagai Kasir">
         <FormAlert>{loadError}</FormAlert>
-        <Link to="/masuk" className="text-base font-medium text-primary underline-offset-4 hover:underline">Kembali ke Masuk</Link>
+        <Link to="/masuk" className="text-base md:text-sm font-medium text-primary underline-offset-4 hover:underline">Kembali ke Masuk</Link>
       </AuthCard>
     )
   }
@@ -72,7 +72,7 @@ export function UndanganPage() {
     <AuthCard title="Gabung sebagai Kasir" description={<>{inv.inviterName} mengundang Anda ke <strong className="text-foreground">{inv.outletName}</strong>.</>}>
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
-        <p className="text-base">Email: <span className="font-medium">{inv.email}</span></p>
+        <p className="text-base md:text-sm">Email: <span className="font-medium">{inv.email}</span></p>
         {inv.accountExists ? null : <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} required maxLength={80} />}
         <TextField
           label={inv.accountExists ? "Kata sandi akun Anda" : "Buat kata sandi"}

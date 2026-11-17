@@ -37,7 +37,7 @@ How to change, verify, review and release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md
    - **Never emit or serve `*.map` source maps** in production client assets.
    - Never bundle `MENGANTAR_PARTNER_SECRET`, seller API keys (note: Mengantar Public API places the seller key in the URL path — **never log, return, or trace raw upstream request URLs**), or `PARTNER_RELAY_SECRET` into client code.
 6. **Indonesian Counter Ergonomics (35–55+ Operators):**
-   - Body and input text minimum `16px`, touch targets minimum `44px` on phones and for all form inputs (`h-11`; desktop sidebar/tabs/menus may use `md:h-10` per `design/admin-contract.json`), high-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).
+   - Desk scale per `design/admin-contract.json` (DEC-239, supersedes the 16px comfort scale): desktop 14px body/inputs/table cells, 12px floor for labels and captions, 24px figures and page titles, 36px controls; on phones inputs stay 16px and every control/target stays `>= 44px` (`h-11 md:h-9`). Operators can raise the root size in the account menu (`Ukuran Teks` 100/112/125%) and browser zoom is never locked. High-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).
 
 ## Example data policy
 

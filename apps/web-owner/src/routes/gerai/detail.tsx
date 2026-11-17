@@ -1,4 +1,4 @@
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
 import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
@@ -28,34 +28,31 @@ export function GeraiDetailPage() {
   const ob = ONBOARDING_LABEL[data.onboarding_state ?? "not_connected"] ?? ONBOARDING_LABEL.not_connected!
   const retryable = data.onboarding_state === "registration_pending" || data.onboarding_state === "registration_unknown"
   return (
-    <div className="flex flex-col gap-6">
-      <nav aria-label="Navigasi halaman" className="text-base text-muted-foreground">
-        <Link to="/gerai" search={{ tab: "direktori" }} className="text-primary underline-offset-4 hover:underline">Gerai</Link> › {data.name}
-      </nav>
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title={data.name}>{data.status === "suspended" ? <StatusChip tone="danger">Dibekukan</StatusChip> : <StatusChip tone="safe">Aktif</StatusChip>}</PageHead>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
         <Section title="Koneksi Mengantar">
-          <dl className="flex flex-col gap-3 text-base">
-            <div><dt className="text-muted-foreground">Status akun seller</dt><dd><StatusChip tone={ob.tone}>{ob.label}</StatusChip></dd></div>
-            <div><dt className="text-muted-foreground">Webhook</dt><dd>{WEBHOOK[data.connection?.webhookState ?? "unconfigured"]}</dd></div>
-            <div><dt className="text-muted-foreground">Kunci API</dt><dd>{data.connection?.hasKey ? `Tersimpan terenkripsi · versi ${data.connection.keyVersion}` : "Belum ada"}</dd></div>
-            {data.last_error_code ? <div><dt className="text-muted-foreground">Kode terakhir</dt><dd className="font-mono">{data.last_error_code}</dd></div> : null}
-            <div><dt className="text-muted-foreground">Disetujui</dt><dd>{formatDate(data.approved_at)}</dd></div>
+          <dl className="flex flex-col gap-3 text-base md:text-sm">
+            <div><dt className="text-xs text-muted-foreground">Status akun seller</dt><dd><StatusChip tone={ob.tone}>{ob.label}</StatusChip></dd></div>
+            <div><dt className="text-xs text-muted-foreground">Webhook</dt><dd>{WEBHOOK[data.connection?.webhookState ?? "unconfigured"]}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">Kunci API</dt><dd>{data.connection?.hasKey ? `Tersimpan terenkripsi · versi ${data.connection.keyVersion}` : "Belum ada"}</dd></div>
+            {data.last_error_code ? <div><dt className="text-xs text-muted-foreground">Kode terakhir</dt><dd className="font-mono">{data.last_error_code}</dd></div> : null}
+            <div><dt className="text-xs text-muted-foreground">Disetujui</dt><dd>{formatDate(data.approved_at)}</dd></div>
           </dl>
           {retryable ? <div className="mt-4"><ReasonAction label="Ulangi pendaftaran seller" confirmLabel="Ulangi" variant="outline" path={`/gerai/${data.slug}/onboarding/retry`} onDone={reload} hint="Status belum pasti diperiksa ulang ke Mengantar, tidak mendaftar dua kali." /></div> : null}
         </Section>
         <Section title="Kontrol">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4 md:gap-5">
             <div className="flex flex-col gap-2">
-              <p className="text-base">Masking label: <strong>{data.masking_enabled ? "Aktif" : "Nonaktif"}</strong> · Kuota harian: <strong className="tabular-nums">{data.masking_daily_quota ?? "Tanpa batas"}</strong></p>
+              <p className="text-base md:text-sm">Masking label: <strong>{data.masking_enabled ? "Aktif" : "Nonaktif"}</strong> · Kuota harian: <strong className="tabular-nums">{data.masking_daily_quota ?? "Tanpa batas"}</strong></p>
               <ReasonAction label={data.masking_enabled ? "Nonaktifkan masking" : "Aktifkan masking"} confirmLabel="Simpan" variant="outline" path={`/gerai/${data.slug}/masking`} extra={{ enabled: !data.masking_enabled, dailyQuota: data.masking_daily_quota }} onDone={reload} />
             </div>
             <div className="flex flex-col gap-2">
-              <p className="text-base">Domain sendiri (Pro): <strong>{data.custom_domain_enabled ? "Diizinkan" : "Tidak"}</strong></p>
+              <p className="text-base md:text-sm">Domain sendiri (Pro): <strong>{data.custom_domain_enabled ? "Diizinkan" : "Tidak"}</strong></p>
               <ReasonAction label={data.custom_domain_enabled ? "Cabut izin domain sendiri" : "Izinkan domain sendiri"} confirmLabel="Simpan" variant="outline" path={`/gerai/${data.slug}/custom-domain`} extra={{ enabled: !data.custom_domain_enabled }} onDone={reload} hint="Mencabut izin tidak menghapus domain yang sudah aktif; hapus lewat tab Domain Mitra." />
             </div>
             <div className="flex flex-col gap-2">
-              <p className="text-base">Membekukan gerai menutup mini-site (403) dan akses ruang kerja dalam 30 detik.</p>
+              <p className="text-base md:text-sm">Membekukan gerai menutup mini-site (403) dan akses ruang kerja dalam 30 detik.</p>
               <ReasonAction label={data.status === "suspended" ? "Aktifkan kembali" : "Bekukan gerai"} confirmLabel={data.status === "suspended" ? "Aktifkan" : "Bekukan"} variant={data.status === "suspended" ? "outline" : "destructive"} path={`/gerai/${data.slug}/status`} extra={{ status: data.status === "suspended" ? "active" : "suspended" }} onDone={reload} />
             </div>
           </div>

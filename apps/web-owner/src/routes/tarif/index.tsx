@@ -28,7 +28,7 @@ export function TarifPage() {
   const navigate = useNavigate()
   const current: Tab = tab ?? "gerai"
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Tarif & Kurir" />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/tarif", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -56,7 +56,7 @@ function GeraiList() {
         <ul className="divide-y">
           {data.items.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <Link to="/tarif/$tenantId" params={{ tenantId: g.id }} className="text-base font-medium text-primary underline-offset-4 hover:underline">
+              <Link to="/tarif/$tenantId" params={{ tenantId: g.id }} className="text-base md:text-sm font-medium text-primary underline-offset-4 hover:underline">
                 {g.name}
               </Link>
               <span className="flex flex-wrap gap-2 tabular-nums">
@@ -102,7 +102,7 @@ function RequestList() {
         <EmptyBlock title="Semua diskon sudah sesuai" body="Tidak ada permintaan yang menunggu tim Mengantar." />
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl border border-slate-200/85">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -140,7 +140,7 @@ function RequestList() {
               </div>
             </form>
           ) : null}
-          {msg ? <p role="status" className="text-base">{msg}</p> : null}
+          {msg ? <p role="status" className="text-base md:text-sm">{msg}</p> : null}
         </div>
       )}
     </Section>
@@ -155,7 +155,7 @@ function Policy() {
   if (loading) return <LoadingBlock />
   if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat."} onRetry={reload} />
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
       <Section title="Batas platform">
         <BandForm initial={data.platform} sla={data.platform.applySlaMinutes} path="/tarif/kebijakan/platform" onDone={reload} />
       </Section>
@@ -164,11 +164,11 @@ function Policy() {
           {data.couriers.map((c) => (
             <li key={c.courierCode} className="flex flex-col gap-2 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-base font-medium">{c.name}</span>
-                <span className="text-base text-muted-foreground tabular-nums">{c.band ? `${pct(c.band.minBps)} – ${pct(c.band.maxBps)} · default ${pct(c.band.defaultBps)}` : "Ikut batas platform"}</span>
+                <span className="text-base md:text-sm font-medium">{c.name}</span>
+                <span className="text-base md:text-sm text-muted-foreground tabular-nums">{c.band ? `${pct(c.band.minBps)} – ${pct(c.band.maxBps)} · default ${pct(c.band.defaultBps)}` : "Ikut batas platform"}</span>
               </div>
               <details>
-                <summary className="flex h-11 cursor-pointer items-center text-base text-primary md:h-10">Ubah batas {c.name}</summary>
+                <summary className="flex h-11 cursor-pointer items-center text-base md:text-sm text-primary md:h-10">Ubah batas {c.name}</summary>
                 <BandForm initial={c.band ?? data.platform} path={`/tarif/kebijakan/kurir/${encodeURIComponent(c.courierCode)}`} onDone={reload} />
               </details>
             </li>
@@ -205,7 +205,7 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
       <FieldLabel htmlFor={`${path}-${key}`}>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <Input id={`${path}-${key}`} inputMode="decimal" value={v[key]} onChange={(e) => setV({ ...v, [key]: e.target.value })} className="tabular-nums" />
-        <span className="text-base text-muted-foreground">{suffix}</span>
+        <span className="text-base md:text-sm text-muted-foreground">{suffix}</span>
       </div>
     </Field>
   )

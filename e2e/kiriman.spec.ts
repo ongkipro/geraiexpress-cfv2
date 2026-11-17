@@ -17,13 +17,13 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   expect((await api.post(`${APP}/api/app/shipments/${slug}/dispatch`, { headers: h, data: {} })).status()).toBe(200)
 
   await page.goto(`${APP}/kiriman`)
-  await expect(page.getByRole("link", { name: /Belum Dibayar\s*\(1\)/ })).toBeVisible()
+  await expect(page.getByRole("link", { name: /^Belum Dibayar\s*1$/ })).toBeVisible()
   await expect(page.getByRole("link", { name: "Ekspor CSV" })).toHaveAttribute("href", /\/api\/app\/shipments-export\.csv\?/)
   await page.getByRole("link", { name: /Belum Dibayar/ }).click()
   await expect(page).toHaveURL(/tab=belum-dibayar/)
   await page.getByRole("button", { name: "Tandai Lunas" }).first().click()
   await expect(page.getByText(`INV ${slug.toUpperCase()} ditandai lunas (QRIS).`)).toBeVisible()
-  await expect(page.getByRole("link", { name: /Belum Dibayar\s*\(0\)/ })).toBeVisible()
+  await expect(page.getByRole("link", { name: /^Belum Dibayar\s*0$/ })).toBeVisible()
   await expect(page.getByText("Belum ada kiriman di sini")).toBeVisible()
 
   await page.goto(`${APP}/kiriman`)

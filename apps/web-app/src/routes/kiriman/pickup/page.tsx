@@ -36,8 +36,8 @@ export function PickupQueue() {
     <ul className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {groups.map((g) => (
         <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
-          <p className="flex items-center justify-between gap-2 text-lg font-semibold">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
-          <p className="flex items-center gap-2 text-base text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
+          <p className="flex items-center justify-between gap-2 text-sm font-semibold md:text-base">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base md:text-sm font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
+          <p className="flex items-center gap-2 text-base md:text-sm text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
           <div><Button onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
         </Panel>
       ))}
@@ -104,7 +104,7 @@ export function ManifestPage() {
   return (
     <div className="min-w-0 pb-24 md:pb-0">
       <PageTitle title={`Manifest ${name}`} description={open ? `${b.scanned_count} paket dipindai` : `Diserahkan · ${b.scanned_count} paket`}>
-        {!open ? <a href={`/api/app/pickup/${b.id}/surat-jalan.pdf`} target="_blank" rel="noopener" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Cetak Surat Jalan</a> : null}
+        {!open ? <a href={`/api/app/pickup/${b.id}/surat-jalan.pdf`} target="_blank" rel="noopener" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground md:h-10">Cetak Surat Jalan</a> : null}
       </PageTitle>
       {open ? (
         <Panel as="form" onSubmit={scan} className="mb-4 flex flex-wrap items-end gap-2 md:p-4">
@@ -117,19 +117,19 @@ export function ManifestPage() {
       ) : null}
       {last ? (
         last.result === "blocked" ? (
-          <p role="alert" className="mb-4 rounded-lg bg-danger px-4 py-3 text-lg font-bold text-white">{last.message}</p>
+          <p role="alert" className="mb-4 rounded-lg bg-danger px-4 py-3 text-base md:text-sm font-bold text-white">{last.message}</p>
         ) : last.warning ? (
-          <p role="status" className="mb-4 rounded-lg border-l-4 border-warn bg-warn-bg px-4 py-3 text-base font-medium">INV {last.slug.toUpperCase()} masuk manifest. {last.warning}</p>
+          <p role="status" className="mb-4 rounded-lg border-l-4 border-warn bg-warn-bg px-4 py-3 text-base md:text-sm font-medium">INV {last.slug.toUpperCase()} masuk manifest. {last.warning}</p>
         ) : (
-          <p role="status" className="mb-4 rounded-lg border-l-4 border-safe bg-safe-bg px-4 py-3 text-base font-medium">{last.result === "duplicate" ? "Sudah ada di manifest" : "Masuk manifest"}: {last.awb}</p>
+          <p role="status" className="mb-4 rounded-lg border-l-4 border-safe bg-safe-bg px-4 py-3 text-base md:text-sm font-medium">{last.result === "duplicate" ? "Sudah ada di manifest" : "Masuk manifest"}: {last.awb}</p>
         )
       ) : null}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
         <SectionCard id="dipindai" title={<>Dipindai ({b.items.length})</>}>
-          {b.items.length === 0 ? <p className="text-base text-muted-foreground">Belum ada paket.</p> : (
+          {b.items.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Belum ada paket.</p> : (
             <ul className="divide-y">
               {b.items.map((i) => (
-                <li key={i.slug} className="flex flex-wrap items-center justify-between gap-2 py-2 text-base">
+                <li key={i.slug} className="flex flex-wrap items-center justify-between gap-2 py-2 text-base md:text-sm">
                   <span className="tabular-nums"><span className="font-medium">{i.awb}</span> · INV {i.slug.toUpperCase()}{i.unpaid_warning ? <span className="font-medium text-warn"> · belum dibayar</span> : null}</span>
                   {open ? <Button variant="ghost" onClick={async () => { const r = await api<{ batch: Batch }>(`/pickup/${b.id}/unscan`, { body: { slug: i.slug } }); setB(r.batch) }}>Keluarkan</Button> : null}
                 </li>
@@ -139,9 +139,9 @@ export function ManifestPage() {
         </SectionCard>
         {open ? (
           <SectionCard id="belum" title={<>Belum dipindai ({b.missing.length})</>}>
-            {b.missing.length === 0 ? <p className="text-base text-muted-foreground">Semua paket {name} sudah dipindai.</p> : (
+            {b.missing.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Semua paket {name} sudah dipindai.</p> : (
               <ul className="divide-y">
-                {b.missing.map((i) => <li key={i.slug} className="py-2 text-base tabular-nums">{i.awb} · INV {i.slug.toUpperCase()}</li>)}
+                {b.missing.map((i) => <li key={i.slug} className="py-2 text-base md:text-sm tabular-nums">{i.awb} · INV {i.slug.toUpperCase()}</li>)}
               </ul>
             )}
           </SectionCard>
@@ -221,12 +221,12 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
         <Field data-invalid={fields.vehicleNo ? true : undefined}><FieldLabel htmlFor="drv-plate">No. polisi</FieldLabel><Input id="drv-plate" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} placeholder="D 1234 ABC" />{fields.vehicleNo ? <FieldError>{fields.vehicleNo}</FieldError> : null}</Field>
       </div>
       <div className="flex flex-col gap-2">
-        <p className="text-base font-medium">Tanda tangan kurir</p>
+        <p className="text-base md:text-sm font-medium">Tanda tangan kurir</p>
         <canvas ref={canvas} width={600} height={200} aria-label="Area tanda tangan kurir" className="h-40 w-full max-w-xl touch-none rounded-lg border border-input bg-white" onPointerDown={down} onPointerMove={move} onPointerUp={() => (drawing.current = false)} onPointerLeave={() => (drawing.current = false)} />
         {fields.signature ? <FieldError>{fields.signature}</FieldError> : null}
         <div><Button variant="ghost" onClick={clear}>Hapus tanda tangan</Button></div>
       </div>
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button size="lg" disabled={pending} onClick={() => submit("handed_over")}>Selesai & Tanda Tangan</Button>
         <Button variant="outline" disabled={pending} onClick={() => submit("dropped_at_branch")}>Diantar Mandiri ke Cabang</Button>

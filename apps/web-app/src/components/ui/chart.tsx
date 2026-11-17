@@ -190,7 +190,7 @@ function ChartTooltipContent({
   return (
     <div
       className={cn(
-        "grid min-w-40 items-start gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm",
+        "grid min-w-40 items-start gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-xs shadow-sm",
         className
       )}
     >
@@ -305,7 +305,7 @@ function ChartLegendContent({
             <div
               key={index}
               className={cn(
-                "flex items-center gap-2 text-base [&>svg]:size-4 [&>svg]:text-muted-foreground"
+                "flex items-center gap-2 text-base md:text-sm [&>svg]:size-4 [&>svg]:text-muted-foreground"
               )}
             >
               {itemConfig?.icon && !hideIcon ? (

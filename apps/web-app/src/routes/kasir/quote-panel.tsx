@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { cn } from "cn"
 import { EyeIcon, EyeOffIcon } from "lucide-react"
 import { AreaPicker, type Area } from "../../components/area-picker"
 import { WeightInput } from "../../components/weight-input"
-import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
@@ -19,6 +19,7 @@ export type Mode = "none" | "buyer_bears_fee" | "sender_bears_fee" | "cod_all_in
 export interface QuoteCard {
   serviceCode: string
   courierName: string
+  courierCode?: string
   name: string
   serviceClass: "regular" | "cargo"
   billableWeightGram: number
@@ -72,17 +73,29 @@ const money = (v: string) => (v.replace(/\D/g, "") ? Number(v.replace(/\D/g, "")
  */
 /** Mengantar courier rules worth seeing before choosing (check-shipping-fee v2.0.0 limits; DEC-238). */
 const RULES: Record<string, { cod?: string; any?: string }> = {
-  pos: { cod: "COD Pos: syarat tingkat terkirim ≥ 82%, maks. Rp2.000.000", any: "Jemput butuh titik koordinat gerai" },
-  anteraja: { cod: "COD maks. Rp2.000.000", any: "Selalu dijemput · maks. 50 kg" },
-  Sap: { cod: "COD maks. Rp2.000.000" },
-  spx: { any: "Maks. 50 kg" },
-  lion: { cod: "COD min. Rp10.000" },
-  JTEco: { any: "Ekonomis · tidak untuk cargo/DG" },
+  pos: { cod: "COD: terkirim ≥ 82%, maks. Rp2 jt", any: "jemput butuh titik koordinat" },
+  anteraja: { cod: "COD maks. Rp2 jt", any: "selalu dijemput · maks. 50 kg" },
+  Sap: { cod: "COD maks. Rp2 jt" },
+  spx: { any: "maks. 50 kg" },
+  lion: { cod: "COD min. Rp10 rb" },
+  JTEco: { any: "ekonomis · tanpa cargo/DG" },
 }
-function CourierRules({ code, cod }: { code: string; cod: boolean }) {
+const courierRule = (code: string, cod: boolean) => {
   const r = RULES[code]
-  const text = [cod ? r?.cod : null, r?.any].filter(Boolean).join(" · ")
-  return text ? <span className="text-sm text-muted-foreground">{text}</span> : null
+  return [cod ? r?.cod : null, r?.any].filter(Boolean).join(" · ")
+}
+const CODE: Record<string, string> = { JNE: "JNE", SiCepat: "SCP", Sap: "SAP", iDexpress: "IDE", JT: "J&T", lion: "LION", anteraja: "ATR", pos: "POS", spx: "SPX", ninja: "NJV" }
+/** Short courier mark for the row badge (cargo/ECO share their courier's mark). */
+const courierCode = (c: { serviceCode: string; courierCode?: string }) => CODE[c.courierCode ?? ""] ?? CODE[c.serviceCode] ?? c.serviceCode.slice(0, 4).toUpperCase()
+
+/** Step heading inside a POS card: numbered dot + 14/16px title. */
+export function StepTitle({ n, title, id }: { n: number; title: string; id?: string }) {
+  return (
+    <h2 id={id} className="flex items-center gap-2 text-sm font-semibold text-slate-950 md:text-base">
+      <span aria-hidden className="grid size-5 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{n}</span>
+      {title}
+    </h2>
+  )
 }
 
 export function QuotePanel({
@@ -211,24 +224,22 @@ export function QuotePanel({
   const counts = { regular: data?.cards.filter((c) => c.serviceClass === "regular" && c.available).length ?? 0, cargo: data?.cards.filter((c) => c.serviceClass === "cargo" && c.available).length ?? 0 }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Panel as="form" onSubmit={submit} className="flex flex-col gap-5" noValidate>
-        <h3 className="text-lg font-semibold">1. Tujuan & berat</h3>
-        <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as typeof kind)} variant="outline" aria-label="Jenis pembayaran ongkir" className="w-full flex-wrap">
-          <ToggleGroupItem value="non_cod">Non-COD</ToggleGroupItem>
-          <ToggleGroupItem value="cod_goods">COD Barang</ToggleGroupItem>
-          <ToggleGroupItem value="cod_shipping">COD Ongkir</ToggleGroupItem>
+    <div className="flex flex-col gap-4">
+      <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <StepTitle n={1} title="Tujuan & spesifikasi paket" />
+        <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as typeof kind)} variant="outline" spacing={0} aria-label="Jenis pembayaran ongkir" className="grid w-full grid-cols-3">
+          <ToggleGroupItem value="non_cod" className="w-full">Non-COD</ToggleGroupItem>
+          <ToggleGroupItem value="cod_goods" className="w-full">COD Barang</ToggleGroupItem>
+          <ToggleGroupItem value="cod_shipping" className="w-full">COD Ongkir</ToggleGroupItem>
         </ToggleGroup>
         <AreaPicker label="Kecamatan tujuan" value={area} onChange={setArea} error={errors.destinationAreaId} />
         <WeightInput gram={gram} onChange={setGram} error={errors.weightGram} />
+        <div className="grid gap-4 sm:grid-cols-2">
         <Field data-invalid={errors.dims ? true : undefined}>
-          <FieldLabel>Ukuran paket (opsional, cm)</FieldLabel>
-          <div className="flex items-center gap-2">
+          <FieldLabel>Ukuran P × L × T (cm, opsional)</FieldLabel>
+          <div className="grid grid-cols-3 gap-1.5">
             {(["l", "w", "h"] as const).map((k, i) => (
-              <span key={k} className="flex items-center gap-2">
-                {i > 0 ? <span aria-hidden>×</span> : null}
-                <Input aria-label={["Panjang", "Lebar", "Tinggi"][i]} inputMode="numeric" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value.replace(/\D/g, "") })} className="w-20 tabular-nums" />
-              </span>
+              <Input key={k} aria-label={["Panjang", "Lebar", "Tinggi"][i]} placeholder={["P", "L", "T"][i]} inputMode="numeric" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value.replace(/\D/g, "") })} className="tabular-nums" />
             ))}
           </div>
           {errors.dims ? <FieldError>{errors.dims}</FieldError> : null}
@@ -237,29 +248,28 @@ export function QuotePanel({
           <>
             <Field data-invalid={errors.codGoodsIdr ? true : undefined}>
               <FieldLabel htmlFor="harga-barang">Harga barang (COD)</FieldLabel>
-              <Input id="harga-barang" inputMode="numeric" value={goods} onChange={(e) => setGoods(money(e.target.value))} className="w-48 tabular-nums" />
+              <Input id="harga-barang" inputMode="numeric" value={goods} onChange={(e) => setGoods(money(e.target.value))} className="tabular-nums" />
               {errors.codGoodsIdr ? <FieldError>{errors.codGoodsIdr}</FieldError> : null}
             </Field>
-            <ToggleGroup value={[feeMode]} onValueChange={(v) => v[0] && setFeeMode(v[0] as Mode)} variant="outline" aria-label="Biaya COD" className="w-full flex-wrap">
-              {COD_FEE_MODES.map((m) => (
-                <ToggleGroupItem key={m.id} value={m.id}>{m.label}</ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <Field className="sm:col-span-2">
+              <FieldLabel>Biaya COD</FieldLabel>
+              <ToggleGroup value={[feeMode]} onValueChange={(v) => v[0] && setFeeMode(v[0] as Mode)} variant="outline" spacing={0} aria-label="Biaya COD" className="grid w-full grid-cols-3">
+                {COD_FEE_MODES.map((m) => (
+                  <ToggleGroupItem key={m.id} value={m.id} className="w-full px-1.5">{m.label}</ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </Field>
           </>
         ) : null}
-        {kind === "cod_shipping" ? <p className="text-base text-muted-foreground">Ongkir dibayar penerima saat paket tiba.</p> : null}
+        {kind === "cod_shipping" ? <p className="self-end pb-2 text-sm text-muted-foreground">Ongkir dibayar penerima saat paket tiba.</p> : null}
         {kind === "non_cod" ? (
           <Field data-invalid={errors.declaredValueIdr ? true : undefined}>
             <FieldLabel htmlFor="nilai-barang">Nilai barang (opsional)</FieldLabel>
-            <Input id="nilai-barang" inputMode="numeric" value={declared} onChange={(e) => setDeclared(money(e.target.value))} className="w-48 tabular-nums" placeholder="0" />
-            <FieldDescription>Wajib untuk Anteraja, Pos Indonesia dan SPX (Rp1.000–Rp10.000.000).{Number(declared.replace(/\D/g, "")) >= 500_000 ? " Nilai di atas Rp500.000: tawarkan asuransi ke pengirim." : ""}</FieldDescription>
+            <Input id="nilai-barang" inputMode="numeric" value={declared} onChange={(e) => setDeclared(money(e.target.value))} className="tabular-nums" placeholder="0" />
+            <FieldDescription>Wajib Anteraja, Pos, SPX (Rp1.000–Rp10 jt).{Number(declared.replace(/\D/g, "")) >= 500_000 ? " Di atas Rp500.000: tawarkan asuransi." : ""}</FieldDescription>
             {errors.declaredValueIdr ? <FieldError>{errors.declaredValueIdr}</FieldError> : null}
           </Field>
         ) : null}
-        <CheckboxField checked={dg} onCheckedChange={setDg} align="start">
-          Barang berbahaya (DG)
-          <span className="block text-muted-foreground">Baterai, cairan, parfum, aerosol. Hanya SiCepat (HALU) dan iDexpress yang menerima.</span>
-        </CheckboxField>
         {pos && pos.packingItems.length ? (
           <Field>
             <FieldLabel htmlFor="packing">Packing (opsional)</FieldLabel>
@@ -268,7 +278,7 @@ export function QuotePanel({
               value={packing}
               onValueChange={(v) => setPacking((v as string | null) ?? "")}
             >
-              <SelectTrigger id="packing" className="w-full max-w-sm">
+              <SelectTrigger id="packing" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -284,83 +294,133 @@ export function QuotePanel({
             </Select>
           </Field>
         ) : null}
-        {pos?.serviceFeeIdr && feeAllowed ? (
-          <CheckboxField checked={serviceFee} onCheckedChange={setServiceFee}>
-            Biaya layanan loket {rp(pos.serviceFeeIdr)}
+        </div>
+        <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
+          <CheckboxField checked={dg} onCheckedChange={setDg}>
+            Barang berbahaya (DG) <span className="text-xs text-muted-foreground">· baterai, cairan, parfum — hanya SiCepat & iDexpress</span>
           </CheckboxField>
-        ) : null}
-        <div><Button type="submit" disabled={loading}>{loading ? "Menghitung…" : "Cek Ongkir"}</Button></div>
+          {pos?.serviceFeeIdr && feeAllowed ? (
+            <CheckboxField checked={serviceFee} onCheckedChange={setServiceFee}>
+              Biaya layanan loket {rp(pos.serviceFeeIdr)}
+            </CheckboxField>
+          ) : null}
+        </div>
+        <div className="flex justify-end"><Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? "Menghitung…" : "Cek Ongkir"}</Button></div>
       </Panel>
 
       {loading ? <LoadingState label="Menghitung ongkir semua ekspedisi" rows={4} /> : error ? <ErrorState message={error} /> : data ? (
         <Panel className="flex flex-col gap-4" aria-labelledby="pilih-ekspedisi">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 id="pilih-ekspedisi" className="text-lg font-semibold">2. Pilih ekspedisi</h3>
-            {owner ? (
-              <Button type="button" variant="outline" onClick={() => setShowMargin((v) => !v)} aria-pressed={showMargin}>
-                {showMargin ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />} {showMargin ? "Sembunyikan modal" : "Lihat modal & margin"}
-              </Button>
-            ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <StepTitle n={2} title="Pilih layanan ekspedisi" id="pilih-ekspedisi" />
+            <div className="flex items-center gap-1.5">
+              <ToggleGroup value={[tab]} onValueChange={(v) => v[0] && setTab(v[0] as typeof tab)} variant="outline" spacing={0} size="sm" aria-label="Kategori layanan">
+                <ToggleGroupItem value="regular">Reguler ({counts.regular})</ToggleGroupItem>
+                <ToggleGroupItem value="cargo">Cargo ≥ 5 kg ({counts.cargo})</ToggleGroupItem>
+              </ToggleGroup>
+              {owner ? (
+                <Button type="button" variant="ghost" size="icon-sm" onClick={() => setShowMargin((v) => !v)} aria-pressed={showMargin} aria-label={showMargin ? "Sembunyikan modal" : "Lihat modal & margin"} className="text-muted-foreground">
+                  {showMargin ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
+                </Button>
+              ) : null}
+            </div>
           </div>
-          {stale ? <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base">Data paket berubah. Tekan Cek Ongkir lagi sebelum memilih ekspedisi.</p> : null}
-          <ToggleGroup value={[tab]} onValueChange={(v) => v[0] && setTab(v[0] as typeof tab)} variant="outline" aria-label="Kategori layanan">
-            <ToggleGroupItem value="regular">Reguler ({counts.regular})</ToggleGroupItem>
-            <ToggleGroupItem value="cargo">Cargo ≥ 5 kg ({counts.cargo})</ToggleGroupItem>
-          </ToggleGroup>
-          {cards.length === 0 ? <p className="text-base text-muted-foreground">Tidak ada layanan pada kategori ini.</p> : (
-            <ul className="flex flex-col divide-y rounded-lg border" aria-label="Daftar ekspedisi">
-              {cards.map((c) => (
-                <li key={c.serviceCode} className={`flex flex-col gap-2 p-4 ${c.available ? "" : "opacity-70"} ${select?.selected === c.serviceCode ? "bg-primary/5 ring-2 ring-primary ring-inset" : ""}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <span className="flex flex-wrap items-center gap-2 text-base font-medium">
-                        {c.name}
-                        {data.medals.termurah === c.serviceCode ? <Badge variant="outline">Termurah</Badge> : null}
-                        {data.medals.tercepat === c.serviceCode ? <Badge variant="outline">Tercepat</Badge> : null}
-                        {data.medals.cairTerbesar === c.serviceCode ? <Badge variant="outline">Cair COD terbesar</Badge> : null}
+          {stale ? <p role="status" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">Data paket berubah. Tekan Cek Ongkir lagi sebelum memilih ekspedisi.</p> : null}
+          {cards.length === 0 ? <p className="text-sm text-muted-foreground">Tidak ada layanan pada kategori ini.</p> : (
+            // DEC-239: compact selectable rows (radio semantics; the whole row is the hit area), ~56px each, so six
+            // couriers fit without scrolling. Cek Ongkir Cepat keeps a small action button at the row end instead.
+            <div
+              role={select ? "radiogroup" : "list"}
+              aria-label={select ? "Pilih ekspedisi" : "Daftar ekspedisi"}
+              className="flex flex-col gap-1.5"
+              onKeyDown={(e) => {
+                if (!select || !req || stale || !["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key)) return
+                e.preventDefault()
+                // WAI-ARIA radio group: arrows move from the FOCUSED row (wrapping) and select it.
+                const ok = cards.filter((x) => x.available)
+                const focusedCode = (document.activeElement as HTMLElement | null)?.id?.replace(/^kurir-/, "")
+                const at = ok.findIndex((x) => x.serviceCode === focusedCode)
+                const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1
+                const next = ok[at < 0 ? (step > 0 ? 0 : ok.length - 1) : (at + step + ok.length) % ok.length]
+                if (next) {
+                  select.onSelect(req, next)
+                  document.getElementById(`kurir-${next.serviceCode}`)?.focus()
+                }
+              }}
+            >
+              {cards.map((c) => {
+                const selectable = !!select && c.available && !!req && !stale
+                const checked = select?.selected === c.serviceCode
+                // One tab stop per group: the selected row when it is in THIS category, else the first available one.
+                const tabStop = cards.find((x) => x.available && x.serviceCode === select?.selected)?.serviceCode ?? cards.find((x) => x.available)?.serviceCode
+                const firstFocusable = tabStop === c.serviceCode
+                const medal = data.medals.termurah === c.serviceCode ? "Termurah" : data.medals.tercepat === c.serviceCode ? "Tercepat" : data.medals.cairTerbesar === c.serviceCode ? "Cair terbesar" : null
+                return (
+                  <div
+                    key={c.serviceCode}
+                    id={`kurir-${c.serviceCode}`}
+                    role={select ? "radio" : "listitem"}
+                    aria-checked={select ? checked : undefined}
+                    aria-label={select ? `${c.name}${c.available ? `, ${rp(mode === "none" ? c.publishShippingIdr : c.codCollectionTotalIdr)}, ${c.eta ?? ""}` : ", tidak tersedia"}` : undefined}
+                    aria-describedby={select ? `kurir-${c.serviceCode}-info` : undefined}
+                    aria-disabled={select && !selectable ? true : undefined}
+                    tabIndex={selectable ? (firstFocusable ? 0 : -1) : undefined}
+                    onClick={selectable ? () => select!.onSelect(req!, c) : undefined}
+                    onKeyDown={selectable ? (e) => (e.key === " " || e.key === "Enter") && (e.preventDefault(), select!.onSelect(req!, c)) : undefined}
+                    className={cn(
+                      "flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-nowrap",
+                      selectable && "cursor-pointer hover:border-slate-300 hover:bg-slate-50/70",
+                      checked ? "border-primary bg-accent/60 hover:border-primary hover:bg-accent/60" : "border-slate-200 bg-white",
+                      !c.available && "bg-slate-50/60",
+                    )}
+                  >
+                    {select ? (
+                      <span aria-hidden className={cn("grid size-4 shrink-0 place-items-center rounded-full border", checked ? "border-primary" : "border-slate-300", !c.available && "opacity-40")}>
+                        {checked ? <span className="size-2 rounded-full bg-primary" /> : null}
                       </span>
-                      <span className="text-base text-muted-foreground">
-                        {c.available ? `Estimasi ${c.eta ?? "—"} · tagih ${(c.billableWeightGram / 1000).toLocaleString("id-ID")} kg` : c.unavailableReason}
+                    ) : null}
+                    <span aria-hidden className={cn("grid h-7 w-11 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", !c.available && "opacity-50")}>
+                      {courierCode(c)}
+                    </span>
+                    <span className="flex min-w-[8rem] flex-1 flex-col gap-0.5">
+                      <span className={cn("flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-slate-900", !c.available && "text-muted-foreground")}>
+                        <span className="truncate">{c.name}</span>
+                        {c.available && medal ? <span className="rounded-full bg-emerald-500/12 px-1.5 py-px text-xs font-semibold text-emerald-700">{medal}</span> : null}
+                        {c.available && c.dropOffOnly ? <span className="rounded-full bg-slate-100 px-1.5 py-px text-xs font-medium text-slate-600">Antar ke agen</span> : null}
                       </span>
-                      {c.available && c.dropOffOnly ? <span className="w-fit rounded-md border border-primary px-2 text-sm text-primary">Drop-off saja — antar ke agen ekspedisi</span> : null}
-                      {c.available ? <CourierRules code={c.serviceCode} cod={mode !== "none"} /> : null}
-                    </div>
+                      {/* Rules and refusal reasons wrap (never truncated) and describe the radio for assistive tech. */}
+                      <span id={`kurir-${c.serviceCode}-info`} className="text-xs text-muted-foreground">
+                        {c.available
+                          ? [`${c.eta ?? "—"}`, `tagih ${(c.billableWeightGram / 1000).toLocaleString("id-ID")} kg`, courierRule(c.serviceCode, mode !== "none"), c.dropOffOnly ? "antar ke agen ekspedisi" : null].filter(Boolean).join(" · ")
+                          : c.unavailableReason}
+                        {c.available && mode !== "none" ? <span className="block tabular-nums">Ongkir {rp(c.publishShippingIdr)} + biaya COD {rp(c.codFeeIdr)}</span> : null}
+                      </span>
+                      {owner && showMargin && c.available && c.providerNetShippingIdr !== undefined ? (
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          Modal {rp(c.providerNetShippingIdr)}{typeof c.observedBps === "number" ? ` · diskon ${(c.observedBps / 100).toLocaleString("id-ID")}%` : ""} · laba <span className="font-medium text-safe">{rp(c.estimatedProfitIdr ?? 0)}</span>
+                        </span>
+                      ) : null}
+                    </span>
                     {c.available ? (
-                      <div className="flex flex-col items-end gap-1 text-right tabular-nums">
+                      <span className="flex shrink-0 flex-col items-end text-right tabular-nums">
                         {mode === "none" ? (
-                          <span className="text-lg font-semibold">{rp(c.publishShippingIdr)}</span>
+                          <span className="text-sm font-semibold text-slate-950">{rp(c.publishShippingIdr)}</span>
                         ) : (
                           <>
-                            <span className="text-base">Tagih penerima <strong className="text-lg">{rp(c.codCollectionTotalIdr)}</strong></span>
-                            {mode !== "dfod" ? <span className="text-base text-muted-foreground">Cair ke pengirim {rp(c.senderCodPayableIdr)}</span> : null}
-                            <span className="text-base text-muted-foreground">Ongkir {rp(c.publishShippingIdr)} + biaya COD {rp(c.codFeeIdr)}</span>
+                            <span className="text-sm font-semibold text-slate-950">{rp(c.codCollectionTotalIdr)}</span>
+                            <span className="text-xs text-muted-foreground">{mode !== "dfod" ? `cair ${rp(c.senderCodPayableIdr)}` : `ongkir ${rp(c.publishShippingIdr)}`}</span>
                           </>
                         )}
-                      </div>
+                      </span>
                     ) : null}
-                  </div>
-                  {owner && showMargin && c.available && c.providerNetShippingIdr !== undefined ? (
-                    <p className="text-base text-muted-foreground tabular-nums">
-                      Modal {rp(c.providerNetShippingIdr)}{typeof c.observedBps === "number" ? ` (diskon ${(c.observedBps / 100).toLocaleString("id-ID")}%)` : ""} · Estimasi laba {rp(c.estimatedProfitIdr ?? 0)}
-                    </p>
-                  ) : null}
-                  {select && c.available && req && !stale ? (
-                    <div>
-                      <Button type="button" variant={select.selected === c.serviceCode ? "default" : "outline"} aria-pressed={select.selected === c.serviceCode} onClick={() => select.onSelect(req, c)}>
-                        {select.selected === c.serviceCode ? "Terpilih" : "Pilih"}
-                      </Button>
-                    </div>
-                  ) : null}
-                  {onChoose && c.available && req && !stale ? (
-                    <div>
-                      <Button type="button" variant="outline" disabled={choosing !== null} onClick={async () => { setChoosing(c.serviceCode); try { await onChoose(req, c, { area, packingName: packing, serviceFee }) } finally { setChoosing(null) } }}>
+                    {onChoose && c.available && req && !stale ? (
+                      <Button type="button" size="sm" variant="outline" className="w-full shrink-0 sm:w-auto" disabled={choosing !== null} onClick={async () => { setChoosing(c.serviceCode); try { await onChoose(req, c, { area, packingName: packing, serviceFee }) } finally { setChoosing(null) } }}>
                         {choosing === c.serviceCode ? "Memproses…" : (chooseLabel ?? "Pilih")}
                       </Button>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
           )}
           {footer}
         </Panel>

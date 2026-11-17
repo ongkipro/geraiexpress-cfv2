@@ -1,7 +1,7 @@
 import { statusLabel } from "../../lib/status"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { ArrowRightIcon } from "lucide-react"
+import { ArrowRightIcon, BanknoteIcon, ChevronRightIcon, CircleCheckIcon, PackageIcon, ReceiptIcon, TrendingUpIcon, WalletIcon } from "lucide-react"
 import { paramsOf, periodFromParams, previousOf, rangeLabel, type Period } from "@gx/domain/period"
 import { PeriodFilter } from "../../components/period-filter/period-filter"
 import { api, ApiError } from "../../lib/api"
@@ -10,8 +10,6 @@ import { AdminBarChart } from "../../components/admin/bar-chart"
 import { DataTableShell } from "../../components/admin/data-table"
 import { EmptyState, ErrorState, LoadingState, MetricCard, MetricGrid, PageHeader, SectionCard, ShareBar, StatusBadge, type StatusTone } from "../../components/admin/page"
 import { Badge } from "../../components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
-import { Separator } from "../../components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { rp } from "../kasir/quote-panel"
 import { LinkButton } from "../../components/admin/link-button"
@@ -97,45 +95,29 @@ function OwnerDashboard() {
   const shipTrend = pct(k.shipments, k.shipmentsPrev)
   const paidTrend = pct(k.paidIdr, k.paidPrevIdr)
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       {header}
-      <MetricGrid>
-        <MetricCard label="Kiriman" value={`${nf.format(k.shipments)} paket`} trend={shipTrend === null ? null : { value: shipTrend, label: vs }} footer={`Non-COD ${nf.format(k.nonCod)} · COD ${nf.format(k.cod)}`} />
-        <MetricCard label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={`Tunai ${short(k.paidByMethod.tunai)} · QRIS ${short(k.paidByMethod.qris)} · Transfer ${short(k.paidByMethod.transfer)}`} />
-        <MetricCard label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
+      {/* One KPI strip (TokoPhi money strip): volume, money in, money owed, safe balance and the two profit figures —
+          Estimasi Laba and Laba Kas stay two separate tiles, never summed. */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+        <MetricCard icon={PackageIcon} label="Kiriman" value={`${nf.format(k.shipments)} paket`} trend={shipTrend === null ? null : { value: shipTrend, label: vs }} footer={`Non-COD ${nf.format(k.nonCod)} · COD ${nf.format(k.cod)}`} />
+        <MetricCard icon={BanknoteIcon} label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={`Tunai ${short(k.paidByMethod.tunai)} · QRIS ${short(k.paidByMethod.qris)} · Transfer ${short(k.paidByMethod.transfer)}`} />
+        <MetricCard icon={ReceiptIcon} label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
         <MetricCard
+          icon={WalletIcon}
           label="Saldo Mengantar aman"
-          value={k.balance.safe_balance_idr === null ? "Belum tersinkron" : short(k.balance.safe_balance_idr)}
-          footer={k.balance.synced_balance_idr === null ? "Sinkron saldo aktif setelah Keuangan tersambung" : `Saldo ${short(k.balance.synced_balance_idr)} − cadangan retur ${short(k.balance.reserve_idr)}`}
+          value={k.balance.safe_balance_idr === null ? "Belum sinkron" : short(k.balance.safe_balance_idr)}
+          footer={k.balance.synced_balance_idr === null ? "Aktif setelah Keuangan tersambung" : `Saldo ${short(k.balance.synced_balance_idr)} − retur ${short(k.balance.reserve_idr)}`}
         />
-      </MetricGrid>
-      <Card aria-labelledby="laba-judul" role="region">
-        <CardHeader className="border-b">
-          <CardTitle>
-            <h3 id="laba-judul">Laba periode ini</h3>
-          </CardTitle>
-          <CardDescription>Dua angka terpisah — tidak pernah dijumlahkan.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-6 sm:grid-cols-[1fr_auto_1fr]">
-          <div className="flex flex-col gap-1">
-            <p className="text-base text-muted-foreground">Estimasi Laba</p>
-            <p className="text-[28px] leading-tight font-bold tabular-nums">{short(k.estimated_margin_idr)}</p>
-            <p className="text-base text-muted-foreground">Dari selisih tarif saat resi terbit</p>
-          </div>
-          <Separator orientation="vertical" className="hidden sm:block" />
-          <div className="flex flex-col gap-1">
-            <p className="flex flex-wrap items-center gap-2 text-base text-muted-foreground">
-              Laba Kas
-              {k.cashProfitPending ? <StatusBadge tone="warn">{nf.format(k.cashProfitPending)} INV belum direkonsiliasi</StatusBadge> : <StatusBadge tone="safe">Cocok dengan Mengantar</StatusBadge>}
-            </p>
-            <p className="text-[28px] leading-tight font-bold tabular-nums">{short(k.cash_profit_idr)}</p>
-            <p className="text-base text-muted-foreground">Sudah lunas dan dicocokkan dengan tagihan Mengantar</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Actions a={d.actions} />
-      <div className="grid gap-6 xl:grid-cols-5">
-        <SectionCard id="grafik" className="xl:col-span-3" title="Grafik pengiriman" description={`${nf.format(d.chart.reduce((a, r) => a + r.nonCod + r.cod, 0))} paket · ${period.granularity === "hour" ? "per jam" : period.granularity === "day" ? "per hari" : "per minggu"} · ${rangeLabel(period)}`}>
+        <MetricCard icon={TrendingUpIcon} label="Estimasi Laba" value={short(k.estimated_margin_idr)} footer="Selisih tarif saat resi terbit" />
+        <MetricCard icon={CircleCheckIcon} label="Laba Kas" value={short(k.cash_profit_idr)} footer={k.cashProfitPending ? `${nf.format(k.cashProfitPending)} INV belum direkonsiliasi` : "Cocok dengan tagihan Mengantar"} />
+      </div>
+      <div className="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+        <SectionCard
+          id="grafik"
+          title="Grafik pengiriman"
+          description={`${nf.format(d.chart.reduce((a, r) => a + r.nonCod + r.cod, 0))} paket · ${period.granularity === "hour" ? "per jam" : period.granularity === "day" ? "per hari" : "per minggu"}`}
+        >
           <AdminBarChart
             data={d.chart}
             xKey="bucket"
@@ -148,18 +130,61 @@ function OwnerDashboard() {
             caption={`Jumlah kiriman Non-COD dan COD ${rangeLabel(period)}`}
           />
         </SectionCard>
-        <SectionCard id="kurir" className="xl:col-span-2" title="Performa ekspedisi" description="Jumlah paket, laba dan persentase retur per kurir" flush>
+        <Actions a={d.actions} />
+      </div>
+      <div className="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+        <SectionCard
+          id="riwayat"
+          title="Riwayat pengiriman"
+          description="Kiriman terbaru di periode ini"
+          action={
+            <LinkButton variant="outline" size="sm" to="/kiriman">
+              Semua <ArrowRightIcon aria-hidden data-icon="inline-end" />
+            </LinkButton>
+          }
+          flush
+        >
+          <DataTableShell
+            bare
+            caption="Riwayat pengiriman"
+            rows={d.recent}
+            rowKey={(r) => r.slug}
+            empty={<EmptyState title="Belum ada kiriman" body="Kiriman yang resinya sudah terbit di periode ini akan muncul di sini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />}
+            columns={[
+              { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary tabular-nums underline-offset-4 hover:underline">INV {r.slug.toUpperCase()}</Link> },
+              { key: "kurir", header: "Ekspedisi", cell: (r) => r.courier },
+              { key: "penerima", header: "Penerima", cell: (r) => r.recipient ?? "—", wide: true },
+              { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => rp(r.due) },
+              { key: "bayar", header: "Pembayaran", cell: (r) => <PaymentBadge payment={r.payment} method={r.method} /> },
+              { key: "status", header: "Status", cell: (r) => <StatusBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</StatusBadge> },
+            ]}
+            mobile={(r) => (
+              <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="flex flex-col gap-1.5 text-sm">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-primary tabular-nums">INV {r.slug.toUpperCase()}</span>
+                  <span className="tabular-nums">{rp(r.due)}</span>
+                </span>
+                <span className="text-muted-foreground">{r.courier} · {r.recipient ?? "—"}</span>
+                <span className="flex flex-wrap gap-2">
+                  <PaymentBadge payment={r.payment} method={r.method} />
+                  <StatusBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</StatusBadge>
+                </span>
+              </Link>
+            )}
+          />
+        </SectionCard>
+        <SectionCard id="kurir" title="Performa ekspedisi" description="Paket, laba dan retur per kurir" flush>
           {d.couriers.length === 0 ? (
-            <p className="px-4 text-base text-muted-foreground md:px-6">Belum ada kiriman di periode ini.</p>
+            <p className="px-4 py-4 text-sm text-muted-foreground md:px-5">Belum ada kiriman di periode ini.</p>
           ) : (
             <Table>
               <caption className="sr-only">Performa ekspedisi</caption>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-4 md:pl-6">Kurir</TableHead>
+                  <TableHead className="pl-4 md:pl-5">Kurir</TableHead>
                   <TableHead className="text-right">Paket</TableHead>
                   <TableHead className="text-right">Laba</TableHead>
-                  <TableHead className="pr-4 text-right md:pr-6">Retur</TableHead>
+                  <TableHead className="pr-4 text-right md:pr-5">Retur</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -176,48 +201,10 @@ function OwnerDashboard() {
           )}
         </SectionCard>
       </div>
-      <SectionCard
-        id="riwayat"
-        title="Riwayat pengiriman"
-        description="Kiriman terbaru di periode ini"
-        action={
-          <LinkButton variant="outline" to="/kiriman">
-            Semua kiriman <ArrowRightIcon aria-hidden data-icon="inline-end" />
-          </LinkButton>
-        }
-      >
-        <DataTableShell
-          caption="Riwayat pengiriman"
-          rows={d.recent}
-          rowKey={(r) => r.slug}
-          empty={<EmptyState title="Belum ada kiriman" body="Kiriman yang resinya sudah terbit di periode ini akan muncul di sini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />}
-          columns={[
-            { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary tabular-nums underline-offset-4 hover:underline">INV {r.slug.toUpperCase()}</Link> },
-            { key: "kurir", header: "Ekspedisi", cell: (r) => r.courier },
-            { key: "penerima", header: "Penerima", cell: (r) => r.recipient ?? "—", wide: true },
-            { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => rp(r.due) },
-            { key: "bayar", header: "Pembayaran", cell: (r) => <PaymentBadge payment={r.payment} method={r.method} /> },
-            { key: "status", header: "Status", cell: (r) => <StatusBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</StatusBadge> },
-          ]}
-          mobile={(r) => (
-            <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="flex flex-col gap-1.5 text-base">
-              <span className="flex items-center justify-between gap-2">
-                <span className="font-medium text-primary tabular-nums">INV {r.slug.toUpperCase()}</span>
-                <span className="tabular-nums">{rp(r.due)}</span>
-              </span>
-              <span className="text-muted-foreground">{r.courier} · {r.recipient ?? "—"}</span>
-              <span className="flex flex-wrap gap-2">
-                <PaymentBadge payment={r.payment} method={r.method} />
-                <StatusBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</StatusBadge>
-              </span>
-            </Link>
-          )}
-        />
-      </SectionCard>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 md:gap-5">
         <SectionCard id="top" title="Pengirim teratas" description="Berdasarkan jumlah paket di periode ini">
           {d.topSenders.length === 0 ? (
-            <p className="text-base text-muted-foreground">Belum ada data.</p>
+            <p className="text-sm text-muted-foreground">Belum ada data.</p>
           ) : (
             <div className="flex flex-col gap-4">
               {d.topSenders.map((s, i) => (
@@ -228,7 +215,7 @@ function OwnerDashboard() {
         </SectionCard>
         <SectionCard id="sumber" title="Sumber order" description="Bagian dari seluruh kiriman periode ini">
           {d.sources.length === 0 ? (
-            <p className="text-base text-muted-foreground">Belum ada data.</p>
+            <p className="text-sm text-muted-foreground">Belum ada data.</p>
           ) : (
             <div className="flex flex-col gap-4">
               {d.sources.map((s) => (
@@ -253,7 +240,7 @@ function PaymentBadge({ payment, method }: { payment: string; method: string | n
   return <StatusBadge tone="muted">Tanpa tagihan</StatusBadge>
 }
 
-/** `Perlu tindakan`: one Alert-styled strip of action links when > 0, a quiet line when nothing waits. */
+/** `Perlu tindakan` (AdsBookCMS "Action needed"): one row per open queue with its count; a quiet line when none. */
 function Actions({ a }: { a: OwnerData["actions"] }) {
   const items = ([
     { n: a.unpaid, label: "INV belum dibayar", to: "/kiriman", tone: "warn" },
@@ -264,17 +251,21 @@ function Actions({ a }: { a: OwnerData["actions"] }) {
     { n: a.readyForPickup, label: "Siap dijemput kurir", to: "/kiriman", tone: "warn" },
   ] satisfies Array<{ n: number; label: string; to: string; tone: StatusTone }>).filter((x) => x.n > 0)
   return (
-    <SectionCard id="tindakan" title="Perlu tindakan" description={items.length ? "Klik untuk membuka daftar yang perlu ditindaklanjuti" : undefined}>
+    <SectionCard id="tindakan" title="Perlu tindakan" description={items.length ? `${nf.format(items.length)} antrean terbuka` : "Semua antrean beres"}>
       {items.length === 0 ? (
-        <p className="text-base text-muted-foreground">Tidak ada yang perlu ditindaklanjuti sekarang.</p>
+        <p className="flex items-center gap-2 text-sm text-safe">
+          <CircleCheckIcon aria-hidden className="size-4" /> Tidak ada yang perlu ditindaklanjuti sekarang.
+        </p>
       ) : (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="-mx-2 -my-1 flex flex-col">
           {items.map((x) => (
             <li key={x.label}>
-              <LinkButton variant="outline"  className="gap-2" to={x.to}>
-                <span aria-hidden className={`size-2 rounded-full ${x.tone === "danger" ? "bg-danger" : "bg-warn"}`} />
-                <span className="font-semibold tabular-nums">{nf.format(x.n)}</span> {x.label}
-              </LinkButton>
+              <Link to={x.to} className="group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:min-h-10">
+                <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${x.tone === "danger" ? "bg-danger" : "bg-warn"}`} />
+                <span className="min-w-0 flex-1 truncate text-slate-700">{x.label}</span>
+                <span className={`text-base font-semibold tabular-nums ${x.tone === "danger" ? "text-danger" : "text-warn"}`}>{nf.format(x.n)}</span>
+                <ChevronRightIcon aria-hidden className="size-4 text-slate-300 group-hover:text-muted-foreground" />
+              </Link>
             </li>
           ))}
         </ul>
@@ -301,7 +292,7 @@ function CounterHome({ name }: { name: string }) {
     { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman" },
   ].filter((x) => x.n > 0)
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-5">
       <PageHeader title="Tugas Loket Hari Ini" description={`Halo, ${name}.`}>
         <LinkButton to="/kasir">Buat Pengiriman</LinkButton>
         <LinkButton variant="outline" to="/kasir/cek-resi">Cek Resi</LinkButton>
@@ -313,7 +304,7 @@ function CounterHome({ name }: { name: string }) {
       </MetricGrid>
       <SectionCard id="tugas" title="Perlu dikerjakan">
         {tasks.length === 0 ? (
-          <p className="text-base text-muted-foreground">Semua beres. Mulai kiriman baru dari tombol Buat Pengiriman.</p>
+          <p className="text-sm text-muted-foreground">Semua beres. Mulai kiriman baru dari tombol Buat Pengiriman.</p>
         ) : (
           <ul className="flex flex-wrap gap-2">
             {tasks.map((x) => (

@@ -11,8 +11,8 @@ export const RISK: Record<RiskBadge, { dot: string; label: string }> = {
 /** Status = dot + text, never colour alone. */
 export function RiskChip({ badge, delivered, rts, rtsBps }: { badge: RiskBadge; delivered: number; rts: number; rtsBps: number | null }) {
   return (
-    <Badge variant="outline" className="h-auto gap-1.5 bg-card py-1 text-sm text-foreground">
-      <span className={`size-2 rounded-full ${RISK[badge].dot}`} aria-hidden />
+    <Badge variant="outline" className="gap-1.5 border-slate-200 bg-white text-slate-700">
+      <span className={`size-1.5 rounded-full ${RISK[badge].dot}`} aria-hidden />
       <span className="tabular-nums">
         {RISK[badge].label}
         {badge === "baru" ? "" : ` · ${delivered} sukses / ${rts} retur (${Math.round((rtsBps ?? 0) / 100)}%)`}

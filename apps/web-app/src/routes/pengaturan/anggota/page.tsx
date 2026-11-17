@@ -70,17 +70,17 @@ export function AnggotaPage() {
   return (
     <SettingsLayout title="Anggota" description="Pemilik dan kasir yang bisa masuk ke gerai ini.">
       <Card>
-        <CardHeader><CardTitle className="text-lg">Daftar anggota</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Daftar anggota</CardTitle></CardHeader>
         <CardContent>
           <ul className="divide-y">
             {data.members.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base">
+              <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm">
                 <span><span className="font-medium">{m.name}</span> · {m.role === "gerai_admin" ? "Pemilik" : "Kasir"}<span className="block text-muted-foreground">{m.email}</span></span>
                 <span className="text-muted-foreground">Terakhir aktif: {when(m.last_seen_at)}</span>
               </li>
             ))}
             {data.invitations.map((i) => (
-              <li key={i.email} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base text-muted-foreground">
+              <li key={i.email} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm text-muted-foreground">
                 <span>{i.email} · Kasir (undangan)</span>
                 <span>Berlaku sampai {when(i.expires_at)}</span>
               </li>
@@ -89,7 +89,7 @@ export function AnggotaPage() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-lg">Undang kasir</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base md:text-sm">Undang kasir</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={invite} className="flex flex-wrap items-end gap-2" noValidate>
             <Field className="min-w-0 flex-1" data-invalid={inviteErr ? true : undefined}>
@@ -103,19 +103,19 @@ export function AnggotaPage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Pembayaran COD ke pengirim</CardTitle>
-          <CardDescription className="text-base">Perubahan langsung tersimpan.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Pembayaran COD ke pengirim</CardTitle>
+          <CardDescription className="text-base md:text-sm">Perubahan langsung tersimpan.</CardDescription>
         </CardHeader>
         <CardContent>
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">Kasir boleh bayar COD <Switch checked={!!mayPay} onCheckedChange={togglePay} /></label>
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">Kasir boleh bayar COD <Switch checked={!!mayPay} onCheckedChange={togglePay} /></label>
         </CardContent>
       </Card>
       {cashiers.length ? (
         <Card className="border-danger/40">
-          <CardHeader><CardTitle className="text-lg">Zona berbahaya</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base md:text-sm">Zona berbahaya</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-3">
             {cashiers.map((m) => (
-              <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 text-base">
+              <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 text-base md:text-sm">
                 <span>{m.name} ({m.email})</span>
                 {confirm?.id === m.id ? (
                   <span className="flex flex-wrap items-center gap-2" role="alertdialog" aria-label={`Cabut akses ${m.name}`}>

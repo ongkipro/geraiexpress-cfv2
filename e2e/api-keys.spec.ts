@@ -13,7 +13,7 @@ test("API & MCP: kunci sekali tampil, dipakai, lalu dicabut", async ({ page, con
   expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `a${Date.now().toString(36)}`, name: "Gerai Api", connect: true } })).status()).toBe(201)
 
   await page.goto(`${APP}/pengaturan/api-mcp`)
-  await expect(page.getByRole("heading", { name: "API & MCP", level: 2 }).last()).toBeVisible()
+  await expect(page.getByRole("heading", { name: "API & MCP", level: 1 }).last()).toBeVisible()
   await page.getByLabel("Nama kunci").fill("Toko Shopify Nisa")
   await page.getByRole("checkbox", { name: /Terbitkan resi/ }).check()
   await page.getByRole("button", { name: "Buat Kunci" }).click()

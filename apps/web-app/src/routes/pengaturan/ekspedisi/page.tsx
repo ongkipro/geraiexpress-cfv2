@@ -62,8 +62,8 @@ export function PengaturanEkspedisiPage() {
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-[880px] flex-col gap-6 px-4 py-6 md:px-8">
       <div className="flex flex-col gap-2">
-        <h2 className="text-[28px] leading-tight font-bold tracking-[-0.02em]">Ekspedisi Aktif</h2>
-        <p className="text-base text-muted-foreground">Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.</p>
+        <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">Ekspedisi Aktif</h1>
+        <p className="text-base md:text-sm text-muted-foreground">Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.</p>
       </div>
 
       {error ? <FormAlert>{error}</FormAlert> : null}
@@ -78,8 +78,8 @@ export function PengaturanEkspedisiPage() {
       {rows ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Daftar ekspedisi</CardTitle>
-            <CardDescription className="text-base tabular-nums">{active} dari {rows.length} aktif</CardDescription>
+            <CardTitle className="text-base md:text-sm">Daftar ekspedisi</CardTitle>
+            <CardDescription className="text-base md:text-sm tabular-nums">{active} dari {rows.length} aktif</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ul className="divide-y divide-border">
@@ -89,7 +89,7 @@ export function PengaturanEkspedisiPage() {
                   <li key={r.courierCode} className="flex flex-col gap-3 px-4 py-3 md:px-6">
                     <label htmlFor={id} className="flex min-h-11 cursor-pointer items-center justify-between gap-4">
                       <span className="flex flex-col gap-1">
-                        <span className="text-base font-medium">{r.name}</span>
+                        <span className="text-base md:text-sm font-medium">{r.name}</span>
                         <span className="flex flex-wrap gap-2">
                           {r.services.map((s) => (
                             <Badge key={s.serviceCode} variant="outline" className="h-7 px-2 text-sm font-normal">
@@ -110,9 +110,9 @@ export function PengaturanEkspedisiPage() {
                         choices={r.pickupOptions.map((m) => ({ value: m, label: MODE_LABEL[m], disabled: pending === r.courierCode }))}
                       />
                     ) : r.enabled && !r.note ? (
-                      <p className="text-base text-muted-foreground">{MODE_LABEL[r.pickupMode]}</p>
+                      <p className="text-base md:text-sm text-muted-foreground">{MODE_LABEL[r.pickupMode]}</p>
                     ) : null}
-                    {r.note && r.enabled ? <p className="text-base text-muted-foreground">{r.note}</p> : null}
+                    {r.note && r.enabled ? <p className="text-base md:text-sm text-muted-foreground">{r.note}</p> : null}
                   </li>
                 )
               })}

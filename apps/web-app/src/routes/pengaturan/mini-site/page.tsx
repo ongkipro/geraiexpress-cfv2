@@ -37,7 +37,7 @@ function Copy({ text }: { text: string }) {
 function DnsTable({ rows }: { rows: Array<{ type: string; name: string; value: string }> }) {
   return (
     <>
-    <dl className="flex flex-col divide-y text-base sm:hidden">
+    <dl className="flex flex-col divide-y text-base md:text-sm sm:hidden">
       {rows.map((r) => (
         <div key={`m${r.type}${r.name}`} className="flex flex-col gap-1 py-2">
           <dt className="font-medium">{r.type}</dt>
@@ -46,7 +46,7 @@ function DnsTable({ rows }: { rows: Array<{ type: string; name: string; value: s
         </div>
       ))}
     </dl>
-    <table className="hidden w-full table-fixed border-collapse text-base sm:table">
+    <table className="hidden w-full table-fixed border-collapse text-base md:text-sm sm:table">
       <caption className="sr-only">Record DNS yang perlu ditambahkan</caption>
       <thead>
         <tr className="border-b text-left text-muted-foreground">
@@ -101,10 +101,10 @@ export function MiniSitePage() {
     <SettingsLayout title="Mini-Site" description="Halaman cek ongkir, kirim dari rumah, dan lacak paket untuk pelanggan gerai Anda.">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Alamat mini-site</CardTitle>
-          <CardDescription className="text-base">Alamat ini dicetak di struk dan kode QR.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Alamat mini-site</CardTitle>
+          <CardDescription className="text-base md:text-sm">Alamat ini dicetak di struk dan kode QR.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-base">
+        <CardContent className="flex flex-col gap-2 text-base md:text-sm">
           <p className="flex flex-wrap items-center gap-2">
             <a href={`https://${v.primaryHost}`} target="_blank" rel="noreferrer" className="font-mono break-all text-primary underline-offset-4 hover:underline">{v.primaryHost}</a>
             <ExternalLinkIcon aria-hidden className="size-4 text-muted-foreground" />
@@ -114,12 +114,12 @@ export function MiniSitePage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Domain Sendiri</CardTitle>
-          <CardDescription className="text-base">Pakai domain toko Anda, misalnya kirim.tokoanda.id, untuk mini-site gerai.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Domain Sendiri</CardTitle>
+          <CardDescription className="text-base md:text-sm">Pakai domain toko Anda, misalnya kirim.tokoanda.id, untuk mini-site gerai.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {!v.pro ? (
-            <p className="text-base text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
+            <p className="text-base md:text-sm text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
           ) : primary ? (
             <DomainStatus v={v} pending={pending} onCheck={(method) => act("/custom-domain/check", method ? { method } : {}, method === "txt" ? "Verifikasi diganti ke TXT. Pasang record TXT di bawah." : "Pemeriksaan diulang.")} onRemove={(confirm) => act("/custom-domain/remove", { confirm }, "Domain dihapus. Mini-site kembali memakai alamat bawaan.")} />
           ) : (
@@ -146,7 +146,7 @@ function AddDomain({ pending, onAdd }: { pending: boolean; onAdd: (hostname: str
       </Field>
       {isRoot ? (
         <div className="flex flex-col gap-2">
-          <p className="text-base font-medium">Domain utama dipakai sebagai</p>
+          <p className="text-base md:text-sm font-medium">Domain utama dipakai sebagai</p>
           <ChoiceGroup
             label="Alamat utama"
             layout="column"
@@ -183,7 +183,7 @@ function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boo
     <div className="flex flex-col gap-4">
       <ul className="flex flex-col gap-2">
         {v.domains.map((d) => (
-          <li key={d.hostname} className="flex flex-wrap items-center gap-2 text-base">
+          <li key={d.hostname} className="flex flex-wrap items-center gap-2 text-base md:text-sm">
             <span className="break-all font-medium">{d.hostname}</span>
             <Badge variant={STATE[d.state]?.tone ?? "secondary"}>{STATE[d.state]?.label ?? d.state}</Badge>
             {d.role === "redirect" ? <span className="text-muted-foreground">diarahkan ke {primary.hostname}</span> : null}
@@ -191,17 +191,17 @@ function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boo
         ))}
       </ul>
       {allActive ? (
-        <p className="text-base">Domain aktif sejak {when(primary.activatedAt)}. Struk dan kode QR baru memakai <span className="font-mono">{primary.hostname}</span>.</p>
+        <p className="text-base md:text-sm">Domain aktif sejak {when(primary.activatedAt)}. Struk dan kode QR baru memakai <span className="font-mono">{primary.hostname}</span>.</p>
       ) : (
         <>
-          <ol className="flex list-decimal flex-col gap-1 pl-5 text-base">
+          <ol className="flex list-decimal flex-col gap-1 pl-5 text-base md:text-sm">
             <li>Buka pengelola DNS domain Anda (registrar atau Cloudflare).</li>
             <li>Tambahkan record di bawah. Jangan ubah record MX atau email yang sudah ada.</li>
             <li>Tunggu beberapa menit, lalu tekan Periksa Lagi. Kami juga memeriksa otomatis tiap 10 menit.</li>
           </ol>
           <DnsTable rows={dns} />
-          {remedy ? <p role="status" className="border-l-4 border-warn pl-3 text-base">{remedy.text}</p> : null}
-          <p className="text-base text-muted-foreground">Terakhir diperiksa: {when(primary.lastCheckedAt)}</p>
+          {remedy ? <p role="status" className="border-l-4 border-warn pl-3 text-base md:text-sm">{remedy.text}</p> : null}
+          <p className="text-base md:text-sm text-muted-foreground">Terakhir diperiksa: {when(primary.lastCheckedAt)}</p>
         </>
       )}
       <div className="flex flex-wrap gap-2">
@@ -211,7 +211,7 @@ function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boo
       </div>
       {confirming ? (
         <div role="alertdialog" aria-label="Hapus domain" className="flex flex-col gap-3 border-l-4 border-danger pl-3">
-          <p className="text-base font-medium text-danger">Hapus {primary.hostname}? Mini-site kembali ke {v.platformHost}; kode QR yang sudah dicetak dengan domain ini berhenti bekerja.</p>
+          <p className="text-base md:text-sm font-medium text-danger">Hapus {primary.hostname}? Mini-site kembali ke {v.platformHost}; kode QR yang sudah dicetak dengan domain ini berhenti bekerja.</p>
           <Field>
             <FieldLabel htmlFor="cd-confirm">Ketik {primary.hostname} untuk konfirmasi</FieldLabel>
             <Input id="cd-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoCapitalize="none" spellCheck={false} />

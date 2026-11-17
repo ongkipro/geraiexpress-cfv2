@@ -82,7 +82,7 @@ export function PengirimPage() {
           )
         ) : (
           <>
-            <div className="hidden md:block">
+            <div className="hidden overflow-hidden rounded-xl border border-slate-200/85 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -116,8 +116,8 @@ export function PengirimPage() {
                 <li key={s.id}>
                   <button type="button" onClick={() => setEditing(s)} className="flex min-h-11 w-full flex-col items-start gap-1 px-4 py-3 text-left">
                     <span className="font-medium">{s.display_brand_name ?? s.true_name}</span>
-                    <span className="text-base text-muted-foreground tabular-nums">{s.true_name} · {s.true_phone}{s.wa_verified_at ? " · terverifikasi" : ""}</span>
-                    <span className="text-base text-muted-foreground tabular-nums">{s.shipments_count} kiriman{owner && s.deposit_balance_idr ? ` · deposit ${rupiah(s.deposit_balance_idr)}` : ""}</span>
+                    <span className="text-base md:text-sm text-muted-foreground tabular-nums">{s.true_name} · {s.true_phone}{s.wa_verified_at ? " · terverifikasi" : ""}</span>
+                    <span className="text-base md:text-sm text-muted-foreground tabular-nums">{s.shipments_count} kiriman{owner && s.deposit_balance_idr ? ` · deposit ${rupiah(s.deposit_balance_idr)}` : ""}</span>
                   </button>
                 </li>
               ))}
@@ -191,12 +191,12 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
       {sender ? (
         <div className="flex flex-col gap-2 rounded-lg border p-3">
           {verified && phone === sender.true_phone ? (
-            <p className="flex items-center gap-2 text-base text-safe"><CheckIcon aria-hidden className="size-5" /> WhatsApp terverifikasi di loket</p>
+            <p className="flex items-center gap-2 text-base md:text-sm text-safe"><CheckIcon aria-hidden className="size-5" /> WhatsApp terverifikasi di loket</p>
           ) : (
             <>
-              <p className="text-base text-muted-foreground">Kirim pesan uji, lalu tanyakan ke pengirim apakah pesan sudah diterima.</p>
+              <p className="text-base md:text-sm text-muted-foreground">Kirim pesan uji, lalu tanyakan ke pengirim apakah pesan sudah diterima.</p>
               <div className="flex flex-wrap gap-2">
-                <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base font-medium md:h-10">
+                <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium md:h-10">
                   <MessageCircleIcon aria-hidden className="size-5" /> Kirim pesan uji
                 </a>
                 <Button type="button" variant="outline" onClick={verify} disabled={phone !== sender.true_phone}>Pengirim sudah menerima</Button>
@@ -211,13 +211,13 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
         <>
           <TextField label="Nama toko tercetak di label" name="brandName" value={brand} onChange={setBrand} error={errors.brandName} maxLength={60} required />
           <TextField label="Nomor HP tercetak di label (opsional)" name="brandPhone" inputMode="numeric" value={brandPhone} onChange={setBrandPhone} error={errors.brandPhone} />
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
             Sembunyikan nama gerai di label
             <Switch checked={hide} onCheckedChange={setHide} />
           </label>
         </>
       ) : null}
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
         {sender && owner ? <Button type="button" variant="outline" onClick={archive}>Arsipkan</Button> : null}

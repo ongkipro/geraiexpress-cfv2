@@ -41,10 +41,10 @@ export function MejaRetur() {
     <div className="mb-6 flex flex-col gap-6">
       <IntakeForm onDone={(r) => { setLast(r); setMsg(null); load() }} />
       {last ? <LastIntake r={last} /> : null}
-      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
+      {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
       <section aria-labelledby="di-gerai">
-        <h3 id="di-gerai" className="mb-3 text-lg font-semibold">Di gerai, menunggu diambil ({d.open.length})</h3>
-        {d.open.length === 0 ? <p className="text-base text-muted-foreground">Tidak ada paket retur yang menunggu.</p> : (
+        <h2 id="di-gerai" className="mb-3 text-sm font-semibold md:text-base">Di gerai, menunggu diambil ({d.open.length})</h2>
+        {d.open.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada paket retur yang menunggu.</p> : (
           <ul className="flex flex-col gap-3">
             {d.open.map((r) => <OpenRow key={r.slug} r={r} owner={isOwner(w)} onChange={(m) => { setMsg(m); load() }} />)}
           </ul>
@@ -52,17 +52,17 @@ export function MejaRetur() {
       </section>
       {d.incoming.length ? (
         <section aria-labelledby="dalam-jalan">
-          <h3 id="dalam-jalan" className="mb-3 text-lg font-semibold">Retur dalam perjalanan ({d.incoming.length})</h3>
+          <h2 id="dalam-jalan" className="mb-3 text-sm font-semibold md:text-base">Retur dalam perjalanan ({d.incoming.length})</h2>
           <ItemList>
-            {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base tabular-nums">{i.courier_code} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
+            {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">{i.courier_code} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
           </ItemList>
         </section>
       ) : null}
       {d.returned.length ? (
         <section aria-labelledby="selesai">
-          <h3 id="selesai" className="mb-3 text-lg font-semibold">Sudah diserahkan (7 hari)</h3>
+          <h2 id="selesai" className="mb-3 text-sm font-semibold md:text-base">Sudah diserahkan (7 hari)</h2>
           <ItemList>
-            {d.returned.map((r) => <li key={r.slug} className="px-4 py-2 text-base tabular-nums">INV {r.slug.toUpperCase()} · {r.handback_at ? when(r.handback_at) : ""} · {r.handback_method === "code" ? "dengan Kode Ambil" : "cek identitas oleh pemilik"}</li>)}
+            {d.returned.map((r) => <li key={r.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">INV {r.slug.toUpperCase()} · {r.handback_at ? when(r.handback_at) : ""} · {r.handback_method === "code" ? "dengan Kode Ambil" : "cek identitas oleh pemilik"}</li>)}
           </ItemList>
         </section>
       ) : null}
@@ -109,21 +109,21 @@ function IntakeForm({ onDone }: { onDone: (r: Intake) => void }) {
   }
   return (
     <Panel as="form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      <h3 className="text-lg font-semibold">Terima paket retur</h3>
+      <h2 className="text-sm font-semibold md:text-base">Terima paket retur</h2>
       <Field><FieldLabel htmlFor="retur-code">Pindai resi atau INV</FieldLabel><Input id="retur-code" autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-base font-medium">Kondisi paket</legend>
+        <legend className="mb-1 text-base md:text-sm font-medium">Kondisi paket</legend>
         <ChoiceGroup label="Kondisi paket" value={condition} onValueChange={setCondition} choices={CONDITION.map(([id, label]) => ({ value: id, label }))} />
       </fieldset>
       <div className="flex flex-col gap-1">
-        <label className="inline-flex h-11 w-fit cursor-pointer items-center gap-2 rounded-lg border px-4 text-base font-medium focus-within:ring-2 focus-within:ring-ring">
+        <label className="inline-flex h-11 w-fit cursor-pointer items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium focus-within:ring-2 focus-within:ring-ring">
           <CameraIcon aria-hidden className="size-4" /> {photo ? `Foto: ${photo.name}` : "Ambil foto paket"}
           <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={pick} />
         </label>
-        {fields.photo ? <FieldError>{fields.photo}</FieldError> : <p className="text-base text-muted-foreground">Wajib untuk paket penyok, rusak, atau terbuka.</p>}
+        {fields.photo ? <FieldError>{fields.photo}</FieldError> : <p className="text-base md:text-sm text-muted-foreground">Wajib untuk paket penyok, rusak, atau terbuka.</p>}
       </div>
       <Field><FieldLabel htmlFor="retur-note">Catatan (opsional)</FieldLabel><Input id="retur-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} /></Field>
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base font-medium text-danger">{msg}</p> : null}
+      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div><Button type="submit" size="lg" disabled={pending || !code.trim()}>Terima Paket Retur</Button></div>
     </Panel>
   )
@@ -131,7 +131,7 @@ function IntakeForm({ onDone }: { onDone: (r: Intake) => void }) {
 
 function LastIntake({ r }: { r: Intake }) {
   return (
-    <section role="status" className="rounded-lg border-l-4 border-safe bg-safe-bg p-4 text-base">
+    <section role="status" className="rounded-lg border-l-4 border-safe bg-safe-bg p-4 text-base md:text-sm">
       <p className="font-medium">INV {r.slug.toUpperCase()} diterima di gerai.</p>
       {r.sender ? <p>Pengirim asli: <span className="font-medium">{r.sender.brand ? `${r.sender.brand} (${r.sender.name})` : r.sender.name}</span> · <span className="tabular-nums">{r.sender.phone}</span></p> : null}
       {r.conflict ? <p className="mt-1 font-medium text-danger">Status Mengantar bertentangan dengan paket yang ada di gerai. Pemilik akan melihatnya di Kendala & Klaim.</p> : null}
@@ -179,13 +179,13 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
     <Panel as="li" className="flex flex-col gap-3 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
-        <span className="text-base text-muted-foreground tabular-nums">{r.courier_code} · {r.awb_number} · diterima {when(r.intake_at)}</span>
+        <span className="text-base md:text-sm text-muted-foreground tabular-nums">{r.courier_code} · {r.awb_number} · diterima {when(r.intake_at)}</span>
       </div>
-      <p className="text-base">Kondisi: {COND_LABEL[r.condition] ?? r.condition} · simpan sampai {day(r.storage_deadline_at)}{r.conflict ? <span className="font-medium text-danger"> · status bertentangan</span> : null}</p>
-      {r.claim_offered ? <p className="border-l-4 border-warn pl-3 text-base">Paket rusak/terbuka: ajukan klaim retur rusak sebelum batas waktu ekspedisi (Kiriman › Kendala & Klaim).</p> : null}
+      <p className="text-base md:text-sm">Kondisi: {COND_LABEL[r.condition] ?? r.condition} · simpan sampai {day(r.storage_deadline_at)}{r.conflict ? <span className="font-medium text-danger"> · status bertentangan</span> : null}</p>
+      {r.claim_offered ? <p className="border-l-4 border-warn pl-3 text-base md:text-sm">Paket rusak/terbuka: ajukan klaim retur rusak sebelum batas waktu ekspedisi (Kiriman › Kendala & Klaim).</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" disabled={busy} onClick={sendCode}><MessageCircleIcon aria-hidden /> {r.code_issued_at ? "Kirim Ulang Kode Ambil" : "Kirim Kode Ambil"}</Button>
-        {share ? <a href={share} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-10">Buka WhatsApp</a> : null}
+        {share ? <a href={share} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground md:h-10">Buka WhatsApp</a> : null}
       </div>
       <form onSubmit={handback} className="flex flex-wrap items-end gap-2" noValidate>
         {override ? (
@@ -196,7 +196,7 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
         <Button type="submit" disabled={override ? reason.trim().length < 5 : code.length !== 4}>Serahkan ke Pengirim</Button>
         {owner ? <Button type="button" variant="ghost" onClick={() => setOverride((x) => !x)}>{override ? "Pakai Kode Ambil" : "Tanpa kode (cek KTP)"}</Button> : null}
       </form>
-      {fieldErr ? <p role="alert" className="text-base font-medium text-danger">{fieldErr}</p> : null}
+      {fieldErr ? <p role="alert" className="text-base md:text-sm font-medium text-danger">{fieldErr}</p> : null}
     </Panel>
   )
 }

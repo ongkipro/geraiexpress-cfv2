@@ -83,7 +83,7 @@ export function PrintDrawer({ slug, printCount, firstPrintedAt, onPrinted }: { s
                 <ToggleGroupItem key={f} value={f}>{FORMAT_LABEL[f]}</ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <p className="text-base text-muted-foreground">{PAPER_HINT[format]}. Cetak dengan skala 100% (ukuran asli).</p>
+            <p className="text-base md:text-sm text-muted-foreground">{PAPER_HINT[format]}. Cetak dengan skala 100% (ukuran asli).</p>
             {reprint ? (
               <Field data-invalid={error && !reason ? true : undefined}>
                 <FieldLabel htmlFor="alasan-ulang">Alasan cetak ulang (dicatat)</FieldLabel>

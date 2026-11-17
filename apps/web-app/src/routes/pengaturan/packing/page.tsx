@@ -23,8 +23,8 @@ export function PackingPage() {
     <SettingsLayout title="Packing & Biaya" description="Harga packing dan biaya layanan loket sepenuhnya milik gerai.">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Daftar packing</CardTitle>
-          <CardDescription className="text-base">Item aktif muncul sebagai pilihan tambahan di kasir.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Daftar packing</CardTitle>
+          <CardDescription className="text-base md:text-sm">Item aktif muncul sebagai pilihan tambahan di kasir.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ul className="flex flex-col divide-y border-y">
@@ -40,7 +40,7 @@ export function PackingPage() {
                   <Input id={`pk-p-${i}`} inputMode="numeric" className="tabular-nums" value={it.priceIdr.toLocaleString("id-ID")} onChange={(e) => setItem(i, { priceIdr: digits(e.target.value) })} />
                   {s.fields[`items.${i}.priceIdr`] ? <FieldError>{s.fields[`items.${i}.priceIdr`]}</FieldError> : null}
                 </Field>
-                <label className="flex min-h-11 items-center gap-2 text-base">Aktif <Switch checked={it.active} onCheckedChange={(v) => setItem(i, { active: v })} /></label>
+                <label className="flex min-h-11 items-center gap-2 text-base md:text-sm">Aktif <Switch checked={it.active} onCheckedChange={(v) => setItem(i, { active: v })} /></label>
                 <Button variant="ghost" aria-label={`Hapus ${it.name || "item"}`} onClick={() => s.setForm({ ...f, items: f.items.filter((_, j) => j !== i) })}><Trash2Icon aria-hidden /> Hapus</Button>
               </li>
             ))}
@@ -50,11 +50,11 @@ export function PackingPage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Biaya Layanan Loket</CardTitle>
-          <CardDescription className="text-base">Opsional. Dicetak sebagai baris tersendiri di struk, hanya untuk kiriman Non-COD dan COD Ongkir.</CardDescription>
+          <CardTitle className="text-base md:text-sm">Biaya Layanan Loket</CardTitle>
+          <CardDescription className="text-base md:text-sm">Opsional. Dicetak sebagai baris tersendiri di struk, hanya untuk kiriman Non-COD dan COD Ongkir.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">Aktifkan biaya layanan <Switch checked={f.serviceFeeEnabled} onCheckedChange={(v) => s.setForm({ ...f, serviceFeeEnabled: v, serviceFeeIdr: f.serviceFeeIdr ?? 2000 })} /></label>
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">Aktifkan biaya layanan <Switch checked={f.serviceFeeEnabled} onCheckedChange={(v) => s.setForm({ ...f, serviceFeeEnabled: v, serviceFeeIdr: f.serviceFeeIdr ?? 2000 })} /></label>
           {f.serviceFeeEnabled ? (
             <Field data-invalid={s.fields.serviceFeeIdr ? true : undefined}>
               <FieldLabel htmlFor="fee">Nominal bawaan (Rp)</FieldLabel>

@@ -55,32 +55,32 @@ export function LabelPrivasiPage() {
   return (
     <main className="mx-auto flex w-full max-w-[880px] flex-col gap-6 pb-24">
       <div className="flex flex-col gap-2">
-        <h2 className="text-[28px] leading-tight font-semibold">Label & Privasi</h2>
-        <p className="text-base text-muted-foreground">Atur apa yang tercetak di label pengirim. Kurir selalu menjemput di alamat gerai, dan paket retur selalu kembali ke gerai.</p>
+        <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">Label & Privasi</h1>
+        <p className="text-base md:text-sm text-muted-foreground">Atur apa yang tercetak di label pengirim. Kurir selalu menjemput di alamat gerai, dan paket retur selalu kembali ke gerai.</p>
       </div>
       {locked ? <FormAlert tone="warn">Masking label sedang dinonaktifkan GeraiExpress untuk gerai ini. Kasir hanya bisa mencetak Standar Gerai.</FormAlert> : null}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Masking label</CardTitle>
-          <CardDescription className="text-base">Bila nonaktif, kasir hanya mencetak Standar Gerai.{form.dailyQuota !== null ? ` Kuota masking: ${form.dailyQuota} kiriman per hari.` : ""}</CardDescription>
+          <CardTitle className="text-base md:text-sm">Masking label</CardTitle>
+          <CardDescription className="text-base md:text-sm">Bila nonaktif, kasir hanya mencetak Standar Gerai.{form.dailyQuota !== null ? ` Kuota masking: ${form.dailyQuota} kiriman per hari.` : ""}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
             Aktifkan masking label
             <Switch checked={form.offered} disabled={locked} onCheckedChange={(v) => set({ offered: v })} />
           </label>
           <fieldset className="flex flex-col gap-1" disabled={locked || !form.offered}>
-            <legend className="mb-2 text-base font-medium">Preset yang boleh dipilih kasir</legend>
-            <label className="flex min-h-11 items-center justify-between gap-3 text-base text-muted-foreground">Standar Gerai (selalu aktif)<Switch checked disabled /></label>
+            <legend className="mb-2 text-base md:text-sm font-medium">Preset yang boleh dipilih kasir</legend>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm text-muted-foreground">Standar Gerai (selalu aktif)<Switch checked disabled /></label>
             {OPTIONAL.map((p) => (
-              <label key={p} className="flex min-h-11 items-center justify-between gap-3 text-base">
+              <label key={p} className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
                 {PRESET_LABEL[p]}
                 <Switch checked={form.presetsEnabled.includes(p)} disabled={locked || !form.offered} onCheckedChange={(v) => togglePreset(p, v)} />
               </label>
             ))}
           </fieldset>
           <fieldset className="flex flex-col gap-2" disabled={locked || !form.offered}>
-            <legend className="mb-1 text-base font-medium">Preset bawaan</legend>
+            <legend className="mb-1 text-base md:text-sm font-medium">Preset bawaan</legend>
             <ChoiceGroup
               label="Preset bawaan"
               value={form.defaultPreset}
@@ -88,24 +88,24 @@ export function LabelPrivasiPage() {
               choices={(["standar_gerai", ...form.presetsEnabled] as MaskPreset[]).map((p) => ({ value: p, label: PRESET_LABEL[p], disabled: locked || !form.offered }))}
             />
           </fieldset>
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
             Samarkan HP penerima untuk kiriman COD
             <Switch checked={form.maskRecipientOnCod} disabled={locked || !form.offered} onCheckedChange={(v) => set({ maskRecipientOnCod: v })} />
           </label>
           <div className="flex flex-col gap-1 border-t pt-4">
-            <label className="flex min-h-11 items-center justify-between gap-3 text-base">
+            <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
               Kirim nama toko reseller ke Mengantar (Dropshipper)
               <Switch checked={form.dropshipperSync} disabled={locked || !form.offered} onCheckedChange={(v) => set({ dropshipperSync: v })} />
             </label>
-            <p className="text-base text-muted-foreground">Nama dan HP toko juga tampil di resi dan pelacakan kurir. Fitur Dropshipper harus aktif di Seller Web Mengantar; bila belum, label gerai tetap memakai nama toko.</p>
-            {form.dropshipperSync && form.dropshipperState === "disabled" ? <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base">Mengantar menolak: fitur Dropshipper belum aktif di akun ini. Aktifkan di Seller Web Mengantar.</p> : null}
+            <p className="text-base md:text-sm text-muted-foreground">Nama dan HP toko juga tampil di resi dan pelacakan kurir. Fitur Dropshipper harus aktif di Seller Web Mengantar; bila belum, label gerai tetap memakai nama toko.</p>
+            {form.dropshipperSync && form.dropshipperState === "disabled" ? <p role="status" className="border-l-4 border-warn py-1 pl-3 text-base md:text-sm">Mengantar menolak: fitur Dropshipper belum aktif di akun ini. Aktifkan di Seller Web Mengantar.</p> : null}
           </div>
         </CardContent>
       </Card>
       {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
       {dirty ? (
         <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-end gap-2 border-t bg-card p-3 md:sticky md:rounded-lg md:border">
-          <span className="mr-auto text-base text-muted-foreground">Ada perubahan belum disimpan</span>
+          <span className="mr-auto text-base md:text-sm text-muted-foreground">Ada perubahan belum disimpan</span>
           <Button variant="outline" onClick={() => setForm(saved)} disabled={pending}>Batal</Button>
           <Button onClick={save} disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
         </div>

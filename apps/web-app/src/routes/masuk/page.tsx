@@ -49,7 +49,7 @@ export function MasukPage() {
         <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} required />
         <TextField label="Kata sandi" name="password" type="password" autoComplete="current-password" value={password} onChange={setPassword} required />
         <div className="flex justify-end">
-          <Link to="/lupa-sandi" className="text-base font-medium text-primary underline-offset-4 hover:underline">
+          <Link to="/lupa-sandi" className="text-base md:text-sm font-medium text-primary underline-offset-4 hover:underline">
             Lupa kata sandi?
           </Link>
         </div>

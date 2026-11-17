@@ -31,9 +31,9 @@ export function PresetPicker({ value, onChange, preview, reseller, cod }: { valu
   const printedSender = value === "dropship_toko" || (value === "privasi_penerima_cod" && preview.brand) ? (preview.brand ?? preview.sender) : value === "full_nama_gerai" ? preview.outlet : preview.sender
   return (
     <fieldset className="flex flex-col gap-3">
-      <legend className="mb-1 text-base font-medium">Label pengirim</legend>
+      <legend className="mb-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Label pengirim</legend>
       {s.presets.length === 1 ? (
-        <p className="text-base text-muted-foreground">{s.killSwitchOff ? "Masking label dinonaktifkan GeraiExpress untuk gerai ini." : "Gerai mencetak label Standar Gerai."}</p>
+        <p className="text-base md:text-sm text-muted-foreground">{s.killSwitchOff ? "Masking label dinonaktifkan GeraiExpress untuk gerai ini." : "Gerai mencetak label Standar Gerai."}</p>
       ) : (
         <ChoiceGroup
           label="Preset label"
@@ -46,8 +46,8 @@ export function PresetPicker({ value, onChange, preview, reseller, cod }: { valu
           })}
         />
       )}
-      {s.quotaLeft !== null && s.presets.length > 1 ? <p className="text-base text-muted-foreground tabular-nums">Sisa kuota masking hari ini: {s.quotaLeft}</p> : null}
-      <div className="border-l-4 border-primary py-1 pl-3 text-base" aria-live="polite">
+      {s.quotaLeft !== null && s.presets.length > 1 ? <p className="text-xs text-muted-foreground tabular-nums">Sisa kuota masking hari ini: {s.quotaLeft}</p> : null}
+      <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600" aria-live="polite">
         <span className="text-muted-foreground">Tercetak di label: </span>
         <strong>{printedSender}</strong>
         {value !== "dropship_toko" ? ` · via ${preview.outlet}` : ""}

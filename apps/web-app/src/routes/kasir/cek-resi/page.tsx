@@ -51,13 +51,13 @@ export function CekResiPage() {
         <Button type="submit" size="lg" disabled={pending || q.trim().length < 4}><SearchIcon aria-hidden /> Cari</Button>
       </Panel>
       <div className="mt-6" aria-live="polite">
-        {res?.kind === "none" ? <p className="text-base text-muted-foreground">Tidak ada kiriman yang cocok.</p> : null}
+        {res?.kind === "none" ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada kiriman yang cocok.</p> : null}
         {res?.kind === "foreign" ? (
           <Panel>
-            <h3 className="text-lg font-semibold">Resi ini bukan kiriman gerai Anda</h3>
-            <p className="mt-1 text-base text-muted-foreground">Lacak resi <span className="font-medium tabular-nums text-foreground">{res.awb}</span> di situs ekspedisinya:</p>
+            <h2 className="text-sm font-semibold md:text-base">Resi ini bukan kiriman gerai Anda</h2>
+            <p className="mt-1 text-base md:text-sm text-muted-foreground">Lacak resi <span className="font-medium tabular-nums text-foreground">{res.awb}</span> di situs ekspedisinya:</p>
             <ul className="mt-3 flex flex-wrap gap-2">
-              {COURIER_TRACK.map(([name, url]) => <li key={name}><a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg border px-4 text-base font-medium">{name}</a></li>)}
+              {COURIER_TRACK.map(([name, url]) => <li key={name}><a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg border px-4 text-base md:text-sm font-medium">{name}</a></li>)}
             </ul>
           </Panel>
         ) : null}
@@ -66,16 +66,16 @@ export function CekResiPage() {
             {res.items.map((it, i) => (
               <Panel as="li" key={it.slug}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="text-lg font-semibold">{res.items.length > 1 ? `Koli ${i + 1} · ` : ""}<Link to="/kiriman/$slug" params={{ slug: it.slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {it.slug.toUpperCase()}</Link></h3>
-                  <p className="text-base tabular-nums">{it.courier} · {it.awb ?? "belum ada resi"}</p>
+                  <h2 className="text-sm font-semibold md:text-base">{res.items.length > 1 ? `Koli ${i + 1} · ` : ""}<Link to="/kiriman/$slug" params={{ slug: it.slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {it.slug.toUpperCase()}</Link></h2>
+                  <p className="text-base md:text-sm tabular-nums">{it.courier} · {it.awb ?? "belum ada resi"}</p>
                 </div>
-                <p className="text-base text-muted-foreground">{it.recipient ?? "—"}{it.area ? ` · ${it.area}` : ""} · dibuat {when(it.createdAt)}</p>
+                <p className="text-base md:text-sm text-muted-foreground">{it.recipient ?? "—"}{it.area ? ` · ${it.area}` : ""} · dibuat {when(it.createdAt)}</p>
                 <ol className="mt-3 flex flex-col gap-2 border-l-2 pl-4">
                   {(it.history ?? []).slice().reverse().map((h, j) => (
-                    <li key={`h${j}`} className="text-base"><span className="tabular-nums text-muted-foreground">{h.date}</span> · {h.status ?? h.category}</li>
+                    <li key={`h${j}`} className="text-base md:text-sm"><span className="tabular-nums text-muted-foreground">{h.date}</span> · {h.status ?? h.category}</li>
                   ))}
-                  {!it.history?.length && it.events.length === 0 ? <li className="text-base text-muted-foreground">Belum ada riwayat perjalanan.</li> : null}
-                  {!it.history?.length ? it.events.map((e, j) => <li key={`e${j}`} className="text-base"><span className="tabular-nums text-muted-foreground">{when(e.event_at)}</span> · {statusLabel(e.mapped_status)}</li>) : null}
+                  {!it.history?.length && it.events.length === 0 ? <li className="text-base md:text-sm text-muted-foreground">Belum ada riwayat perjalanan.</li> : null}
+                  {!it.history?.length ? it.events.map((e, j) => <li key={`e${j}`} className="text-base md:text-sm"><span className="tabular-nums text-muted-foreground">{when(e.event_at)}</span> · {statusLabel(e.mapped_status)}</li>) : null}
                 </ol>
               </Panel>
             ))}

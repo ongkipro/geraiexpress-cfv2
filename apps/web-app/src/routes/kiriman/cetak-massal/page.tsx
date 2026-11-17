@@ -89,9 +89,9 @@ export function CetakMassalPage() {
           <Input id="alasan-massal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
         </Field>
       ) : null}
-      {msg ? <p role="status" className={`mt-4 border-l-4 py-1 pl-3 text-base font-medium ${msg.tone === "safe" ? "border-safe text-safe" : "border-danger text-danger"}`}>{msg.text}</p> : null}
+      {msg ? <p role="status" className={`mt-4 border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "safe" ? "border-safe text-safe" : "border-danger text-danger"}`}>{msg.text}</p> : null}
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-3 border-t bg-card p-3 md:static md:mt-4 md:border-0 md:bg-transparent md:p-0">
-        <span className="text-base tabular-nums">{sel.size} / {MAX} dipilih</span>
+        <span className="text-base md:text-sm tabular-nums">{sel.size} / {MAX} dipilih</span>
         <Button size="lg" onClick={go} disabled={pending || sel.size === 0 || (anyReprint && reason.trim().length < 3)}>{pending ? "Menyiapkan…" : `Cetak (${sel.size})`}</Button>
       </div>
     </div>

@@ -1,8 +1,9 @@
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "../ui/chart"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "../ui/chart"
 
-// Shared bar chart (DEC-236, shadcn Chart on Recharts): solid fills from `--chart-*` tokens (no gradients), 14px+ axis
-// text, tabular tooltip, and a visually hidden data table so the numbers are readable without the graphic.
+// Shared bar chart (DEC-236, DEC-239 — AdsBookCMS `DashboardRevenueChart`): solid fills from `--chart-*` tokens (no
+// gradients), bars capped at 28px so a sparse range still reads as designed, dashed hairline grid, 12px slate ticks, a
+// legend row of dots, and a visually hidden data table so the numbers are readable without the graphic.
 export interface BarSeries {
   key: string
   label: string
@@ -37,14 +38,23 @@ export function AdminBarChart<T extends Record<string, string | number>>({
     return typeof x === "string" || typeof x === "number" ? xLabel(x) : ""
   }
   return (
-    <figure className="flex min-w-0 flex-col">
+    <figure className="flex min-w-0 flex-col gap-3">
+      {series.length > 1 ? (
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-hidden>
+          {series.map((s) => (
+            <li key={s.key} className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full" style={{ background: s.color }} />
+              {s.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <ChartContainer config={config} className="aspect-auto w-full" style={{ height }} role="img" aria-label={caption}>
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer>
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey={xKey as string} tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} tickFormatter={xLabel} fontSize={14} />
-          <YAxis tickLine={false} axisLine={false} width={40} allowDecimals={false} fontSize={14} tickFormatter={(v: number) => nf.format(v)} />
-          <ChartTooltip cursor={{ fillOpacity: 0.4 }} content={<ChartTooltipContent labelFormatter={(_, payload) => tooltipLabel(payload)} />} />
-          {series.length > 1 ? <ChartLegend content={<ChartLegendContent />} /> : null}
+        <BarChart data={data} margin={{ top: 8, right: 4, left: -12, bottom: 0 }} accessibilityLayer>
+          <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
+          <XAxis dataKey={xKey as string} tickLine={false} axisLine={false} tickMargin={8} minTickGap={16} tickFormatter={xLabel} tick={{ fontSize: 12, fill: "#64748b" }} />
+          <YAxis tickLine={false} axisLine={false} width={40} allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b" }} tickFormatter={(v: number) => nf.format(v)} />
+          <ChartTooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={<ChartTooltipContent labelFormatter={(_, payload) => tooltipLabel(payload)} />} />
           {series.map((s, i) => (
             <Bar
               key={s.key}
@@ -52,6 +62,7 @@ export function AdminBarChart<T extends Record<string, string | number>>({
               stackId={stacked ? "a" : undefined}
               fill={`var(--color-${s.key})`}
               radius={stacked ? (i === series.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]) : [4, 4, 0, 0]}
+              maxBarSize={28}
               isAnimationActive={false}
             />
           ))}
