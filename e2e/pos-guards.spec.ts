@@ -24,7 +24,7 @@ async function quoteJt(page: Page, cod = false) {
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   if (cod) await page.getByLabel("Harga barang (COD)").fill("150000")
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
 }
 async function parties(page: Page) {
@@ -45,7 +45,7 @@ test("an answer to a superseded quote never restores the selection (R2-A)", asyn
     await held
     await route.continue()
   })
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("button", { name: "2 kg" }).click()
   release()
   await page.waitForTimeout(1500)

@@ -20,7 +20,7 @@ test("Checkout: kasir → INV → lunas tunai → resi terbit (< 45 s)", async (
   await page.goto(`${APP}/kasir`)
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
@@ -60,7 +60,7 @@ test("Checkout COD: pengirim baru diverifikasi di layar kasir → resi terbit", 
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByLabel("Harga barang (COD)").fill("150000")
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
 
   await page.getByRole("button", { name: "Pengirim baru" }).click()

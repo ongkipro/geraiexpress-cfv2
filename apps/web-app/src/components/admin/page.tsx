@@ -1,6 +1,6 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { AlertCircleIcon, ArrowDownRightIcon, ArrowUpRightIcon, MinusIcon } from "lucide-react"
+import { AlertCircleIcon, ArrowDownRightIcon, ArrowUpRightIcon, CheckIcon, CopyIcon, MinusIcon } from "lucide-react"
 import { cn } from "cn"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert"
 import { Badge } from "../ui/badge"
@@ -10,6 +10,8 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group"
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty"
 import { Skeleton } from "../ui/skeleton"
+import { linkTo } from "./shell"
+import { Switch } from "../ui/switch"
 
 // Shared admin kit (DEC-236, DEC-239): one page vocabulary for Gerai Admin (`app.`) and Super Admin (`owner.`), built
 // only on the copied base-nova primitives and the desk size contract (`design/admin-contract.json`: 14px body, 12px
@@ -92,7 +94,7 @@ export function MetricCard({ label, value, trend, footer, to, tone, icon: Icon }
     </Card>
   )
   return to ? (
-    <Link to={to} className="group/metric block rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+    <Link {...(linkTo(to) as { to: string })} className="group/metric block rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
       {body}
     </Link>
   ) : (
@@ -272,25 +274,32 @@ export function ChoiceGroup<V extends string>({
   value: V | null
   onValueChange: (v: V) => void
   choices: Array<Choice<V>>
-  layout?: "row" | "column" | "grid"
+  /** `segmented`: a compact pill switcher (2–3 short options); the radio dot is visually hidden, the pill shows state. */
+  layout?: "row" | "column" | "grid" | "segmented"
   className?: string
 }) {
+  const seg = layout === "segmented"
   return (
     <RadioGroup
       aria-label={label}
       value={value ?? ""}
       onValueChange={(v) => onValueChange(v as V)}
-      className={cn(layout === "row" ? "flex flex-wrap gap-2" : layout === "grid" ? "grid gap-2 sm:grid-cols-2" : "flex flex-col gap-2", className)}
+      className={cn(
+        layout === "row" ? "flex flex-wrap gap-2" : layout === "grid" ? "grid gap-2 sm:grid-cols-2" : seg ? "inline-flex w-auto gap-0.5 rounded-lg border border-slate-200 bg-slate-100/80 p-0.5" : "flex flex-col gap-2",
+        className,
+      )}
     >
       {choices.map((c) => (
         <label
           key={c.value}
           className={cn(
-            "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base md:text-sm transition-colors hover:bg-slate-50 has-data-checked:border-primary has-data-checked:bg-accent has-data-checked:text-accent-foreground has-data-disabled:cursor-not-allowed has-data-disabled:opacity-60 md:min-h-9 md:text-sm",
-            c.description && "items-start",
+            seg
+              ? "relative flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-medium whitespace-nowrap text-slate-600 transition-colors hover:text-slate-950 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-data-checked:bg-white has-data-checked:text-slate-950 has-data-checked:shadow-[0_1px_2px_rgba(15,23,42,0.08)] has-data-disabled:cursor-not-allowed has-data-disabled:opacity-60 md:min-h-8"
+              : "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base md:text-sm transition-colors hover:bg-slate-50 has-data-checked:border-primary has-data-checked:bg-accent has-data-checked:text-accent-foreground has-data-disabled:cursor-not-allowed has-data-disabled:opacity-60 md:min-h-9 md:text-sm",
+            !seg && c.description && "items-start",
           )}
         >
-          <RadioGroupItem value={c.value} disabled={c.disabled} className={c.description ? "mt-0.5" : undefined} />
+          <RadioGroupItem value={c.value} disabled={c.disabled} className={seg ? "absolute inset-0 size-auto rounded-md border-0 opacity-0" : c.description ? "mt-0.5" : undefined} />
           <span className="flex min-w-0 flex-col">
             <span className="font-medium">{c.label}</span>
             {c.description ? <span className="text-xs text-muted-foreground">{c.description}</span> : null}
@@ -298,6 +307,54 @@ export function ChoiceGroup<V extends string>({
         </label>
       ))}
     </RadioGroup>
+  )
+}
+
+/**
+ * Settings switch row (TokoPhi `ToggleRow`): title + one helper line on the left, Switch on the right. The whole row is
+ * the hit area (a `<label>`), while the switch is named by the title only and described by the helper line.
+ */
+export function ToggleRow({ id, title, description, checked, onCheckedChange, disabled, className, children }: { id: string; title: ReactNode; description?: ReactNode; checked: boolean; onCheckedChange: (v: boolean) => void; disabled?: boolean; className?: string; children?: ReactNode }) {
+  return (
+    <div className={cn("py-3 first:pt-0 last:pb-0", className)}>
+      <label className={cn("flex min-h-11 cursor-pointer items-center justify-between gap-4", disabled && "cursor-not-allowed")}>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span id={`${id}-t`} className={cn("text-sm font-medium text-slate-900", disabled && "text-muted-foreground")}>{title}</span>
+          {description ? <span id={`${id}-d`} className="text-xs text-muted-foreground">{description}</span> : null}
+        </span>
+        <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} aria-labelledby={`${id}-t`} aria-describedby={description ? `${id}-d` : undefined} />
+      </label>
+      {children}
+    </div>
+  )
+}
+
+/** Read-only value with a copy action (URLs, endpoints): mono text in a muted well + an outline `Salin` button. */
+export function CopyField({ label, value, action, copyLabel = "Salin" }: { label: string; value: string; action?: ReactNode; copyLabel?: string }) {
+  const [copied, setCopied] = useState(false)
+  const id = `cf-${label.replace(/\W+/g, "-").toLowerCase()}`
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span id={id} className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <code aria-labelledby={id} className="flex min-h-9 min-w-0 flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-xs break-all text-slate-800">{value}</code>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard?.writeText(value).catch(() => undefined)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}
+          >
+            {copied ? <CheckIcon aria-hidden /> : <CopyIcon aria-hidden />}
+            {copied ? "Tersalin" : copyLabel}
+          </Button>
+          {action}
+        </div>
+      </div>
+    </div>
   )
 }
 

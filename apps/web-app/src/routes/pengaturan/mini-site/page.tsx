@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { CopyIcon, ExternalLinkIcon } from "lucide-react"
-import { Badge } from "../../../components/ui/badge"
+import { CopyIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table"
+import { AnchorButton } from "../../../components/admin/link-button"
 import { Button } from "../../../components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SettingsLayout } from "../index/shared"
-import { ChoiceGroup } from "../../../components/admin/page"
+import { CalloutAlert, ChoiceGroup, CopyField, SectionCard, StatusBadge, type StatusTone } from "../../../components/admin/page"
 
 // Pengaturan › Mini-Site (visual 08 §2.3) with `Domain Sendiri` (spec 11 §5–6): DNS record to add, steps,
 // `Periksa Lagi`, and the remedy for the current state. Cloudflare work happens server-side; this page only shows it.
@@ -16,19 +17,19 @@ type Records = { ownership: { name: string; value: string } | null; ssl: Array<{
 type Domain = { hostname: string; role: "primary" | "redirect"; state: string; branch: string | null; sslMethod: "http" | "txt" | null; cfStatus: string | null; sslStatus: string | null; records: Records | null; remedy: { code: string; text: string } | null; lastCheckedAt: number | null; activatedAt: number | null }
 type View = { pro: boolean; platformHost: string; cnameTarget: string; primaryHost: string; domains: Domain[] }
 
-const STATE: Record<string, { label: string; tone: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending: { label: "Menunggu DNS", tone: "secondary" },
-  active: { label: "Aktif", tone: "default" },
-  failed: { label: "Gagal", tone: "destructive" },
-  moved: { label: "DNS berubah", tone: "destructive" },
-  suspended: { label: "Dibekukan", tone: "destructive" },
+const STATE: Record<string, { label: string }> = {
+  pending: { label: "Menunggu DNS" },
+  active: { label: "Aktif" },
+  failed: { label: "Gagal" },
+  moved: { label: "DNS berubah" },
+  suspended: { label: "Dibekukan" },
 }
 const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms) : "Belum")
 const label = (host: string, root: string) => (host === root ? "@" : host.endsWith(`.${root}`) ? host.slice(0, -root.length - 1) : host)
 
 function Copy({ text }: { text: string }) {
   return (
-    <Button type="button" variant="ghost" size="icon" aria-label={`Salin ${text}`} onClick={() => void navigator.clipboard?.writeText(text)}>
+    <Button type="button" variant="ghost" size="icon-sm" aria-label={`Salin ${text}`} onClick={() => void navigator.clipboard?.writeText(text)}>
       <CopyIcon aria-hidden />
     </Button>
   )
@@ -37,34 +38,37 @@ function Copy({ text }: { text: string }) {
 function DnsTable({ rows }: { rows: Array<{ type: string; name: string; value: string }> }) {
   return (
     <>
-    <dl className="flex flex-col divide-y text-base md:text-sm sm:hidden">
-      {rows.map((r) => (
-        <div key={`m${r.type}${r.name}`} className="flex flex-col gap-1 py-2">
-          <dt className="font-medium">{r.type}</dt>
-          <dd className="flex items-start gap-1"><span className="w-12 shrink-0 text-muted-foreground">Nama</span><code className="min-w-0 flex-1 break-all">{r.name}</code><Copy text={r.name} /></dd>
-          <dd className="flex items-start gap-1"><span className="w-12 shrink-0 text-muted-foreground">Isi</span><code className="min-w-0 flex-1 break-all">{r.value}</code><Copy text={r.value} /></dd>
-        </div>
-      ))}
-    </dl>
-    <table className="hidden w-full table-fixed border-collapse text-base md:text-sm sm:table">
-      <caption className="sr-only">Record DNS yang perlu ditambahkan</caption>
-      <thead>
-        <tr className="border-b text-left text-muted-foreground">
-          <th scope="col" className="w-20 py-2 pr-2 font-medium">Tipe</th>
-          <th scope="col" className="py-2 pr-2 font-medium">Nama</th>
-          <th scope="col" className="py-2 font-medium">Isi</th>
-        </tr>
-      </thead>
-      <tbody>
+      <dl className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm sm:hidden">
         {rows.map((r) => (
-          <tr key={`${r.type}${r.name}`} className="border-b align-top last:border-0">
-            <td className="py-2 pr-2 font-medium">{r.type}</td>
-            <td className="py-2 pr-2"><span className="flex items-start gap-1"><code className="min-w-0 break-all">{r.name}</code><Copy text={r.name} /></span></td>
-            <td className="py-2"><span className="flex items-start gap-1"><code className="min-w-0 break-all">{r.value}</code><Copy text={r.value} /></span></td>
-          </tr>
+          <div key={`m${r.type}${r.name}`} className="flex flex-col gap-1 px-3 py-2.5">
+            <dt><span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700">{r.type}</span></dt>
+            <dd className="flex items-center gap-1"><span className="w-10 shrink-0 text-xs text-muted-foreground">Nama</span><code className="min-w-0 flex-1 font-mono text-xs break-all">{r.name}</code><Copy text={r.name} /></dd>
+            <dd className="flex items-center gap-1"><span className="w-10 shrink-0 text-xs text-muted-foreground">Isi</span><code className="min-w-0 flex-1 font-mono text-xs break-all">{r.value}</code><Copy text={r.value} /></dd>
+          </div>
         ))}
-      </tbody>
-    </table>
+      </dl>
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 sm:block">
+        <Table className="table-fixed">
+          <caption className="sr-only">Record DNS yang perlu ditambahkan</caption>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-20">Tipe</TableHead>
+              <TableHead>Nama</TableHead>
+              <TableHead>Isi</TableHead>
+              <TableHead className="w-16 text-right"><span className="sr-only">Salin</span></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={`${r.type}${r.name}`} className="align-top hover:bg-transparent">
+                <TableCell><span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700">{r.type}</span></TableCell>
+                <TableCell className="whitespace-normal"><span className="flex items-start gap-1"><code className="min-w-0 flex-1 pt-1.5 font-mono text-xs break-all">{r.name}</code><Copy text={r.name} /></span></TableCell>
+                <TableCell className="whitespace-normal" colSpan={2}><span className="flex items-start gap-1"><code className="min-w-0 flex-1 pt-1.5 font-mono text-xs break-all">{r.value}</code><Copy text={r.value} /></span></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </>
   )
 }
@@ -83,13 +87,17 @@ export function MiniSitePage() {
       .catch((e) => setError(e instanceof ApiError ? e.body.message : "Data mini-site tidak dapat dimuat."))
   }, [])
   useEffect(load, [load])
-  async function act(path: string, body: unknown, ok: string) {
+  /** Returns the error message (null on success) so a dialog can show it in place (Sol R1 #1). */
+  async function act(path: string, body: unknown, ok: string, inline = false): Promise<string | null> {
     setPending(true)
     try {
       setV(await api<View>(path, { body }))
       setMsg({ tone: "safe", text: ok })
+      return null
     } catch (e) {
-      setMsg({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Permintaan gagal. Coba lagi." })
+      const text = e instanceof ApiError ? e.body.message : "Permintaan gagal. Coba lagi."
+      if (!inline) setMsg({ tone: "danger", text })
+      return text
     } finally {
       setPending(false)
     }
@@ -97,36 +105,28 @@ export function MiniSitePage() {
   if (error) return <SettingsLayout title="Mini-Site"><ErrorState message={error} onRetry={load} /></SettingsLayout>
   if (!v) return <SettingsLayout title="Mini-Site"><LoadingState label="Memuat mini-site" /></SettingsLayout>
   const primary = v.domains.find((d) => d.role === "primary") ?? v.domains[0] ?? null
+  const tone = (d: Domain): StatusTone => (d.state === "active" ? "safe" : d.state === "pending" ? "warn" : "danger")
   return (
     <SettingsLayout title="Mini-Site" description="Halaman cek ongkir, kirim dari rumah, dan lacak paket untuk pelanggan gerai Anda.">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base md:text-sm">Alamat mini-site</CardTitle>
-          <CardDescription className="text-base md:text-sm">Alamat ini dicetak di struk dan kode QR.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-base md:text-sm">
-          <p className="flex flex-wrap items-center gap-2">
-            <a href={`https://${v.primaryHost}`} target="_blank" rel="noreferrer" className="font-mono break-all text-primary underline-offset-4 hover:underline">{v.primaryHost}</a>
-            <ExternalLinkIcon aria-hidden className="size-4 text-muted-foreground" />
-          </p>
-          {v.primaryHost !== v.platformHost ? <p className="text-muted-foreground">Alamat bawaan <span className="font-mono">{v.platformHost}</span> tetap bisa dipakai.</p> : null}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base md:text-sm">Domain Sendiri</CardTitle>
-          <CardDescription className="text-base md:text-sm">Pakai domain toko Anda, misalnya kirim.tokoanda.id, untuk mini-site gerai.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {!v.pro ? (
-            <p className="text-base md:text-sm text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
-          ) : primary ? (
-            <DomainStatus v={v} pending={pending} onCheck={(method) => act("/custom-domain/check", method ? { method } : {}, method === "txt" ? "Verifikasi diganti ke TXT. Pasang record TXT di bawah." : "Pemeriksaan diulang.")} onRemove={(confirm) => act("/custom-domain/remove", { confirm }, "Domain dihapus. Mini-site kembali memakai alamat bawaan.")} />
-          ) : (
-            <AddDomain pending={pending} onAdd={(hostname, rootChoice) => act("/custom-domain", { hostname, rootChoice }, "Domain didaftarkan. Pasang record DNS di bawah.")} />
-          )}
-        </CardContent>
-      </Card>
+      <SectionCard title="Alamat mini-site" description="Alamat ini dicetak di struk dan kode QR.">
+        <div className="flex flex-col gap-2">
+          <CopyField label="Alamat aktif" value={`https://${v.primaryHost}`} action={<AnchorButton variant="outline" href={`https://${v.primaryHost}`} target="_blank" rel="noreferrer">Buka Mini-Site <ExternalLinkIcon aria-hidden /></AnchorButton>} />
+          {v.primaryHost !== v.platformHost ? <p className="text-xs text-muted-foreground">Alamat bawaan <span className="font-mono">{v.platformHost}</span> tetap bisa dipakai.</p> : null}
+        </div>
+      </SectionCard>
+      <SectionCard
+        title="Domain Sendiri"
+        description="Pakai domain toko Anda, misalnya kirim.tokoanda.id, untuk mini-site gerai."
+        action={!v.pro ? <StatusBadge tone="muted">Paket Pro</StatusBadge> : primary ? <StatusBadge tone={tone(primary)}>{STATE[primary.state]?.label ?? primary.state}</StatusBadge> : null}
+      >
+        {!v.pro ? (
+          <p className="text-sm text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
+        ) : primary ? (
+          <DomainStatus v={v} pending={pending} tone={tone} onCheck={(method) => act("/custom-domain/check", method ? { method } : {}, method === "txt" ? "Verifikasi diganti ke TXT. Pasang record TXT di bawah." : "Pemeriksaan diulang.")} onRemove={(confirm) => act("/custom-domain/remove", { confirm }, "Domain dihapus. Mini-site kembali memakai alamat bawaan.", true)} />
+        ) : (
+          <AddDomain pending={pending} onAdd={(hostname, rootChoice) => act("/custom-domain", { hostname, rootChoice }, "Domain didaftarkan. Pasang record DNS di bawah.")} />
+        )}
+      </SectionCard>
       <Notice msg={msg} />
     </SettingsLayout>
   )
@@ -164,8 +164,9 @@ function AddDomain({ pending, onAdd }: { pending: boolean; onAdd: (hostname: str
   )
 }
 
-function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boolean; onCheck: (method?: "txt" | "http") => void; onRemove: (confirm: string) => void }) {
+function DomainStatus({ v, pending, tone, onCheck, onRemove }: { v: View; pending: boolean; tone: (d: Domain) => StatusTone; onCheck: (method?: "txt" | "http") => void; onRemove: (confirm: string) => Promise<string | null> }) {
   const [confirming, setConfirming] = useState(false)
+  const [removeErr, setRemoveErr] = useState<string | null>(null)
   const [typed, setTyped] = useState("")
   const primary = v.domains.find((d) => d.role === "primary") ?? v.domains[0]!
   const root = primary.branch === "subdomain" ? primary.hostname.split(".").slice(1).join(".") : primary.hostname.replace(/^www\./, "")
@@ -181,27 +182,31 @@ function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boo
   const remedy = v.domains.map((d) => d.remedy).find(Boolean) ?? null
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200">
         {v.domains.map((d) => (
-          <li key={d.hostname} className="flex flex-wrap items-center gap-2 text-base md:text-sm">
-            <span className="break-all font-medium">{d.hostname}</span>
-            <Badge variant={STATE[d.state]?.tone ?? "secondary"}>{STATE[d.state]?.label ?? d.state}</Badge>
-            {d.role === "redirect" ? <span className="text-muted-foreground">diarahkan ke {primary.hostname}</span> : null}
+          <li key={d.hostname} className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm">
+            <GlobeIcon aria-hidden className="size-4 text-muted-foreground" />
+            <span className="font-medium break-all">{d.hostname}</span>
+            <StatusBadge tone={tone(d)}>{STATE[d.state]?.label ?? d.state}</StatusBadge>
+            {d.role === "redirect" ? <span className="text-xs text-muted-foreground">diarahkan ke {primary.hostname}</span> : null}
           </li>
         ))}
       </ul>
       {allActive ? (
-        <p className="text-base md:text-sm">Domain aktif sejak {when(primary.activatedAt)}. Struk dan kode QR baru memakai <span className="font-mono">{primary.hostname}</span>.</p>
+        <p className="text-sm">Domain aktif sejak {when(primary.activatedAt)}. Struk dan kode QR baru memakai <span className="font-mono">{primary.hostname}</span>.</p>
       ) : (
         <>
-          <ol className="flex list-decimal flex-col gap-1 pl-5 text-base md:text-sm">
-            <li>Buka pengelola DNS domain Anda (registrar atau Cloudflare).</li>
-            <li>Tambahkan record di bawah. Jangan ubah record MX atau email yang sudah ada.</li>
-            <li>Tunggu beberapa menit, lalu tekan Periksa Lagi. Kami juga memeriksa otomatis tiap 10 menit.</li>
+          <ol className="flex flex-col gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-sm">
+            {["Buka pengelola DNS domain Anda (registrar atau Cloudflare).", "Tambahkan record di bawah. Jangan ubah record MX atau email yang sudah ada.", "Tunggu beberapa menit, lalu tekan Periksa Lagi. Kami juga memeriksa otomatis tiap 10 menit."].map((t, i) => (
+              <li key={t} className="flex gap-2.5">
+                <span aria-hidden className="grid size-5 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{i + 1}</span>
+                <span>{t}</span>
+              </li>
+            ))}
           </ol>
           <DnsTable rows={dns} />
-          {remedy ? <p role="status" className="border-l-4 border-warn pl-3 text-base md:text-sm">{remedy.text}</p> : null}
-          <p className="text-base md:text-sm text-muted-foreground">Terakhir diperiksa: {when(primary.lastCheckedAt)}</p>
+          {remedy ? <div role="status"><CalloutAlert title="Perlu tindakan">{remedy.text}</CalloutAlert></div> : null}
+          <p className="text-xs text-muted-foreground">Terakhir diperiksa: {when(primary.lastCheckedAt)}</p>
         </>
       )}
       <div className="flex flex-wrap gap-2">
@@ -209,20 +214,24 @@ function DomainStatus({ v, pending, onCheck, onRemove }: { v: View; pending: boo
         {!allActive && primary.sslMethod !== "txt" && remedy?.code === "http_dcv_blocked" ? <Button type="button" variant="outline" onClick={() => onCheck("txt")} disabled={pending}>Ganti ke Verifikasi TXT</Button> : null}
         <Button type="button" variant="outline" onClick={() => setConfirming(true)} disabled={pending}>Hapus Domain</Button>
       </div>
-      {confirming ? (
-        <div role="alertdialog" aria-label="Hapus domain" className="flex flex-col gap-3 border-l-4 border-danger pl-3">
-          <p className="text-base md:text-sm font-medium text-danger">Hapus {primary.hostname}? Mini-site kembali ke {v.platformHost}; kode QR yang sudah dicetak dengan domain ini berhenti bekerja.</p>
+      <AlertDialog open={confirming} onOpenChange={(o) => { setConfirming(o); setRemoveErr(null); if (!o) setTyped("") }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus {primary.hostname}?</AlertDialogTitle>
+            <AlertDialogDescription>Mini-site kembali ke {v.platformHost}; kode QR yang sudah dicetak dengan domain ini berhenti bekerja.</AlertDialogDescription>
+          </AlertDialogHeader>
           <Field>
             <FieldLabel htmlFor="cd-confirm">Ketik {primary.hostname} untuk konfirmasi</FieldLabel>
             <Input id="cd-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoCapitalize="none" spellCheck={false} />
             {typed && typed !== primary.hostname ? <FieldError>Nama domain belum sama.</FieldError> : null}
           </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setConfirming(false)}>Batal</Button>
-            <Button type="button" variant="destructive" disabled={typed !== primary.hostname || pending} onClick={() => onRemove(typed)}>Ya, Hapus Domain</Button>
-          </div>
-        </div>
-      ) : null}
+          {removeErr ? <p role="alert" className="text-sm font-medium text-danger">{removeErr}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={typed !== primary.hostname || pending} onClick={async () => setRemoveErr(await onRemove(typed))}>Ya, Hapus Domain</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

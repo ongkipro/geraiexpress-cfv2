@@ -13,6 +13,7 @@ import { Badge } from "../../components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { rp } from "../kasir/quote-panel"
 import { LinkButton } from "../../components/admin/link-button"
+import { linkTo } from "../../components/admin/shell"
 
 // Dashboard (PR-18, DEC-213/221, visual 07 `/`, visual 02 §1): owner = period filter → 4 KPI (kiriman, tercatat
 // dibayar, belum dibayar, saldo Mengantar aman) + Estimasi Laba / Laba Kas apart → stacked Non-COD/COD chart →
@@ -41,6 +42,7 @@ interface OwnerData {
   actions: { unpaid: number; unpaidHold: number; stuck: number; failed: number; variance: number; readyForPickup: number }
 }
 interface CounterData {
+  /** Still served by the API; Shift Loket UI is deferred (DEC-241, TASK-704). */
   shift: { id: string; opened_at: number } | null
   today: { shipments: number; unpaid: number }
   actions: { unpaid: number; unpaidHold: number; failed: number; readyForPickup: number }
@@ -243,12 +245,11 @@ function PaymentBadge({ payment, method }: { payment: string; method: string | n
 /** `Perlu tindakan` (AdsBookCMS "Action needed"): one row per open queue with its count; a quiet line when none. */
 function Actions({ a }: { a: OwnerData["actions"] }) {
   const items = ([
-    { n: a.unpaid, label: "INV belum dibayar", to: "/kiriman", tone: "warn" },
-    { n: a.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman", tone: "danger" },
+    { n: a.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar", tone: "warn" },
+    { n: a.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo", tone: "danger" },
     { n: a.failed, label: "Gagal diterbitkan", to: "/kiriman", tone: "danger" },
     { n: a.stuck, label: "Tertahan > 48 jam", to: "/kiriman", tone: "warn" },
-    { n: a.variance, label: "Selisih kas shift (7 hari)", to: "/kasir/shift", tone: "danger" },
-    { n: a.readyForPickup, label: "Siap dijemput kurir", to: "/kiriman", tone: "warn" },
+    { n: a.readyForPickup, label: "Siap dijemput kurir", to: "/kiriman?tab=pickup", tone: "warn" },
   ] satisfies Array<{ n: number; label: string; to: string; tone: StatusTone }>).filter((x) => x.n > 0)
   return (
     <SectionCard id="tindakan" title="Perlu tindakan" description={items.length ? `${nf.format(items.length)} antrean terbuka` : "Semua antrean beres"}>
@@ -260,7 +261,7 @@ function Actions({ a }: { a: OwnerData["actions"] }) {
         <ul className="-mx-2 -my-1 flex flex-col">
           {items.map((x) => (
             <li key={x.label}>
-              <Link to={x.to} className="group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:min-h-10">
+              <Link {...(linkTo(x.to) as { to: string })} className="group flex min-h-11 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:min-h-10">
                 <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${x.tone === "danger" ? "bg-danger" : "bg-warn"}`} />
                 <span className="min-w-0 flex-1 truncate text-slate-700">{x.label}</span>
                 <span className={`text-base font-semibold tabular-nums ${x.tone === "danger" ? "text-danger" : "text-warn"}`}>{nf.format(x.n)}</span>
@@ -286,9 +287,9 @@ function CounterHome({ name }: { name: string }) {
   if (!data || data.kind !== "counter") return <LoadingState label="Memuat tugas loket" />
   const d = data.data
   const tasks: Array<{ n: number; label: string; to: string }> = [
-    { n: d.actions.unpaid, label: "INV belum dibayar", to: "/kiriman" },
-    { n: d.actions.readyForPickup, label: "Paket siap dijemput kurir", to: "/kiriman" },
-    { n: d.actions.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman" },
+    { n: d.actions.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar" },
+    { n: d.actions.readyForPickup, label: "Paket siap dijemput kurir", to: "/kiriman?tab=pickup" },
+    { n: d.actions.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo" },
     { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman" },
   ].filter((x) => x.n > 0)
   return (
@@ -298,9 +299,9 @@ function CounterHome({ name }: { name: string }) {
         <LinkButton variant="outline" to="/kasir/cek-resi">Cek Resi</LinkButton>
       </PageHeader>
       <MetricGrid cols={3}>
-        <MetricCard label="Shift Loket" value={d.shift ? "Sedang buka" : "Belum dibuka"} footer={<Link to="/kasir/shift" className="text-primary underline-offset-4 hover:underline">{d.shift ? "Lihat laci" : "Buka Shift"}</Link>} />
         <MetricCard label="Kiriman hari ini" value={`${nf.format(d.today.shipments)} paket`} footer="Semua INV yang dibuat hari ini (WIB)" />
         <MetricCard label="Belum dibayar hari ini" value={`${nf.format(d.today.unpaid)} INV`} footer="Tagih sebelum resi diserahkan" tone={d.today.unpaid ? "warn" : undefined} />
+        <MetricCard label="Siap dijemput kurir" value={`${nf.format(d.actions.readyForPickup)} paket`} footer="Serahkan lewat Pickup & Surat Jalan" to="/kiriman?tab=pickup" />
       </MetricGrid>
       <SectionCard id="tugas" title="Perlu dikerjakan">
         {tasks.length === 0 ? (
@@ -309,7 +310,7 @@ function CounterHome({ name }: { name: string }) {
           <ul className="flex flex-wrap gap-2">
             {tasks.map((x) => (
               <li key={x.label}>
-                <LinkButton variant="outline"  className="gap-2" to={x.to}>
+                <LinkButton variant="outline"  className="gap-2" {...(linkTo(x.to) as { to: string })}>
                   <span aria-hidden className="size-2 rounded-full bg-warn" />
                   <span className="font-semibold tabular-nums">{nf.format(x.n)}</span> {x.label}
                 </LinkButton>

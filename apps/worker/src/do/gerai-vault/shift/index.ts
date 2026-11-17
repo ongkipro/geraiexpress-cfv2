@@ -102,7 +102,9 @@ type PayoutReceipt = { id: string; amount_idr: number; method: string; shift_id:
 
 /**
  * Pays (part of) the sender's COD money (spec 03 §1.2). Eligible after the provider credit is reconciled, or by owner
- * override with a reason. `tunai` needs an open shift (cash leaves that drawer); `transfer` does not.
+ * override with a reason. A `tunai` payout counts in the actor's open shift when there is one (cash leaves that drawer);
+ * with Shift Loket deferred (DEC-241, TASK-704) it is recorded without a shift (`shift_id = NULL`). `transfer` never
+ * touches a drawer.
  */
 export function senderPayout(
   sql: SqlStorage,
@@ -133,7 +135,6 @@ export function senderPayout(
   }
   const method = p.method === "transfer" ? "transfer" : p.method === "tunai" ? "tunai" : null
   if (!method) return { ok: false, error: { status: 422, code: "INVALID_METHOD", message: "Pilih cara bayar: Tunai atau Transfer." } }
-  if (method === "tunai" && !p.shiftId) return { ok: false, error: { status: 409, code: "SHIFT_REQUIRED", message: "Pencairan tunai butuh shift loket yang terbuka." } }
   const amount = typeof p.amountIdr === "number" ? p.amountIdr : Number(p.amountIdr)
   const remaining = s.sender_cod_payable_idr - (s.sender_cod_paid_idr ?? 0)
   if (!Number.isSafeInteger(amount) || amount <= 0 || amount > remaining) return { ok: false, error: { status: 422, code: "INVALID_AMOUNT", message: `Nominal pencairan 1–${remaining.toLocaleString("id-ID")} rupiah.`, fields: { amountIdr: "Melebihi sisa hak COD." } } }
@@ -156,7 +157,7 @@ export function senderPayout(
   return { ok: true, value: sql.exec<PayoutReceipt>("SELECT id, amount_idr, method, shift_id, idempotency_key, shipment_slug, event, created_at FROM counter_receipts WHERE id = ?", id).one(), replayed: false, remaining: remaining - amount }
 }
 
-/** Owner-only reversal of one payout (reason required); `tunai` reversals need an open shift (cash back in the drawer). */
+/** Owner-only reversal of one payout (reason required); a `tunai` reversal lands in the open shift if any (DEC-241). */
 export function voidSenderPayout(
   sql: SqlStorage,
   tenantId: string,
@@ -174,7 +175,6 @@ export function voidSenderPayout(
     p.slug,
   ).toArray()[0]
   if (!r) return { ok: false, error: { status: 404, code: "PAYOUT_NOT_FOUND", message: "Pencairan tidak ditemukan atau sudah dibatalkan." } }
-  if (r.method === "tunai" && !p.shiftId) return { ok: false, error: { status: 409, code: "SHIFT_REQUIRED", message: "Pembatalan pencairan tunai butuh shift loket yang terbuka." } }
   const id = crypto.randomUUID()
   sql.exec(
     `INSERT INTO counter_receipts (id, tenant_id, shipment_slug, event, direction, amount_idr, method, shift_id, actor_user_id, reason, voids_receipt_id, idempotency_key, created_at)

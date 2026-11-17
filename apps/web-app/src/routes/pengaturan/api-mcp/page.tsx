@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { CopyIcon } from "lucide-react"
+import { CopyIcon, ExternalLinkIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
+import { AnchorButton } from "../../../components/admin/link-button"
+import { DataTableShell } from "../../../components/admin/data-table"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { rp } from "../../kasir/quote-panel"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SettingsLayout } from "../index/shared"
-import { CheckboxField } from "../../../components/admin/page"
+import { CheckboxField, CopyField, SectionCard } from "../../../components/admin/page"
 
 // Pengaturan › API & MCP (spec 08 §2, visual 08 §2.3): keys table, `Buat Kunci` (the token is shown once), revoke with
 // a confirm naming the key, links to the API reference and the MCP endpoint.
@@ -23,6 +25,25 @@ const SCOPE_LABEL: Record<string, string> = {
   "finance:read": "Lihat biaya, laba, dan saldo",
   "finance:sync": "Sinkronkan keuangan",
 }
+function ScopeList({ k }: { k: Key }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {k.scopes.map((s) => <span key={s} className="rounded-full border border-slate-200 bg-white px-2 py-px text-xs text-slate-700">{SCOPE_SHORT[s] ?? s}</span>)}
+      {k.daily_issue_cap_idr ? <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-px text-xs text-slate-700 tabular-nums">batas {rp(k.daily_issue_cap_idr)}/hari</span> : null}
+    </span>
+  )
+}
+const SCOPE_SHORT: Record<string, string> = { "rates:read": "Cek tarif", "shipments:draft": "Draf INV", "tracking:read": "Status kiriman", "contacts:read": "Lihat kontak", "contacts:write": "Ubah kontak", "shipments:issue": "Terbitkan resi", "finance:read": "Lihat keuangan", "finance:sync": "Sinkron keuangan" }
+const SCOPE_HINT: Record<string, string> = {
+  "rates:read": "Ongkir semua ekspedisi aktif.",
+  "shipments:draft": "Disarankan untuk toko online.",
+  "tracking:read": "Status & riwayat pelacakan.",
+  "contacts:read": "Daftar pengirim dan penerima.",
+  "contacts:write": "Tambah atau ubah kontak.",
+  "shipments:issue": "Memakai saldo Mengantar; wajib batas harian.",
+  "finance:read": "Biaya, laba, dan saldo.",
+  "finance:sync": "Tarik ulang data keuangan.",
+}
 const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms) : "Belum pernah")
 
 export function ApiMcpPage() {
@@ -30,7 +51,12 @@ export function ApiMcpPage() {
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null)
-  const [confirm, setConfirm] = useState<string | null>(null)
+  const [confirm, setConfirmState] = useState<string | null>(null)
+  const [revokeErr, setRevokeErr] = useState<string | null>(null)
+  const setConfirm = (id: string | null) => {
+    setRevokeErr(null)
+    setConfirmState(id)
+  }
   const load = useCallback(() => {
     api<{ items: Key[]; scopes: string[] }>("/api-keys")
       .then((x) => {
@@ -47,68 +73,74 @@ export function ApiMcpPage() {
       setConfirm(null)
       load()
     } catch (e) {
-      setMsg({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Gagal mencabut kunci." })
+      // Shown inside the still-open dialog (Sol R1 #1): the page notice would sit behind the modal.
+      setRevokeErr(e instanceof ApiError ? e.body.message : "Gagal mencabut kunci.")
     }
   }
   const origin = typeof window !== "undefined" ? window.location.origin : ""
   if (error) return <SettingsLayout title="API & MCP"><ErrorState message={error} onRetry={load} /></SettingsLayout>
   if (!d) return <SettingsLayout title="API & MCP"><LoadingState label="Memuat kunci API" /></SettingsLayout>
   const live = d.items.filter((k) => !k.revoked_at)
+  const confirmed = live.find((k) => k.id === confirm) ?? null
   return (
     <SettingsLayout title="API & MCP" description="Hubungkan toko online, bot WhatsApp, atau asisten AI ke gerai Anda.">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base md:text-sm">Alamat integrasi</CardTitle>
-          <CardDescription className="text-base md:text-sm">Berikan alamat ini bersama kunci API kepada pengembang integrasi.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-base md:text-sm">
-          <p>API: <span className="font-mono break-all">{origin}/api/v1</span> · <a href="/api/v1/docs" target="_blank" rel="noopener" className="text-primary underline-offset-4 hover:underline">Dokumentasi API</a></p>
-          <p>MCP: <span className="font-mono break-all">{origin}/mcp</span></p>
-        </CardContent>
-      </Card>
+      <SectionCard title="Alamat integrasi" description="Berikan alamat ini bersama kunci API kepada pengembang integrasi.">
+        <div className="flex flex-col gap-4">
+          <CopyField label="REST API (OpenAPI v1)" value={`${origin}/api/v1`} action={<AnchorButton variant="outline" href="/api/v1/docs" target="_blank" rel="noopener">Dokumentasi <ExternalLinkIcon aria-hidden /></AnchorButton>} />
+          <CopyField label="MCP Server" value={`${origin}/mcp`} />
+        </div>
+      </SectionCard>
       {created ? (
-        <Card className="border-primary">
-          <CardHeader>
-            <CardTitle className="text-base md:text-sm">Kunci {created.name} dibuat</CardTitle>
-            <CardDescription className="text-base md:text-sm">Salin sekarang. Kunci ini hanya ditampilkan sekali dan tidak bisa dilihat lagi.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <p className="font-mono text-base md:text-sm break-all" aria-label="Kunci API baru">{created.token}</p>
+        <SectionCard title={`Kunci ${created.name} dibuat`} description="Salin sekarang. Kunci ini hanya ditampilkan sekali dan tidak bisa dilihat lagi." className="border-primary/50">
+          <div className="flex flex-col gap-3">
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm break-all" aria-label="Kunci API baru">{created.token}</p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(created.token).then(() => setMsg({ tone: "safe", text: "Kunci disalin." }))}><CopyIcon aria-hidden /> Salin Kunci</Button>
               <Button variant="ghost" onClick={() => setCreated(null)}>Sudah Saya Simpan</Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       ) : null}
       <CreateKey scopes={d.scopes} onCreated={(x) => { setCreated(x); setMsg(null); load() }} />
-      <Card>
-        <CardHeader><CardTitle className="text-base md:text-sm">Kunci aktif ({live.length})</CardTitle></CardHeader>
-        <CardContent>
-          {live.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Belum ada kunci aktif.</p> : (
-            <ul className="divide-y">
-              {live.map((k) => (
-                <li key={k.id} className="flex flex-col gap-2 py-3 text-base md:text-sm">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span><span className="font-medium">{k.name}</span> <span className="font-mono text-muted-foreground">{k.token_prefix}…</span></span>
-                    <span className="text-muted-foreground">Terakhir dipakai: {when(k.last_used_at)}</span>
-                  </div>
-                  <p className="text-muted-foreground">{k.scopes.map((s) => SCOPE_LABEL[s] ?? s).join(" · ")}{k.daily_issue_cap_idr ? ` · batas harian ${rp(k.daily_issue_cap_idr)}` : ""}</p>
-                  {confirm === k.id ? (
-                    <div className="flex flex-wrap items-center gap-2" role="alertdialog" aria-label={`Cabut kunci ${k.name}`}>
-                      <span className="font-medium text-danger">Cabut kunci {k.name}? Integrasi yang memakainya langsung berhenti.</span>
-                      <Button variant="outline" onClick={() => setConfirm(null)}>Batal</Button>
-                      <Button variant="destructive" onClick={() => revoke(k)}>Ya, Cabut Kunci</Button>
-                    </div>
-                  ) : (
-                    <div><Button variant="outline" onClick={() => setConfirm(k.id)}>Cabut</Button></div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <SectionCard title="Kunci aktif" description={<span className="tabular-nums">{live.length} kunci</span>} flush>
+        {live.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground md:px-5">Belum ada kunci aktif.</p> : (
+          <DataTableShell
+            bare
+            caption="Kunci API aktif"
+            rows={live}
+            rowKey={(k) => k.id}
+            columns={[
+              { key: "nama", header: "Nama", cell: (k) => <span className="flex flex-col"><span className="font-medium">{k.name}</span><span className="font-mono text-xs text-muted-foreground">{k.token_prefix}…</span></span> },
+              { key: "izin", header: "Izin", cell: (k) => <ScopeList k={k} /> },
+              { key: "pakai", header: "Terakhir dipakai", cell: (k) => <span className="text-muted-foreground">{when(k.last_used_at)}</span>, wide: true },
+              { key: "aksi", header: <span className="sr-only">Aksi</span>, align: "right", cell: (k) => <Button variant="outline" size="sm" onClick={() => setConfirm(k.id)}>Cabut</Button> },
+            ]}
+            mobile={(k) => (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex flex-col"><span className="font-medium">{k.name}</span><span className="font-mono text-xs text-muted-foreground">{k.token_prefix}…</span></span>
+                  <Button variant="outline" size="sm" onClick={() => setConfirm(k.id)}>Cabut</Button>
+                </div>
+                <ScopeList k={k} />
+                <span className="text-xs text-muted-foreground">Terakhir dipakai: {when(k.last_used_at)}</span>
+              </div>
+            )}
+          />
+        )}
+      </SectionCard>
+      <AlertDialog open={!!confirmed} onOpenChange={(o) => !o && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cabut kunci {confirmed?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>Integrasi yang memakainya langsung berhenti.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {revokeErr ? <p role="alert" className="text-sm font-medium text-danger">{revokeErr}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => confirmed && revoke(confirmed)}>Ya, Cabut Kunci</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Notice msg={msg} />
     </SettingsLayout>
   )
@@ -136,18 +168,18 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
     }
   }
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-sm">Buat kunci baru</CardTitle></CardHeader>
-      <CardContent>
+    <SectionCard title="Buat kunci baru" description="Satu kunci per integrasi agar mudah dicabut.">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="key-name">Nama kunci</FieldLabel><Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Toko Shopify Nisa" />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
-          <fieldset className="flex flex-col gap-1">
-            <legend className="mb-1 text-base md:text-sm font-medium">Izin</legend>
-            {scopes.map((s) => (
-              <CheckboxField key={s} checked={picked.has(s)} onCheckedChange={(on) => setPicked((p) => { const n = new Set(p); if (on) n.add(s); else n.delete(s); return n })}>
-                {SCOPE_LABEL[s] ?? s}
-              </CheckboxField>
-            ))}
+          <Field className="sm:max-w-md" data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="key-name">Nama kunci</FieldLabel><Input id="key-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Toko Shopify Nisa" />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-medium">Izin</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {scopes.map((s) => (
+                <CheckboxField key={s} align="start" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:bg-slate-50 has-data-checked:border-primary has-data-checked:bg-accent/50 md:py-2.5" checked={picked.has(s)} onCheckedChange={(on) => setPicked((p) => { const n = new Set(p); if (on) n.add(s); else n.delete(s); return n })}>
+                  <span className="flex flex-col gap-0.5"><span className="font-medium">{SCOPE_LABEL[s] ?? s}</span>{SCOPE_HINT[s] ? <span className="text-xs text-muted-foreground">{SCOPE_HINT[s]}</span> : null}</span>
+                </CheckboxField>
+              ))}
+            </div>
             {fields.scopes ? <FieldError>{fields.scopes}</FieldError> : <FieldDescription>Pencatatan pembayaran di loket tidak pernah bisa lewat API.</FieldDescription>}
           </fieldset>
           {issue ? (
@@ -156,7 +188,6 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
           {fields.form && !Object.keys(fields).some((k) => k !== "form") ? <p role="alert" className="text-base md:text-sm text-danger">{fields.form}</p> : null}
           <div><Button type="submit" disabled={pending || !name.trim()}>Buat Kunci</Button></div>
         </form>
-      </CardContent>
-    </Card>
+    </SectionCard>
   )
 }

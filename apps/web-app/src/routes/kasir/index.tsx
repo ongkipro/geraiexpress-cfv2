@@ -329,8 +329,8 @@ export function KasirPage() {
       {claim ? (
         <p role="status" className="rounded-lg border border-primary/20 bg-accent px-3 py-2 text-sm text-slate-700">Kiriman dari rumah <span className="font-semibold tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
       ) : null}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] xl:gap-5">
-        <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid items-start gap-4 lg:-mb-8 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] xl:gap-5">
+        <div className="flex min-w-0 flex-col gap-4 lg:pb-8">
           <QuotePanel
             key={`${claim?.slug ?? "baru"}-${round}`}
             initial={initial}
@@ -376,7 +376,8 @@ export function KasirPage() {
           </Panel>
         </div>
 
-        <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+        {/* DEC-242: the summary stays put while the left steps scroll, and scrolls on its own when taller than a laptop screen. */}
+        <div data-pos-summary className="thin-scrollbar flex flex-col gap-4 lg:sticky lg:top-[5.25rem] lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
           <Panel className="flex flex-col gap-4 p-0 md:p-0" aria-labelledby="ringkasan-judul">
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5 md:px-5">
               <h2 id="ringkasan-judul" className="text-sm font-semibold text-slate-950 md:text-base">Ringkasan & Pembayaran</h2>

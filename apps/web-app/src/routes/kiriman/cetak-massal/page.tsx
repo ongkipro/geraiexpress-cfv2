@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -22,14 +22,18 @@ export function CetakMassalPage() {
   const [reason, setReason] = useState("")
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
+  // Only the latest request may paint: the first (Belum Cetak) list must not overwrite Sudah Cetak when it resolves late.
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ items: Row[] }>(`/print/list?status=${status}`)
       .then((d) => {
+        if (mine !== gen.current) return
         setError(null)
         setRows(d.items)
         setSel(new Set())
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Daftar tidak dapat dimuat."))
+      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar tidak dapat dimuat."))
   }, [status])
   useEffect(load, [load])
   const toggle = (slug: string) => setSel((s) => {

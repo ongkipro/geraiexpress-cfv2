@@ -19,7 +19,7 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await expect(page.getByText("Biaya layanan loket Rp 2.000")).toBeVisible()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   const list = page.getByRole("list", { name: "Daftar ekspedisi" })
   await expect(list.getByText("J&T Express")).toBeVisible()
   await expect(list.getByText("Rp 12.500")).toBeVisible()
@@ -29,7 +29,7 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await page.getByLabel("Packing (opsional)").click()
   await page.getByRole("option", { name: /Plastik/ }).click()
   await page.getByRole("checkbox", { name: /Biaya layanan loket/ }).uncheck()
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("listitem").filter({ hasText: "J&T Express" }).getByRole("button", { name: "Buat Kiriman dari Tarif Ini" }).click()
   await expect(page).toHaveURL(/\/kasir\?.*packing=Plastik/)
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
@@ -47,7 +47,7 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await page.getByRole("button", { name: "COD Barang" }).click()
   await expect(page.getByText("Biaya layanan loket Rp 2.000")).toHaveCount(0)
   await page.getByLabel("Harga barang (COD)").fill("150000")
-  await page.getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await expect(list.getByText("Rp 167.500").first()).toBeVisible()
 
   // DEC-237: the result prefills Kiriman Satuan (no INV until the POS primary); the chosen service stays selected.

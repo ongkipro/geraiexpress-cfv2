@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
@@ -32,13 +32,17 @@ export function Kendala() {
   const [d, setD] = useState<{ counts: Record<Bucket, number>; rows: Row[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
+  // Only the latest bucket request may paint (a slower earlier bucket must not overwrite the one now selected).
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ counts: Record<Bucket, number>; rows: Row[] }>(`/exceptions?bucket=${bucket}`)
       .then((x) => {
+        if (mine !== gen.current) return
         setError(null)
         setD(x)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat."))
+      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat."))
   }, [bucket])
   useEffect(load, [load])
   const act = async (fn: () => Promise<unknown>, ok: string) => {

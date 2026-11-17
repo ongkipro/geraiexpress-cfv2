@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { Badge } from "../../../components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { cn } from "cn"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { Switch } from "../../../components/ui/switch"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { api, ApiError } from "../../../lib/api"
-import { ChoiceGroup } from "../../../components/admin/page"
+import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
+import { SettingsLayout } from "../index/shared"
 import { toast } from "sonner"
 
 // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223, visual 08 §2): one full-row switch per courier that saves at once
@@ -25,6 +25,20 @@ const DISCOUNT_STATE: Record<string, string> = { belum_diterapkan: "belum ditera
 const pct = (bps: number) => `${(bps / 100).toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`
 
 const MODE_LABEL: Record<PickupMode, string> = { scheduled_pickup: "Dijemput kurir", drop_off_only: "Antar ke agen" }
+const MARK: Record<string, string> = { JNE: "JNE", SiCepat: "SCP", Sap: "SAP", iDexpress: "IDE", JT: "J&T", lion: "LION", anteraja: "ATR", pos: "POS", spx: "SPX", ninja: "NJV" }
+
+/**
+ * Service pill label (DEC-240): a courier can hold several regular services (J&T Express + J&T ECO, SAP Express + SAP
+ * Lite), so "Reguler" alone is ambiguous. The courier's own regular service is `Reguler`; any other regular service
+ * shows its catalog name without the courier prefix (`ECO`, `Lite`); cargo is `Cargo`.
+ */
+export function serviceLabel(r: Pick<CourierRow, "name" | "courierCode">, s: CourierRow["services"][number]): string {
+  if (s.serviceClass === "cargo") return "Cargo"
+  if (s.serviceCode === r.courierCode) return "Reguler"
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const short = s.name.replace(new RegExp(`^(${esc(r.name)}|${esc(r.name.split(" ")[0]!)})\\s*`, "i"), "").trim()
+  return short && !/^reguler$/i.test(short) ? short : "Reguler"
+}
 
 export function PengaturanEkspedisiPage() {
   const [rows, setRows] = useState<CourierRow[] | null>(null)
@@ -60,12 +74,7 @@ export function PengaturanEkspedisiPage() {
   const active = rows?.filter((r) => r.enabled).length ?? 0
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-[880px] flex-col gap-6 px-4 py-6 md:px-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">Ekspedisi Aktif</h1>
-        <p className="text-base md:text-sm text-muted-foreground">Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.</p>
-      </div>
-
+    <SettingsLayout title="Ekspedisi Aktif" description="Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.">
       {error ? <FormAlert>{error}</FormAlert> : null}
       {!rows && !error ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat ekspedisi">
@@ -76,50 +85,55 @@ export function PengaturanEkspedisiPage() {
       ) : null}
 
       {rows ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base md:text-sm">Daftar ekspedisi</CardTitle>
-            <CardDescription className="text-base md:text-sm tabular-nums">{active} dari {rows.length} aktif</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-border">
-              {rows.map((r) => {
-                const id = `kurir-${r.courierCode}`
-                return (
-                  <li key={r.courierCode} className="flex flex-col gap-3 px-4 py-3 md:px-6">
-                    <label htmlFor={id} className="flex min-h-11 cursor-pointer items-center justify-between gap-4">
-                      <span className="flex flex-col gap-1">
-                        <span className="text-base md:text-sm font-medium">{r.name}</span>
-                        <span className="flex flex-wrap gap-2">
-                          {r.services.map((s) => (
-                            <Badge key={s.serviceCode} variant="outline" className="h-7 px-2 text-sm font-normal">
-                              {s.serviceClass === "cargo" ? "Cargo" : "Reguler"}
-                              {s.cod ? " · COD" : ""}
-                              {s.discount ? <span className="tabular-nums">{` · diskon ${pct(s.discount.assignedBps)} (${DISCOUNT_STATE[s.discount.state]})`}</span> : null}
-                            </Badge>
-                          ))}
-                        </span>
+        <SectionCard title="Daftar ekspedisi" description={<span className="tabular-nums">{active} dari {rows.length} aktif</span>} flush>
+          <ul className="divide-y divide-slate-100">
+            {rows.map((r) => {
+              const id = `kurir-${r.courierCode}`
+              return (
+                <li key={r.courierCode} className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center md:px-5", !r.enabled && "bg-slate-50/60")}>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span aria-hidden className={cn("grid h-8 w-12 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", !r.enabled && "opacity-60")}>{MARK[r.courierCode] ?? r.courierCode.slice(0, 4).toUpperCase()}</span>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <span className={cn("text-sm font-semibold text-slate-950", !r.enabled && "text-muted-foreground")}>{r.name}</span>
+                      <span className="flex flex-wrap gap-1.5">
+                        {r.services.map((s) => (
+                          <span key={s.serviceCode} className="inline-block rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs leading-5 text-slate-700">
+                            <span className="font-medium">{serviceLabel(r, s)}</span>
+                            {s.cod ? <span className="text-muted-foreground"> · COD</span> : null}
+                            {s.discount ? <span className="text-muted-foreground tabular-nums"> · diskon {pct(s.discount.assignedBps)} ({DISCOUNT_STATE[s.discount.state]})</span> : null}
+                          </span>
+                        ))}
                       </span>
-                      <Switch id={id} checked={r.enabled} disabled={pending === r.courierCode} onCheckedChange={(v) => update(r, { enabled: v })} aria-label={`Aktifkan ${r.name}`} />
-                    </label>
+                      {r.note && r.enabled ? <span className="text-xs text-muted-foreground">{r.note}</span> : null}
+                    </div>
+                  </div>
+                  {/* Phones: switch on the title row, pickup choice full width below; ≥ 640 px: one row. */}
+                  <div className="order-last col-span-2 flex items-center sm:order-none sm:col-span-1 sm:justify-end">
                     {r.enabled && r.pickupOptions.length > 1 ? (
                       <ChoiceGroup
                         label={`Penjemputan ${r.name}`}
+                        layout="segmented"
+                        className="w-full sm:w-auto"
                         value={r.pickupMode}
                         onValueChange={(m) => r.pickupMode !== m && update(r, { pickupMode: m })}
                         choices={r.pickupOptions.map((m) => ({ value: m, label: MODE_LABEL[m], disabled: pending === r.courierCode }))}
                       />
-                    ) : r.enabled && !r.note ? (
-                      <p className="text-base md:text-sm text-muted-foreground">{MODE_LABEL[r.pickupMode]}</p>
-                    ) : null}
-                    {r.note && r.enabled ? <p className="text-base md:text-sm text-muted-foreground">{r.note}</p> : null}
-                  </li>
-                )
-              })}
-            </ul>
-          </CardContent>
-        </Card>
+                    ) : r.enabled ? (
+                      <span className="text-xs text-muted-foreground">{MODE_LABEL[r.pickupMode]}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Nonaktif</span>
+                    )}
+                  </div>
+                  {/* The label is the ≥ 44 px hit area around the 28 px switch (phones). */}
+                  <label htmlFor={id} className="-m-2 flex min-h-11 min-w-11 cursor-pointer items-center justify-center p-2 sm:pt-2">
+                    <Switch id={id} checked={r.enabled} disabled={pending === r.courierCode} onCheckedChange={(v) => update(r, { enabled: v })} aria-label={`Aktifkan ${r.name}`} />
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        </SectionCard>
       ) : null}
-    </main>
+    </SettingsLayout>
   )
 }

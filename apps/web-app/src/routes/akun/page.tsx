@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { Button } from "../../components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { MonitorSmartphoneIcon } from "lucide-react"
+import { SectionCard } from "../../components/admin/page"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
@@ -32,8 +33,8 @@ export function AkunPage() {
   if (error) return <div><PageTitle title="Akun Saya" /><ErrorState message={error} onRetry={load} /></div>
   if (!a) return <LoadingState label="Memuat akun" />
   return (
-    <div className="mx-auto flex w-full max-w-[720px] flex-col gap-6 pb-24 md:pb-0">
-      <PageTitle title="Akun Saya" description={a.profile.email} />
+    <div className="flex w-full max-w-4xl flex-col gap-4 pb-24 md:gap-5 md:pb-0">
+      <PageTitle title="Akun Saya" description={`Masuk sebagai ${a.profile.email}. Pengaturan ini milik Anda pribadi, bukan gerai.`} />
       <ProfileCard p={a.profile} onSaved={load} />
       <PasswordCard />
       <EmailCard current={a.profile.email} onChanged={load} />
@@ -63,17 +64,16 @@ function ProfileCard({ p, onSaved }: { p: Account["profile"]; onSaved: () => voi
     }
   }
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-sm">Profil</CardTitle></CardHeader>
-      <CardContent>
-        <form onSubmit={save} className="flex flex-col gap-4" noValidate>
+    <SectionCard title="Profil" description="Nama tampil di log aktivitas gerai.">
+      <form onSubmit={save} className="flex flex-col gap-4" noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="ak-name">Nama</FieldLabel><Input id="ak-name" value={name} onChange={(e) => setName(e.target.value)} />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
           <Field data-invalid={fields.phone ? true : undefined}><FieldLabel htmlFor="ak-phone">No HP</FieldLabel><Input id="ak-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />{fields.phone ? <FieldError>{fields.phone}</FieldError> : null}</Field>
-          {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-          <div><Button type="submit" disabled={!dirty}>Simpan</Button></div>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+        {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
+        <div className="flex justify-end"><Button type="submit" disabled={!dirty}>Simpan</Button></div>
+      </form>
+    </SectionCard>
   )
 }
 
@@ -97,17 +97,16 @@ function PasswordCard() {
     }
   }
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-sm">Ganti Kata Sandi</CardTitle></CardHeader>
-      <CardContent>
+    <SectionCard title="Ganti Kata Sandi" description="Perangkat lain akan dikeluarkan setelah kata sandi diganti.">
         <form onSubmit={save} className="flex flex-col gap-4" noValidate>
+          <div className="grid items-start gap-4 sm:grid-cols-2">
           <Field data-invalid={fields.current ? true : undefined}><FieldLabel htmlFor="pw-cur">Kata sandi saat ini</FieldLabel><Input id="pw-cur" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />{fields.current ? <FieldError>{fields.current}</FieldError> : null}</Field>
-          <Field data-invalid={fields.next ? true : undefined}><FieldLabel htmlFor="pw-new">Kata sandi baru</FieldLabel><Input id="pw-new" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />{fields.next ? <FieldError>{fields.next}</FieldError> : <FieldDescription>Minimal 8 karakter. Perangkat lain akan dikeluarkan.</FieldDescription>}</Field>
+          <Field data-invalid={fields.next ? true : undefined}><FieldLabel htmlFor="pw-new">Kata sandi baru</FieldLabel><Input id="pw-new" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />{fields.next ? <FieldError>{fields.next}</FieldError> : <FieldDescription>Minimal 8 karakter.</FieldDescription>}</Field>
+          </div>
           {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-          <div><Button type="submit" disabled={!current || !next}>Ganti Kata Sandi</Button></div>
+          <div className="flex justify-end"><Button type="submit" disabled={!current || !next}>Ganti Kata Sandi</Button></div>
         </form>
-      </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -150,28 +149,24 @@ function EmailCard({ current, onChanged }: { current: string; onChanged: () => v
     }
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base md:text-sm">Ganti Email</CardTitle>
-        <CardDescription className="text-base md:text-sm">Email sekarang: {current}. Kode verifikasi dikirim ke email baru.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SectionCard title="Ganti Email" description={<>Email sekarang: <span className="font-medium text-slate-700">{current}</span>. Kode verifikasi dikirim ke email baru.</>}>
         {otpId ? (
           <form onSubmit={confirm} className="flex flex-col gap-4" noValidate>
             <Field data-invalid={fields.code ? true : undefined}><FieldLabel htmlFor="em-code">Kode dari email baru</FieldLabel><Input id="em-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="w-40 tabular-nums" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />{fields.code ? <FieldError>{fields.code}</FieldError> : null}</Field>
             {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-            <div className="flex gap-2"><Button type="submit" disabled={code.length !== 6}>Konfirmasi</Button><Button variant="ghost" type="button" onClick={() => setOtpId(null)}>Batal</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="ghost" type="button" onClick={() => setOtpId(null)}>Batal</Button><Button type="submit" disabled={code.length !== 6}>Konfirmasi</Button></div>
           </form>
         ) : (
           <form onSubmit={request} className="flex flex-col gap-4" noValidate>
+            <div className="grid items-start gap-4 sm:grid-cols-2">
             <Field data-invalid={fields.email ? true : undefined}><FieldLabel htmlFor="em-new">Email baru</FieldLabel><Input id="em-new" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />{fields.email ? <FieldError>{fields.email}</FieldError> : null}</Field>
             <Field data-invalid={fields.password ? true : undefined}><FieldLabel htmlFor="em-pw">Kata sandi saat ini</FieldLabel><Input id="em-pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />{fields.password ? <FieldError>{fields.password}</FieldError> : null}</Field>
+            </div>
             {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-            <div><Button type="submit" disabled={!email || !password}>Kirim Kode</Button></div>
+            <div className="flex justify-end"><Button type="submit" disabled={!email || !password}>Kirim Kode</Button></div>
           </form>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   )
 }
 
@@ -188,30 +183,33 @@ function SessionsCard({ sessions, onChanged }: { sessions: Session[]; onChanged:
   }
   const others = sessions.filter((s) => !s.current)
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-sm">Perangkat yang masuk</CardTitle></CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <ul className="divide-y">
-          {sessions.map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-base md:text-sm">
-              <span><span className="font-medium">{s.device}</span>{s.current ? " · perangkat ini" : ""}<span className="block text-muted-foreground">Terakhir aktif {when(s.lastSeenAt)}</span></span>
-              {s.current ? null : <Button variant="outline" onClick={() => revoke({ id: s.id })}>Keluarkan</Button>}
-            </li>
-          ))}
-        </ul>
-        {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-        {others.length ? <div><Button variant="outline" onClick={() => revoke({ all: true })}>Keluar dari Semua Perangkat Lain</Button></div> : null}
-      </CardContent>
-    </Card>
+    <SectionCard
+      title="Perangkat yang masuk"
+      description={<span className="tabular-nums">{sessions.length} perangkat</span>}
+      action={others.length ? <Button variant="outline" size="sm" onClick={() => revoke({ all: true })}>Keluar dari Semua Perangkat Lain</Button> : null}
+      flush
+    >
+      <ul className="divide-y divide-slate-100">
+        {sessions.map((s) => (
+          <li key={s.id} className="flex items-center gap-3 px-4 py-3 md:px-5">
+            <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600"><MonitorSmartphoneIcon className="size-4" /></span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex flex-wrap items-center gap-2 text-sm font-medium">{s.device}{s.current ? <span className="text-xs font-medium text-safe">· perangkat ini</span> : null}</span>
+              <span className="text-xs text-muted-foreground">Terakhir aktif {when(s.lastSeenAt)}</span>
+            </span>
+            {s.current ? null : <Button variant="outline" size="sm" onClick={() => revoke({ id: s.id })}>Keluarkan</Button>}
+          </li>
+        ))}
+      </ul>
+      {msg ? <div className="border-t border-slate-100 px-4 py-3 md:px-5"><FormAlert tone={msg.tone}>{msg.text}</FormAlert></div> : null}
+    </SectionCard>
   )
 }
 
 function TextSizeCard() {
   const [size, setSize] = useState<TextSize>(storedTextSize)
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base md:text-sm">Ukuran teks</CardTitle><CardDescription className="text-base md:text-sm">Berlaku di perangkat ini.</CardDescription></CardHeader>
-      <CardContent>
+    <SectionCard title="Ukuran teks" description="Berlaku di perangkat ini.">
         <ToggleGroup value={[size]} onValueChange={(v) => {
           const s = (v[0] as TextSize) ?? size
           setSize(s)
@@ -219,7 +217,6 @@ function TextSizeCard() {
         }} variant="outline" aria-label="Ukuran teks" className="flex-wrap">
           {TEXT_SIZES.map((t) => <ToggleGroupItem key={t.id} value={t.id}>{t.label}</ToggleGroupItem>)}
         </ToggleGroup>
-      </CardContent>
-    </Card>
+    </SectionCard>
   )
 }

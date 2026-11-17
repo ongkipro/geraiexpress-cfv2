@@ -815,3 +815,31 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   courier rules truncated, COD fee line dropped, 38 px phone account trigger, stale sidebar counter status (P2). All
   fixed (`e2e/admin-shell.spec.ts`, mutations M15–M18; muted text on `--muted-foreground`; dropdown triggers in the
   phone target check). R2 APPROVE. Integrated run `DEC-239` PASS 9/9; UI gates 0 fail on 43 routes.
+
+## 2026-11-17 — DEC-240 settings precision + DEC-241 menu taxonomy + DEC-242 sticky rail
+
+- Settings frame (`routes/pengaturan/index/shared.tsx`): `/pengaturan` redirects to the first section on ≥ 1024 px;
+  phone directory with icon tiles and subtitles; framed `Card` rail + gerai summary card; flush-left `max-w-4xl`
+  column; phone `← Semua Pengaturan`. Kit: `ToggleRow`, `CopyField`, `ChoiceGroup layout="segmented"`, `linkTo()` for
+  query targets in the shell (tree, breadcrumb, ⌘K, MetricCard).
+- Pages rebuilt on `SectionCard`: Profil (2-col, Kecamatan + Kode pos 2fr/1fr), Data Usaha (entity grid, Legalitas
+  with masked NPWP badge), Ekspedisi (courier mark, `serviceLabel` → `Reguler`/`ECO`/`Lite`/`Cargo`, segmented pickup),
+  Printer (2×2 formats, 39/50 counter, ToggleRow), Label & Privasi (ToggleRows, nested preset list, 2×2 default),
+  Packing (table + phone cards), Anggota (avatar rows, inline invite, AlertDialog revoke), Mengantar (status strip,
+  steps, CopyField, CardFooter), API & MCP (endpoint CopyFields, 2-col scope cards, keys `DataTableShell`,
+  AlertDialog revoke), Mini-Site (URL bar, DNS `Table`, Alert, AlertDialog remove); `/akun` and `/bantuan` aligned.
+- Taxonomy (`shell/app-shell.tsx`, `web-owner/shell/console-shell.tsx`): `sectionOf` + query-aware `activeChild`;
+  Kiriman list keeps 4 status tabs, `?tab=pickup|retur|kendala` render workstations with their own `h1`; Keuangan tabs
+  = sub-tree; Super Admin sub-trees. Shift Loket removed from menu, ⌘K, status card, Kasir tile, variance row and
+  Keuangan tab; `senderPayout`/`voidSenderPayout` no longer refuse `tunai` without a shift (worker test + mutation M19).
+- DEC-242 (TASK-705): settings rail `aside` and `/kasir` summary sticky at 84 px, `max-h: calc(100dvh − 6.5rem)`,
+  `overflow-y-auto overscroll-y-contain thin-scrollbar` (new `@utility thin-scrollbar` in `styles/theme.css`). At page end
+  sticky pushed the rail 12 px up (its grid area ended above the main `pb-8`); fixed by letting the grid row reach over
+  that padding (grid `-mb-8`, content column `pb-8`), keeping the `6.5rem` bound. Proof:
+  `e2e/settings.spec.ts` rail test 8/8 repeats at 1280×720; mutations M25–M27 red.
+- Review: GPT-6.1 Sol R1 APPROVE with 2 P2 — destructive-action errors rendered behind the open AlertDialog; the
+  `/pengaturan` desktop redirect did not react to crossing 1024 px. Fixed (dialog-local `role="alert"` errors in API &
+  MCP, Anggota, Mini-Site; `useSyncExternalStore` media query) with `e2e/admin-shell.spec.ts` + mutations M28–M29.
+  R2 APPROVE. Integrated run `DEC-240` PASS 9/9; UI gates 0 fail on 45 routes (`docs/evidence/DEC-240/ui-gates.txt`).
+- Gate r2 failed e2e once: `/kiriman/cetak-massal` painted a late Belum Cetak response over Sudah Cetak (same stale-
+  response race as the Kiriman list); fixed with the request-generation guard. Integrated run `DEC-240` r3 PASS 9/9.

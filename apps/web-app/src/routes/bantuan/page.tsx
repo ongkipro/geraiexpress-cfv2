@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link } from "@tanstack/react-router"
-import { MessageCircleIcon, SearchIcon } from "lucide-react"
+import { BookOpenIcon, ChevronDownIcon, LifeBuoyIcon, MessageCircleIcon, SearchIcon } from "lucide-react"
 import { Field, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { api } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
-import { Panel } from "../../components/admin/page"
+import { Panel, SectionCard } from "../../components/admin/page"
+import { AnchorButton, LinkButton } from "../../components/admin/link-button"
 
 // `Bantuan & Panduan` (visual 07 `/bantuan`): searchable guides (first setup, printer on PC, custom domain, COD flow,
 // returns) and `Hubungi Bantuan` on WhatsApp (contact set by the platform; email as fallback).
@@ -14,7 +14,7 @@ const GUIDES: Guide[] = [
   {
     id: "mulai",
     title: "Persiapan pertama gerai",
-    steps: ["Lengkapi Profil Gerai: nama, WhatsApp, dan alamat jemput.", "Hubungkan akun Mengantar dan aktifkan webhook di Pengaturan › Mengantar.", "Pilih ekspedisi yang dipakai di Pengaturan › Ekspedisi Aktif.", "Undang kasir di Pengaturan › Anggota.", "Buka Shift Loket sebelum menerima uang tunai."],
+    steps: ["Lengkapi Profil Gerai: nama, WhatsApp, dan alamat jemput.", "Hubungkan akun Mengantar dan aktifkan webhook di Pengaturan › Mengantar.", "Pilih ekspedisi yang dipakai di Pengaturan › Ekspedisi Aktif.", "Undang kasir di Pengaturan › Anggota."],
     link: { to: "/pengaturan/profil", label: "Buka Profil Gerai" },
   },
   {
@@ -51,34 +51,57 @@ export function BantuanPage() {
     return GUIDES.filter((g) => words.every((w) => `${g.title} ${g.steps.join(" ")}`.toLowerCase().includes(w)))
   }, [q])
   const contact = support?.whatsapp
-    ? <a href={`https://wa.me/${support.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-9 md:text-sm"><MessageCircleIcon aria-hidden className="size-4" /> Hubungi Bantuan</a>
-    : <a href={`mailto:${support?.email ?? "bantuan@geraiexpress.com"}`} className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground md:h-9 md:text-sm">Hubungi Bantuan</a>
+    ? <AnchorButton href={`https://wa.me/${support.whatsapp}`} target="_blank" rel="noopener noreferrer"><MessageCircleIcon aria-hidden /> Hubungi Bantuan</AnchorButton>
+    : <AnchorButton href={`mailto:${support?.email ?? "bantuan@geraiexpress.com"}`}><MessageCircleIcon aria-hidden /> Hubungi Bantuan</AnchorButton>
   return (
-    <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 pb-24 md:gap-5 md:pb-0">
+    <div className="flex w-full max-w-4xl flex-col gap-4 pb-24 md:gap-5 md:pb-0">
       <PageTitle title="Bantuan & Panduan" description="Panduan singkat untuk pekerjaan sehari-hari di loket." />
-      <Field>
-        <FieldLabel htmlFor="cari-panduan">Cari panduan</FieldLabel>
-        <div className="relative">
-          <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input id="cari-panduan" type="search" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="printer, COD, retur…" />
-        </div>
-      </Field>
-      {list.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada panduan yang cocok. Coba kata lain atau hubungi bantuan.</p> : null}
-      <div className="flex flex-col gap-3">
-        {list.map((g) => (
-          <Panel as="details" key={g.id} open={q.length > 0}>
-            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold md:text-base">{g.title}</summary>
-            <ol className="mt-3 flex list-decimal flex-col gap-2 pl-6 text-base md:text-sm">
-              {g.steps.map((s) => <li key={s}>{s}</li>)}
-            </ol>
-            {g.link ? <Link to={g.link.to} className="mt-2 inline-flex min-h-11 items-center text-base font-medium text-primary underline-offset-4 hover:underline md:min-h-9 md:text-sm">{g.link.label}</Link> : null}
-          </Panel>
-        ))}
-      </div>
+      <Panel className="flex flex-col gap-2">
+        <Field>
+          <FieldLabel htmlFor="cari-panduan">Cari panduan</FieldLabel>
+          <div className="relative">
+            <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input id="cari-panduan" type="search" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="printer, COD, retur…" />
+          </div>
+        </Field>
+      </Panel>
+      <SectionCard title="Panduan" description={<span className="tabular-nums">{list.length} dari {GUIDES.length} panduan</span>} flush>
+        {list.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground md:px-5">Tidak ada panduan yang cocok. Coba kata lain atau hubungi bantuan.</p> : null}
+        <ul className="divide-y divide-slate-100">
+          {list.map((g) => (
+            <li key={g.id}>
+              <details open={q.length > 0} className="group px-4 md:px-5">
+                <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 py-2 [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600"><BookOpenIcon className="size-4" /></span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-semibold text-slate-950">{g.title}</span>
+                    <span className="text-xs text-muted-foreground">{g.steps.length} langkah</span>
+                  </span>
+                  <ChevronDownIcon aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="pb-4 pl-11">
+                  <ol className="flex flex-col gap-2 text-sm">
+                    {g.steps.map((s, i) => (
+                      <li key={s} className="flex gap-2.5">
+                        <span aria-hidden className="grid size-5 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">{i + 1}</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {g.link ? <LinkButton variant="outline" size="sm" className="mt-3" to={g.link.to}>{g.link.label}</LinkButton> : null}
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
       <Panel className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h2 className="text-sm font-semibold md:text-base">Masih butuh bantuan?</h2>
-          <p className="text-sm text-muted-foreground">Tim GeraiExpress siap membantu lewat WhatsApp atau email.</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600"><LifeBuoyIcon className="size-4" /></span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h2 className="text-sm font-semibold md:text-base">Masih butuh bantuan?</h2>
+            <p className="text-sm text-muted-foreground">Tim GeraiExpress siap membantu lewat WhatsApp atau email.</p>
+          </div>
         </div>
         {contact}
       </Panel>

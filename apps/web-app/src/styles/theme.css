@@ -114,3 +114,15 @@ html[data-text="sangat-besar"] { font-size: 125%; }
   body { @apply bg-background text-sm text-foreground; }
   .num { font-variant-numeric: tabular-nums; }
 }
+
+/* DEC-242: quiet scrollbar for independently scrolling rails (settings rail, POS summary). 5 px, transparent track,
+   thumb only visible while the pointer is over the rail (AdsBookCMS admin.css). Firefox uses scrollbar-width/color. */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  &:hover, &:focus-within { scrollbar-color: rgb(203 213 225 / 0.8) transparent; }
+  &::-webkit-scrollbar { width: 5px; height: 5px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
+  &:hover::-webkit-scrollbar-thumb { background: rgb(226 232 240 / 0.8); }
+}

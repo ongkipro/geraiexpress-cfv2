@@ -1,5 +1,5 @@
 import { statusLabel } from "../../../lib/status"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { DownloadIcon, PrinterIcon, SearchIcon } from "lucide-react"
 import { paramsOf, periodFromParams, resolvePreset, type Period } from "@gx/domain/period"
@@ -44,16 +44,19 @@ interface Row {
 type Tab = "semua" | "belum-dibayar" | "draf-qr" | "menunggu-saldo" | "pickup" | "kendala" | "retur"
 interface ListResp { items: Row[]; nextCursor: string | null; counts: Record<Tab, number> }
 
-const TABS: Array<{ id: Tab | "massal"; label: string }> = [
+// DEC-241: the list keeps only its four status filters; Pickup, Meja Retur and Kendala are workstations of their own
+// (sidebar sub-tree under Kiriman), still served on `?tab=` so links and bookmarks keep working.
+const TABS: Array<{ id: Tab; label: string }> = [
   { id: "semua", label: "Semua" },
   { id: "belum-dibayar", label: "Belum Dibayar" },
   { id: "draf-qr", label: "Draf QR" },
   { id: "menunggu-saldo", label: "Menunggu Saldo" },
-  { id: "pickup", label: "Pickup & Manifest" },
-  { id: "massal", label: "Riwayat Massal" },
-  { id: "kendala", label: "Kendala & Klaim" },
-  { id: "retur", label: "Meja Retur" },
 ]
+const STATION: Partial<Record<Tab, { title: string; description: string }>> = {
+  pickup: { title: "Pickup & Surat Jalan", description: "Kelompokkan paket per ekspedisi, cetak surat jalan, dan serahkan ke kurir." },
+  retur: { title: "Meja Retur", description: "Paket retur yang kembali ke gerai: terima, kirim kode ambil, lalu serahkan ke pengirim." },
+  kendala: { title: "Kendala & Klaim", description: "Paket hilang, rusak, atau tertahan — pantau batas waktu klaim per ekspedisi." },
+}
 const MODE: Record<string, string> = { none: "Non-COD", buyer_bears_fee: "COD", sender_bears_fee: "COD", cod_all_in: "COD", dfod: "COD Ongkir" }
 const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer: "Transfer", deposit: "Deposit" }
 const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
@@ -76,15 +79,20 @@ export function KirimanPage() {
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const qs = useMemo(() => new URLSearchParams({ tab, ...(search.q ? { q: search.q } : {}), ...(search.cetak ? { cetak: search.cetak } : {}), ...paramsOf(period) }).toString(), [tab, search.q, search.cetak, period])
+  // Only the latest request may paint: an earlier (e.g. unfiltered) response that resolves after a search must not
+  // overwrite the filtered list.
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<ListResp>(`/shipments?${qs}`)
       .then((d) => {
+        if (mine !== gen.current) return
         setError(null)
         setData(d)
         setMore([])
         setCursor(d.nextCursor)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Daftar kiriman tidak dapat dimuat."))
+      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar kiriman tidak dapat dimuat."))
   }, [qs])
   useEffect(load, [load])
   const go = (p: Partial<Search>) => void navigate({ to: "/kiriman", search: { ...search, ...p } as never })
@@ -104,6 +112,15 @@ export function KirimanPage() {
   const rows = [...(data?.items ?? []), ...more]
   const exportHref = `/api/app/shipments-export.csv?${qs}`
   const filtered = !!(search.q || search.cetak)
+  const station = STATION[tab]
+  if (station) {
+    return (
+      <div className="min-w-0">
+        <PageTitle title={station.title} description={station.description} />
+        {tab === "pickup" ? <PickupQueue /> : tab === "retur" ? <MejaRetur /> : <Kendala />}
+      </div>
+    )
+  }
   return (
     <div className="min-w-0">
       <PageTitle title="Kiriman">
@@ -115,17 +132,13 @@ export function KirimanPage() {
         <ul className="flex w-max gap-0.5 rounded-lg bg-slate-100/90 p-1">
           {TABS.map((t) => {
             const active = t.id === tab
-            const count = t.id === "massal" ? null : data?.counts[t.id]
+            const count = data?.counts[t.id]
             const cls = `flex h-11 items-center gap-1.5 rounded-md px-3 text-base whitespace-nowrap md:h-8 md:text-sm ${active ? "bg-white font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]" : "text-muted-foreground hover:text-slate-900"}`
             return (
               <li key={t.id}>
-                {t.id === "massal" ? (
-                  <Link to="/kiriman/massal" className={cls}>{t.label}</Link>
-                ) : (
-                  <Link to="/kiriman" search={{ ...search, tab: t.id === "semua" ? undefined : t.id } as never} aria-current={active ? "page" : undefined} className={cls}>
-                    {t.label}{count !== undefined && count !== null ? <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-slate-100 text-slate-600" : "text-muted-foreground"}`}>{count}</span> : null}
-                  </Link>
-                )}
+                <Link to="/kiriman" search={{ ...search, tab: t.id === "semua" ? undefined : t.id } as never} aria-current={active ? "page" : undefined} className={cls}>
+                  {t.label}{count !== undefined && count !== null ? <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-slate-100 text-slate-600" : "text-muted-foreground"}`}>{count}</span> : null}
+                </Link>
               </li>
             )
           })}
@@ -144,11 +157,8 @@ export function KirimanPage() {
           ))}
         </ToggleGroup>
       </div>
-      {tab === "pickup" ? <PickupQueue /> : null}
-      {tab === "retur" ? <MejaRetur /> : null}
-      {tab === "kendala" ? <Kendala /> : null}
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 text-base md:text-sm font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
-      {tab === "pickup" || tab === "retur" || tab === "kendala" ? null : error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
+      {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
         filtered ? (
           <EmptyState title="Tidak ada yang cocok" body="Tidak ada kiriman dengan pencarian atau filter ini." action={<Button variant="outline" onClick={() => { setQ(""); go({ q: undefined, cetak: undefined }) }}>Hapus Filter</Button>} />
         ) : (

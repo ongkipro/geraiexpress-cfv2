@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { forwardRef, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
+import { Link, useLinkProps, useNavigate } from "@tanstack/react-router"
 import { ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
 import { applyTextSize, storedTextSize, TEXT_SIZES, type TextSize } from "../../shell/workspace"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb"
@@ -56,6 +56,25 @@ export interface ShellNavItem {
   badge?: { content: ReactNode; label: string } | null
   children?: Array<{ to: string; label: string; active: boolean }>
 }
+
+/**
+ * Menu targets may carry a query (`/kiriman?tab=pickup`, DEC-241 sub-trees over tabbed pages). TanStack `Link`
+ * wants `{ to, search }`, so split once here; every shell link (tree, breadcrumb, ⌘K) goes through it.
+ */
+export function linkTo(target: string): { to: string; search?: Record<string, string> } {
+  const [to, qs] = target.split("?", 2)
+  return qs ? { to: to!, search: Object.fromEntries(new URLSearchParams(qs)) } : { to: to! }
+}
+
+/**
+ * Shell link: a router link whose `aria-current` is ours. TanStack `Link` marks `/kiriman` active on
+ * `/kiriman?tab=retur` (prefix path + subset search) and stamps `aria-current="page"` after every prop, which would
+ * announce two current pages in a sub-tree; the shell computes the current entry itself (query-aware, DEC-241).
+ */
+const NavLink = forwardRef<HTMLAnchorElement, Omit<ComponentProps<"a">, "href" | "target"> & { target: string }>(function NavLink({ target, "aria-current": current, ...rest }, ref) {
+  const props = useLinkProps({ ...(linkTo(target) as { to: string }), ...rest }, ref as ForwardedRef<Element>)
+  return <a {...props} aria-current={current} data-status={undefined} />
+})
 
 export interface ShellNavGroup {
   label: string
@@ -195,7 +214,7 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
       isActive={n.active}
       tooltip={n.label}
       className="relative data-active:bg-accent data-active:text-primary"
-      render={<Link to={n.to} aria-current={self ? "page" : undefined} onClick={close} />}
+      render={<NavLink target={n.to} aria-current={self ? "page" : undefined} onClick={close} />}
     >
       {n.active ? <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-1 rounded-r-full bg-primary group-data-[collapsible=icon]:hidden" /> : null}
       <n.icon aria-hidden />
@@ -224,7 +243,7 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
         <SidebarMenuSub className="mr-0 gap-0.5 border-slate-200/90 py-1">
           {n.children.map((c) => (
             <SidebarMenuSubItem key={c.to}>
-              <SidebarMenuSubButton isActive={c.active} className="data-active:bg-transparent data-active:font-medium data-active:text-primary" render={<Link to={c.to} aria-current={c.active ? "page" : undefined} onClick={close} />}>
+              <SidebarMenuSubButton isActive={c.active} className="data-active:bg-transparent data-active:font-medium data-active:text-primary" render={<NavLink target={c.to} aria-current={c.active ? "page" : undefined} onClick={close} />}>
                 <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", c.active ? "bg-primary" : "bg-slate-300")} />
                 <span>{c.label}</span>
               </SidebarMenuSubButton>
@@ -244,7 +263,7 @@ function SiteBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
       <BreadcrumbList className="flex-nowrap gap-1 text-sm sm:gap-1.5">
         {crumbs.slice(0, -1).map((c) => (
           <BreadcrumbItem key={c.label} className="hidden md:inline-flex">
-            {c.to ? <BreadcrumbLink className="text-muted-foreground hover:text-slate-900" render={<Link to={c.to} />}>{c.label}</BreadcrumbLink> : <span className="text-muted-foreground">{c.label}</span>}
+            {c.to ? <BreadcrumbLink className="text-muted-foreground hover:text-slate-900" render={<NavLink target={c.to} />}>{c.label}</BreadcrumbLink> : <span className="text-muted-foreground">{c.label}</span>}
             <BreadcrumbSeparator />
           </BreadcrumbItem>
         ))}
@@ -277,7 +296,7 @@ function CommandPalette({ open, onOpenChange, commands }: { open: boolean; onOpe
   const go = (c: ShellCommand | undefined) => {
     if (!c) return
     close(false)
-    void navigate({ to: c.to })
+    void navigate(linkTo(c.to) as { to: string })
   }
   // Keep the keyboard-active option visible inside the scrolling list (focus stays on the input).
   useEffect(() => {

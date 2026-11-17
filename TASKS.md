@@ -710,6 +710,15 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 
 - **TASK-701** Layar Pelanggan (PR-22, P1) · **TASK-702** Sender stamp card (PR-23, P2, counsel first) ·
   **TASK-703** Multi-outlet owner (PR-24, P2). Contracts written when prioritised.
+- **TASK-705** Pengaturan rail as a secondary sidebar (P1 polish, DEC-242) — **DONE 2026-11-17**. The settings rail and
+  the `/kasir` summary are sticky, viewport-bounded (`calc(100dvh − 6.5rem)`) and scroll independently with a thin
+  scrollbar. Done when: `e2e/settings.spec.ts` "rail tetap diam…" passes at 1280×720 (rail y constant while the form
+  scrolls; rail scrolls while the page stays) and mutations M25–M27 turn it red.
+- **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
+  dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
+  tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or
+  `Keuangan`), the status row, the Kasir home tile, the variance action and the `Kas & Shift` tab, and decide whether
+  `tunai` payouts require an open shift again.
 
 ### Coverage map
 
@@ -723,7 +732,7 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
 | **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production), 232; ADR-0006 §7 |
-| **Post-launch** | TASK-701..703 | PR-22 (P1), PR-23 (P2), PR-24 (P2) | — |
+| **Post-launch** | TASK-701..705 | PR-22 (P1), PR-23 (P2), PR-24 (P2), DEC-241 (P2), DEC-242 (P1, done) | — |
 
 Milestone notes carried forward:
 - **M3 additions (DEC-229):** Paket Massal Excel/CSV import + Riwayat Massal, Cek Resi, Cetak Resi Massal, Akun Saya;

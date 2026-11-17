@@ -1,5 +1,5 @@
 import { AreaPicker, type Area } from "../../../components/area-picker"
-import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card"
+import { SectionCard } from "../../../components/admin/page"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { ErrorState, LoadingState } from "../../../shell/states"
@@ -34,27 +34,27 @@ export function ProfilGeraiPage() {
   )
   return (
     <SettingsLayout title="Profil Gerai" description="Nama dan alamat ini dipakai untuk penjemputan kurir dan struk pelanggan.">
-      <Card>
-        <CardHeader><CardTitle className="text-base md:text-sm">Identitas</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-4">
+      <SectionCard title="Identitas gerai" description="Tampil di struk, label, dan mini-site.">
+        <div className="grid gap-4 sm:grid-cols-2">
           {field("name", "Nama gerai")}
           {field("whatsapp", "WhatsApp gerai", "Tampil di struk bila pelanggan perlu menghubungi gerai.", { inputMode: "tel" })}
           {field("openingHours", "Jam buka", "Contoh: Senin–Sabtu 08.00–21.00")}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle className="text-base md:text-sm">Alamat jemput</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <AreaPicker label="Kecamatan" value={f.area} onChange={(a) => set({ area: a, postalCode: a?.postalCode ?? f.postalCode })} error={s.fields.areaId} />
+        </div>
+      </SectionCard>
+      <SectionCard title="Alamat jemput" description="Alamat ini dipakai kurir saat menjemput paket di gerai.">
+        <div className="flex flex-col gap-4">
+          <div className="grid items-start gap-4 sm:grid-cols-[2fr_1fr]">
+            <AreaPicker label="Kecamatan" value={f.area} onChange={(a) => set({ area: a, postalCode: a?.postalCode ?? f.postalCode })} error={s.fields.areaId} />
+            {field("postalCode", "Kode pos", undefined, { inputMode: "numeric", className: "tabular-nums" })}
+          </div>
           {field("street", "Alamat lengkap")}
-          {field("postalCode", "Kode pos", undefined, { inputMode: "numeric", className: "w-32 tabular-nums" })}
           <div className="grid gap-4 sm:grid-cols-2">
             {field("latitude", "Latitude", "Contoh: -6.9456", { inputMode: "decimal", className: "tabular-nums" })}
             {field("longitude", "Longitude", "Contoh: 107.5703", { inputMode: "decimal", className: "tabular-nums" })}
           </div>
-          <p className="text-base md:text-sm text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
-        </CardContent>
-      </Card>
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
+        </div>
+      </SectionCard>
       <Notice msg={s.msg} />
       <SaveBar dirty={s.dirty} pending={s.pending} onCancel={s.cancel} onSave={s.save} />
     </SettingsLayout>

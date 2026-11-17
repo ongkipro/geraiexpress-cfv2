@@ -10,47 +10,119 @@ import { api } from "../lib/api"
 import { COUNTER_STATUS_EVENT, useWorkspace } from "./workspace"
 import { LinkButton } from "../components/admin/link-button"
 
-// Gerai workspace shell (visual 07 §1, DEC-213/225, DEC-236, DEC-239): the shared AdminShell — 6 menus in three groups
-// (Keuangan owner only), `+ Kiriman Baru` + `Scan QR` as the sidebar quick-action row, counter status at the sidebar
-// foot; topbar = breadcrumb, ⌘K, mini-site link, QR, notifications and the account chip. Phones keep the 5-item
-// counter bottom bar, whose `Lainnya` opens the same sidebar Sheet.
-const NAV = [
-  { key: "dashboard", to: "/", label: "Dashboard", icon: HomeIcon },
+// Gerai workspace shell (visual 07 §1, DEC-213/225, DEC-236, DEC-239, DEC-241): the shared AdminShell — menus in three
+// groups (Keuangan owner only), `+ Kiriman Baru` + `Scan QR` as the sidebar quick-action row, counter status at the
+// sidebar foot; topbar = breadcrumb, ⌘K, mini-site link, QR, notifications and the account chip. Phones keep the
+// 5-item counter bottom bar, whose `Lainnya` opens the same sidebar Sheet.
+//
+// DEC-241 taxonomy: a top-level menu is a job (create, check, operate, administer); its sub-tree lists the screens of
+// that job, including the specialist tabs of a page (`/kiriman?tab=pickup`). Pengaturan stays one entry — its ten
+// pages have their own left rail. `Shift Loket` is deferred to post-launch (TASK-704): no menu, command or status row.
+type NavChild = { to: string; label: string }
+type NavDef = { key: string; menu: string; to: string; label: string; icon: typeof HomeIcon; children?: NavChild[] }
+const NAV: NavDef[] = [
+  { key: "dashboard", menu: "dashboard", to: "/", label: "Dashboard", icon: HomeIcon },
   {
     key: "buat-pengiriman",
+    menu: "buat-pengiriman",
     to: "/kasir",
     label: "Buat Pengiriman",
     icon: PackageIcon,
-    // DEC-237: one job per screen; the order-creation tools are a sidebar tree, not a tab bar on /kasir.
     children: [
       { to: "/kasir", label: "Kiriman Satuan" },
-      { to: "/kasir/multi", label: "Paket Massal (CSV)" },
-      { to: "/kasir/cek-cepat", label: "Cek Ongkir Cepat" },
-      { to: "/kasir/cek-resi", label: "Cek Resi" },
-      { to: "/kasir/shift", label: "Shift Loket" },
+      { to: "/kasir/multi", label: "Paket Massal" },
     ],
   },
-  { key: "kiriman", to: "/kiriman", label: "Kiriman", icon: TruckIcon },
-  { key: "kontak", to: "/kontak/pengirim", label: "Kontak", icon: ContactIcon, children: [{ to: "/kontak/pengirim", label: "Pengirim" }, { to: "/kontak/penerima", label: "Penerima" }] },
-  { key: "keuangan", to: "/keuangan", label: "Keuangan", icon: WalletIcon },
-  { key: "pengaturan", to: "/pengaturan", label: "Pengaturan", icon: SettingsIcon },
-] as const
+  {
+    // Same audience as Buat Pengiriman (owner and Kasir), so it follows that menu key instead of a new server key.
+    key: "cek",
+    menu: "buat-pengiriman",
+    to: "/kasir/cek-cepat",
+    label: "Cek Ongkir & Resi",
+    icon: SearchIcon,
+    children: [
+      { to: "/kasir/cek-cepat", label: "Cek Ongkir" },
+      { to: "/kasir/cek-resi", label: "Cek Resi" },
+    ],
+  },
+  {
+    key: "kiriman",
+    menu: "kiriman",
+    to: "/kiriman",
+    label: "Kiriman",
+    icon: TruckIcon,
+    children: [
+      { to: "/kiriman", label: "Daftar Kiriman" },
+      { to: "/kiriman?tab=pickup", label: "Pickup & Surat Jalan" },
+      { to: "/kiriman/cetak-massal", label: "Cetak Resi Massal" },
+      { to: "/kiriman/massal", label: "Riwayat Massal" },
+      { to: "/kiriman?tab=retur", label: "Meja Retur" },
+      { to: "/kiriman?tab=kendala", label: "Kendala & Klaim" },
+    ],
+  },
+  { key: "kontak", menu: "kontak", to: "/kontak/pengirim", label: "Kontak", icon: ContactIcon, children: [{ to: "/kontak/pengirim", label: "Data Pengirim" }, { to: "/kontak/penerima", label: "Data Penerima" }] },
+  {
+    key: "keuangan",
+    menu: "keuangan",
+    to: "/keuangan",
+    label: "Keuangan",
+    icon: WalletIcon,
+    children: [
+      { to: "/keuangan", label: "Ringkasan & Saldo" },
+      { to: "/keuangan?tab=mutasi", label: "Mutasi Mengantar" },
+      { to: "/keuangan?tab=laba", label: "Laba per Kiriman" },
+      { to: "/keuangan?tab=cadangan", label: "Cadangan Retur" },
+      { to: "/keuangan?tab=selisih", label: "Selisih Sync" },
+    ],
+  },
+  { key: "pengaturan", menu: "pengaturan", to: "/pengaturan", label: "Pengaturan", icon: SettingsIcon },
+]
+
+/** Kiriman tabs that are views of the list (Daftar Kiriman); the other tabs are their own sub-tree entries. */
+const LIST_TABS = new Set(["semua", "belum-dibayar", "draf-qr", "menunggu-saldo"])
+
+/**
+ * Query-aware sub-tree matching (TokoPhi `activeChild`): a child with `?tab=x` is active only on that tab; a plain
+ * child is active on its path when no sibling claims the current tab. Detail pages fall back to their section.
+ */
+export function activeChild(children: NavChild[], path: string, tab: string | undefined): string | null {
+  const exact = children.find((c) => c.to.includes("?") && c.to === `${path}?tab=${tab}`)
+  if (exact) return exact.to
+  const plain = children.find((c) => !c.to.includes("?") && c.to === path)
+  if (plain && (path !== "/kiriman" || !tab || LIST_TABS.has(tab))) return plain.to
+  // The manifest screen of a pickup batch belongs to Pickup & Surat Jalan.
+  if (path.startsWith("/kiriman/pickup/")) return children.find((c) => c.to === "/kiriman?tab=pickup")?.to ?? null
+  const prefix = children.filter((c) => !c.to.includes("?") && c.to !== "/kasir" && path.startsWith(`${c.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]
+  return prefix?.to ?? null
+}
+
+/** Which top-level menu owns the path (`/kasir/cek-*` belongs to Cek Ongkir & Resi, not Buat Pengiriman). */
+export function sectionOf(path: string): string | null {
+  if (path === "/") return "dashboard"
+  if (/^\/kasir\/cek-(cepat|resi)/.test(path)) return "cek"
+  if (path.startsWith("/kasir")) return "buat-pengiriman"
+  if (path.startsWith("/kiriman")) return "kiriman"
+  if (path.startsWith("/kontak")) return "kontak"
+  if (path.startsWith("/keuangan")) return "keuangan"
+  if (path.startsWith("/pengaturan")) return "pengaturan"
+  return null
+}
 
 const SECTIONS: Array<[RegExp, Crumb[]]> = [
   [/^\/$/, [{ label: "Dashboard" }]],
-  [/^\/kasir\/multi/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Paket Massal (CSV)" }]],
-  [/^\/kasir\/cek-cepat/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Cek Ongkir Cepat" }]],
-  [/^\/kasir\/cek-resi/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Cek Resi" }]],
-  [/^\/kasir\/shift/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Shift Loket" }]],
+  [/^\/kasir\/multi/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Paket Massal" }]],
+  [/^\/kasir\/cek-cepat/, [{ label: "Cek Ongkir & Resi", to: "/kasir/cek-cepat" }, { label: "Cek Ongkir" }]],
+  [/^\/kasir\/cek-resi/, [{ label: "Cek Ongkir & Resi", to: "/kasir/cek-cepat" }, { label: "Cek Resi" }]],
+  [/^\/kasir\/shift/, [{ label: "Shift Loket" }]],
   [/^\/kasir$/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Kiriman Satuan" }]],
   [/^\/kasir/, [{ label: "Buat Pengiriman" }]],
   [/^\/kiriman\/massal/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Riwayat Massal" }]],
   [/^\/kiriman\/cetak-massal/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Cetak Resi Massal" }]],
-  [/^\/kiriman\/pickup/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Pickup & Manifest" }]],
+  [/^\/kiriman\/pickup/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Pickup & Surat Jalan", to: "/kiriman?tab=pickup" }, { label: "Surat Jalan" }]],
   [/^\/kiriman\/[a-z0-9]{7}$/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Detail Kiriman" }]],
   [/^\/kiriman/, [{ label: "Kiriman" }]],
-  [/^\/kontak\/pengirim/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Pengirim" }]],
-  [/^\/kontak\/penerima/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Penerima" }]],
+  [/^\/kontak\/pengirim/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Pengirim" }]],
+  [/^\/kontak\/penerima/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Penerima" }]],
   [/^\/keuangan/, [{ label: "Keuangan" }]],
   [/^\/pengaturan\/.+/, [{ label: "Pengaturan", to: "/pengaturan" }, { label: "Detail Pengaturan" }]],
   [/^\/pengaturan/, [{ label: "Pengaturan" }]],
@@ -72,71 +144,71 @@ const SETTINGS_TITLE: Record<string, string> = {
   "api-mcp": "API & MCP",
 }
 
-function crumbsOf(path: string): Crumb[] {
+/** Breadcrumb; on tabbed sections (Kiriman, Keuangan) the active sub-tree entry is the second crumb. */
+function crumbsOf(path: string, tab: string | undefined): Crumb[] {
   const found = SECTIONS.find(([re]) => re.test(path))?.[1] ?? [{ label: "GeraiExpress" }]
   const sub = /^\/pengaturan\/([a-z-]+)/.exec(path)?.[1]
-  return sub && SETTINGS_TITLE[sub] ? [found[0]!, { label: SETTINGS_TITLE[sub]! }] : found
+  if (sub && SETTINGS_TITLE[sub]) return [found[0]!, { label: SETTINGS_TITLE[sub]! }]
+  const tabbed = NAV.find((n) => (path === "/kiriman" || path === "/keuangan") && n.to === path)
+  if (tabbed?.children) {
+    const c = tabbed.children.find((x) => x.to === activeChild(tabbed.children!, path, tab))
+    if (c) return [{ label: tabbed.label, to: tabbed.to }, { label: c.label }]
+  }
+  return found
 }
 
 /** `+ Kiriman Baru` is primary only on Dashboard, /kasir and /kiriman (visual 07 §1.1). */
 const primaryCta = (path: string) => path === "/" || path === "/kasir" || path === "/kiriman"
-
-function isActive(path: string, to: string) {
-  if (to === "/") return path === "/"
-  const base = to.startsWith("/kontak") ? "/kontak" : to
-  return path === base || path.startsWith(`${base}/`)
-}
 
 async function logout() {
   await api("/auth/logout", { body: {} }).catch(() => undefined)
   window.location.assign("/masuk")
 }
 
-/** Sidebar groups (DEC-239): Utama · Operasional · Administrasi; Keuangan only for the owner (`w.menus`). */
+/** Sidebar groups (DEC-239/241): Utama · Operasional · Administrasi; visibility follows the server's `w.menus`. */
 const GROUPS: Array<{ label: string; keys: string[] }> = [
-  { label: "Utama", keys: ["dashboard", "buat-pengiriman"] },
+  { label: "Utama", keys: ["dashboard", "buat-pengiriman", "cek"] },
   { label: "Operasional", keys: ["kiriman", "kontak"] },
   { label: "Administrasi", keys: ["keuangan", "pengaturan"] },
 ]
 
-/** ⌘K commands: every menu the role sees, plus the counter tasks operators type for. */
-function commandsFor(menus: string[]): ShellCommand[] {
+/** ⌘K commands: every menu and sub-tree screen the role sees, plus the counter tasks operators type for. */
+export function commandsFor(menus: string[]): ShellCommand[] {
   const out: ShellCommand[] = []
   for (const n of NAV) {
-    if (!menus.includes(n.key)) continue
+    if (!menus.includes(n.menu)) continue
     const group = GROUPS.find((g) => g.keys.includes(n.key))?.label ?? "Menu"
-    if ("children" in n) for (const c of n.children) out.push({ label: c.label, description: n.label, group, to: c.to, icon: n.icon })
+    if (n.children) for (const c of n.children) out.push({ label: c.label, description: n.label, group, to: c.to, icon: n.icon })
     else out.push({ label: n.label, group, to: n.to, icon: n.icon })
   }
   out.push(
     { label: "Lacak INV, AWB atau HP", description: "Cek Resi", group: "Tugas", to: "/kasir/cek-resi", keywords: "cari resi awb inv lacak", icon: SearchIcon },
-    { label: "Pickup & Manifest", description: "Kiriman", group: "Tugas", to: "/kiriman?tab=pickup", keywords: "jemput kurir surat jalan", icon: TruckIcon },
-    { label: "Meja Retur", description: "Kiriman", group: "Tugas", to: "/kiriman?tab=retur", keywords: "retur rts kembali", icon: TruckIcon },
     { label: "Notifikasi", group: "Tugas", to: "/notifikasi", icon: BellIcon },
   )
   return out
 }
 
-/** Sidebar foot: the counter's own state (open shift, label printer format). */
-function CounterStatus() {
-  const [shift, setShift] = useState<"open" | "closed" | null>(null)
+/** Sidebar foot: the counter's own state — label format and the Mengantar connection (DEC-241: no shift row). */
+function CounterStatus({ owner }: { owner: boolean }) {
   const [format, setFormat] = useState<Format | null>(null)
+  const [hook, setHook] = useState<{ sellerId: string | null; webhookState: string | null } | null>(null)
   useEffect(() => {
     const load = () => {
-      api<{ shift: { state: string } | null }>("/shift").then((v) => setShift(v.shift ? "open" : "closed")).catch(() => setShift(null))
       api<{ format: Format }>("/print/settings").then((s) => setFormat(s.format)).catch(() => setFormat(null))
+      if (owner) api<{ sellerId: string | null; webhookState: string | null }>("/settings/mengantar").then(setHook).catch(() => setHook(null))
     }
     load()
-    // Opening/closing a shift or saving the label format refreshes this block (no stale "Belum dibuka").
+    // Saving the label format (or a settings page) refreshes this block.
     window.addEventListener(COUNTER_STATUS_EVENT, load)
     return () => window.removeEventListener(COUNTER_STATUS_EVENT, load)
-  }, [])
+  }, [owner])
+  const mengantar = !hook ? { value: "—", tone: "muted" as const } : !hook.sellerId ? { value: "Belum terhubung", tone: "warn" as const } : hook.webhookState === "active" ? { value: "Terhubung", tone: "safe" as const } : { value: "Webhook belum aktif", tone: "warn" as const }
   return (
     <SidebarStatusCard
       title="Status loket"
       rows={[
-        { label: "Shift", value: shift === "open" ? "Buka" : shift === "closed" ? "Belum dibuka" : "—", tone: shift === "open" ? "safe" : shift === "closed" ? "warn" : "muted" },
         { label: "Label", value: format ? FORMAT_LABEL[format] : "—", tone: format ? "safe" : "muted" },
+        ...(owner ? [{ label: "Mengantar", ...mengantar }] : []),
       ]}
     />
   )
@@ -145,24 +217,32 @@ function CounterStatus() {
 export function AppShell() {
   const w = useWorkspace()
   const path = useRouterState({ select: (s) => s.location.pathname })
+  const tab = useRouterState({ select: (s) => (s.location.search as { tab?: unknown }).tab })
+  const tabStr = typeof tab === "string" ? tab : undefined
   const navigate = useNavigate()
   // Commit flows own the bottom of the phone screen (their checkout bar); the menu stays in the header Sheet.
   const commitFlow = path === "/kasir" || /^\/kiriman\/[a-z0-9]{7}$/.test(path) || /^\/kasir\/(multi|shift)/.test(path) || /^\/kiriman\/(pickup|retur)\//.test(path)
-  const item = (n: (typeof NAV)[number]): ShellNavItem => ({
+  const section = sectionOf(path)
+  const item = (n: NavDef): ShellNavItem => ({
     key: n.key,
     to: n.to,
     label: n.label,
     icon: n.icon,
-    active: isActive(path, n.to),
+    active: section === n.key,
     badge:
       n.key === "kiriman" && w.badges.kiriman > 0
         ? { content: w.badges.kiriman, label: `${w.badges.kiriman} kiriman perlu tindakan` }
         : n.key === "pengaturan" && w.hints.mengantarWebhook
           ? { content: <TriangleAlertIcon className="size-4 text-warn" aria-hidden />, label: "Webhook Mengantar belum aktif" }
           : null,
-    children: "children" in n ? n.children.map((c) => ({ ...c, active: c.to === "/kasir" ? path === "/kasir" : path.startsWith(c.to) })) : undefined,
+    children: n.children
+      ? (() => {
+          const on = section === n.key ? activeChild(n.children, path, tabStr) : null
+          return n.children.map((c) => ({ ...c, active: c.to === on }))
+        })()
+      : undefined,
   })
-  const groups: ShellNavGroup[] = GROUPS.map((g) => ({ label: g.label, items: NAV.filter((n) => g.keys.includes(n.key) && w.menus.includes(n.key)).map(item) })).filter((g) => g.items.length)
+  const groups: ShellNavGroup[] = GROUPS.map((g) => ({ label: g.label, items: NAV.filter((n) => g.keys.includes(n.key) && w.menus.includes(n.menu)).map(item) })).filter((g) => g.items.length)
   const commands = useMemo(() => commandsFor(w.menus), [w.menus])
 
   const toolbar = (
@@ -206,12 +286,12 @@ export function AppShell() {
           </div>
         ) : null
       }
-      sidebarStatus={<CounterStatus />}
+      sidebarStatus={<CounterStatus owner={w.role === "gerai_admin"} />}
       navLabel="Menu utama"
       groups={groups}
       commands={commands}
       user={{ name: w.user.name, email: w.user.email, role: w.role === "gerai_admin" ? "Pemilik" : "Kasir", onLogout: logout, profileTo: "/akun", helpTo: "/bantuan" }}
-      crumbs={crumbsOf(path)}
+      crumbs={crumbsOf(path, tabStr)}
       toolbar={toolbar}
       bottomBar={commitFlow ? undefined : <BottomBar path={path} kiriman={w.badges.kiriman} />}
     >
@@ -233,7 +313,7 @@ function BottomBar({ path, kiriman }: { path: string; kiriman: number }) {
   return (
     <nav aria-label="Menu bawah" className="fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-5 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden">
       <BottomLink to="/" label="Beranda" icon={HomeIcon} active={path === "/"} />
-      <BottomLink to="/kasir" label="Buat" icon={PackageIcon} active={path.startsWith("/kasir")} />
+      <BottomLink to="/kasir" label="Buat" icon={PackageIcon} active={sectionOf(path) === "buat-pengiriman"} />
       <Link to="/kasir" aria-label="Kiriman Baru" className="flex items-center justify-center">
         <span className={`flex size-12 items-center justify-center rounded-full ${primaryCta(path) ? "bg-primary text-primary-foreground" : "border-2 border-primary bg-card text-primary"}`}>
           <PlusIcon aria-hidden className="size-6" />

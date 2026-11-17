@@ -43,8 +43,12 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
   24 px bold tabular figure, one 12 px caption.
 - C8: POS rows (DEC-239) = compact selectable courier rows (radio, whole row is the hit area, ~56 px: dot, courier mark,
   service + medal, ETA · billable kg · rule hint, price right); payment = 2×2 grid, never a 3 + 1 wrap.
-- C6: settings = left settings menu + one form per route on desktop; grouped list of rows → item page on phones
-  (visual 08 §2); never a row of horizontal tabs.
+- C6: settings (DEC-240, TokoPhi) = framed white `Card` rail 260 px (group labels, icon tile + title + one-line
+  subtitle rows) + owner gerai summary card, beside a flush-left `max-w-4xl` column of `SectionCard`s with 2-col form
+  grids; switches as `ToggleRow` (title + helper left, Switch right); `/pengaturan` opens the first section on desktop
+  and is a grouped directory on phones; never a row of horizontal tabs.
+- C9: sidebar taxonomy (DEC-241) = a menu per job, a sub-tree per screen of that job (tab-backed children active only
+  on their tab); settings pages never appear in the main sidebar.
 
 ## Tokens
 

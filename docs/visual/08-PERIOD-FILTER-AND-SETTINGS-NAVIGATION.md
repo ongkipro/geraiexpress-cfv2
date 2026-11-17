@@ -90,35 +90,44 @@ contract (day cells ≥ 40 px desktop, ≥ 44 px phone; 16 px text).
 
 Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its own short form.
 
-### 2.1 Desktop ≥ 1024 px
+### 2.1 Desktop ≥ 1024 px (DEC-240 TokoPhi rail, DEC-242 independent scroll)
+
+`/pengaturan` itself opens the first section (owner `Profil Gerai`, Kasir `Printer & Struk`, replace).
 
 ```text
 ┌─ app shell sidebar ─┬───────────────────────────────────────────────────────────────────────────┐
-│                     │ Pengaturan                                                                │
-│                     ├───────────────────────┬───────────────────────────────────────────────────┤
-│                     │ GERAI                 │ Printer & Struk                                   │
-│                     │   Profil Gerai        │ Atur printer kasir dan isi struk pelanggan.       │
-│                     │   Mini-Site           │                                                   │
-│                     │   Data Usaha          │ ┌ Printer di perangkat ini ─────────────────────┐ │
-│                     │ OPERASIONAL           │ │ POS-58 · Bluetooth · terhubung 🟢             │ │
-│                     │   Ekspedisi Aktif     │ │ [Tes Cetak]  [Ganti Printer]                  │ │
-│                     │ ● Printer & Struk     │ └───────────────────────────────────────────────┘ │
-│                     │   Label & Privasi     │ ┌ Format cetak ─────────────────────────────────┐ │
-│                     │   Packing & Biaya     │ │ Format label (●) 10×15 + Bukti ( ) 10×10      │ │
-│                     │ AKUN & AKSES          │ │              ( ) 10×15 Paket saja             │ │
-│                     │   Anggota             │ │ Ketebalan      (●) Normal ( ) Tebal           │ │
-│                     │   Mengantar      ⚠    │ └───────────────────────────────────────────────┘ │
-│                     │   API & MCP           │ ┌ Isi struk ────────────────────────────────────┐ │
-│                     │                       │ │ Tampilkan WA gerai           [● on ]          │ │
-│                     │                       │ │ Catatan kaki  [Terima kasih sudah ...     ]   │ │
-│                     │                       │ └───────────────────────────────────────────────┘ │
-│                     │                       ├───────────────────────────────────────────────────┤
-│                     │                       │ Ada perubahan belum disimpan   [Batal] [Simpan]   │ ← only when dirty
-└─────────────────────┴───────────────────────┴───────────────────────────────────────────────────┘
-   settings menu 240 px, group labels 14 px semibold (sentence case, not tracked caps in the build),
-   items h-10 / 16 px, current item marked (accent background + aria-current="page"), status hint icons
-   only where action is needed (⚠ Mengantar webhook not active)
+│                     │ ┌ rail card 260 px ──────┐  Printer & Struk (h1)                          │
+│                     │ │ GERAI                  │  Atur printer di perangkat ini dan isi struk.  │
+│                     │ │ [#] Profil Gerai       │  ┌ Printer di perangkat ini ──────────────────┐│
+│                     │ │     Nama, WA & jemput  │  │ Ketebalan cetak   [Normal][Tebal]          ││
+│                     │ │ [#] Mini-Site          │  └────────────────────────────────────────────┘│
+│                     │ │ [#] Data Usaha         │  ┌ Format label bawaan ───────────────────────┐│
+│                     │ │ OPERASIONAL            │  │ (●) 10×15 · Paket + Bukti  ( ) 10×10       ││
+│                     │ │ [#] Ekspedisi Aktif    │  │ ( ) 10×15 · Paket saja     ( ) Roll 58 mm  ││
+│                     │ │▌[#] Printer & Struk    │  └────────────────────────────────────────────┘│
+│                     │ │ [#] Label & Privasi    │  ┌ Isi struk ─────────────────────────────────┐│
+│                     │ │ [#] Packing & Biaya    │  │ Catatan video unboxing      39/50          ││
+│                     │ │ AKUN & AKSES           │  │ Tampilkan komisi …        [● on ]          ││
+│                     │ │ [#] Anggota            │  └────────────────────────────────────────────┘│
+│                     │ │ [#] Mengantar      •   │                                                │
+│                     │ │ [#] API & MCP        ↕ │  ← the rail scrolls on its own                 │
+│                     │ └────────────────────────┘                                                │
+│                     │ ┌ (SJ) Sinar Jaya Cell ──┐  Ada perubahan belum disimpan [Batal][Simpan]  │
+│                     │ │ ● Mengantar terhubung  │  ← only when dirty                             │
+│                     │ └────────────────────────┘                                                │
+└─────────────────────┴───────────────────────────────────────────────────────────────────────────┘
+   rail: white Card, group labels 12 px uppercase, rows = 32 px icon tile + 14 px title + 12 px subtitle,
+   current row primary tint + aria-current="page", amber dot on Mengantar while the webhook is inactive;
+   owner summary card below. Content: flush-left, max 896 px, SectionCards with 2-col form grids.
 ```
+
+**Rail scroll (DEC-242).** The rail is a secondary sidebar: `sticky` at `top: 84px` (64 px topbar + 20 px) with
+`max-height: calc(100dvh − 6.5rem)`, `overflow-y: auto`, `overscroll-behavior-y: contain` and the quiet
+`thin-scrollbar` utility. Scrolling the form never moves the rail; on a short laptop screen (1280×720, 1366×768) the
+rail scrolls by itself to reach `API & MCP` and the summary card without scrolling the page. The settings grid
+row reaches over the main area's 32 px bottom padding (grid `-mb-8`, content `pb-8`); otherwise sticky, bounded by its
+grid area, would push the rail up at the end of a long page. The POS summary
+on `/kasir` uses the same bound.
 
 ### 2.2 Phone < 768 px
 
@@ -182,7 +191,8 @@ Kasir sees only `Printer & Struk` (device part); every other route returns the 4
 
 ### 2.5 shadcn mapping
 
-Settings menu: `SidebarMenu` / `SidebarMenuButton` primitives rendered inside the page (not a second app
-sidebar) with `SidebarGroupLabel` per group; phone list: `Item`-style rows or `Card` + `Separator` rows with a
-trailing chevron; forms: `Card` + `FieldGroup` + `Field` + `Input` / `Select` / `RadioGroup` / `Switch`;
+Settings rail (DEC-240): a white `Card` (`p-2`) with group labels and `Link` rows (icon tile + title + subtitle),
+inside a sticky, viewport-bounded, independently scrolling `aside` (DEC-242), plus the owner summary `Card`; phone
+directory: `Card` rows with the same icon tile, subtitle and a trailing chevron; switches: `ToggleRow`; copyable
+values: `CopyField`; forms: `Card` + `FieldGroup` + `Field` + `Input` / `Select` / `RadioGroup` / `Switch`;
 save bar: sticky footer `div` with `Button` outline `Batal` + `Button` `Simpan`; confirmations: `AlertDialog`.

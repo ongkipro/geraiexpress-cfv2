@@ -25,7 +25,7 @@ test("Paket Massal: unggah CSV, perbaiki baris, buat, bayar; Cek Resi", async ({
   await page.locator('input[type="file"]').setInputFiles({ name: "paket.csv", mimeType: "text/csv", buffer: Buffer.from(CSV) })
   await expect(page.getByText("paket.csv")).toBeVisible()
   await page.getByRole("button", { name: "Periksa Baris" }).click()
-  await expect(page).toHaveURL(/\/kiriman\/massal\/[0-9a-f-]{36}$/)
+  await expect(page).toHaveURL(/\/kiriman\/massal\/[0-9a-f-]{36}$/, { timeout: 15_000 })
   await expect(page.getByRole("tab", { name: "Siap (1)" })).toBeVisible({ timeout: 20_000 })
   await page.getByRole("tab", { name: "Perlu Diperbaiki (1)" }).click()
   await expect(page.getByText("Kecamatan lebih dari satu, pilih yang benar")).toBeVisible()

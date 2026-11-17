@@ -88,13 +88,19 @@ describe("sender COD payout (spec 03 §1.2)", () => {
     return slug
   }
 
-  it("not settled → refused (owner may override with a reason); tunai needs a shift; partial payouts up to the payable; void puts cash back", async () => {
+  it("not settled → refused (owner may override with a reason); tunai works without a shift (DEC-241); partial payouts up to the payable; void puts cash back", async () => {
     const t = await checkoutGerai("payoutsatu")
     const slug = await codInv(t)
     const notSettled = await post(`/shipments/${slug}/cod-payout`, t.cookie, { amountIdr: 10000, method: "transfer" }, "po-001-xxxx")
     expect(((await notSettled.json()) as { error: { code: string } }).error.code).toBe("COD_NOT_SETTLED")
     await t.vault.setReconciledCodCredit(t.tenantId, slug, 147500)
-    expect(((await (await post(`/shipments/${slug}/cod-payout`, t.cookie, { amountIdr: 10000, method: "tunai" }, "po-002-xxxx")).json()) as { error: { code: string } }).error.code).toBe("SHIFT_REQUIRED")
+    // DEC-241 (Shift Loket deferred): a tunai payout with no open shift is recorded without a shift, then voided back.
+    const noShift = await post(`/shipments/${slug}/cod-payout`, t.cookie, { amountIdr: 10000, method: "tunai" }, "po-002-xxxx")
+    expect(noShift.status).toBe(200)
+    const ns = ((await noShift.json()) as { data: { receipt: { id: string; shift_id: string | null }; remaining: number } }).data
+    expect(ns.receipt.shift_id).toBeNull()
+    expect(ns.remaining).toBe(135000)
+    expect((await post(`/shipments/${slug}/cod-payout`, t.cookie, { op: "void", receiptId: ns.receipt.id, reason: "uji tanpa shift" }, "po-002-void")).status).toBe(200)
     await post("/shift/open", t.cookie, { openingFloatIdr: 200000 })
     // sender_bears_fee: payable = G − F = 150.000 − 5.000 = 145.000.
     const p1 = await post(`/shipments/${slug}/cod-payout`, t.cookie, { amountIdr: 100000, method: "tunai" }, "po-003-xxxx")
@@ -110,7 +116,8 @@ describe("sender COD payout (spec 03 §1.2)", () => {
     const rid = ((await p1.json().catch(() => null)) as null) ?? null
     void rid
     const list = ((await (await appGet(`/shipments/${slug}`, t.cookie)).json()) as { data: { receipts: Array<{ id: string; event: string; method: string }> } }).data.receipts
-    const tunaiPayout = list.find((r) => r.event === "sender_cod_payout" && r.method === "tunai")!
+    // The in-shift tunai payout (the shift-less one above was already voided).
+    const tunaiPayout = list.find((r) => r.event === "sender_cod_payout" && r.method === "tunai" && r.id !== ns.receipt.id)!
     const v = await post(`/shipments/${slug}/cod-payout`, t.cookie, { op: "void", receiptId: tunaiPayout.id, reason: "salah nominal" }, "po-void-xxxx")
     expect(v.status).toBe(200)
     const tot = (await view(t.cookie)).totals as { codPayoutTunai: number; expectedCash: number; tunaiIn: number; voidTunai: number }

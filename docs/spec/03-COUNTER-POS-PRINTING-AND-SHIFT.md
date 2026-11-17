@@ -63,9 +63,10 @@ is finished on `/kiriman/:slug`. Senders and recipients can be added in a Sheet 
 
 - **Eligible:** COD Barang INV whose `reconciled_provider_cod_credit_idr IS NOT NULL` (the money reached the outlet's
   Mengantar balance). Owner may override with a reason (`Bayar sebelum cair`), audit-logged; Kasir never can.
-- **Who:** owner; Kasir only when the owner enabled `Kasir boleh bayar COD`. **Every `tunai` payout and its reversal
-  requires an open shift** (the cash leaves that drawer), whoever performs it; `transfer` payouts need no shift and
-  never touch drawer totals.
+- **Who:** owner; Kasir only when the owner enabled `Kasir boleh bayar COD`. A `tunai` payout and its reversal count
+  in the actor's open shift when there is one (the cash leaves that drawer); with Shift Loket deferred (DEC-241,
+  TASK-704) they are recorded with `shift_id = NULL` instead of being refused. `transfer` payouts never touch drawer
+  totals.
 - **Amount:** `amount <= sender_cod_payable_idr − COALESCE(sender_cod_paid_idr, 0)`; partial payouts allowed; each one
   is a `sender_cod_payout` receipt (`direction = out`, method `tunai`/`transfer`) with an `Idempotency-Key`.
   `sender_cod_paid_idr` is the sum of non-voided payouts and is updated in the same Durable Object transaction.
@@ -152,6 +153,10 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 ---
 
 ## 4. Per-Shift Cash Drawer Reconciliation (`/kasir/shift`)
+
+> **Deferred UI (DEC-241, 2026-11-17):** the Shift Loket screen is out of the launch navigation (no menu, command, status
+> row, dashboard tile or `Kas & Shift` tab) until TASK-704. The contract below and the `/shift` API stay implemented and
+> tested; payments and payouts work without an open shift (receipts carry `shift_id = NULL`).
 
 1. **Open Shift:** cashier enters opening cash float (`Modal Awal Laci`, e.g., `Rp150.000`).
 2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `Pencairan COD Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` from `counter_receipts` whose `shift_id` is this shift (so an INV created unpaid in shift A and paid in shift B counts in B). `expected_cash_idr = opening_float + Σ tunai(direction=in) − Σ tunai(direction=out)` (voids of payments are `out`, sender payouts are `out`, voids of payouts are `in`).

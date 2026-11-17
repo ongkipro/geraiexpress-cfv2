@@ -178,7 +178,7 @@ function OpenRow({ r, owner, onChange }: { r: Row; owner: boolean; onChange: (m:
   return (
     <Panel as="li" className="flex flex-col gap-3 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
+        <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-6 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
         <span className="text-base md:text-sm text-muted-foreground tabular-nums">{r.courier_code} · {r.awb_number} · diterima {when(r.intake_at)}</span>
       </div>
       <p className="text-base md:text-sm">Kondisi: {COND_LABEL[r.condition] ?? r.condition} · simpan sampai {day(r.storage_deadline_at)}{r.conflict ? <span className="font-medium text-danger"> · status bertentangan</span> : null}</p>

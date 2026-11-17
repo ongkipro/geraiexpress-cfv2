@@ -13,7 +13,8 @@ import { rp } from "../kasir/quote-panel"
 import { LinkButton } from "../../components/admin/link-button"
 
 // `Keuangan` (visual 06 §3, visual 07 `/keuangan`, spec 09; owner only — the API refuses Kasir): synced balance,
-// Saldo Aman, COD waiting, counter cash → tabs Ringkasan · Mutasi Sync · Laba per INV · Kas & Shift · Selisih Sync.
+// Saldo Aman, COD waiting, counter cash → tabs Ringkasan & Saldo · Mutasi Mengantar · Laba per Kiriman · Cadangan Retur ·
+// Selisih Sync (also the Keuangan sidebar sub-tree, DEC-241). The `Kas & Shift` tab is deferred with Shift Loket (TASK-704).
 interface Summary {
   balance: number | null
   safeBalance: number | null
@@ -29,15 +30,13 @@ interface Summary {
 interface Mutation { invoice_id: string; inv_number: string | null; type: string; status: string | null; amount_idr: number | null; balance_amount_idr: number | null; provider_created_at: number | null; description: string | null; link_state: string; slugs: string | null }
 interface Profit { slug: string; issued_at: number; cod_fee_mode: string; estimated_margin_idr: number | null; cash_profit_idr: number | null; reconciled: boolean; quote_drift: number }
 interface Discrepancy { id: string; kind: string; invoice_id: string; shipment_slug: string | null; expected_idr: number | null; actual_idr: number | null; detail: string | null; created_at: number }
-interface Shift { id: string; opened_at: number; closed_at: number | null; variance_idr: number | null; expected_cash_idr: number | null; counted_cash_idr: number | null; state: string }
 interface Reserve { slug: string; kind: "retur" | "sengketa"; status: string; amount_idr: number }
-interface Finance { summary: Summary; mutations: Mutation[]; profits: Profit[]; discrepancies: Discrepancy[]; shifts: Shift[]; reserve: Reserve[] }
+interface Finance { summary: Summary; mutations: Mutation[]; profits: Profit[]; discrepancies: Discrepancy[]; reserve: Reserve[] }
 
 const TABS = [
-  { id: "ringkasan", label: "Ringkasan" },
-  { id: "mutasi", label: "Mutasi Sync" },
-  { id: "laba", label: "Laba per INV" },
-  { id: "kas", label: "Kas & Shift" },
+  { id: "ringkasan", label: "Ringkasan & Saldo" },
+  { id: "mutasi", label: "Mutasi Mengantar" },
+  { id: "laba", label: "Laba per Kiriman" },
   { id: "cadangan", label: "Cadangan Retur" },
   { id: "selisih", label: "Selisih Sync" },
 ] as const
@@ -130,7 +129,6 @@ export function KeuanganPage() {
       ) : null}
       {tab === "mutasi" ? <Mutations rows={d.mutations} /> : null}
       {tab === "laba" ? <Profits rows={d.profits} /> : null}
-      {tab === "kas" ? <Shifts rows={d.shifts} /> : null}
       {tab === "cadangan" ? <ReserveList rows={d.reserve} /> : null}
       {tab === "selisih" ? <Discrepancies rows={d.discrepancies} /> : null}
     </div>
@@ -186,31 +184,11 @@ function Profits({ rows }: { rows: Profit[] }) {
         rowKey={(p) => p.slug}
         empty={<EmptyState title="Belum ada kiriman" body="Laba per INV muncul setelah resi terbit." />}
         columns={[
-          { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {p.slug.toUpperCase()}</Link> },
+          { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="inline-flex min-h-6 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {p.slug.toUpperCase()}</Link> },
           { key: "terbit", header: "Terbit", cell: (p) => <span className="tabular-nums">{when(p.issued_at)}</span> },
           { key: "estimasi", header: "Estimasi", align: "right", cell: (p) => rp(p.estimated_margin_idr ?? 0) },
           { key: "kas", header: "Laba Kas", align: "right", cell: (p) => (p.reconciled && p.cash_profit_idr !== null ? rp(p.cash_profit_idr) : <span className="text-muted-foreground">menunggu</span>) },
           { key: "catatan", header: "Catatan", wide: true, cell: (p) => (p.quote_drift ? <StatusBadge tone="warn">Berbeda dari perkiraan</StatusBadge> : <span className="text-muted-foreground">—</span>) },
-        ]}
-      />
-    </SectionCard>
-  )
-}
-
-function Shifts({ rows }: { rows: Shift[] }) {
-  return (
-    <SectionCard id="kas" title="Kas & Shift" description="Shift Loket kasir dan selisih laci">
-      <DataTableShell
-        caption="Shift loket"
-        rows={rows}
-        rowKey={(x) => x.id}
-        empty={<EmptyState title="Belum ada shift" body="Shift Loket yang dibuka kasir akan muncul di sini." />}
-        columns={[
-          { key: "buka", header: "Dibuka", cell: (x) => <span className="tabular-nums">{when(x.opened_at)}</span> },
-          { key: "tutup", header: "Ditutup", cell: (x) => (x.closed_at ? <span className="tabular-nums">{when(x.closed_at)}</span> : <StatusBadge tone="primary">Masih buka</StatusBadge>) },
-          { key: "seharusnya", header: "Seharusnya", align: "right", cell: (x) => (x.state === "closed" ? rp(x.expected_cash_idr ?? 0) : "—") },
-          { key: "dihitung", header: "Dihitung", align: "right", cell: (x) => (x.state === "closed" ? rp(x.counted_cash_idr ?? 0) : "—") },
-          { key: "selisih", header: "Selisih", align: "right", cell: (x) => (x.variance_idr ? <span className="font-medium text-danger">{rp(Math.abs(x.variance_idr))} ({x.variance_idr > 0 ? "lebih" : "kurang"})</span> : "—") },
         ]}
       />
     </SectionCard>
@@ -271,7 +249,7 @@ function ReserveList({ rows }: { rows: Reserve[] }) {
         rowKey={(r) => `${r.kind}-${r.slug}`}
         empty={<EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />}
         columns={[
-          { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> },
+          { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-6 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> },
           { key: "jenis", header: "Jenis", cell: (r) => (r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan") },
           { key: "jumlah", header: "Jumlah", align: "right", cell: (r) => <span className="font-medium">{rp(r.amount_idr)}</span> },
         ]}

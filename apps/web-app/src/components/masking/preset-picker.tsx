@@ -6,7 +6,7 @@ import { ChoiceGroup } from "../../components/admin/page"
 // what prints, and explicit states for an exhausted quota and the Super Admin kill-switch.
 export type MaskPreset = "standar_gerai" | "dropship_toko" | "privasi_penerima_cod" | "full_nama_gerai"
 export const PRESET_LABEL: Record<MaskPreset, string> = { standar_gerai: "Standar Gerai", dropship_toko: "Dropship Toko", privasi_penerima_cod: "Privasi Penerima COD", full_nama_gerai: "Full Nama Gerai" }
-const PRESET_HELP: Record<MaskPreset, string> = {
+export const PRESET_HELP: Record<MaskPreset, string> = {
   standar_gerai: "Nama pengirim asli + nama dan WhatsApp gerai.",
   dropship_toko: "Nama & HP toko reseller; nama gerai tidak dicetak.",
   privasi_penerima_cod: "HP penerima disamarkan (0857****8821) dan ongkir tidak dicetak.",
