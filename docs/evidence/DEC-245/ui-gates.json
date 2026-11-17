@@ -1,0 +1,100 @@
+[
+  {
+    "viewport": "1440x900",
+    "label": "home hero",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 13,
+    "courierBroken": [],
+    "webgl": {
+      "w": 1440,
+      "h": 900
+    },
+    "errors": []
+  },
+  {
+    "viewport": "1440x900",
+    "label": "select keyboard pick",
+    "picked": "Tebet",
+    "expanded": "false",
+    "focus": "h-city"
+  },
+  {
+    "viewport": "1440x900",
+    "label": "home after scroll",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 13,
+    "courierBroken": [],
+    "webgl": {
+      "w": 1440,
+      "h": 900
+    },
+    "errors": []
+  },
+  {
+    "viewport": "1440x900",
+    "label": "/ekspedisi",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 18,
+    "courierBroken": [],
+    "webgl": null,
+    "errors": []
+  },
+  {
+    "viewport": "1440x900",
+    "label": "/simulasi-kasir after pick",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 4,
+    "courierBroken": [],
+    "webgl": null,
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "label": "home hero",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 13,
+    "courierBroken": [],
+    "webgl": {
+      "w": 390,
+      "h": 844
+    },
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "label": "select keyboard pick",
+    "picked": "Tebet",
+    "expanded": "false",
+    "focus": "h-city"
+  },
+  {
+    "viewport": "390x844",
+    "label": "home after scroll",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 13,
+    "courierBroken": [],
+    "webgl": {
+      "w": 390,
+      "h": 844
+    },
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "label": "/ekspedisi",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 18,
+    "courierBroken": [],
+    "webgl": null,
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "label": "/simulasi-kasir after pick",
+    "horizontalOverflowPx": 0,
+    "courierImgs": 4,
+    "courierBroken": [],
+    "webgl": null,
+    "errors": []
+  }
+]

@@ -894,3 +894,24 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   shell tests' extra signups exhausted the 10-OTP/hour limit. `e2e/fixtures.ts` now FNV-hashes the whole test id.
 - Gate r3 then failed on the packing-select geometry by 0.47 px: the popup was measured mid zoom-in. The test now waits
   for `data-open` and a settled box (4/4 repeats; mutation M41 still red).
+
+## 2026-11-17 — DEC-245 brand landing recorded and gated
+
+- The multi-page brand site went to `main` before its contract (`91cebae`, `9c740b1`). DEC-245 records it (DECISIONS,
+  DESIGN brand direction → `docs/visual/09`, TASKS, SYSTEM-MAP, spec 06 §5) and gates it in ledger run
+  `RUN-20261117T212826Z-e40fa41f` (declared R2).
+- The 3D hero's unminified source now lives in `apps/worker/src/brand/hero/hero-studio-3d.src.js` (linted as a browser
+  script); `apps/web-app/public/hero-studio-3d.min.js` is its esbuild output (`--minify --target=es2019
+  --legal-comments=none`). Edit the source, rebuild, never hand-edit the bundle.
+- Sol R1 (1 P1, 9 P2): pause/reduced motion now freeze a scene clock (wall-clock motion kept running before); marketing
+  copy trimmed to the courier catalog (no J&T Cargo, BIGPACK, SAP Lite, EXPRESS/SAMEDAY; cargo Non-COD), the engine's
+  volumetric rule, no fixed discount % (DEC-230/233), no KYC claim, API/MCP in Standard, no support hours; 44 px hero
+  controls; `#7B879C` input borders; worker tests for the `BRAND_ASSETS` allow-list. R2: a paused resize left a blank
+  canvas (`setSize` clears the buffer) → repaint + time-and-frame settle (headless draws ~8 fps). R3: that repaint ran
+  off-screen → gated on visibility, redraw on return. R4 APPROVE. Mutations M-a..M-e red (`docs/evidence/DEC-245/`).
+- Gate: r1 e2e web server failed to start (transient; brand e2e passed alone), r3 UNVERIFIED because evidence files were
+  written mid-run — do not touch the tree while `pnpm gate` runs. r4 PASS 9/9; r5 PASS 9/9 on the final surface
+  (the ledger refuses `finish PASS` while any required check predates the last edit), run finished PASS. A local `d1 migrations apply` "bad port"
+  flake also hit one focused e2e start; rerun passes.
+- Evidence capture: the open Select must be captured after the smooth scroll and its 0.12 s open animation settle,
+  otherwise the listbox looks translucent over the segmented control (capture artifact, not a stacking bug).

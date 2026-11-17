@@ -1,0 +1,10 @@
+home.html https://geraiexpress.localhost/ :: home.html: 0 fail, 0 warn, 2 info
+fitur.html https://geraiexpress.localhost/fitur :: fitur.html: 0 fail, 0 warn, 2 info
+ekspedisi.html https://geraiexpress.localhost/ekspedisi :: ekspedisi.html: 0 fail, 0 warn, 11 info
+cara-kerja.html https://geraiexpress.localhost/cara-kerja :: cara-kerja.html: 0 fail, 0 warn, 2 info
+biaya-dan-paket.html https://geraiexpress.localhost/biaya-dan-paket :: biaya-dan-paket.html: 0 fail, 0 warn, 2 info
+simulasi-kasir.html https://geraiexpress.localhost/simulasi-kasir :: simulasi-kasir.html: 0 fail, 0 warn, 3 info
+tanya-jawab.html https://geraiexpress.localhost/tanya-jawab :: tanya-jawab.html: 0 fail, 0 warn, 2 info
+hubungi-kami.html https://geraiexpress.localhost/hubungi-kami :: hubungi-kami.html: 0 fail, 0 warn, 2 info
+ketentuan.html https://geraiexpress.localhost/ketentuan :: ketentuan.html: 0 fail, 0 warn, 2 info
+privasi.html https://geraiexpress.localhost/privasi :: privasi.html: 0 fail, 0 warn, 2 info

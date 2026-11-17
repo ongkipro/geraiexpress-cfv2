@@ -121,11 +121,11 @@ Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis terse
 │  #stageWrapper — PANGGUNG 3D STUDIO MOTION MURNI 100SVH (Tanpa Blok Copywriting di Dalam Panggung)   │
 │                                                                                                      │
 │  ┌─ #spatialCallout ─────────────────┐                              ┌─ .stage-pill (Desktop) ───────┐│
-│  │ 04 • KIRIM & UNTUNG  Diskon 25%   │     [3D HUB GERAI EXPRESS]   │ ● Diskon Kirim Mitra  25% OFF ││
+│  │ 04 • KIRIM & UNTUNG  Diskon Mitra │     [3D HUB GERAI EXPRESS]   │ ● Diskon kirim mitra (akun)   ││
 │  │ Jangkau Seluruh Indonesia         │      + Karakter & Konveyor   └───────────────────────────────┘│
 │  └───────────────────────────────────┘                                                               │
 │                                      Peta 3D Nusantara Sabang—Merauke                                │
-│                      [ ⏸ │  01 Daftar  │  02 KYC  │  03 Gerai  │  04 Untung  ]                       │
+│                      [ ⏸ │  01 Daftar  │ 02 Tinjau │  03 Gerai  │  04 Untung  ]                      │
 │  SEKSI 1 (AFTER-HERO, Latar #FFFFFF, Tanpa Garis Pembatas)                                           │
 │  Aplikasi kasir agen kirim paket multi-ekspedisi    ┌─ PRATINJAU CEK TARIF LOKET (Data Contoh) ────┐ │
 │  [ Daftar Gerai ]   [ Coba Simulasi Kasir ]         │ Coblong, Bandung · Reguler 1 kg vs Kargo 12kg│ │
@@ -162,14 +162,14 @@ Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis terse
    - Membedah 6 alur kerja nyata aplikasi v2: (1) Kasir Satu Layar 60/40 & Cek Ongkir Cepat, (2) Kiriman COD & Perlindungan Batas Nilai Barang, (3) Unggah Paket Massal CSV 200 Baris, (4) Pickup per Kurir & Surat Jalan Digital, (5) Meja Retur dengan Kode Ambil Pengirim, (6) Keuangan Dua Buku, Saldo Aman & Pemisahan Peran Kasir vs Pemilik.
    - Dilengkapi pratinjau anatomi **Label 100×150 mm dengan Potongan Struk** dan **Halaman Publik `<slug>.geraimitra.com`**.
 2. **`/ekspedisi` — Direktori Kurir & Aturan Layanan:**
-   - Tabel terstruktur ekspedisi jaringan Mengantar: **J&T Express** (`EZ`, `J&T Cargo`, `J&T Eco`), **JNE** (`REG`, `JTR Kargo`), **SiCepat** (`REG`, `GOKIL Kargo`), **SAP Express** (`REG`, `SAP Lite`), **Lion Parcel** (`REGPACK`, `BIGPACK`), **iDexpress** (`STD`, `iDtruck`), **Anteraja**, **Pos Indonesia**, dan **SPX Express**.
-   - Penjelasan jujur aturan lapangan: perhitungan berat aktual vs volumetrik (`P×L×T`), layanan Kargo mulai `5 kg`, batas nilai COD per kurir, serta aturan barang berbahaya (*Dangerous Goods* seperti baterai/cairan hanya pada kurir yang mendukung).
+   - Tabel terstruktur ekspedisi jaringan Mengantar: **J&T Express** (`EZ`, `J&T Eco` di sebagian rute), **JNE** (`REG`, `JNE Cargo`), **SiCepat** (`REG`, `SiCepat Cargo`), **SAP Express** (`REG`, `SAP Cargo`), **Lion Parcel** (`REGPACK`), **iDexpress** (`STD`, `iDexpress Cargo`), **Anteraja**, **Pos Indonesia**, dan **SPX Express** — hanya layanan aktif di katalog kurir (`courier_service_catalog`); Kargo selalu Non-COD (DEC-245).
+   - Penjelasan jujur aturan lapangan: perhitungan berat aktual vs volumetrik (`P×L×T`; pembagi `4.000` untuk JNE Reguler dan iDexpress Cargo, `6.000` untuk layanan lain), layanan Kargo mulai `5 kg` (Non-COD), batas nilai COD per kurir, serta aturan barang berbahaya (*Dangerous Goods* seperti baterai/cairan hanya pada kurir yang mendukung).
 3. **`/cara-kerja` — Alur Pendaftaran & Panduan Peralatan Meja Kasir:**
    - 5 langkah berurutan dari pengajuan titik jemput → verifikasi & pembuatan akun seller Mengantar otomatis → pengaturan webhook & saldo Non-COD → penerimaan paket pelanggan (datang langsung atau pindai QR dari rumah) → serah terima pickup sore & pencairan COD.
    - Tabel spesifikasi alat toko tanpa *vendor lock-in*: perangkat hitung, timbangan meja 30–50 kg, printer USB/LAN 100 mm (disarankan) atau Bluetooth 58 mm, serta pemindai QR kamera/USB opsional.
 4. **`/biaya-dan-paket` — Transparansi Biaya & Skema Komisi Mitra:**
-   - Perbandingan jujur **Kemitraan Standar Gerai (Rp 0 biaya pendaftaran software)** vs **Opsi Domain Sendiri (Pro)** untuk gerai mapan yang ingin memakai domain `.com`/`.id` milik sendiri dengan SSL otomatis Cloudflare.
-   - Simulasi contoh hitungan margin loket yang jujur: pelanggan membayar tarif publik resmi pada struk, sementara gerai memperoleh selisih diskon ongkir per kurir sesuai kebijakan akun Mengantar setelah dikurangi biaya layanan platform yang transparan.
+   - Perbandingan jujur **Kemitraan Standar Gerai (Rp 0 biaya pendaftaran software)** vs **Opsi Domain Sendiri (Pro)** untuk gerai mapan yang ingin memakai domain `.com`/`.id` milik sendiri dengan SSL otomatis Cloudflare. Kunci API & konektor MCP termasuk paket Standar (tidak dibatasi Pro).
+   - Simulasi contoh hitungan margin loket yang jujur: pelanggan membayar tarif publik resmi pada struk, sementara gerai memperoleh selisih diskon mitra yang ditetapkan GeraiExpress per gerai dan diterapkan tim Mengantar pada akun gerai (DEC-230/233). Halaman publik tidak menampilkan persentase diskon tetap.
 5. **`/simulasi-kasir` — Sandbox Meja Kasir Interaktif Tanpa Login:**
    - Formulir kiri: Kota Tujuan, Berat (gram, tombol cepat `1 kg`, `3 kg`, `12 kg Kargo`), Jenis Kiriman (`Non-COD` vs `COD`), Cara Bayar Loket (`Tunai`, `QRIS Gerai`, `Transfer`), dan Opsi Packing Tambahan.
    - Panel kanan ganda: daftar pilihan ekspedisi terurut otomatis dengan penanda *Termurah* + pratinjau berdampingan **`#struk` (Struk Pelanggan 58 mm)** dan **Label Resi Thermal 100 mm (`INV DEMO...`)** yang langsung berubah saat ekspedisi diklik. Mempertahankan penuh kompatibilitas E2E (`#struk`, label `Berat (gram)`, tombol `Pilih J&T Express ...`).

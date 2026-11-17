@@ -105,16 +105,15 @@ C1: SSR HTML + inline CSS < 35 KB; JavaScript only for the area search and the T
 C2: one column ≤ 640 px for forms on every width; header and tabs span the 960 px frame.
 C3: anonymous tracking shows initials + district/city only; the 4-digit gate is the only way to the recipient name.
 
-## Direction — brand site `geraiexpress.com` (TASK-502)
+## Direction — brand site `geraiexpress.com` (DEC-245, supersedes TASK-502)
 
-Picked-by: inherited direction A + visual 03 §2 (owner-approved wireframe); no separate owner pick → visual
-acceptance UNVERIFIED until the independent final pass.
-Surface/job: shop owners (konter pulsa, fotokopi, kelontong, agen) deciding "is this worth signing up for and does
-it fit my counter?"
-Sections: plain wordmark + 5-link nav → hero (one offer headline, one sentence, `Daftar Gerai` + `Coba Simulasi
-Kasir`) → three counter benefits (band) → money trust + free gerai page → existing-equipment note (band) → legal
-footer (filled fields only). `/simulasi-kasir` = static synthetic demo, no login, no API.
+Picked-by: owner directive 2026-11-17 (DEC-245). Full tokens, page map, SEO contract and wireframes:
+`docs/visual/09-BRAND-MARKETING-DESIGN-SYSTEM-AND-SEO.md`; extends visual 03 §2.
+Surface/job: shop owners deciding "is this worth signing up for and does it fit my counter?" — ten SSR pages.
+Sections (home): frosted header (logo + `by Mengantar`) → full-bleed 3D studio hero → `#ringkasan` (h1, CTAs,
+synthetic rate preview with courier logos) → partner strip (9 Mengantar couriers) → benefits band → closing band.
 ### Composition contract
-C1: SSR, no client framework, no cookies on the apex; JS only on `/simulasi-kasir`.
-C2: no imagery until the owner supplies real counter photos (no invented customers, metrics or logos).
-C3: titles `Halaman - GeraiExpress`, meta descriptions 120–155 chars, single h1 per page.
+C1: SSR, no client framework, no cookies on the apex; JS only for the home preview + 3D hero and `/simulasi-kasir`;
+three.js is loaded on `/` only, deferred, paused off-screen, reduced-motion aware, with a pause control.
+C2: real courier logos only; no invented customers, metrics, testimonials or counts (nine couriers, never `10+`).
+C3: titles 55–70 with ` - GeraiExpress`, descriptions 120–155, single h1, breadcrumbs on sub-pages.

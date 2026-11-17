@@ -44,11 +44,11 @@ export const HOME_SCRIPT = `<script defer src="/three.min.js"></script><script d
 (function(){
   var L={jne:["JNE",47],jt:["J&T Express",93],sicepat:["SiCepat",71],sap:["SAP Express",29],lion:["Lion Parcel",106],anteraja:["Anteraja",67],idexpress:["iDexpress",24],pos:["Pos Indonesia",29],spx:["SPX Express",49]};
   var D=[
-    {reg:[["lion","REGPACK","2–3 hari",10500],["jt","EZ","2–3 hari",11500],["sicepat","REG","1–2 hari",12000],["jne","REG","2–3 hari",12500]],cargo:[["jt","J&T Cargo","3–5 hari",42000],["jne","JTR Kargo","3–4 hari",46000],["sicepat","GOKIL","2–4 hari",48000]]},
-    {reg:[["lion","REGPACK","2–3 hari",11000],["jne","REG","2–3 hari",12000],["sicepat","REG","1–2 hari",13000],["anteraja","Reguler","2–3 hari",13500]],cargo:[["jt","J&T Cargo","3–5 hari",45000],["lion","BIGPACK","3–4 hari",49000],["jne","JTR Kargo","3–4 hari",51000]]},
-    {reg:[["sap","REG","2–4 hari",14500],["jt","EZ","2–3 hari",15500],["jne","REG","1–2 hari",16000],["idexpress","STD","2–4 hari",16500]],cargo:[["jt","J&T Cargo","4–6 hari",58000],["sicepat","GOKIL","3–5 hari",62000],["jne","JTR Kargo","3–5 hari",64000]]},
-    {reg:[["pos","Pos Reguler","2–4 hari",17000],["jt","EZ","2–3 hari",18000],["spx","Standard","2–4 hari",18500],["sicepat","REG","1–2 hari",19500]],cargo:[["jt","J&T Cargo","4–6 hari",71000],["jne","JTR Kargo","4–6 hari",74000],["sicepat","GOKIL","3–5 hari",77000]]},
-    {reg:[["jne","REG","3–5 hari",27000],["jt","EZ","3–5 hari",28500],["lion","REGPACK","3–4 hari",29000],["pos","Pos Reguler","4–6 hari",30500]],cargo:[["jne","JTR Kargo","5–8 hari",132000],["lion","BIGPACK","5–7 hari",139000],["pos","Pos Kargo","6–9 hari",146000]]}
+    {reg:[["lion","REGPACK","2–3 hari",10500],["jt","EZ","2–3 hari",11500],["sicepat","REG","1–2 hari",12000],["jne","REG","2–3 hari",12500]],cargo:[["sap","SAP Cargo","3–5 hari",42000],["jne","JNE Cargo","3–4 hari",46000],["sicepat","SiCepat Cargo","2–4 hari",48000]]},
+    {reg:[["lion","REGPACK","2–3 hari",11000],["jne","REG","2–3 hari",12000],["sicepat","REG","1–2 hari",13000],["anteraja","Reguler","2–3 hari",13500]],cargo:[["sap","SAP Cargo","3–5 hari",45000],["idexpress","iDexpress Cargo","3–4 hari",49000],["jne","JNE Cargo","3–4 hari",51000]]},
+    {reg:[["sap","REG","2–4 hari",14500],["jt","EZ","2–3 hari",15500],["jne","REG","1–2 hari",16000],["idexpress","STD","2–4 hari",16500]],cargo:[["sap","SAP Cargo","4–6 hari",58000],["sicepat","SiCepat Cargo","3–5 hari",62000],["jne","JNE Cargo","3–5 hari",64000]]},
+    {reg:[["pos","Pos Reguler","2–4 hari",17000],["jt","EZ","2–3 hari",18000],["spx","Standard","2–4 hari",18500],["sicepat","REG","1–2 hari",19500]],cargo:[["sap","SAP Cargo","4–6 hari",71000],["jne","JNE Cargo","4–6 hari",74000],["sicepat","SiCepat Cargo","3–5 hari",77000]]},
+    {reg:[["jne","REG","3–5 hari",27000],["jt","EZ","3–5 hari",28500],["lion","REGPACK","3–4 hari",29000],["pos","Pos Reguler","4–6 hari",30500]],cargo:[["jne","JNE Cargo","5–8 hari",132000],["idexpress","iDexpress Cargo","5–7 hari",139000],["sicepat","SiCepat Cargo","6–9 hari",146000]]}
   ];
   var mode="reg",city=0;
   var btn=document.getElementById("h-city"),box=document.getElementById("h-city-list"),val=document.getElementById("h-city-val");
@@ -106,17 +106,17 @@ export function renderHome(app: string): string {
 <div id="calloutDesc" class="callout-desc">Daftar akun Gerai Express secara online tanpa proses rumit.</div>
 </div></div>
 
-<div class="glass-surface stage-pill"><span class="stage-dot"></span><span>Diskon Kirim Mitra s/d</span><span class="stage-off">25% OFF</span></div>
+<div class="glass-surface stage-pill"><span class="stage-dot"></span><span>Diskon kirim mitra</span><span class="stage-off">sesuai akun gerai</span></div>
 
 <div id="hudControls">
 <div class="glass-surface hud-bar">
-<button type="button" id="togglePlayBtn" aria-label="Jeda atau putar animasi 3D" title="Jeda / Putar">
+<button type="button" id="togglePlayBtn" aria-label="Jeda animasi 3D" aria-pressed="false" title="Jeda / Putar">
 <svg id="iconPause" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="1.5" width="3" height="9" rx="1"/><rect x="7" y="1.5" width="3" height="9" rx="1"/></svg>
 <svg id="iconPlay" class="hidden" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.8 1.5L10.2 6L2.8 10.5V1.5Z"/></svg>
 </button>
 <div class="hud-tabs" role="group" aria-label="Tahapan alur kemitraan">
 <button type="button" data-act="0" class="step-tab active">01 Daftar</button>
-<button type="button" data-act="1" class="step-tab">02 KYC</button>
+<button type="button" data-act="1" class="step-tab">02 Tinjau</button>
 <button type="button" data-act="2" class="step-tab">03 Gerai</button>
 <button type="button" data-act="3" class="step-tab">04 Untung</button>
 </div>
@@ -195,9 +195,9 @@ export function renderHome(app: string): string {
 <h2>Dukungan multi-ekspedisi Reguler, Ekonomi, Kargo &amp; COD</h2>
 <p>Melalui integrasi resmi akun seller Mengantar milik masing-masing gerai, pelanggan Anda bebas memilih layanan tercepat atau paling hemat dari satu loket:</p>
 <ul class="chk">
-<li>${IC.check}<span><strong>Reguler &amp; Ekonomi:</strong> J&amp;T Express (EZ &amp; Eco), JNE REG, SiCepat REG, SAP Express &amp; SAP Lite, Lion Parcel, iDexpress, Anteraja, Pos Indonesia, dan SPX.</span></li>
-<li>${IC.check}<span><strong>Kargo mulai 5 kg:</strong> J&amp;T Cargo, JNE JTR, SiCepat GOKIL, Lion BIGPACK, dan iDtruck lengkap dengan hitung dimensi volumetrik otomatis.</span></li>
-<li>${IC.check}<span><strong>Kiriman COD &amp; Non-COD:</strong> validasi otomatis batas nilai COD per kurir dan perlindungan cadangan ongkir retur pada perhitungan Saldo Aman.</span></li>
+<li>${IC.check}<span><strong>Reguler &amp; Ekonomi:</strong> J&amp;T Express (EZ, serta Eco di sebagian rute), JNE REG, SiCepat REG, SAP Express, Lion Parcel, iDexpress, Anteraja, Pos Indonesia, dan SPX.</span></li>
+<li>${IC.check}<span><strong>Kargo mulai 5 kg (Non-COD):</strong> JNE Cargo, SiCepat Cargo, SAP Cargo, dan iDexpress Cargo lengkap dengan hitung dimensi volumetrik otomatis.</span></li>
+<li>${IC.check}<span><strong>Kiriman COD &amp; Non-COD (layanan reguler):</strong> validasi otomatis batas nilai COD per kurir dan perlindungan cadangan ongkir retur pada perhitungan Saldo Aman.</span></li>
 </ul>
 <p class="next-links"><a href="/ekspedisi">Tabel lengkap ekspedisi &amp; aturan layanan →</a></p>
 </div>
@@ -255,14 +255,14 @@ ${closingBand(app, "/simulasi-kasir", "Coba Simulasi Kasir")}`
 
 export function renderEkspedisi(app: string): string {
   const rows: Array<[string, string, string, string]> = [
-    ["jt", "EZ (Reguler), J&T Eco", "J&T Cargo (≥ 5 kg)", "Non-COD & COD"],
-    ["jne", "REG (Reguler)", "JTR Kargo (≥ 5 kg)", "Non-COD & COD"],
-    ["sicepat", "REG (Reguler)", "GOKIL Kargo (≥ 5 kg)", "Non-COD, COD & DG tertentu"],
-    ["sap", "REG, SAP Lite (Ekonomi)", "Kargo Darat", "Non-COD & COD"],
-    ["lion", "REGPACK", "BIGPACK Kargo", "Non-COD & COD"],
-    ["idexpress", "STD (Reguler)", "iDtruck Kargo", "Non-COD, COD & DG tertentu"],
-    ["anteraja", "Reguler", "Kargo", "Non-COD & COD (wajib nilai barang)"],
-    ["pos", "Pos Reguler", "Pos Kargo", "Non-COD & COD (batas rasio COD)"],
+    ["jt", "EZ (Reguler), J&T Eco (sebagian rute)", "—", "Reguler: Non-COD & COD"],
+    ["jne", "REG (Reguler)", "JNE Cargo (≥ 5 kg, Non-COD)", "Reguler: Non-COD & COD"],
+    ["sicepat", "REG (Reguler)", "SiCepat Cargo (≥ 5 kg, Non-COD)", "Reguler: Non-COD, COD & barang berbahaya tertentu"],
+    ["sap", "REG (Reguler)", "SAP Cargo (≥ 5 kg, Non-COD)", "Reguler: Non-COD & COD"],
+    ["lion", "REGPACK (Reguler)", "—", "Non-COD & COD"],
+    ["idexpress", "STD (Reguler)", "iDexpress Cargo (≥ 5 kg, Non-COD)", "Reguler: Non-COD, COD & barang berbahaya tertentu"],
+    ["anteraja", "Reguler (selalu dijemput kurir)", "—", "Non-COD & COD (wajib nilai barang)"],
+    ["pos", "Pos Reguler", "—", "Non-COD & COD (syarat tingkat terkirim)"],
     ["spx", "Standard", "—", "Non-COD & COD (wajib nilai barang)"],
   ]
   return `<div class="wrap phead">
@@ -281,9 +281,9 @@ export function renderEkspedisi(app: string): string {
 </div></section>
 
 <section class="sec"><div class="wrap grid3">
-<article class="card"><h3>Aturan berat &amp; volumetrik</h3><p>Sistem menghitung otomatis mana yang lebih besar antara berat timbangan aktual dan berat volumetrik dimensi kotak (pembagi <code>6.000</code> untuk reguler dan <code>4.000</code> untuk kargo) agar gerai tidak merugi akibat selisih berat tagihan kurir.</p></article>
-<article class="card"><h3>Validasi batas COD otomatis</h3><p>Setiap ekspedisi memiliki batas maksimum nilai tagihan COD dan ketentuan nilai barang (misalnya batas rasio ongkir terhadap nilai COD pada Pos Indonesia). Meja kasir memfilter otomatis sebelum resi diterbitkan.</p></article>
-<article class="card"><h3>Penanda barang berbahaya (DG)</h3><p>Kiriman yang mengandung baterai, cairan, parfum, atau aerosol dapat ditandai di kasir sehingga sistem hanya menampilkan ekspedisi yang mengizinkan jalur pengiriman tersebut.</p></article>
+<article class="card"><h3>Aturan berat &amp; volumetrik</h3><p>Sistem menghitung otomatis mana yang lebih besar antara berat timbangan aktual dan berat volumetrik dimensi kotak (pembagi mengikuti layanan yang dipilih: <code>4.000</code> untuk JNE Reguler dan iDexpress Cargo, <code>6.000</code> untuk layanan lain) agar gerai tidak merugi akibat selisih berat tagihan kurir.</p></article>
+<article class="card"><h3>Validasi batas COD otomatis</h3><p>Setiap ekspedisi memiliki batas maksimum nilai tagihan COD dan ketentuan nilai barang (misalnya syarat tingkat terkirim untuk COD Pos Indonesia). Meja kasir memfilter otomatis sebelum resi diterbitkan.</p></article>
+<article class="card"><h3>Penanda barang berbahaya (DG)</h3><p>Kiriman yang mengandung baterai, cairan, parfum, atau aerosol dapat ditandai di kasir sehingga sistem hanya menampilkan layanan reguler SiCepat dan iDexpress yang menerimanya.</p></article>
 </div>
 <p class="wrap next-links"><a href="/cara-kerja">Lihat cara menghubungkan titik jemput gerai →</a><a href="/biaya-dan-paket">Pelajari skema diskon ongkir per kurir →</a></p>
 </section>
@@ -341,6 +341,7 @@ export function renderBiaya(app: string): string {
 <li>${IC.check}<span>Akun pemilik + undangan akun kasir terpisah (tanpa bocor angka margin)</span></li>
 <li>${IC.check}<span>Halaman publik gratis <strong>namagerai.geraimitra.com</strong> dengan QR kirim dari rumah</span></li>
 <li>${IC.check}<span>Sinkronisasi mutasi saldo, pelacak COD cair, dan Meja Retur</span></li>
+<li>${IC.check}<span>Kunci API toko &amp; konektor MCP berbatas kuota harian</span></li>
 </ul>
 <div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai Standar</a></div>
 </article>
@@ -352,7 +353,6 @@ export function renderBiaya(app: string): string {
 <li>${IC.check}<span>Hubungkan domain milik sendiri (misalnya <code>kirim.tokoberkah.com</code> atau <code>tokoberkah.id</code>)</span></li>
 <li>${IC.check}<span>Sertifikat keamanan SSL/HTTPS diterbitkan dan diperpanjang otomatis di tepi jaringan Cloudflare</span></li>
 <li>${IC.check}<span>Pengalihan otomatis <code>www</code> ke domain utama dan pemantauan kesehatan DNS berkala</span></li>
-<li>${IC.check}<span>Akses kunci API toko &amp; konektor MCP berbatas kuota harian</span></li>
 </ul>
 <div class="row"><a class="cta ghost" href="/hubungi-kami">Tanyakan Aktivasi Domain Pro</a></div>
 </article>
@@ -364,7 +364,7 @@ export function renderBiaya(app: string): string {
 <h2>Bagaimana gerai mendapatkan keuntungan?</h2>
 <p>Pendapatan utama gerai berasal dari <strong>selisih diskon ongkos kirim mitra</strong> pada setiap resi yang diberangkatkan, ditambah layanan tambahan milik toko sendiri:</p>
 <ol class="chk" style="margin-top:10px">
-<li>${IC.check}<span><strong>1. Margin diskon ongkir ekspedisi:</strong> Pelanggan di loket membayar tarif publik resmi (misalnya Rp 20.000). Akun gerai memperoleh potongan diskon mitra per kurir (umumnya berkisar 20%–30% mengikuti kebijakan masing-masing ekspedisi di Mengantar), sehingga saldo yang terpotong lebih rendah dari uang tunai yang diterima di laci kasir.</span></li>
+<li>${IC.check}<span><strong>1. Margin diskon ongkir ekspedisi:</strong> Pelanggan di loket membayar tarif publik resmi (misalnya Rp 20.000). GeraiExpress menetapkan diskon mitra untuk akun Mengantar gerai Anda (nilainya per ekspedisi dan dikonfirmasi saat pendaftaran disetujui), lalu tim Mengantar menerapkannya pada akun tersebut. Saldo yang terpotong menjadi lebih rendah dari uang tunai yang diterima di laci kasir, sementara pelanggan tetap membayar tarif publik.</span></li>
 <li>${IC.check}<span><strong>2. Penjualan packing &amp; biaya layanan loket:</strong> Gerai bebas menetapkan daftar harga bubble wrap, kardus, lakban, atau biaya jasa loket resmi yang langsung tercantum rapi di struk pelanggan.</span></li>
 </ol>
 </div>
@@ -564,7 +564,7 @@ export function renderHubungi(l: Legal | null, app: string): string {
 <section class="sec band"><div class="wrap grid2" style="align-items:start">
 <div class="card">
 <h2>Saluran komunikasi resmi</h2>
-<p>Tim kemitraan dan bantuan teknis melayani pada hari kerja (Senin–Sabtu, pukul 08.30–17.30 WIB).</p>
+<p>Tim kemitraan dan bantuan teknis menjawab pertanyaan melalui saluran resmi di bawah ini.</p>
 <dl style="margin:12px 0 0;display:grid;gap:12px;font-size:.975rem">
 <div><dt style="font-weight:650;color:var(--navy)">Email Kemitraan &amp; Bantuan</dt><dd style="margin:2px 0 0"><a href="mailto:${e(email)}">${e(email)}</a></dd></div>
 ${l?.privacy_contact_email ? `<div><dt style="font-weight:650;color:var(--navy)">Kontak Pelindungan Data Pribadi</dt><dd style="margin:2px 0 0"><a href="mailto:${e(l.privacy_contact_email)}">${e(l.privacy_contact_email)}</a></dd></div>` : ""}

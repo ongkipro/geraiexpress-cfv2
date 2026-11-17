@@ -82,4 +82,5 @@ All routes require `aal2` TOTP verification and enforce strict non-impersonation
    - `/inv/:slug` — Privacy-safe digital customer receipt.
    - `/mcp` — Rate-limited public MCP endpoint (`08-OPENAPI-AND-MCP-CONTRACT.md`).
 2. **Platform Brand Site (`https://geraiexpress.com`):**
-   - `/` · `/fitur` · `/cara-kerja` · `/simulasi-kasir` (1-click interactive counter sandbox, no login wall) · `/hubungi-kami` · `/ketentuan` · `/privasi`.
+   - Ten SSR pages (DEC-245, `docs/visual/09` §3.1): `/` · `/fitur` · `/ekspedisi` · `/cara-kerja` · `/biaya-dan-paket` · `/simulasi-kasir` (1-click interactive counter sandbox, no login wall) · `/tanya-jawab` · `/hubungi-kami` · `/ketentuan` · `/privasi`; plus `sitemap.xml` (the ten pages) and `robots.txt`.
+   - Static brand files on the apex come only from the fixed `BRAND_ASSETS` allow-list (logo, favicons, `logo-192.png`, `og-geraiexpress.png`, `three.min.js` + `hero-studio-3d.min.js` for the home hero, `couriers/*.svg`), served from `ASSETS /app/*`; anything else is 404. No cookies and no `/api` families on the apex (ADR-0002); `www.` → apex `301`.

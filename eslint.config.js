@@ -24,5 +24,9 @@ export default defineConfig([
     files: ["**/*.{js,mjs}"],
     extends: [js.configs.recommended],
     languageOptions: { globals: { ...globals.node } },
+  },  {
+    // DEC-245 home hero source (browser script, vendored three.js r128 global).
+    files: ["apps/worker/src/brand/hero/*.js"],
+    languageOptions: { sourceType: "script", globals: { ...globals.browser, THREE: "readonly" } },
   },
 ])
