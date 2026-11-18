@@ -338,10 +338,13 @@ test("Brand DEC-247: beranda memuat paket, perbandingan, FAQ dan langkah penutup
   await pricing.locator(".tier", { hasText: "Domain Sendiri (Pro)" }).click()
   await expect(pro).toBeVisible()
   await expect(pricing.locator('.readout[data-plan="standar"]')).toBeHidden()
-  await expect(page.locator("table.cmp")).toBeVisible()
+  // DEC-249: the comparison table lives on /biaya-dan-paket; the home links to it.
+  await expect(page.locator("table.cmp")).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Lihat tabel perbandingan & skema komisi →" })).toHaveAttribute("href", "/biaya-dan-paket")
   const faq = page.locator('section[aria-labelledby="faq-title"] details')
   await expect(faq).toHaveCount(5)
   const second = faq.nth(1)
+  await expect(faq.first()).not.toHaveAttribute("open", "") // DEC-249: the home FAQ starts closed
   await expect(second).not.toHaveAttribute("open", "")
   await second.locator("summary").click()
   await expect(second).toHaveAttribute("open", "")
@@ -459,4 +462,47 @@ test("Brand DEC-247B: halaman dalam (lompat langkah, pipeline, indeks FAQ, foote
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), p).toBeLessThanOrEqual(0)
     await expect(page.locator(".phead .eyebrow"), p).toBeVisible()
   }
+})
+
+// DEC-249: the slim home (<= 6,200px at 1440) keeps the 3D hero, runs the courier marquee (paused on hover, a static
+// wrap under reduced motion) and shows Raka's counter with motion only on screen; /fitur opens with the moved showcase.
+test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya", async ({ page, browser }, info) => {
+  const apex = APP.replace("app.", "")
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()))
+  await page.goto(`${apex}/`)
+  await expect(page.locator("#stageWrapper canvas#webglCanvas")).toHaveCount(1)
+  if (info.project.name === "desktop-1280") {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(6200)
+  }
+  const track = page.locator(".mq-track")
+  await page.locator("section.partners").scrollIntoViewIfNeeded()
+  expect(await track.evaluate((el) => getComputedStyle(el).animationName)).toBe("gx-mq")
+  await page.locator(".marquee").hover()
+  expect(await track.evaluate((el) => getComputedStyle(el).animationPlayState)).toBe("paused")
+  await expect(page.locator('.mq-list[aria-hidden="true"] img[alt=""]')).toHaveCount(9)
+  const raka = page.locator("[data-raka]")
+  await raka.scrollIntoViewIfNeeded()
+  await expect(raka).toHaveClass(/is-playing/)
+  await expect(page.getByRole("img", { name: /^Ilustrasi Raka, mitra loket GeraiExpress/ })).toBeVisible()
+  await expect(page.locator('section[aria-labelledby="toko-title"] .chips li')).toHaveCount(8)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+  // Reduced motion: the marquee is a static wrap of nine logos (no duplicate track), Raka stays still.
+  const still = await browser.newContext({ reducedMotion: "reduce", viewport: page.viewportSize()! })
+  const sp = await still.newPage()
+  await sp.goto(`${apex}/`)
+  expect(await sp.locator(".mq-track").evaluate((el) => getComputedStyle(el).animationName)).toBe("none")
+  await expect(sp.locator('.mq-list[aria-hidden="true"]')).toBeHidden()
+  await sp.locator("[data-raka]").scrollIntoViewIfNeeded()
+  await sp.waitForTimeout(300)
+  await expect(sp.locator("[data-raka]")).not.toHaveClass(/is-playing/)
+  await still.close()
+  // /fitur: the showcase and the proof band sit between the page head and the six pillars.
+  await page.goto(`${apex}/fitur`)
+  const order = await page.evaluate(() => ["satu-layar-title", "bukti-title", "kasir-title"].map((id) => document.getElementById(id)!.getBoundingClientRect().top + scrollY))
+  expect(order[0]).toBeLessThan(order[1]!)
+  expect(order[1]).toBeLessThan(order[2]!)
+  expect(errors).toEqual([])
 })

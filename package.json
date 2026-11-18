@@ -15,6 +15,8 @@
     "test:worker": "pnpm --filter @gx/worker test",
     "security:bundle-audit": "node scripts/ci/bundle-audit.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test:unit && pnpm build && pnpm test:worker && pnpm security:bundle-audit",
+    "check:fast": "pnpm typecheck && pnpm lint && pnpm build && pnpm security:bundle-audit",
+    "clean:e2e-state": "node scripts/dev/clean-e2e-state.mjs",
     "cf-typegen": "wrangler types apps/worker/worker-configuration.d.ts --env-interface Env",
     "e2e": "playwright test",
     "db:migrate:local": "wrangler d1 migrations apply DB --local --env= --persist-to .wrangler/state-dev",

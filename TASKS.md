@@ -808,6 +808,14 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `/daftar-akun` and both `/daftar` steps have 0 `<footer>`, no page scroll and no inner scroll at 1440×900, 1366×768
   and 390×844 (e2e `auth-stage.spec.ts`); password toggle; onboarding/auth e2e on the new flow; dotuiux and
   admin-geometry 0 fail on the auth pages; mutations red; screenshots in `docs/evidence/DEC-248/`; `pnpm check`.
+- **DEC-249** Slim home + Raka storefront + courier marquee + geometric logo + dev velocity (R2, DEC-249; owner
+  2026-11-19) — worktree `dec-249`. Contract: visual 09 §6.2, `docs/WORKFLOW.md` §4, `docs/SYSTEM-MAP.md`. Done when:
+  hero markup byte-identical (hash test); `/` ≤ 6,200 px at 1440 with 0 overflow and 0 console errors; marquee pauses
+  on hover/focus and is a static wrap under reduced motion; Raka section with eight store types, motion only on screen;
+  showcase + proof band at the top of `/fitur`; `logo.svg` < 1.8 KB with no traced steps and both favicons redrawn
+  (before/after proof); `check:fast`, `GX_SKIP_BUILD`, `GX_REUSE_SERVER`, `GX_VITEST_WORKERS`, stale-state pruning;
+  `check-page.mjs` 10/10, brand Vitest + e2e, mutations, screenshots in `docs/evidence/DEC-249/`; supervisor screenshot
+  review before the single final gate.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
   dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
   tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or

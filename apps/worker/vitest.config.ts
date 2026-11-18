@@ -30,5 +30,8 @@ export default defineConfig({
     setupFiles: ["./test/setup.ts"],
     // Multi-step flows (dispatch + sync + projection) on a shared machine: 5 s produced load-only timeouts.
     testTimeout: 15_000,
+    // DEC-249: at most 3 workerd pools locally (4 in CI) — 8 on a shared 8-core host starved each other ("bad port",
+    // EnvironmentTeardownError) and forced reruns. Override with GX_VITEST_WORKERS.
+    maxWorkers: Number(process.env.GX_VITEST_WORKERS ?? (process.env.CI ? 4 : 3)),
   },
 })

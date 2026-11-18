@@ -4,6 +4,9 @@
 import { env, exports } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 
+/** SHA-256 of the home 3D studio hero markup on `main` before DEC-249 (owner: "do not modify it at all"). */
+const HERO_SHA256 = "0c41edbc5b85f6e3f6e79771f53968b4ecc1eb19a30a73dbddc217cee2250ca1"
+
 const APEX = "http://geraiexpress.localhost:8787"
 const get = (path: string, headers: Record<string, string> = {}) => exports.default.fetch(`${APEX}${path}`, { headers })
 const PAGES = [
@@ -177,7 +180,9 @@ describe("brand site DEC-247", () => {
     expect(h).toContain('<div class="stage"><aside class="float" aria-labelledby="demo-title">')
     expect(h).toContain('<h2 id="demo-title" class="demo-title">Tinjau Tarif Loket</h2>')
     expect(h).not.toMatch(/Pratinjau/)
-    expect(h.match(/<li class="pbadge"><img src="\/couriers\//g)?.length).toBe(9)
+    // DEC-249: the nine couriers run in a marquee; the duplicate track is hidden from assistive tech.
+    expect(h.match(/<ul class="mq-list" aria-label="Sembilan ekspedisi mitra Mengantar">(<li class="pbadge"><img src="\/couriers\/\w+\.svg" alt="[^"]+"[^>]*><\/li>){9}<\/ul>/)).not.toBeNull()
+    expect(h.match(/<ul class="mq-list" aria-hidden="true">(<li class="pbadge"><img src="\/couriers\/\w+\.svg" alt=""[^>]*><\/li>){9}<\/ul>/)).not.toBeNull()
     const bento = h.slice(h.indexOf("<div class=\"bento\" data-bento>"), h.indexOf("</div>\n<p class=\"note\">Ilustrasi fitur", h.indexOf("data-bento")))
     expect([...bento.matchAll(/<article class="tile ([^"]+)">/g)].map((m) => m[1])).toEqual(["s6", "s6", "s4", "s4", "s4 b5", "s12"])
     expect([...bento.matchAll(/<span class="idx">(\d\d)<\/span>/g)].map((m) => m[1])).toEqual(["01", "02", "03", "04", "05", "06"])
@@ -224,6 +229,36 @@ describe("brand site DEC-247", () => {
     const head = h.slice(h.indexOf('<section class="phead"'), h.indexOf("</section>", h.indexOf('<section class="phead"')))
     expect([...head.matchAll(/<a href="#([a-z-]+)">/g)].map((m) => m[1])).toEqual(ids)
     expect(h).not.toContain('class="card"')
+  })
+
+  it("DEC-249 home: hero byte-identical, seven blocks, courier marquee, Raka storefront section with eight store types", async () => {
+    const h = await html("/")
+    // The 3D studio hero is untouched (owner 2026-11-19): byte-identical markup and the same two scripts.
+    const hero = h.slice(h.indexOf('<section class="hero-bleed"'), h.indexOf("</section>", h.indexOf('<section class="hero-bleed"')) + 10)
+    const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hero)))].map((b) => b.toString(16).padStart(2, "0")).join("")
+    expect(digest).toBe(HERO_SHA256)
+    expect(h).toContain('<script defer src="/three.min.js"></script><script defer src="/hero-studio-3d.min.js"></script>')
+    // Seven blocks after the hero: intro, marquee, Raka, bento, screenshot, pricing, FAQ (+ the shared closing).
+    const main = h.slice(h.indexOf("</section>", h.indexOf('<section class="hero-bleed"')))
+    expect([...main.matchAll(/<section class="([^"]+)"(?: id="[^"]+")?(?: aria-labelledby="([^"]+)")?/g)].map((m) => m[2] ?? m[1])).toEqual([
+      "sec", "mitra-title", "toko-title", "enam-title", "layar-title", "paket-title", "faq-title", "tutup-title",
+    ])
+    // Marquee: CSS-only, pauses on hover/focus, a static wrap under reduced motion.
+    const css = /<style>([\s\S]*?)<\/style>/.exec(h)![1]!
+    expect(css).toContain(".marquee:hover .mq-track,.marquee:focus-within .mq-track{animation-play-state:paused}")
+    expect(css).toContain("@media(prefers-reduced-motion:reduce){.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}")
+    expect(css).toContain("mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)")
+    // Raka: a labelled illustration, motion only on screen and never under reduced motion.
+    const raka = h.slice(h.indexOf('<section class="sec" aria-labelledby="toko-title">'), h.indexOf("</section>", h.indexOf('aria-labelledby="toko-title"')))
+    expect(raka).toContain('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 470" class="raka-svg" role="img" aria-labelledby="rk-t">')
+    expect(raka).toMatch(/<title id="rk-t">Ilustrasi Raka, mitra loket GeraiExpress[^<]+<\/title>/)
+    expect(raka).toContain('<h2 id="toko-title">Ubah tokomu jadi titik kirim paket warga &amp; penjual online sekitar</h2>')
+    expect([...raka.matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1])).toEqual([
+      "Konter Pulsa &amp; Kuota", "Fotokopi &amp; Percetakan", "Warung &amp; Toko Kelontong", "Toko ATK &amp; Buku",
+      "Ruko Jasa &amp; Laundry", "Koperasi &amp; BUMDes", "Dropshipper &amp; Reseller", "Gudang UMKM Online",
+    ])
+    expect(h).toContain('var r=document.querySelector("[data-raka]");\n  if(!r||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;')
+    expect(css).toContain("@media(prefers-reduced-motion:reduce){.raka-stage .rk-float,.raka-stage .rk-scan path{animation:none!important}}")
   })
 
   it("DEC-247B inner pages: centered PageHead with eyebrow pill and dot grid on all nine inner pages", async () => {
@@ -342,26 +377,32 @@ describe("brand site DEC-247", () => {
     }
   })
 
-  it("home parity (DEC-247A): layered showcase, proof band 01/02, pricing + comparison, five FAQ, quiet closing (DEC-248)", async () => {
-    const h = await html("/")
+  it("home + /fitur (DEC-247A, slimmed by DEC-249): showcase and proof band on /fitur, pricing + link, five FAQ, quiet closing", async () => {
+    const home = await html("/")
+    const h = await html("/fitur")
+    // DEC-249: the layered showcase and the proof band moved from the home page to the top of /fitur.
+    for (const moved of ['<figure class="layers">', '<div class="proof">', '<table class="cmp">', 'aria-labelledby="layanan-title"', 'aria-labelledby="alat-title"']) expect(home, moved).not.toContain(moved)
+    expect(h.indexOf('aria-labelledby="satu-layar-title"')).toBeGreaterThan(h.indexOf('<section class="phead"'))
+    expect(h.indexOf('aria-labelledby="bukti-title"')).toBeLessThan(h.indexOf('<section class="sec tight" aria-label="Enam modul GeraiExpress">'))
     // 1. Layered product UI: faded KPI layer behind a floating table card, synthetic data labelled as such.
     expect(h).toContain('<figure class="layers">')
     expect(h).toMatch(/<div class="layer-back" aria-hidden="true">[\s\S]*Saldo Aman[\s\S]*<div class="spark">/)
     expect(h).toMatch(/<div class="layer-front float">[\s\S]*Ringkasan Ekspedisi Loket[\s\S]*Cocok 1:1/)
     expect(h).toContain("Data contoh untuk ilustrasi, bukan angka gerai sungguhan.")
     // Sol R1 (non-blocking P2): every synthetic visual says it is an illustration.
-    expect(h).toMatch(/<div class="bento" data-bento>[\s\S]*?<\/div>\n<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan\.<\/p>\n<\/div><\/section>/)
+    expect(home).toMatch(/<div class="bento" data-bento>[\s\S]*?<\/div>\n<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan\.<\/p>\n<\/div><\/section>/)
     expect(h).toMatch(/<div class="float rb"[\s\S]*?<p class="rb-note">Ilustrasi alur, bukan angka pengukuran\.<\/p>\n<\/div>/)
     // 2. Two porcelain proof surfaces 01 and 02.
     expect(h).toMatch(/<div class="proof">[\s\S]*<span class="idx">01<\/span><h3>Dari catatan campur ke rekonsiliasi 1:1 per resi[\s\S]*<span class="idx">02<\/span><h3>Tiga lapis privasi/)
-    // 3. The same pricing radios and open comparison as /biaya-dan-paket, on the home page.
+    // 3. The same pricing radios as /biaya-dan-paket on the home page; the comparison stays on /biaya-dan-paket (linked).
     const biaya = await html("/biaya-dan-paket")
     const block = (x: string, open: string, close: string) => x.slice(x.indexOf(open), x.indexOf(close, x.indexOf(open)) + close.length)
-    expect(block(h, '<div class="pricing" data-pricing>', "</fieldset>")).toBe(block(biaya, '<div class="pricing" data-pricing>', "</fieldset>"))
-    expect(block(h, '<table class="cmp">', "</table>")).toBe(block(biaya, '<table class="cmp">', "</table>"))
-    expect(h).not.toContain("Biaya kemitraan")
+    expect(block(home, '<div class="pricing" data-pricing>', "</fieldset>")).toBe(block(biaya, '<div class="pricing" data-pricing>', "</fieldset>"))
+    expect(biaya).toContain('<table class="cmp">')
+    expect(home).toContain('<p class="more"><a href="/biaya-dan-paket">Lihat tabel perbandingan &amp; skema komisi →</a></p>')
+    expect(home).not.toContain("Biaya kemitraan")
     // 4. Five FAQ rows, worded exactly as on /tanya-jawab, plus the link to all questions.
-    const faq = block(h, '<section class="sec tight" aria-labelledby="faq-title">', "</section>")
+    const faq = block(home, '<section class="sec tight" aria-labelledby="faq-title">', "</section>")
     expect(faq.match(/<details/g)).toHaveLength(5)
     const all = await html("/tanya-jawab")
     for (const q of faq.matchAll(/<summary>([^<]+)<\/summary>/g)) expect(all).toContain(`<summary>${q[1]}</summary>`)

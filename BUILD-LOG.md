@@ -1201,3 +1201,23 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   brand `/`, `/fitur`, app `/masuk`, `/daftar-akun` and owner `/masuk` 200; probes staging 5/5, production 6/6
   (twice). No migration.
 
+## 2026-11-19 — DEC-249 Slim home + Raka storefront + courier marquee + geometric logo + dev velocity (branch `dec-249`, awaiting supervisor review)
+
+- Tooling first (§4): Workers Vitest caps `workerd` pools at `GX_VITEST_WORKERS` (3 locally, 4 in CI); `pnpm
+  check:fast`; Playwright honours `GX_SKIP_BUILD` / `GX_REUSE_SERVER` and prunes `.wrangler/state-e2e-*` older than
+  2 h (`scripts/dev/clean-e2e-state.mjs`, also `pnpm clean:e2e-state`). With these, a focused brand e2e started
+  without rebuilding both SPAs.
+- Logo: the traced 10.3 KB `logo.svg` was measured row by row and contour-traced at 2x. It was redrawn as straight
+  edges plus cubic Béziers fitted to the measured boundary (max deviation ~2–3 units on the 1044-wide viewBox):
+  792 B, M/L/H/C/Q/Z only, same three colours. Favicons (app white tile 983 B, owner navy tile 892 B) reuse the paths
+  at the original placement. Proof: `logo-before-after-zoom.png` (520 px, 6× zoom, 120 px, 24/64 px favicons).
+- Home: hero byte-identical (SHA-256 of `main`'s markup locked in a test); partner grid → marquee; new Raka section
+  (hand-drawn SVG, labelled illustration, motion only on screen); layered showcase + proof band moved to `/fitur`;
+  Reguler/Kargo/COD, equipment and the comparison table dropped from `/` (each still on its own page). Home-only CSS
+  (`main:has(>.hero-bleed)`) tightens the rhythm, sets one-line section titles, and compacts the pricing panel, FAQ
+  and closing: 10,027 → 6,044 px at 1440 (measured per section).
+- Gotchas:
+  1. `max-width:34ch` on titles still wrapped a 43-character title; the home lets section titles span the container.
+  2. `pkill -f` matching its own command line killed the deploy shell during DEC-247B cleanup (no harm); WORKFLOW
+     now says to stop servers by PID.
+

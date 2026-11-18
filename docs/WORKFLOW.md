@@ -61,6 +61,15 @@ R3/R4 always get an independent review.
 | Before merge | `pnpm check` (typecheck + lint + unit + worker + bundle audit) |
 | Milestone boundary | ONE integrated run (§5) |
 
+**No duplicate suites (DEC-249).** `pnpm check` already runs `test:unit` and `test:worker`. A ledger run records
+either `check` alone (plus `e2e`, `seo`, …), or targeted `unit` / `worker` files plus `check:fast` (typecheck + lint
++ build + bundle audit) — never the full `test:worker` twice on the same tree. During iteration use focused checks
+only: `pnpm typecheck`, the touched Vitest files, and `GX_SKIP_BUILD=1 pnpm exec playwright test <spec> --project
+desktop-1280` after one `pnpm build` (`GX_REUSE_SERVER=1` reuses a `wrangler dev` already on `GX_E2E_PORT`). Run the
+full gate once, in the release run. A review-only or doc-only release commit reuses the verified check evidence of
+the same code digest instead of a second five-minute suite. Workers tests run at most `GX_VITEST_WORKERS` (default 3
+locally, 4 in CI) `workerd` pools, so a shared host no longer hits `bad port` / `EnvironmentTeardownError`.
+
 Heavy runs (worker pool, Playwright, builds) go through the device's shared-resource wrapper (`heavy-run --lock
 <repo>-env -- <cmd>` on devices that have it).
 
@@ -113,3 +122,7 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
 - `blockConcurrencyWhile` has a 30 s limit and a throw resets the object; tenant migrations use an explicit RPC.
 - `shadcn add` overwrites edited primitives (`card.tsx`, `button.tsx`): back up, add, restore.
 - Box-drawing wireframes: check display width (emoji with VS16 count as 2 columns) before committing.
+- Every Playwright run writes a fresh `.wrangler/state-e2e-<run>`; folders older than 2 h are pruned at start and by
+  `pnpm clean:e2e-state` (DEC-249). Do not point `GX_E2E_RUN` at a folder another run still uses.
+- `pkill -f <pattern>` also matches the shell running it when the pattern is on its own command line; stop servers
+  by PID (`kill $WPID`) instead.

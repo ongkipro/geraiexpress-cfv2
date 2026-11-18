@@ -112,6 +112,12 @@ export const HOME_SCRIPT = `<script defer src="/three.min.js"></script><script d
   if(!g||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
   new IntersectionObserver(function(es){es.forEach(function(x){g.classList.toggle("is-playing",x.isIntersecting)})},{threshold:.15}).observe(g);
 })();
+(function(){
+  // Raka's parcel, label and scan beam move only while the stage is on screen; still under reduced motion (DEC-249).
+  var r=document.querySelector("[data-raka]");
+  if(!r||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  new IntersectionObserver(function(es){es.forEach(function(x){r.classList.toggle("is-playing",x.isIntersecting)})},{threshold:.2}).observe(r);
+})();
 </script>`
 
 export function renderHome(app: string): string {
@@ -183,36 +189,65 @@ export function renderHome(app: string): string {
 
 <section class="sec tight partners" aria-labelledby="mitra-title"><div class="wrap">
 <div class="shead"><h2 id="mitra-title">Sembilan ekspedisi mitra dalam satu loket</h2><p class="sub">Terhubung resmi lewat jaringan Mengantar: satu akun gerai untuk semua kurir, Reguler maupun Kargo.</p></div>
-<ul class="pgrid" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
-</div></section>
+</div>
+<div class="marquee"><div class="mq-track">
+<ul class="mq-list" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
+<ul class="mq-list" aria-hidden="true">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28, true)}</li>`).join("")}</ul>
+</div></div>
+</section>
 
-<section class="sec" aria-labelledby="satu-layar-title"><div class="wrap show-grid">
-<div>
-<h2 id="satu-layar-title">Lihat jelas untung loket, saldo Mengantar, dan status tiap resi dalam satu layar</h2>
-<p class="sub">Setiap resi tunai, QRIS, maupun COD tercatat otomatis antara laci kasir dan mutasi akun seller Mengantar. Anda tahu persis berapa Saldo Aman yang siap ditarik dan paket mana yang menunggu dijemput kurir.</p>
-<ul class="chk">
-<li>${IC.check}<span>Kasir melihat tarif publik; modal dan margin hanya di akun Pemilik</span></li>
-<li>${IC.check}<span>Rekonsiliasi per resi antara kas loket dan mutasi Mengantar</span></li>
-<li>${IC.check}<span>Cadangan ongkir retur dihitung otomatis dalam Saldo Aman sebelum saldo ditarik</span></li>
-</ul>
-</div>
-<figure class="layers">
-<div class="layer-back" aria-hidden="true">
-<div class="kpis"><div><span>Resi hari ini</span><b>42</b></div><div><span>Kas loket</span><b>Rp 1.284.000</b></div><div><span>Rekonsiliasi</span><b>1:1</b></div><div><span>Saldo Aman</span><b>Rp 2.450.000</b></div></div>
-<div class="spark">${[38, 52, 44, 61, 57, 70, 64, 78, 72, 88].map((h) => `<i style="height:${h}%"></i>`).join("")}</div>
-</div>
-<div class="layer-front float">
-<p class="lf-title">Ringkasan Ekspedisi Loket</p>
-<table class="lf-table"><caption class="sr">Contoh ringkasan ekspedisi loket hari ini (data contoh)</caption>
-<thead><tr><th scope="col">Ekspedisi</th><th scope="col">Paket</th><th scope="col">Tagihan publik</th><th scope="col">Status</th></tr></thead>
-<tbody>
-<tr><td>${courierImg("jt", 14, true)}<span>J&amp;T Express · EZ</span></td><td>18</td><td>Rp 342.000</td><td><span class="st ok">Cocok 1:1</span></td></tr>
-<tr><td>${courierImg("sicepat", 14, true)}<span>SiCepat · REG</span></td><td>12</td><td>Rp 228.000</td><td><span class="st">Siap Pickup</span></td></tr>
-<tr><td>${courierImg("sap", 14, true)}<span>SAP Cargo</span></td><td>3</td><td>Rp 186.000</td><td><span class="st">Siap Pickup</span></td></tr>
-</tbody></table>
-</div>
-<figcaption>Data contoh untuk ilustrasi, bukan angka gerai sungguhan.</figcaption>
+<section class="sec" aria-labelledby="toko-title"><div class="wrap raka-grid">
+<figure class="raka-stage" data-raka>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 470" class="raka-svg" role="img" aria-labelledby="rk-t">
+<title id="rk-t">Ilustrasi Raka, mitra loket GeraiExpress, memindai paket di meja kasir dengan timbangan dan printer label thermal</title>
+<defs>
+<linearGradient id="rk-skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D49A6A"/><stop offset="1" stop-color="#B97C4E"/></linearGradient>
+<linearGradient id="rk-vest" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173A8F"/><stop offset="1" stop-color="#012676"/></linearGradient>
+<linearGradient id="rk-shirt" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6EBF3"/></linearGradient>
+<linearGradient id="rk-desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E9EEF6"/></linearGradient>
+<linearGradient id="rk-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCE3EE"/><stop offset="1" stop-color="#C9D3E2"/></linearGradient>
+<linearGradient id="rk-beam" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00A6FE" stop-opacity=".55"/><stop offset="1" stop-color="#00A6FE" stop-opacity="0"/></linearGradient>
+<filter id="rk-sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0F172A" flood-opacity=".14"/></filter>
+</defs>
+<g filter="url(#rk-sh)"><rect x="150" y="26" width="260" height="46" rx="12" fill="#012676"/></g>
+<text x="280" y="55" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" font-weight="800" letter-spacing="1.5" fill="#fff">LOKET MULTI-EKSPEDISI</text>
+<rect x="356" y="128" width="150" height="8" rx="4" fill="#CBD5E1"/>
+<g><path d="M372 100h44v28h-44z" fill="#C8935A"/><path d="M372 100l8-8h44l-8 8z" fill="#DDB07A"/><path d="M416 100l8-8v28l-8 8z" fill="#AE7A47"/><rect x="390" y="100" width="8" height="28" fill="#E8C99B"/></g>
+<g><path d="M436 108h52v20h-52z" fill="#C8935A"/><path d="M436 108l7-7h52l-7 7z" fill="#DDB07A"/><path d="M488 108l7-7v20l-7 7z" fill="#AE7A47"/><rect x="458" y="108" width="8" height="20" fill="#E8C99B"/></g>
+<path d="M126 330c0-62 30-104 82-104s82 42 82 104z" fill="url(#rk-shirt)"/>
+<path d="M134 330c2-52 24-88 58-98l16 44 16-44c34 10 56 46 58 98z" fill="url(#rk-vest)"/>
+<path d="M192 232l16 44 16-44-16 8z" fill="#fff"/>
+<rect x="228" y="268" width="30" height="20" rx="6" fill="#0060FE"/>
+<text x="243" y="283" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">GE</text>
+<rect x="196" y="204" width="24" height="26" rx="8" fill="#B97C4E"/>
+<circle cx="208" cy="168" r="40" fill="url(#rk-skin)"/>
+<circle cx="168" cy="172" r="8" fill="#C38657"/><circle cx="248" cy="172" r="8" fill="#C38657"/>
+<path d="M168 162c-2-30 16-46 42-46 24 0 42 14 40 40-6-12-18-18-34-18-20 0-30 8-48 24z" fill="#1F2937"/>
+<ellipse cx="194" cy="172" rx="4" ry="5" fill="#1F2937"/><ellipse cx="224" cy="172" rx="4" ry="5" fill="#1F2937"/>
+<path d="M196 190q12 10 24 0" stroke="#7C3F1D" stroke-width="3" stroke-linecap="round" fill="none"/>
+<circle cx="186" cy="184" r="5" fill="#E8956B" opacity=".45"/><circle cx="232" cy="184" r="5" fill="#E8956B" opacity=".45"/>
+<path d="M262 262c22 6 40 22 52 40l-18 14c-12-14-24-24-40-30z" fill="url(#rk-shirt)"/>
+<circle cx="312" cy="314" r="13" fill="url(#rk-skin)"/>
+<g class="rk-scan"><path d="M306 296l40-14 8 20-40 14z" fill="#334155"/><path d="M346 282l10-3 7 18-9 5z" fill="#0F172A"/><rect x="318" y="310" width="12" height="24" rx="4" transform="rotate(-20 324 322)" fill="#1E293B"/>
+<path d="M360 292l70 44v-20z" fill="url(#rk-beam)"/></g>
+<g filter="url(#rk-sh)"><path d="M36 330h488l-10 26H46z" fill="url(#rk-desk)"/></g>
+<path d="M46 356h468v94a14 14 0 0 1-14 14H60a14 14 0 0 1-14-14z" fill="url(#rk-front)"/>
+<rect x="46" y="356" width="468" height="4" fill="#0060FE" opacity=".85"/><rect x="66" y="380" width="96" height="10" rx="5" fill="#fff" opacity=".7"/>
+<path d="M392 322h112l6 10H386z" fill="#94A3B8"/><rect x="398" y="332" width="100" height="14" rx="4" fill="#475569"/>
+<rect x="410" y="334" width="62" height="10" rx="2" fill="#0B1220"/><text x="441" y="342.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" font-weight="700" fill="#5EEAD4">1.000 g</text>
+<g class="rk-float"><path d="M404 262h74v60h-74z" fill="#C8935A"/><path d="M404 262l14-14h74l-14 14z" fill="#DDB07A"/><path d="M478 262l14-14v60l-14 14z" fill="#AE7A47"/><rect x="434" y="262" width="12" height="60" fill="#E8C99B"/>
+<rect x="412" y="282" width="34" height="26" rx="3" fill="#fff"/><path d="M416 288h2v14h-2zm4 0h1v14h-1zm3 0h3v14h-3zm5 0h1v14h-1zm3 0h2v14h-2zm4 0h1v14h-1zm3 0h2v14h-2z" fill="#0F172A"/></g>
+<g class="rk-float rk-late"><rect x="70" y="300" width="96" height="30" rx="8" fill="#fff" stroke="#E2E8F0" stroke-width="2"/><rect x="84" y="298" width="68" height="5" rx="2.5" fill="#1E293B"/>
+<path d="M90 300V246h56v54z" fill="#fff" stroke="#E2E8F0" stroke-width="2"/><text x="118" y="262" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" font-weight="700" fill="#0F172A">AWB</text>
+<path d="M98 270h2v18h-2zm4 0h1v18h-1zm3 0h3v18h-3zm5 0h1v18h-1zm3 0h2v18h-2zm4 0h1v18h-1zm3 0h3v18h-3zm5 0h1v18h-1zm3 0h2v18h-2z" fill="#0F172A"/><circle cx="154" cy="315" r="3" fill="#22C55E"/></g>
+</svg>
+<figcaption class="sr">Raka, ilustrasi mitra loket (bukan foto orang sungguhan).</figcaption>
 </figure>
+<div class="raka-copy">
+<h2 id="toko-title">Ubah tokomu jadi titik kirim paket warga &amp; penjual online sekitar</h2>
+<p class="sub">Sudah punya meja kasir atau ruko yang buka setiap hari? Tambahkan layanan sembilan ekspedisi tanpa biaya waralaba dan tanpa sewa mesin khusus.</p>
+<ul class="chips" aria-label="Jenis usaha yang cocok membuka loket"><li>Konter Pulsa &amp; Kuota</li><li>Fotokopi &amp; Percetakan</li><li>Warung &amp; Toko Kelontong</li><li>Toko ATK &amp; Buku</li><li>Ruko Jasa &amp; Laundry</li><li>Koperasi &amp; BUMDes</li><li>Dropshipper &amp; Reseller</li><li>Gudang UMKM Online</li></ul>
+</div>
 </div></section>
 
 <section class="sec" aria-labelledby="enam-title"><div class="wrap">
@@ -259,6 +294,50 @@ export function renderHome(app: string): string {
 <figure class="shot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" loading="lazy" decoding="async"></div><figcaption>Tangkapan layar ruang kerja kasir dengan data contoh.</figcaption></figure>
 </div></section>
 
+<section class="sec" aria-labelledby="paket-title"><div class="wrap">
+<div class="shead"><h2 id="paket-title">Pilih cara bermitra</h2><p class="sub">Mulai tanpa biaya langganan aplikasi, lalu tambahkan domain toko sendiri hanya bila dibutuhkan.</p></div>
+${pricingBlock(app)}
+<p class="more"><a href="/biaya-dan-paket">Lihat tabel perbandingan &amp; skema komisi →</a></p>
+</div></section>
+
+<section class="sec tight" aria-labelledby="faq-title"><div class="wrap">
+<div class="shead"><h2 id="faq-title">Pertanyaan umum calon mitra</h2><p class="sub">Lima hal yang paling sering ditanyakan pemilik toko sebelum membuka loket.</p></div>
+${faqList(HOME_FAQ, false)}
+<p class="more"><a href="/tanya-jawab">Semua pertanyaan →</a></p>
+</div></section>
+${closing(app, "/fitur", "Lihat Semua Fitur")}`
+}
+
+/** Moved from the home page (DEC-249): the layered KPI/table showcase and the two-surface proof band open `/fitur`. */
+const FITUR_SHOWCASE = `<section class="sec" aria-labelledby="satu-layar-title"><div class="wrap show-grid">
+<div>
+<h2 id="satu-layar-title">Lihat jelas untung loket, saldo Mengantar, dan status tiap resi dalam satu layar</h2>
+<p class="sub">Setiap resi tunai, QRIS, maupun COD tercatat otomatis antara laci kasir dan mutasi akun seller Mengantar. Anda tahu persis berapa Saldo Aman yang siap ditarik dan paket mana yang menunggu dijemput kurir.</p>
+<ul class="chk">
+<li>${IC.check}<span>Kasir melihat tarif publik; modal dan margin hanya di akun Pemilik</span></li>
+<li>${IC.check}<span>Rekonsiliasi per resi antara kas loket dan mutasi Mengantar</span></li>
+<li>${IC.check}<span>Cadangan ongkir retur dihitung otomatis dalam Saldo Aman sebelum saldo ditarik</span></li>
+</ul>
+</div>
+<figure class="layers">
+<div class="layer-back" aria-hidden="true">
+<div class="kpis"><div><span>Resi hari ini</span><b>42</b></div><div><span>Kas loket</span><b>Rp 1.284.000</b></div><div><span>Rekonsiliasi</span><b>1:1</b></div><div><span>Saldo Aman</span><b>Rp 2.450.000</b></div></div>
+<div class="spark">${[38, 52, 44, 61, 57, 70, 64, 78, 72, 88].map((h) => `<i style="height:${h}%"></i>`).join("")}</div>
+</div>
+<div class="layer-front float">
+<p class="lf-title">Ringkasan Ekspedisi Loket</p>
+<table class="lf-table"><caption class="sr">Contoh ringkasan ekspedisi loket hari ini (data contoh)</caption>
+<thead><tr><th scope="col">Ekspedisi</th><th scope="col">Paket</th><th scope="col">Tagihan publik</th><th scope="col">Status</th></tr></thead>
+<tbody>
+<tr><td>${courierImg("jt", 14, true)}<span>J&amp;T Express · EZ</span></td><td>18</td><td>Rp 342.000</td><td><span class="st ok">Cocok 1:1</span></td></tr>
+<tr><td>${courierImg("sicepat", 14, true)}<span>SiCepat · REG</span></td><td>12</td><td>Rp 228.000</td><td><span class="st">Siap Pickup</span></td></tr>
+<tr><td>${courierImg("sap", 14, true)}<span>SAP Cargo</span></td><td>3</td><td>Rp 186.000</td><td><span class="st">Siap Pickup</span></td></tr>
+</tbody></table>
+</div>
+<figcaption>Data contoh untuk ilustrasi, bukan angka gerai sungguhan.</figcaption>
+</figure>
+</div></section>
+
 <section class="sec" aria-labelledby="bukti-title"><div class="wrap">
 <div class="shead"><h2 id="bukti-title">Uang laci kasir dan saldo ekspedisi tidak lagi selisih di akhir minggu</h2><p class="sub">Dua kebiasaan loket yang paling sering memakan waktu kini dikerjakan sistem.</p></div>
 <div class="proof">
@@ -276,46 +355,7 @@ export function renderHome(app: string): string {
 <div><dt>Layar kasir</dt><dd>Modal &amp; diskon terkunci</dd></div>
 </dl></div></div>
 </div>
-</div></section>
-
-<section class="sec tight" aria-labelledby="layanan-title"><div class="wrap">
-<div class="shead"><h2 id="layanan-title">Reguler, Kargo, dan COD dari satu loket</h2><p class="sub">Lewat akun seller Mengantar milik gerai sendiri, pelanggan bebas memilih layanan tercepat atau paling hemat.</p></div>
-<div class="open-cols">
-<div><h3>Reguler &amp; Ekonomi</h3><p>J&amp;T Express (EZ, serta Eco di sebagian rute), JNE REG, SiCepat REG, SAP Express, Lion Parcel, iDexpress, Anteraja, Pos Indonesia, dan SPX.</p></div>
-<div><h3>Kargo mulai 5 kg (Non-COD)</h3><p>JNE Cargo, SiCepat Cargo, SAP Cargo, dan iDexpress Cargo, lengkap dengan hitung berat volumetrik otomatis.</p></div>
-<div><h3>COD &amp; Non-COD</h3><p>Batas nilai COD per kurir divalidasi otomatis, dan cadangan ongkir retur ikut dihitung dalam Saldo Aman.</p></div>
-</div>
-</div></section>
-
-<section class="sec tight" aria-labelledby="alat-title"><div class="wrap">
-<div>
-<h2 id="alat-title">Cukup peralatan yang sudah ada di toko</h2>
-<p class="sub">Tidak ada paket perangkat keras eksklusif atau sewa mesin bulanan. Tiga alat umum sudah cukup untuk melayani kiriman harian.</p>
-<ul class="chk">
-<li>${IC.check}<span><strong>Laptop, PC, atau HP Android</strong> untuk ruang kerja berbasis web yang ringan.</span></li>
-<li>${IC.check}<span><strong>Timbangan digital meja</strong> dengan input berat dalam gram (bawaan 1.000 gram).</span></li>
-<li>${IC.check}<span><strong>Printer thermal 100 mm atau 58 mm</strong> merek apa pun, USB, LAN, atau Bluetooth.</span></li>
-</ul>
-</div>
-</div></section>
-
-<section class="sec" aria-labelledby="paket-title"><div class="wrap">
-<div class="shead"><h2 id="paket-title">Pilih cara bermitra</h2><p class="sub">Mulai tanpa biaya langganan aplikasi, lalu tambahkan domain toko sendiri hanya bila dibutuhkan.</p></div>
-${pricingBlock(app)}
-</div></section>
-
-<section class="sec tight" aria-labelledby="banding-title"><div class="wrap">
-<div class="shead"><h2 id="banding-title">Dibanding cara lain membuka loket</h2><p class="sub">Gambaran umum tanpa menyebut merek, dan hanya pada hal yang benar-benar dikerjakan GeraiExpress.</p></div>
-${compareTable()}
-</div></section>
-
-<section class="sec tight" aria-labelledby="faq-title"><div class="wrap">
-<div class="shead"><h2 id="faq-title">Pertanyaan umum calon mitra</h2><p class="sub">Lima hal yang paling sering ditanyakan pemilik toko sebelum membuka loket.</p></div>
-${faqList(HOME_FAQ)}
-<p class="more"><a href="/tanya-jawab">Semua pertanyaan →</a></p>
-</div></section>
-${closing(app, "/fitur", "Lihat Semua Fitur")}`
-}
+</div></section>`
 
 type Pillar = { id: string; label: string; title: string; points: string[]; visual: string }
 
@@ -418,6 +458,7 @@ const CAPABILITIES: Array<[string, string]> = [
 export function renderFitur(app: string): string {
   return `${pageHead("Fitur loket", "Fitur kasir loket, cetak resi &amp; keuangan agen", "Enam modul terpadu yang memisahkan tugas cepat kasir di depan pelanggan dari pengawasan margin, saldo, dan rekonsiliasi milik pemilik gerai.")}
 
+${FITUR_SHOWCASE}
 <section class="sec tight" aria-label="Enam modul GeraiExpress"><div class="wrap"><div class="prows">
 ${PILLARS.map((p, i) => `<article class="prow${i % 2 ? " flip" : ""}" id="${p.id}" aria-labelledby="${p.id}-title">
 <div class="prow-text"><p class="plabel"><span class="pno" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>${p.label}</p>
@@ -894,8 +935,8 @@ const FAQ_GROUPS: Array<[string, string, Array<[string, string]>]> = [
 ]
 
 /** Open hairline FAQ rows (`+` turns into `×` when open). */
-const faqList = (items: Array<[string, string]>) =>
-  `<div class="faq">${items.map(([q, a], i) => `<details${i === 0 ? " open" : ""}><summary>${e(q)}</summary><p class="ans">${e(a)}</p></details>`).join("")}</div>`
+const faqList = (items: Array<[string, string]>, openFirst = true) =>
+  `<div class="faq">${items.map(([q, a], i) => `<details${openFirst && i === 0 ? " open" : ""}><summary>${e(q)}</summary><p class="ans">${e(a)}</p></details>`).join("")}</div>`
 
 /** The five homepage questions, picked from the `/tanya-jawab` groups (same wording on both pages). */
 const faqAt = (g: number, q: number) => FAQ_GROUPS[g]![2][q]!

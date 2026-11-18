@@ -203,6 +203,39 @@ ul.rates li:last-child{border-bottom:0}
 @media(min-width:640px){.pgrid{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}
 @media(min-width:1024px){.pgrid{grid-template-columns:repeat(9,minmax(0,1fr))}}
 .pgrid-gap{margin-bottom:56px}
+/* DEC-249 home: infinite courier marquee (pauses on hover/focus, static wrap under reduced motion) */
+.marquee{overflow:hidden;padding:6px 0 18px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}
+.marquee:hover .mq-track,.marquee:focus-within .mq-track{animation-play-state:paused}
+.mq-list{display:flex;gap:12px;margin:0;padding:0 12px 0 0;list-style:none}
+.mq-list .pbadge{width:152px;flex-shrink:0}
+@keyframes gx-mq{to{transform:translateX(-50%)}}
+@media(prefers-reduced-motion:reduce){.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}.mq-list{flex-wrap:wrap;justify-content:center;padding:0 16px}.mq-list[aria-hidden]{display:none}}
+/* DEC-249 home: Raka, the counter partner (stylized SVG on a porcelain stage) + store-type chips */
+.raka-grid{display:grid;gap:32px;align-items:center}@media(min-width:900px){.raka-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px}}
+.raka-stage{margin:0;background:var(--tile);border-radius:28px;padding:18px 14px 6px;overflow:hidden;min-width:0}
+.raka-svg{display:block;width:100%;height:auto}
+.raka-stage .rk-float,.raka-stage .rk-scan path:last-child{transform-box:fill-box}
+.raka-stage.is-playing .rk-float{animation:gx-float 4.2s var(--ease) infinite}.raka-stage.is-playing .rk-late{animation-delay:-2.1s}
+.raka-stage.is-playing .rk-scan path:last-child{animation:gx-beam 2.4s ease-in-out infinite}
+@keyframes gx-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes gx-beam{0%,100%{opacity:.35}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.raka-stage .rk-float,.raka-stage .rk-scan path{animation:none!important}}
+.chips{list-style:none;margin:26px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.chips li{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 20px -12px rgba(15,23,42,.18);font-weight:600;font-size:.9375rem;color:var(--ink);line-height:1.25}
+.chips li::before{content:"";width:8px;height:8px;border-radius:999px;background:var(--action);box-shadow:0 0 0 4px var(--tint);flex-shrink:0}
+@media(max-width:400px){.chips{grid-template-columns:1fr}}
+/* DEC-249: a slimmer home (<= 6,200px at 1440): tighter rhythm, one-line section titles, compact pricing and FAQ */
+@media(min-width:900px){main:has(>.hero-bleed) section.sec{padding-bottom:56px}main:has(>.hero-bleed) .shead{margin-bottom:28px}main:has(>.hero-bleed) .shead .sub{max-width:76ch}main:has(>.hero-bleed) .shead h2{max-width:none}}
+main:has(>.hero-bleed) .readout .incl,main:has(>.hero-bleed) .readout hr{display:none}
+main:has(>.hero-bleed) .bento{gap:16px}main:has(>.hero-bleed) .bento .tile{padding:1.5rem}
+main:has(>.hero-bleed) .closing{padding-bottom:64px}
+@media(min-width:900px){main:has(>.hero-bleed) .closing .callout{padding:40px}}main:has(>.hero-bleed) .more{margin-top:12px}
+@media(min-width:900px){main:has(>.hero-bleed) #ringkasan{padding-top:40px}main:has(>.hero-bleed) h2{font-size:clamp(1.6rem,1.2rem + 1.2vw,2rem)}main:has(>.hero-bleed) .raka-copy h2{max-width:26ch}}
+main:has(>.hero-bleed) .shot-stage{max-height:340px}
+main:has(>.hero-bleed) .bento>.tile{gap:18px}
+main:has(>.hero-bleed) .faq summary{min-height:48px;padding:12px 0}
+main:has(>.hero-bleed) .partners .shead{text-align:center;margin-left:auto;margin-right:auto}main:has(>.hero-bleed) .partners .shead h2,main:has(>.hero-bleed) .partners .shead .sub{margin-left:auto;margin-right:auto}
 .pbadge{display:flex;align-items:center;justify-content:center;height:72px;padding:12px;background:var(--tile);border:0;border-radius:16px}
 .pbadge img{display:block;width:auto;height:auto;max-width:100%;max-height:30px}
 @media(max-width:420px){.pbadge{height:60px;padding:10px}.pbadge img{max-height:24px}}
