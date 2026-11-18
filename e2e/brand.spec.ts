@@ -468,6 +468,8 @@ test("Brand DEC-247B: halaman dalam (lompat langkah, pipeline, indeks FAQ, foote
 // wrap under reduced motion) and shows Raka's counter with motion only on screen; /fitur opens with the moved showcase.
 test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya", async ({ page, browser }, info) => {
   const apex = APP.replace("app.", "")
+  // Sol R4: the project's own viewport, restored after the 1440/1920 checks so the reduced-motion block runs at it.
+  const initial = page.viewportSize()!
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()))
@@ -504,8 +506,8 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
     await page.setViewportSize({ width: 1920, height: 900 })
     const w = await page.evaluate(() => ({ box: document.querySelector(".marquee")!.getBoundingClientRect().width, list: document.querySelector(".mq-list")!.getBoundingClientRect().width }))
     expect(w.box).toBeLessThanOrEqual(w.list)
-    await page.setViewportSize({ width: 1440, height: 900 })
   }
+  await page.setViewportSize(initial)
   const raka = page.locator("[data-raka]")
   await raka.scrollIntoViewIfNeeded()
   await expect(raka).toHaveClass(/is-playing/)

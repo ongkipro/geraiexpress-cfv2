@@ -38,3 +38,12 @@ R2-1, R2-2 and R2-3 were verified resolved. The one remaining CSS item was fixed
 | # | Finding | Fix | Regression | Mutation (red) |
 |---|---|---|---|---|
 | R3-1 | Reduced motion switched on after load (`data-ready` already set) kept the moving, masked marquee | Every `.marquee[data-ready]` rule, including `.marquee[data-ready]+.mq-ctl{display:flex}`, now sits inside `@media(prefers-reduced-motion:no-preference)`. Turning reduced motion on falls back to the static wrap at once. | e2e at 390 and 1280: page loaded (`data-ready`), then `emulateMedia({ reducedMotion: "reduce" })` gives animation `none`, `.mq-ctl` and the duplicate track hidden, and nine logos wholly inside the viewport; restored to `no-preference`. Worker: no `[data-ready]` rule outside the query. | D249R3-M1 (query unwrapped → phone e2e red) |
+
+# Round 4 — GPT-6.2 Sol R4 (`R4-sol.md`)
+
+The CSS fix was confirmed sound. One test detail was fixed in run `RUN-20261118T225529Z-db3fe622`: the DEC-249 e2e
+saves `page.viewportSize()` at the start and restores it after the 1440 and 1920 checks, so on `desktop-1280` the
+`emulateMedia({ reducedMotion: "reduce" })` block really runs at 1280×800, where the track (1,476 px) overflows.
+Focused check: `eslint e2e/brand.spec.ts` and `playwright test e2e/brand.spec.ts -g DEC-249 --project phone-390
+--project desktop-1280` 2/2. The R3 mutation (no-preference query unwrapped) re-run on `desktop-1280` now goes red too
+(`toBeHidden` after reduced motion).

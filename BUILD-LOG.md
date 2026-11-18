@@ -1243,4 +1243,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol R3 (one CSS item) fixed in run `RUN-20261118T224644Z-e20fc6b9`: all `data-ready` marquee rules sit under
   `prefers-reduced-motion: no-preference`, so turning reduced motion on after load restores the static wrap (e2e with
   `emulateMedia` at 390 and 1280). Mutation D249R3-M1 red.
+- Sol R4 (one test detail) fixed in run `RUN-20261118T225529Z-db3fe622`: the DEC-249 e2e restores the project
+  viewport after the 1440/1920 checks, so the reduced-motion fallback is proven at 1280 too (mutation re-run red).
 

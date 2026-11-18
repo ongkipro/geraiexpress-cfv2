@@ -42,3 +42,4 @@ Each mutation was applied, `vitest run test/brand` was run, and the file was res
 | Id | File | Mutation | Suite | Result |
 |---|---|---|---|---|
 | D249R3-M1 | `apps/worker/src/brand/styles.ts` | `data-ready` rules outside the `no-preference` query | e2e `-g DEC-249 --project phone-390` | exit 1 — `toBeHidden` failed after reduced motion switched on |
+| D249R3-M1 (Sol R4 re-run) | `apps/worker/src/brand/styles.ts` | same mutation, `--project desktop-1280` (viewport restored to 1280×800) | e2e `-g DEC-249` | exit 1 — `toBeHidden` failed |
