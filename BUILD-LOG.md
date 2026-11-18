@@ -1246,4 +1246,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol R4 (one test detail) fixed in run `RUN-20261118T225529Z-db3fe622`: the DEC-249 e2e restores the project
   viewport after the 1440/1920 checks, so the reduced-motion fallback is proven at 1280 too (mutation re-run red).
 - GPT-6.2 Sol R5 APPROVE on `72728f8` (zero open findings) after R1 (5), R2 (3), R3 (1) and R4 (1) fixes.
+- Live 2026-11-19 (owner-authorized): `main` fast-forwarded to `6d79d70` and pushed; `pnpm build` (the 3D counter
+  WebP and the geometric `logo.svg` in `dist/assets/app`) + bundle-audit PASS; Workers staging
+  `26bc21eb-d95c-4939-bd13-e7b49ee5a63f`, production `ff3d1957-6c5b-42df-adef-61c006b424a5` (each verified serving
+  the Raka section before checks). Production `/`, `/fitur` 200 (no `Set-Cookie`), `/loket-mitra-3d.webp` 200
+  `image/webp` 32,916 B, `/logo.svg` 200 `image/svg+xml` 792 B, app and owner `/masuk` 200; probes staging 5/5,
+  production 6/6 (twice). No migration.
 
