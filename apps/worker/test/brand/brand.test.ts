@@ -250,7 +250,12 @@ describe("brand site DEC-247", () => {
     expect(css).toContain(".mq-list[aria-hidden]{display:none}")
     expect(css).toContain(".marquee[data-ready] .mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}")
     expect(css).toContain(".marquee[data-ready]:hover .mq-track,.marquee[data-ready]:focus-within .mq-track,.marquee[data-paused] .mq-track{animation-play-state:paused}")
-    expect(css).toContain(".mq-ctl{display:none;justify-content:flex-end;margin-top:-18px}.marquee[data-ready]+.mq-ctl{display:flex}")
+    expect(css).toContain(".mq-ctl{display:none;justify-content:flex-end;margin-top:-18px}")
+    // Sol R3: every data-ready rule sits under no-preference, so turning reduced motion on after load restores the wrap.
+    const motion = css.slice(css.indexOf("@media(prefers-reduced-motion:no-preference){\n.marquee[data-ready]{"), css.indexOf("@keyframes gx-mq"))
+    expect(motion).toContain(".marquee[data-ready]+.mq-ctl{display:flex}")
+    expect(motion).toContain(".marquee[data-ready] .mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}")
+    expect(css.replace(motion, "")).not.toContain("[data-ready]")
     expect(css).toContain("@media(prefers-reduced-motion:reduce){.mq-ctl{display:none!important}.mq-track{animation:none!important}}")
     expect(h).toContain('if(!b||!m||matchMedia("(prefers-reduced-motion: reduce)").matches)return;')
     expect(h).toContain('m.setAttribute("data-ready","");')

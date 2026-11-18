@@ -36,3 +36,9 @@ Each mutation was applied, `vitest run test/brand` was run, and the file was res
 | D249R2-M1 | `scripts/dev/clean-e2e-state.mjs` | symlink aliases not resolved | unit | exit 1 — "a live process persisting through a symlink alias…" |
 | D249R2-M2 | `apps/worker/src/brand/styles.ts` | marquee animated without JavaScript | e2e `-g DEC-249` desktop | exit 1 — "Brand DEC-249: beranda ramping…" |
 | D249R2-M3 | `apps/worker/src/brand/pages.ts` | `data-ready` set even under reduced motion | `vitest run test/brand` | exit 1 — "DEC-249 home …" |
+
+## Sol R3 fix (run `RUN-20261118T224644Z-e20fc6b9`)
+
+| Id | File | Mutation | Suite | Result |
+|---|---|---|---|---|
+| D249R3-M1 | `apps/worker/src/brand/styles.ts` | `data-ready` rules outside the `no-preference` query | e2e `-g DEC-249 --project phone-390` | exit 1 — `toBeHidden` failed after reduced motion switched on |

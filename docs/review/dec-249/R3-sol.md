@@ -1,0 +1,14 @@
+## Review
+
+DEC-249 Round 3, `4081836..9098c31` on `dec-249`. Reviewed the supplied delta, Round 2 review, disposition, and affected source. No files were modified and no tests were rerun.
+
+- **Finding: P2 — Switching on reduced motion after load clips the courier logos.** The script checks motion preference only at startup, then leaves `data-ready` set (`apps/worker/src/brand/pages.ts:130`, `apps/worker/src/brand/pages.ts:132`). If reduced motion is enabled while the page is open, the CSS stops animation and hides `.mq-ctl`, but retains the edge mask, max-content track, unwrapped list, and duplicate (`apps/worker/src/brand/styles.ts:213`, `apps/worker/src/brand/styles.ts:214`, `apps/worker/src/brand/styles.ts:215`, `apps/worker/src/brand/styles.ts:221`). At 390 px, the stationary track leaves most logos clipped. This is a regression: the prior reduced-motion CSS restored the wrapped list. Gate all `data-ready` presentation rules behind `prefers-reduced-motion: no-preference`. Extend the e2e test to switch to reduced motion **after** `data-ready` is set and verify that all nine logos fit in the static wrap, with no duplicate or control. The current test starts a fresh reduced-motion context and misses that transition (`e2e/brand.spec.ts:519`).
+- **Correct — R2-1, protected paths.** The pruner records both `path.resolve` and `realpathSync` spellings and compares candidates against both. A missing path retains its lexical spelling without failing the prune. The aged symlink-alias regression also passes an uncreated path (`scripts/dev/clean-e2e-state.mjs:62`, `scripts/dev/clean-e2e-state.mjs:68`, `scripts/dev/clean-e2e-state.mjs:77`, `scripts/dev/clean-e2e-state.test.mjs:77`).
+- **Correct — R2-2, initial marquee states.** Without JavaScript, the nine logos wrap and the duplicate and control stay hidden. With JavaScript and normal motion, the handler is attached before `data-ready` exposes the animation and control. Reduced motion at initial load stays in the static fallback (`apps/worker/src/brand/styles.ts:209`, `apps/worker/src/brand/styles.ts:218`, `apps/worker/src/brand/pages.ts:130`, `e2e/brand.spec.ts:529`).
+- **Correct — R2-3, `/fitur` wording.** The headline qualifies both timing (“Setelah sinkronisasi”) and receipt-level scope (“jika sudah tercocokkan”), matching scheduled sync and discrepancies without a receipt link. The exact title is asserted in the worker test (`apps/worker/src/brand/pages.ts:322`, `apps/worker/src/cron/finance/index.ts:1`, `apps/worker/src/do/gerai-vault/finance/index.ts:256`, `apps/worker/test/brand/brand.test.ts:412`).
+
+The disposition records passing focused checks, including 7 cleanup unit tests, 22 brand worker tests, and 14 desktop brand e2e tests (`docs/review/dec-249/DISPOSITION.md:22`). No other P0–P2 issues were found in the supplied delta.
+
+**Merge verdict: BLOCK** — the reduced-motion regression fails the requested zero-regression gate.
+
+Verdict: REQUEST_CHANGES

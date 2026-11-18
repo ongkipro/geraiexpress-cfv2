@@ -1240,4 +1240,7 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   and via `realpath`, so symlink aliases and not-yet-created paths are covered. The marquee is a progressive
   enhancement: static nine logos by default, motion and the pause button only after the script sets `data-ready`, and
   none under reduced motion or without JS. The `/fitur` proof title is precise. Mutations D249R2-M1..M3 red.
+- Sol R3 (one CSS item) fixed in run `RUN-20261118T224644Z-e20fc6b9`: all `data-ready` marquee rules sit under
+  `prefers-reduced-motion: no-preference`, so turning reduced motion on after load restores the static wrap (e2e with
+  `emulateMedia` at 390 and 1280). Mutation D249R3-M1 red.
 

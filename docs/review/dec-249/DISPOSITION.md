@@ -28,3 +28,13 @@ focused checks: `pnpm check:fast`, unit `clean-e2e-state.test.mjs` 7/7, `vitest 
 | R2-1 | A live process persisting through a symlink alias did not protect the real folder | Every protected path is stored as written (`path.resolve`, which also covers one not created yet) and with symlinks resolved (`realpathSync`). A candidate is protected when either of its own spellings matches. | Unit: `active-run -> state-e2e-x` in `activePaths` keeps `state-e2e-x`; a not-yet-created path is accepted | D249R2-M1 (`realpath` dropped) |
 | R2-2 | Without JavaScript the marquee moved but had no pause control | Progressive enhancement: the default CSS is a static wrap of the nine logos (duplicate track and pause button hidden, no animation). The inline script attaches the pause handler and only then sets `data-ready`, and it does nothing under reduced motion. Animation, edge fade, the duplicate track and the button all hang off `.marquee[data-ready]`. | e2e with `javaScriptEnabled: false`: animation `none`, `.mq-ctl` hidden, duplicate track hidden, nine logos visible; worker CSS/script assertions | D249R2-M2 (animated without JS → e2e red), D249R2-M3 (`data-ready` under reduced motion → worker red) |
 | R2-3 | The `/fitur` proof title still overstated | "Setelah sinkronisasi, tinjau selisih kas loket dan mutasi Mengantar, termasuk per resi jika sudah tercocokkan" | `brand.test.ts` exact title | — (copy) |
+
+# Round 3 — GPT-6.2 Sol R3 (`R3-sol.md`)
+
+R2-1, R2-2 and R2-3 were verified resolved. The one remaining CSS item was fixed in run
+`RUN-20261118T224644Z-e20fc6b9` with focused checks: `pnpm check:fast`, `vitest run test/brand` 22/22, e2e
+`brand.spec.ts --project phone-390 --project desktop-1280` 26/0/0.
+
+| # | Finding | Fix | Regression | Mutation (red) |
+|---|---|---|---|---|
+| R3-1 | Reduced motion switched on after load (`data-ready` already set) kept the moving, masked marquee | Every `.marquee[data-ready]` rule, including `.marquee[data-ready]+.mq-ctl{display:flex}`, now sits inside `@media(prefers-reduced-motion:no-preference)`. Turning reduced motion on falls back to the static wrap at once. | e2e at 390 and 1280: page loaded (`data-ready`), then `emulateMedia({ reducedMotion: "reduce" })` gives animation `none`, `.mq-ctl` and the duplicate track hidden, and nine logos wholly inside the viewport; restored to `no-preference`. Worker: no `[data-ready]` rule outside the query. | D249R3-M1 (query unwrapped → phone e2e red) |

@@ -210,12 +210,16 @@ ul.rates li:last-child{border-bottom:0}
 .mq-list{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:0;padding:0 16px;list-style:none}
 .mq-list[aria-hidden]{display:none}
 .mq-list .pbadge{width:152px;flex-shrink:0}
+/* Motion lives only under no-preference: switching reduced motion on after load drops back to the static wrap. */
+@media(prefers-reduced-motion:no-preference){
 .marquee[data-ready]{-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .marquee[data-ready] .mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}
 .marquee[data-ready] .mq-list{flex-wrap:nowrap;padding:0 12px 0 0}.marquee[data-ready] .mq-list[aria-hidden]{display:flex}
 .marquee[data-ready]:hover .mq-track,.marquee[data-ready]:focus-within .mq-track,.marquee[data-paused] .mq-track{animation-play-state:paused}
+.marquee[data-ready]+.mq-ctl{display:flex}
+}
 @keyframes gx-mq{to{transform:translateX(-50%)}}
-.mq-ctl{display:none;justify-content:flex-end;margin-top:-18px}.marquee[data-ready]+.mq-ctl{display:flex}
+.mq-ctl{display:none;justify-content:flex-end;margin-top:-18px}
 .mq-pause{display:inline-grid;place-items:center;width:44px;height:44px;border:0;border-radius:999px;background:var(--tile);color:var(--slate);cursor:pointer}
 .mq-pause:hover{color:var(--ink);background:#EBEEF4}.mq-pause[aria-pressed=true]{color:var(--action);background:var(--tint)}
 @media(prefers-reduced-motion:reduce){.mq-ctl{display:none!important}.mq-track{animation:none!important}}

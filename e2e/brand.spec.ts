@@ -515,6 +515,21 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   await expect(page.locator(".raka-stage .rk-pill")).toHaveCount(2)
   await expect(page.locator('section[aria-labelledby="toko-title"] .chips li')).toHaveCount(8)
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+  // Sol R3: reduced motion switched on after load (data-ready already set) falls back to the static wrap: nine whole
+  // logos inside the viewport, no pause button, no duplicate track, no animation.
+  await page.locator("section.partners").scrollIntoViewIfNeeded()
+  await expect(page.locator(".marquee")).toHaveAttribute("data-ready", "")
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  expect(await track.evaluate((el) => getComputedStyle(el).animationName)).toBe("none")
+  await expect(page.locator(".mq-ctl")).toBeHidden()
+  await expect(page.locator('.mq-list[aria-hidden="true"]')).toBeHidden()
+  const vw = page.viewportSize()!.width
+  for (const img of await page.locator(".mq-list").first().locator("img").all()) {
+    const box = (await img.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(vw)
+  }
+  await page.emulateMedia({ reducedMotion: "no-preference" })
   // Reduced motion: the marquee is a static wrap of nine logos (no duplicate track), Raka stays still.
   const still = await browser.newContext({ reducedMotion: "reduce", viewport: page.viewportSize()! })
   const sp = await still.newPage()
