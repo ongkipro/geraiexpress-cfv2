@@ -1195,4 +1195,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   renders at once cannot prove a reserved slot; delay it and assert that nothing moves.
 - Supervisor pre-review + Sol R2 combobox items fixed (results bound to their query; active option scrolled in an
   effect). GPT-6.2 Sol R3 APPROVE on `c59e509` (zero open findings).
+- Live 2026-11-19 (owner-authorized): `main` fast-forwarded to `3548b48` and pushed; `pnpm build` + bundle-audit PASS;
+  Workers staging `60497461-9857-4b18-bc21-a0fb8aa15591`, production `c7fb0d25-6e2b-45a3-b4cd-6c363dde5eaf` (each
+  verified with the closing pills gone before checks). The production app bundle carries the `1 · 2 · 3` register;
+  brand `/`, `/fitur`, app `/masuk`, `/daftar-akun` and owner `/masuk` 200; probes staging 5/5, production 6/6
+  (twice). No migration.
 
