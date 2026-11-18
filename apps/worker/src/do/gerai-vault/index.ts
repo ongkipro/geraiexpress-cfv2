@@ -19,7 +19,7 @@ import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type PickupRef, type QuoteRow } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
-import { displayStatus, pairDisplay, paidState, parseCheckout, readDisplay, revokeForShift, setDisplayState, unpairDisplay, type DisplayError, type DisplayRead, type DisplayState } from "./customer-display"
+import { displayStatus, packingNameOf, pairDisplay, paidState, parseCheckout, readDisplay, revokeForShift, setDisplayState, unpairDisplay, type DisplayError, type DisplayRead, type DisplayResolved, type DisplayState } from "./customer-display"
 import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
 import type { ValidRow } from "@gx/domain/bulk"
 import { normalizePhone08 } from "@gx/domain/contacts"
@@ -528,9 +528,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
   async customerDisplayOp(
     tenantId: string,
     userId: string,
-    op: { op: "pair"; tokenHash: string } | { op: "status" } | { op: "unpair" } | { op: "state"; input: Record<string, unknown>; trackingHost: string },
+    op:
+      | { op: "pair"; tokenHash: string }
+      | { op: "status" }
+      | { op: "unpair" }
+      | { op: "state"; input: Record<string, unknown>; trackingHost: string; resolved?: DisplayResolved; catalog?: Record<string, string> },
     now: number = Date.now(),
-  ): Promise<{ ok: true; value: { paired: boolean; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
+  ): Promise<{ ok: true; value: { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -551,11 +555,12 @@ export class GeraiVaultDO extends DurableObject<Env> {
         let state: DisplayState
         if (kind === "idle") state = { kind: "idle" }
         else if (kind === "checkout") {
-          const c = parseCheckout(op.input)
+          if (!op.resolved) return { ok: false as const, error: { status: 422, code: "DISPLAY_INVALID", message: "Pilih ekspedisi dulu." } }
+          const c = parseCheckout(op.input, op.resolved, (name) => packingNameOf(sql, name))
           if (!c.ok) return c
           state = c.value
         } else if (kind === "paid") {
-          const p = typeof op.input.slug === "string" ? paidState(sql, op.input.slug.toLowerCase(), op.input.courier, op.trackingHost) : null
+          const p = typeof op.input.slug === "string" ? paidState(sql, op.input.slug.toLowerCase(), op.catalog ?? {}, op.trackingHost) : null
           if (!p) return { ok: false as const, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
           state = p
         } else return { ok: false as const, error: { status: 422, code: "DISPLAY_INVALID", message: "Status layar tidak dikenal." } }

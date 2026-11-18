@@ -1023,4 +1023,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   unknown. Boundary: 34 task files, all ALLOWED, 0 failures; diff-risk escalates the declared R3 to R4 (token hashing
   in the tenant object) → REVIEW_REQUIRED. The run stays open for the reviewer; committing moves HEAD past the
   baseline, so the post-review boundary needs a fresh run on the commit (or the merge gate).
+- Sol R1 (REQUEST_CHANGES, F1 P1 + F2..F7 P2) fixed after rebasing onto `d7ebf4e` — disposition
+  `docs/review/task-701/DISPOSITION.md`. F1: the counter sends ids (`serviceCode`, `destinationAreaId`); the Worker
+  names them from `courier_service_catalog` and the Mengantar area search (exact id match), the ETA must match
+  `N[-M] hari|jam`, packing names come from the gerai's own `packing_items`, and `paid` reads the courier from the
+  shipment. F2/F5/F6 live in `routes/kasir/display-sync.ts` (hint = refresh only, serialised + ordered reads, bounded
+  retry), unit-tested; F3 keys publication by `pairId|input` and the dialog drops its QR view on close (otherwise
+  `Buat Kode Baru` was unreachable without a reload); F4 own-key line kinds; F7 Indonesian upload failure copy.
+  Lesson: "zero-leak" by dropping unknown keys is not a PII boundary while any allowed field is free text — accept ids
+  and let the server name them. Gotcha: a retry helper must check `cancelled` inside the scheduled callback, not only
+  before scheduling (found by the unit test, not by the reviewer).
 

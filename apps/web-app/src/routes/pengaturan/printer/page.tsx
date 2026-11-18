@@ -101,6 +101,8 @@ function ReceiptForm() {
  * `QRIS Loket (Layar Pelanggan)` (TASK-701, spec 03 §5.4): the outlet's static QRIS shown on the paired customer
  * display when the counter picks QRIS. Instant (no Save bar): upload replaces, delete asks first. Kasir: read-only.
  */
+const QRIS_UPLOAD_FAILED = "Gagal mengunggah gambar QRIS. Periksa koneksi lalu coba lagi."
+
 function QrisCard({ owner }: { owner: boolean }) {
   const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -119,11 +121,13 @@ function QrisCard({ owner }: { owner: boolean }) {
     setPending(true)
     try {
       const up = await fetch("/api/app/media?purpose=qris", { method: "POST", credentials: "same-origin", headers: { "content-type": f.type || "application/octet-stream" }, body: f })
-      const j = (await up.json().catch(() => null)) as { ok: boolean; data?: { id: string }; error?: { message: string } } | null
-      if (!j?.ok) throw new Error(j?.error?.message ?? "Gagal mengunggah gambar. Coba lagi.")
+      const j = (await up.json().catch(() => null)) as { ok: boolean; data?: { id: string }; error?: { code?: string; message: string } } | null
+      // A server refusal (size, type, role) keeps its own Indonesian message; an unreadable answer gets the fallback.
+      if (!j?.ok) throw new ApiError(up.status, { code: j?.error?.code ?? "UPLOAD_FAILED", message: j?.error?.message ?? QRIS_UPLOAD_FAILED, field_errors: {} })
       setQ(await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: j.data!.id } }))
     } catch (err) {
-      setMsg(err instanceof ApiError || err instanceof Error ? err.message : "Gagal mengunggah gambar. Coba lagi.")
+      // Sol R1 F7: only the server's own (Indonesian) message is shown; a browser/network error never leaks its English text.
+      setMsg(err instanceof ApiError ? err.body.message : QRIS_UPLOAD_FAILED)
     } finally {
       setPending(false)
     }

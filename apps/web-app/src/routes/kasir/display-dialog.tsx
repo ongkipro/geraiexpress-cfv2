@@ -5,16 +5,24 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { CopyField } from "../../components/admin/page"
 import { LinkButton } from "../../components/admin/link-button"
 import { api, ApiError } from "../../lib/api"
+import { DISPLAY_CHANNEL, runWithRetry, type DisplayHint } from "./display-sync"
 
 // Layar Pelanggan on the counter (TASK-701, spec 03 §5.5): pair a second window or a phone by QR, keep it in step
-// with `/kasir`, unpair. The server builds every state the display shows; this side only sends customer inputs.
-export const DISPLAY_CHANNEL = "gx-layar-pelanggan"
+// with `/kasir`, unpair. The server builds every state the display shows; this side only sends ids and amounts.
 
-interface Status { paired: boolean; expiresAt: number | null; shiftBound: boolean; hasQris: boolean }
-interface Pairing { pairUrl: string; expiresAt: number; shiftBound: boolean; hasQris: boolean; qrSvg: string }
+interface Status { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean }
+interface Pairing { pairUrl: string; pairId: string; expiresAt: number; shiftBound: boolean; hasQris: boolean; qrSvg: string }
 export type DisplayInput = Record<string, unknown> & { kind: "idle" | "checkout" | "paid" }
 
-/** Pairing status for this member + a debounced push that also tells a same-PC window at once. */
+/** A 4xx answer will not heal by itself (validation, pairing gone); only network failures and 5xx are retried. */
+const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500
+
+/**
+ * Pairing status for this member + a debounced push of the current input. The push is keyed by pairing AND input, so
+ * a new pairing (`Buat Kode Baru`) on an unchanged checkout publishes it at once (Sol R1 F3); a transient failure is
+ * retried 1.5 s → 3 s → 6 s and the retry is cancelled when the input or pairing changes (F6). A same-PC display is
+ * told to refresh through the channel — it then reads its own view; the message carries no state (F2).
+ */
 export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
   const [status, setStatus] = useState<Status | null>(null)
   const refresh = useCallback(() => {
@@ -22,31 +30,37 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
   }, [])
   useEffect(refresh, [refresh])
   const key = JSON.stringify(input)
+  const pairId = status?.paired ? status.pairId : null
   const last = useRef<string | null>(null)
   useEffect(() => {
-    if (!status?.paired || last.current === key) return
+    if (!pairId) return
+    const target = `${pairId}|${key}`
+    if (last.current === target) return
+    let cancel: (() => void) | null = null
     const id = setTimeout(() => {
-      api<Status & { state: unknown }>("/customer-display/state", { body: JSON.parse(key) })
-        .then((r) => {
-          last.current = key
+      cancel = runWithRetry(async () => {
+        try {
+          const r = await api<Status>("/customer-display/state", { body: JSON.parse(key) })
+          last.current = target
           try {
             const ch = new BroadcastChannel(DISPLAY_CHANNEL)
-            ch.postMessage({ tenantSlug, state: r.state, updatedAt: Date.now() })
+            ch.postMessage({ tenantSlug, pairId } satisfies DisplayHint)
             ch.close()
           } catch {
             // No BroadcastChannel: the display still updates on its next poll.
           }
-          if (!r.paired) setStatus((s) => (s ? { ...s, paired: false } : s))
-        })
-        .catch(() => undefined)
+          if (!r.paired) setStatus((s) => (s ? { ...s, paired: false, pairId: null } : s))
+        } catch (e) {
+          if (!permanent(e)) throw e
+        }
+      })
     }, 250)
-    return () => clearTimeout(id)
-  }, [key, status?.paired, tenantSlug])
-  // A new pairing starts idle on the server: send the current state again.
-  const onPaired = (s: Status) => {
-    last.current = null
-    setStatus(s)
-  }
+    return () => {
+      clearTimeout(id)
+      cancel?.()
+    }
+  }, [key, pairId, tenantSlug])
+  const onPaired = (s: Status) => setStatus(s)
   return { status, refresh, onPaired }
 }
 
@@ -64,7 +78,7 @@ export function CustomerDisplayButton({ display, owner }: { display: ReturnType<
     try {
       const p = await api<Pairing>("/customer-display/pair", { body: {} })
       setPairing(p)
-      display.onPaired({ paired: true, expiresAt: p.expiresAt, shiftBound: p.shiftBound, hasQris: p.hasQris })
+      display.onPaired({ paired: true, pairId: p.pairId, expiresAt: p.expiresAt, shiftBound: p.shiftBound, hasQris: p.hasQris })
     } catch (err) {
       setMsg(err instanceof ApiError ? err.body.message : "Gagal membuat kode layar. Coba lagi.")
     } finally {
@@ -94,7 +108,14 @@ export function CustomerDisplayButton({ display, owner }: { display: ReturnType<
         Layar Pelanggan
         <span aria-hidden className={`size-2 rounded-full ${paired ? "bg-emerald-500" : "bg-slate-300"}`} />
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      {/* Closing drops the one-time QR view: reopening shows the pairing status with `Buat Kode Baru` (Sol R1 F3 path). */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o)
+          if (!o) setPairing(null)
+        }}
+      >
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Layar Pelanggan</DialogTitle>

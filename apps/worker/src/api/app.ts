@@ -1090,12 +1090,37 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const token = newToken(32)
     const v = await displayOp(c, { op: "pair", tokenHash: await sha256Hex(token) })
     const pairUrl = `${hostOrigin(c.req.raw)}/kasir/layar-pelanggan?gerai=${encodeURIComponent(c.get("membership")!.tenantSlug)}&kode=${token}`
-    return ok({ pairUrl, token, expiresAt: v.expiresAt, shiftBound: v.shiftBound, hasQris: v.hasQris, qrSvg: qrSvg(pairUrl, { title: "QR Layar Pelanggan" }) }, 201)
+    return ok({ pairUrl, token, pairId: v.pairId, expiresAt: v.expiresAt, shiftBound: v.shiftBound, hasQris: v.hasQris, qrSvg: qrSvg(pairUrl, { title: "QR Layar Pelanggan" }) }, 201)
   })
   r("GET", "/customer-display/status", "app_member", "role", async (c) => ok(await displayOp(c, { op: "status" })))
   r("POST", "/customer-display/unpair", "app_member", "role", async (c) => ok(await displayOp(c, { op: "unpair" })))
+  /** Sol R1 F1: the display's text comes from server data only. `checkout` names a catalog `serviceCode` (→ its display
+   *  name) and a `destinationAreaId` (→ the Mengantar area label, found by searching the hint and matching the exact
+   *  id; no match → no destination); `paid` gets the active catalog so the object names the shipment's own service. */
+  async function displayText(c: AppCtx, input: Record<string, unknown>): Promise<{ resolved?: { courier: string; destination: string | null }; catalog?: Record<string, string> }> {
+    if (input.kind === "paid") {
+      const rows = await c.env.DB.prepare("SELECT service_code, display_name FROM courier_service_catalog WHERE is_active = 1").all<{ service_code: string; display_name: string }>()
+      return { catalog: Object.fromEntries(rows.results.map((x) => [x.service_code, x.display_name])) }
+    }
+    if (input.kind !== "checkout") return {}
+    const code = typeof input.serviceCode === "string" && /^[A-Za-z0-9]{1,40}$/.test(input.serviceCode) ? input.serviceCode : null
+    const svc = code ? await c.env.DB.prepare("SELECT display_name FROM courier_service_catalog WHERE service_code = ? AND is_active = 1").bind(code).first<{ display_name: string }>() : null
+    if (!svc) throw new AppError(422, "DISPLAY_INVALID", "Pilih ekspedisi dulu.")
+    let destination: string | null = null
+    const areaId = typeof input.destinationAreaId === "string" && /^[0-9a-f]{24}$/.test(input.destinationAreaId) ? input.destinationAreaId : null
+    const hint = typeof input.destinationLabel === "string" ? (input.destinationLabel.split(",")[0] ?? "").trim() : ""
+    if (areaId && hint.length >= 3) {
+      try {
+        destination = (await searchAreas(c.env, hint)).items.find((a) => a.id === areaId)?.label ?? null
+      } catch {
+        destination = null // area search unavailable: the display simply omits the destination
+      }
+    }
+    return { resolved: { courier: svc.display_name, destination } }
+  }
   r("POST", "/customer-display/state", "app_member", "role", async (c) => {
-    const v = await displayOp(c, { op: "state", input: await body(c), trackingHost: await trackingHost(c) })
+    const input = await body(c)
+    const v = await displayOp(c, { op: "state", input, trackingHost: await trackingHost(c), ...(await displayText(c, input)) })
     return ok({ ...v, state: v.state ? publicState(v.state) : null })
   })
   const DISPLAY_FAIL_LIMIT = 30
@@ -1130,6 +1155,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const o = p.value.outlet!
     return ok(
       {
+        pairId: p.value.pairId,
         state: publicState(p.value.state),
         updatedAt: p.value.updatedAt,
         outlet: { name: o.name, logoUrl: o.logo ? `/api/app/customer-display/media/logo?${p.query}` : null, qrisUrl: o.qris ? `/api/app/customer-display/media/qris?${p.query}` : null },

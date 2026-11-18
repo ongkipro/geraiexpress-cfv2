@@ -254,16 +254,18 @@ export function KasirPage() {
   const sig = sel ? JSON.stringify([sel.req, sel.card.serviceCode]) : ""
   const locked = !!frozen && (frozen.paid || !!claim) && frozen.sig !== sig
 
-  // Layar Pelanggan (spec 03 §5.5): only customer-side values; the server rebuilds the state (and `paid` from the INV).
+  // Layar Pelanggan (spec 03 §5.5): only ids and amounts; the server rebuilds the state (and `paid` from the INV).
   const displayInput: DisplayInput = issued
-    ? { kind: "paid", slug: issued.slug, courier: issued.courier }
+    ? { kind: "paid", slug: issued.slug }
     : card && sel
       ? {
+          // Ids, not display text (Sol R1 F1): the server names the service and the area.
           kind: "checkout",
-          courier: card.name,
+          serviceCode: card.serviceCode,
           eta: card.eta,
           billableWeightGram: card.billableWeightGram,
-          destination: form.areaLabel,
+          destinationAreaId: sel.req.destinationAreaId,
+          destinationLabel: form.areaLabel,
           method: due > 0 ? method : null,
           lines: [
             ...(cod ? [] : [{ kind: "ongkir", amountIdr: card.publishShippingIdr }]),

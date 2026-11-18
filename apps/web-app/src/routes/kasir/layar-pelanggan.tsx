@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react"
 import { CheckCircle2Icon, MonitorOffIcon, PackageIcon, QrCodeIcon } from "lucide-react"
-import { DISPLAY_CHANNEL } from "./display-dialog"
+import { createViewSync, DISPLAY_CHANNEL, isHintFor } from "./display-sync"
 
 // `/kasir/layar-pelanggan` (TASK-701, PR-22, spec 03 §5, visual 07): the chromeless customer-facing screen. Mounted
 // outside the workspace shell: no sign-in, no navigation; it sends no cookie and reads only `?gerai&kode`. It polls
-// the server-built state every 2 s (paused while hidden) and takes a same-PC update from `/kasir` at once.
+// the server-built state every 2 s (paused while hidden); a same-PC hint from `/kasir` only triggers an immediate read
+// of its own view (Sol R1 F2). Reads never overlap and an older answer never replaces a newer screen (F5).
 
 type Line = { kind: string; label: string; amountIdr: number }
 type State =
   | { kind: "idle" }
   | { kind: "checkout"; courier: string; eta: string | null; billableWeightGram: number | null; destination: string | null; method: "qris" | "tunai" | "transfer" | "later" | null; lines: Line[]; totalIdr: number; codCollectionIdr: number | null; senderPayoutIdr: number | null }
   | { kind: "paid"; inv: string; courier: string | null; awb: string | null; paymentStatus: string; method: string | null; totalIdr: number; cashReceivedIdr: number | null; changeIdr: number | null; trackingUrl: string; trackingQrSvg: string }
-interface View { state: State; updatedAt: number; outlet: { name: string; logoUrl: string | null; qrisUrl: string | null } }
+interface View { pairId: string; state: State; updatedAt: number; outlet: { name: string; logoUrl: string | null; qrisUrl: string | null } }
 
 const POLL_MS = 2000
 const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`
@@ -34,40 +35,47 @@ export function LayarPelangganPage() {
   useEffect(() => {
     document.title = "Layar Pelanggan"
     if (!gerai || !kode) return
-    let alive = true
     const url = `/api/app/customer-display/view?gerai=${encodeURIComponent(gerai)}&kode=${encodeURIComponent(kode)}`
-    async function tick() {
-      if (document.hidden || endedRef.current) return
-      try {
-        const res = await fetch(url, { credentials: "omit", cache: "no-store" })
-        const j = (await res.json()) as { ok: true; data: View } | { ok: false; error: { code: string; message: string } }
-        if (!alive) return
-        setOffline(false)
-        if (j.ok) setView(j.data)
-        else if (res.status === 401 || res.status === 410) setEnded(j.error.message)
-        else setOffline(true)
-      } catch {
-        if (alive) setOffline(true)
-      }
+    let pairId: string | null = null
+    const sync = createViewSync<View>({
+      fetchView: async () => {
+        try {
+          const res = await fetch(url, { credentials: "omit", cache: "no-store" })
+          const j = (await res.json()) as { ok: true; data: View } | { ok: false; error: { code: string; message: string } }
+          setOffline(false)
+          if (j.ok) return j.data
+          if (res.status === 401 || res.status === 410) setEnded(j.error.message)
+          else setOffline(true)
+        } catch {
+          setOffline(true)
+        }
+        return null
+      },
+      onView: (v) => {
+        pairId = v.pairId
+        setView(v)
+      },
+    })
+    const tick = () => {
+      if (!document.hidden && !endedRef.current) void sync.refresh()
     }
-    void tick()
-    const id = setInterval(() => void tick(), POLL_MS)
-    const onVisible = () => !document.hidden && void tick()
-    document.addEventListener("visibilitychange", onVisible)
-    // Same PC: `/kasir` posts the server-built state the moment it changes (the poll stays the source of truth).
+    tick()
+    const id = setInterval(tick, POLL_MS)
+    document.addEventListener("visibilitychange", tick)
+    // Same PC: `/kasir` says "changed"; the display reads its own view with its own kode (never the message's data).
     let ch: BroadcastChannel | null = null
     try {
       ch = new BroadcastChannel(DISPLAY_CHANNEL)
-      ch.onmessage = (e: MessageEvent<{ tenantSlug?: string; state?: State; updatedAt?: number }>) => {
-        if (e.data?.tenantSlug === gerai && e.data.state) setView((v) => (v ? { ...v, state: e.data.state!, updatedAt: e.data.updatedAt ?? v.updatedAt } : v))
+      ch.onmessage = (e: MessageEvent<unknown>) => {
+        if (isHintFor(e.data, gerai, pairId) && !endedRef.current) void sync.refresh()
       }
     } catch {
       ch = null
     }
     return () => {
-      alive = false
+      sync.stop()
       clearInterval(id)
-      document.removeEventListener("visibilitychange", onVisible)
+      document.removeEventListener("visibilitychange", tick)
       ch?.close()
     }
   }, [gerai, kode])

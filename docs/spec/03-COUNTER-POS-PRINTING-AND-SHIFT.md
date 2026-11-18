@@ -193,13 +193,14 @@ static QRIS — never cost, discount, margin, balance, phone numbers or street a
 
 `POST /customer-display/state` (counter member) replaces the state of every live pairing of that member. The server
 builds the stored `state_json` field by field from a closed schema — unknown keys are dropped, so cost or margin
-can never enter it:
+can never enter it — and **no display text comes from the request** (Sol R1 F1): the counter names ids, the server
+names them, so a phone number, street or true sender typed into any field cannot reach the screen:
 
 | `kind` | Input from `/kasir` | Built and stored |
 |---|---|---|
 | `idle` | — | `{ kind }` |
-| `checkout` | courier label, ETA, billable gram, destination area label (`Kecamatan, Kota`), customer lines, `totalIdr`, payment method, COD collection / sender payout (COD only) | lines from the closed set `ongkir` (`Ongkos kirim`), `asuransi`, `packing`, `layanan` (`Biaya layanan loket`), `promo` (`Potongan promo`, subtracted); every amount a safe integer IDR `0..100.000.000`; `totalIdr` must equal Σ lines − promo (else `422`). Text is trimmed and capped (courier 60, ETA 30, destination 120). |
-| `paid` | `slug` (+ courier label) | read from the tenant object, never from the request: `INV`, AWB (if issued), `counter_payment_status`, method, `counter_due_idr`, `Tunai diterima` / `Kembalian` of the latest `mark_paid` receipt, and the tracking link `https://<primary host>/lacak?q=<INV>`. An unknown slug is `404`. |
+| `checkout` | `serviceCode`, ETA, billable gram, `destinationAreaId` (+ the picked area label as a search hint), customer lines (packing may name an item), `totalIdr`, payment method, COD collection / sender payout (COD only) | courier = `display_name` of the active `courier_service_catalog` row for `serviceCode` (unknown/inactive → `422`); destination = the Mengantar area label whose id equals `destinationAreaId` among the results for the hint's first segment (no match or search down → no destination); ETA only when it matches `N[-M] hari|jam` (stored as `N-M hari`), else none; a packing line is `Packing (<name>)` only when the name is an active item of this gerai's `packing_items` (its stored spelling), else `Packing`. Lines from the closed set (own keys only; `__proto__`/`constructor`/non-strings → `422`) `ongkir` (`Ongkos kirim`), `asuransi`, `packing`, `layanan` (`Biaya layanan loket`), `promo` (`Potongan promo`, subtracted); every amount a safe integer IDR `0..100.000.000`; `totalIdr` must equal Σ lines − promo (else `422`). |
+| `paid` | `slug` | read from the tenant object, never from the request: courier = catalog name of the shipment's own `service_code`, `INV`, AWB (if issued), `counter_payment_status`, method, `counter_due_idr`, `Tunai diterima` / `Kembalian` of the latest `mark_paid` receipt, and the tracking link `https://<primary host>/lacak?q=<INV>`. An unknown slug is `404`. |
 
 `counter_due_idr` composition (spec 02 §3): non-COD `P + I + K + S − V`, COD `K + S − V`; the counter sends `ongkir`
 only for non-COD sales. A `paid` state turns back into `idle` 20 seconds after it was set, or as soon as the counter
@@ -235,9 +236,15 @@ di meja kasir.`
 - `/kasir` header: `Layar Pelanggan` (status dot green while paired) opens a dialog with the pairing QR, a copyable
   link, `Buka di Jendela Baru`, `Putuskan Layar` and, without a QRIS image, a hint to `Pengaturan › Printer & Struk`.
 - While paired, `/kasir` pushes `idle` (empty or reset), `checkout` (a courier row is selected; re-sent on method or
-  amount change, debounced) and `paid` (after issue). It posts the server-built state on a same-origin
-  `BroadcastChannel` so a window on the same PC updates at once.
+  amount change, debounced) and `paid` (after issue). A push is keyed by pairing **and** input, so `Buat Kode Baru` on
+  an unchanged checkout publishes it to the new pairing at once (Sol R1 F3); a network/5xx failure is retried after
+  1.5 s, 3 s and 6 s and the retry is cancelled when the input or pairing changes (F6). Pair, status and view carry a
+  non-secret `pairId` (the session row id). After a push the counter posts `{ tenantSlug, pairId }` on a same-origin
+  `BroadcastChannel`; it is only a "refresh now" hint — the display then reads its own `view` with its own `kode` and
+  never shows message contents (F2). Closing the dialog drops the one-time QR view; reopening shows the status and
+  `Buat Kode Baru`.
 - `/kasir/layar-pelanggan` is mounted outside the workspace shell (no sign-in, no navigation). It polls `view` every
-  2 s, pauses while `document.hidden` and refreshes on `visibilitychange`. States: `Menunggu paket` (idle),
+  2 s, pauses while `document.hidden` and refreshes on `visibilitychange`; reads never overlap (one in flight, one
+  queued) and a view older than the one shown (`updatedAt`, same `pairId`) is dropped (F5). States: `Menunggu paket` (idle),
   `Rincian pembayaran` (checkout, total `40px` bold `tabular-nums`), `Terima kasih` (paid, INV, AWB, tracking QR),
   `Layar belum terhubung` (no/ended pairing).

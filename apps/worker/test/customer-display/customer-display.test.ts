@@ -17,8 +17,9 @@ beforeEach(() => {
   hostCache.clear()
 })
 
-type Pair = { pairUrl: string; token: string; expiresAt: number; shiftBound: boolean; qrSvg: string }
+type Pair = { pairUrl: string; token: string; pairId: string; expiresAt: number; shiftBound: boolean; qrSvg: string }
 type View = {
+  pairId: string
   state: Record<string, unknown> & { kind: string }
   updatedAt: number
   outlet: { name: string; logoUrl: string | null; qrisUrl: string | null }
@@ -47,12 +48,16 @@ async function cashier(tenantId: string, email: string) {
   return k
 }
 
+// Sol R1 F1: the counter names ids (service, area); the server supplies every display text.
+const TEBET_BARAT = "5fc64714f8f44b34aa4cdd60"
+const TEBET_LABEL = "Tebet Barat, Tebet, Jakarta Selatan, DKI Jakarta"
 const CHECKOUT = {
   kind: "checkout",
-  courier: "J&T Express REG",
-  eta: "2-3 hari",
+  serviceCode: "JT",
+  eta: "2 - 3 hari",
   billableWeightGram: 1000,
-  destination: "Tebet Barat, Jakarta Selatan",
+  destinationAreaId: TEBET_BARAT,
+  destinationLabel: "Tebet Barat",
   method: "qris",
   lines: [
     { kind: "ongkir", amountIdr: 12500 },
@@ -82,8 +87,11 @@ describe("Layar Pelanggan pairing and view", () => {
     expect(idle.status).toBe(200)
     expect(idle.headers.get("set-cookie")).toBeNull()
     expect(idle.headers.get("cache-control")).toBe("no-store")
-    expect(await data<View>(idle)).toMatchObject({ state: { kind: "idle" }, outlet: { name: "layarsatu", logoUrl: null, qrisUrl: null } })
-    expect(await data<{ paired: boolean; hasQris: boolean }>(await appGet("/customer-display/status", t.cookie))).toMatchObject({ paired: true, hasQris: false })
+    const idleBody = await data<View>(idle)
+    expect(idleBody).toMatchObject({ state: { kind: "idle" }, outlet: { name: "layarsatu", logoUrl: null, qrisUrl: null } })
+    expect(await data<{ paired: boolean; pairId: string; hasQris: boolean }>(await appGet("/customer-display/status", t.cookie))).toMatchObject({ paired: true, pairId: p.pairId, hasQris: false })
+    expect(p.pairId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(idleBody.pairId).toBe(p.pairId)
 
     // Checkout: unknown keys (cost, margin, phone, street) are dropped by the server-built schema.
     const pushed = await post("/customer-display/state", t.cookie, { ...CHECKOUT, providerNetShippingIdr: 777123, estimatedProfitIdr: 777124, recipientPhone: "085712348821", street: "Jl. Tebet Barat No. 14", lines: [...CHECKOUT.lines.map((l) => ({ ...l, provider_net_shipping_idr: 777125 }))] })
@@ -91,12 +99,13 @@ describe("Layar Pelanggan pairing and view", () => {
     const v = await view("layarsatu", kodeOf(p))
     const raw = await v.text()
     const body = (JSON.parse(raw) as { data: View }).data
+    expect(body.pairId).toBe(p.pairId)
     expect(body.state).toEqual({
       kind: "checkout",
-      courier: "J&T Express REG",
+      courier: "J&T Express",
       eta: "2-3 hari",
       billableWeightGram: 1000,
-      destination: "Tebet Barat, Jakarta Selatan",
+      destination: TEBET_LABEL,
       method: "qris",
       lines: [
         { kind: "ongkir", label: "Ongkos kirim", amountIdr: 12500 },
@@ -113,10 +122,10 @@ describe("Layar Pelanggan pairing and view", () => {
     const inv = await readyInv(t)
     await post(`/shipments/${inv}/payment`, t.cookie, { method: "tunai", cashReceivedIdr: 20000 }, `cd-${inv}-1`)
     await post(`/shipments/${inv}/dispatch`, t.cookie, {})
-    const paid = await post("/customer-display/state", t.cookie, { kind: "paid", slug: inv, courier: "J&T Express REG", totalIdr: 1, cashReceivedIdr: 999999 })
+    const paid = await post("/customer-display/state", t.cookie, { kind: "paid", slug: inv, courier: "Ibu Siti 0812-3456-7890", totalIdr: 1, cashReceivedIdr: 999999 })
     expect(paid.status).toBe(200)
     const pv = await data<View>(await view("layarsatu", kodeOf(p)))
-    expect(pv.state).toMatchObject({ kind: "paid", inv: inv.toUpperCase(), courier: "J&T Express REG", paymentStatus: "paid", method: "tunai", totalIdr: 15500, cashReceivedIdr: 20000, changeIdr: 4500, trackingUrl: `https://layarsatu.geraimitra.localhost/lacak?q=${inv.toUpperCase()}` })
+    expect(pv.state).toMatchObject({ kind: "paid", inv: inv.toUpperCase(), courier: "J&T Express", paymentStatus: "paid", method: "tunai", totalIdr: 15500, cashReceivedIdr: 20000, changeIdr: 4500, trackingUrl: `https://layarsatu.geraimitra.localhost/lacak?q=${inv.toUpperCase()}` })
     expect(typeof pv.state.awb).toBe("string")
     expect(String(pv.state.trackingQrSvg).startsWith("<svg")).toBe(true)
     expect(ownerOnlyKeysIn(pv)).toEqual([])
@@ -268,3 +277,69 @@ describe("outlet QRIS image (Pengaturan › Printer & Struk)", () => {
     expect(await data<{ hasQris: boolean }>(await post("/settings/qris", t.cookie, { mediaId: null }))).toMatchObject({ hasQris: false, url: null })
   })
 })
+
+describe("Sol R1 regressions (TASK-701)", () => {
+  it("F1: PII in the allowed fields never reaches the stored or public state; display text is server-resolved", async () => {
+    const t = await checkoutGerai("layarpii")
+    const p = await pair(t.cookie)
+    await runInDurableObject(vaultFor(env, t.tenantId), (_i, s) => {
+      s.storage.sql.exec("INSERT INTO packing_items (id, name, price_idr, is_active, sort_order, updated_at) VALUES ('pk1', 'Bubble Wrap', 3000, 1, 0, 0)")
+    })
+    const PII = { street: "Jl. Melati Raya No. 17 RT 03", phone: "0812-3456-7890", sender: "Ibu Siti Nisa" }
+    const res = await post("/customer-display/state", t.cookie, {
+      ...CHECKOUT,
+      courier: `${PII.sender} ${PII.phone}`,
+      eta: PII.phone,
+      destination: PII.street,
+      destinationLabel: `Tebet Barat, ${PII.street}`,
+      lines: [
+        { kind: "ongkir", amountIdr: 12500 },
+        { kind: "packing", amountIdr: 3000, name: `${PII.sender} ${PII.phone}` },
+      ],
+    })
+    expect(res.status).toBe(200)
+    const pub = await (await view("layarpii", kodeOf(p))).text()
+    let stored = ""
+    await runInDurableObject(vaultFor(env, t.tenantId), (_i, s) => {
+      stored = s.storage.sql.exec<{ state_json: string }>("SELECT state_json FROM customer_display_sessions WHERE revoked_at IS NULL").toArray()[0]!.state_json
+    })
+    for (const raw of [stored, pub]) for (const leak of [PII.street, "Melati", PII.phone, "0812", PII.sender, "Siti"]) expect(raw, leak).not.toContain(leak)
+    expect(JSON.parse(stored)).toMatchObject({ courier: "J&T Express", eta: null, destination: TEBET_LABEL, lines: [{ label: "Ongkos kirim" }, { label: "Packing" }] })
+    // A packing name from the gerai's own catalogue is shown; anything else falls back to the fixed label.
+    await post("/customer-display/state", t.cookie, { ...CHECKOUT, lines: [{ kind: "ongkir", amountIdr: 12500 }, { kind: "packing", amountIdr: 3000, name: "Bubble Wrap" }] })
+    expect((await data<View>(await view("layarpii", kodeOf(p)))).state).toMatchObject({ lines: [{ label: "Ongkos kirim" }, { label: "Packing (Bubble Wrap)" }] })
+    // An area id that the hint does not resolve to → no destination at all (never the free text).
+    await post("/customer-display/state", t.cookie, { ...CHECKOUT, destinationAreaId: "0123456789abcdef01234567", destinationLabel: PII.street })
+    expect((await data<View>(await view("layarpii", kodeOf(p)))).state).toMatchObject({ destination: null })
+    // Unknown, inactive or missing service → 422; the stored state is untouched.
+    for (const serviceCode of ["XX", "", undefined, "JT'--"]) {
+      const r = await post("/customer-display/state", t.cookie, { ...CHECKOUT, serviceCode, courier: "J&T Express" })
+      expect(r.status, String(serviceCode)).toBe(422)
+    }
+    expect((await data<View>(await view("layarpii", kodeOf(p)))).state).toMatchObject({ destination: null })
+  })
+
+  it("F4: inherited or non-string line kinds are refused and the stored state stays as it was", async () => {
+    const t = await checkoutGerai("layarproto")
+    const p = await pair(t.cookie)
+    expect((await post("/customer-display/state", t.cookie, CHECKOUT)).status).toBe(200)
+    const before = (await data<View>(await view("layarproto", kodeOf(p)))).state
+    for (const kind of ["__proto__", "constructor", "toString", "hasOwnProperty", 1, null, ["ongkir"], { ongkir: 1 }]) {
+      const r = await post("/customer-display/state", t.cookie, { ...CHECKOUT, lines: [{ kind, amountIdr: 12500 }], totalIdr: 12500 })
+      expect(r.status, JSON.stringify(kind)).toBe(422)
+      expect((await errorOf(r)).code).toBe("DISPLAY_INVALID")
+    }
+    expect((await data<View>(await view("layarproto", kodeOf(p)))).state).toEqual(before)
+  })
+
+  it("F2: pair, status and view agree on a non-secret pairId; a re-pair gets a new one", async () => {
+    const t = await checkoutGerai("layarpairid")
+    const a = await pair(t.cookie)
+    const b = await pair(t.cookie)
+    expect(a.pairId).not.toBe(b.pairId)
+    expect((await data<{ pairId: string }>(await appGet("/customer-display/status", t.cookie))).pairId).toBe(b.pairId)
+    expect((await data<View>(await view("layarpairid", kodeOf(b)))).pairId).toBe(b.pairId)
+    expect(b.pairId).not.toContain(b.token)
+  })
+})
+

@@ -23,6 +23,12 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   // Owner uploads the outlet's static QRIS (Pengaturan › Printer & Struk).
   await page.goto(`${APP}/pengaturan/printer`)
   await expect(page.getByText("QRIS Loket (Layar Pelanggan)")).toBeVisible()
+  // Sol R1 F7: a network failure shows Indonesian copy, never the browser's English exception text.
+  await page.route("**/api/app/media?purpose=qris", (r) => r.abort("failed"))
+  await page.getByLabel("Pilih gambar QRIS").setInputFiles({ name: "qris.png", mimeType: "image/png", buffer: PNG_1PX })
+  await expect(page.getByText("Gagal mengunggah gambar QRIS. Periksa koneksi lalu coba lagi.")).toBeVisible()
+  await expect(page.getByText(/Failed to fetch|TypeError|NetworkError/)).toHaveCount(0)
+  await page.unroute("**/api/app/media?purpose=qris")
   await page.getByLabel("Pilih gambar QRIS").setInputFiles({ name: "qris.png", mimeType: "image/png", buffer: PNG_1PX })
   await expect(page.getByText("QRIS sudah terpasang.")).toBeVisible()
 
@@ -39,11 +45,15 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
 
   // The paired device: a fresh context with no cookies, same viewport as this project.
   const device = await browser.newContext({ viewport: info.project.use.viewport ?? { width: 1280, height: 800 } })
-  const screen = await device.newPage()
   const screenErrors: string[] = []
-  screen.on("pageerror", (e) => screenErrors.push(e.message))
-  screen.on("console", (m) => m.type() === "error" && screenErrors.push(m.text()))
-  await screen.goto(pairUrl)
+  const openScreen = async (url: string) => {
+    const p = await device.newPage()
+    p.on("pageerror", (e) => screenErrors.push(e.message))
+    p.on("console", (m) => m.type() === "error" && screenErrors.push(m.text()))
+    await p.goto(url)
+    return p
+  }
+  let screen = await openScreen(pairUrl)
   await expect(screen.getByRole("heading", { name: "Selamat datang di Gerai Layar" })).toBeVisible()
   expect(await device.cookies()).toEqual([])
 
@@ -51,8 +61,14 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
+  // Sol R1 F6: the first state write after choosing the courier fails at the network; the counter retries by itself
+  // (1.5 s) and the display reaches checkout with no further input.
+  let stateCalls = 0
+  await page.route("**/api/app/customer-display/state", (r) => (stateCalls++ === 0 ? r.abort("failed") : r.continue()))
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
-  await expect(screen.getByText("Rincian pembayaran")).toBeVisible()
+  await expect(screen.getByText("Rincian pembayaran")).toBeVisible({ timeout: 10_000 })
+  expect(stateCalls).toBeGreaterThanOrEqual(2)
+  await page.unroute("**/api/app/customer-display/state")
   await expect(screen.getByRole("heading", { name: /J&T Express/ })).toBeVisible()
   const total = screen.locator("[data-total]")
   await expect(total).toHaveText("Rp 12.500")
@@ -64,6 +80,19 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   const text = await screen.locator("main").innerText()
   for (const leak of ["Modal", "laba", "0857", "0812", "Jl. Tebet", "Rina"]) expect(text).not.toContain(leak)
   expect(await screen.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+
+  // Sol R1 F3: `Buat Kode Baru` on an unchanged checkout publishes it to the new pairing at once; the old one ends.
+  await page.getByRole("button", { name: "Layar Pelanggan (terhubung)" }).click()
+  const again = page.getByRole("dialog", { name: "Layar Pelanggan" })
+  await again.getByRole("button", { name: "Buat Kode Baru" }).click()
+  const nextUrl = (await again.locator("code").innerText()).trim()
+  expect(nextUrl).not.toBe(pairUrl)
+  await page.keyboard.press("Escape")
+  await expect(screen.getByRole("heading", { name: "Layar belum terhubung" })).toBeVisible()
+  await screen.close()
+  screen = await openScreen(nextUrl)
+  await expect(screen.getByText("Rincian pembayaran")).toBeVisible()
+  await expect(screen.locator("[data-total]")).toHaveText("Rp 12.500")
 
   // Checkout in cash: the display thanks the customer with INV, change and the tracking QR.
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
