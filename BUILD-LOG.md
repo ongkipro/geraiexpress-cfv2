@@ -1075,4 +1075,11 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   (`route.fetch()` then a gated `fulfill`), open the gate only after the newer result is visible, then await delivery
   and a render before asserting. The barrier version fails at all three viewports under the mutation.
 - Sol R7 APPROVE on `7fe4b76`. Release run `RUN-20261118T142750Z-8cb203d3` (TASKS.md declared this time).
+- Live 2026-11-18 (owner-authorized): `main` fast-forwarded to `2d8caae` and pushed; Workers staging
+  `82278278-ffd9-4846-9819-17400a07714a`, production `62b42387-cdb0-4d0c-9135-ee59c078c989`; tenant objects migrated
+  v23 -> v24 (`0024`) on both (`pnpm do:migrate`; D1 `tenant_schema_versions` = 24/ok); `pnpm probes --env production`
+  6/6 PASS (relay 200 since the supervisor's TASK-601 rollout), staging 5/5. Gotcha: the first staging `do:migrate`
+  right after deploy answered "already current" — the old Worker version still served it (its schema target was v23)
+  and D1 stayed 23; a dry-run seconds later showed `v23 -> v24` and the real run migrated. Production waited for five
+  consecutive 401s on the new public route and dry-ran first.
 
