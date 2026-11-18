@@ -71,46 +71,82 @@ const timer: Schedule = (fn, ms) => {
   return () => clearTimeout(id)
 }
 
+/** What the server said about one publication: applied, or dropped as stale; `seq` = the pairing's high-water mark. */
+export type PublishResult = { applied: boolean; seq: number | null }
+
 /**
- * The counter's state publisher (Sol R2-F1 + R1 F6). One publication in flight at a time; inputs published meanwhile
- * coalesce to the newest, which goes next. Every send carries a strictly increasing `seq` (`max(clock, last + 1)`), which
- * the tenant object uses to drop an older write that arrives late. `send` resolves on success or on a permanent refusal
- * and rejects on a transient failure: that input is retried after each of `delays` while nothing newer was published
- * (a newer input or `stop()` cancels the retry). `schedule` and `clock` are injectable for tests.
+ * The counter's state publisher (Sol R2-F1, R3-F1, R3-F2, R1 F6). `publish(input)` declares the counter's CURRENT input.
+ *
+ * - One send in flight. A newer input waits and goes next; an intermediate one is never sent after it is superseded.
+ * - Dedup lives here (R3-F1): the current input is skipped only when the server is known to hold exactly it (`acked`)
+ *   and nothing else is in flight. Every `publish()` cancels a pending retry, including a return to an earlier input. A
+ *   transient failure makes the server's content unknown (`acked = null`), so returning to the earlier input sends it.
+ * - Numbering: `seq = max(clock, last + 1, floor + 1)`; `floor()` is the pairing's stored mark from status/pair/state
+ *   (R3-F2), so a remounted page or a slower clock still numbers above the server.
+ * - `send` resolves `{ applied, seq }`, resolves `null` for a permanent refusal (not retried), and rejects on a
+ *   transient failure: the input is retried after each of `delays` while it is still the current input.
+ * - A `stale` answer for the input that is still current lifts the numbering to the server's mark and sends it once
+ *   more; a stale answer for a superseded input is dropped, never republished.
  */
-export function createPublisher<T>(opts: { send: (input: T, seq: number) => Promise<void>; delays?: readonly number[]; schedule?: Schedule; clock?: () => number }) {
+export function createPublisher<T>(opts: {
+  send: (input: T, seq: number) => Promise<PublishResult | null>
+  keyOf: (input: T) => string
+  floor?: () => number
+  delays?: readonly number[]
+  schedule?: Schedule
+  clock?: () => number
+}) {
   const delays = opts.delays ?? RETRY_DELAYS_MS
   const schedule = opts.schedule ?? timer
   const clock = opts.clock ?? Date.now
+  const floor = opts.floor ?? (() => 0)
+  let target: { key: string; input: T } | null = null
+  let acked: string | null = null // the key the server is known to hold from this publisher
+  let parked: string | null = null // the current key we stopped trying (refused, retries spent, stale twice)
+  let rebased: string | null = null // the current key already resent once after a stale answer
   let inFlight = false
-  let next: { input: T } | null = null
+  let waiting = false
   let attempt = 0
   let cancelRetry: (() => void) | null = null
   let stopped = false
   let lastSeq = 0
   function pump() {
-    if (stopped || inFlight || !next) return
-    const { input } = next
-    next = null
+    if (stopped || inFlight || waiting || !target || target.key === acked || target.key === parked) return
+    const { key, input } = target
     inFlight = true
-    lastSeq = Math.max(clock(), lastSeq + 1)
+    lastSeq = Math.max(clock(), lastSeq + 1, floor() + 1)
+    const current = () => target?.key === key
     opts
       .send(input, lastSeq)
       .then(
-        () => {
+        (r) => {
           attempt = 0
+          if (!r) {
+            if (current()) parked = key
+            return
+          }
+          if (r.seq !== null) lastSeq = Math.max(lastSeq, r.seq)
+          if (r.applied) {
+            acked = key
+            return
+          }
+          // Stale: something newer is stored. Only the still-current input earns one resend above the mark.
+          if (!current()) return
+          if (rebased === key) parked = key
+          else rebased = key
         },
         () => {
-          if (stopped || next || attempt >= delays.length) {
+          acked = null // the request may or may not have landed
+          if (stopped || !current() || attempt >= delays.length) {
+            if (current()) parked = key
             attempt = 0
             return
           }
+          waiting = true
           cancelRetry = schedule(() => {
             cancelRetry = null
-            if (!stopped && !next) {
-              next = { input }
-              pump()
-            }
+            waiting = false
+            pump()
           }, delays[attempt++]!)
         },
       )
@@ -122,10 +158,14 @@ export function createPublisher<T>(opts: { send: (input: T, seq: number) => Prom
   return {
     publish(input: T) {
       if (stopped) return
+      const key = opts.keyOf(input)
       cancelRetry?.()
       cancelRetry = null
+      waiting = false
       attempt = 0
-      next = { input }
+      parked = null
+      if (target?.key !== key) rebased = null
+      target = { key, input }
       pump()
     },
     stop() {

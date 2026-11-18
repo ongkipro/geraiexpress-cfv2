@@ -10,29 +10,34 @@ import { createPublisher, DISPLAY_CHANNEL, type DisplayHint } from "./display-sy
 // Layar Pelanggan on the counter (TASK-701, spec 03 §5.5): pair a second window or a phone by QR, keep it in step
 // with `/kasir`, unpair. The server builds every state the display shows; this side only sends ids and amounts.
 
-interface Status { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean }
-interface Pairing { pairUrl: string; pairId: string; expiresAt: number; shiftBound: boolean; hasQris: boolean; qrSvg: string }
+interface Status { paired: boolean; pairId: string | null; seq: number; expiresAt: number | null; shiftBound: boolean; hasQris: boolean }
+interface Pairing { pairUrl: string; pairId: string; seq: number; expiresAt: number; shiftBound: boolean; hasQris: boolean; qrSvg: string }
 export type DisplayInput = Record<string, unknown> & { kind: "idle" | "checkout" | "paid" }
 
 /** A 4xx answer will not heal by itself (validation, pairing gone); only network failures and 5xx are retried. */
 const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500
 
 /**
- * Pairing status for this member + a debounced push of the current input. The push is keyed by pairing AND input, so
- * a new pairing (`Buat Kode Baru`) on an unchanged checkout publishes it at once (Sol R1 F3). Pushes go through one
- * serialised publisher (Sol R2-F1): never two in flight, the newest input wins, each carries an increasing `seq` the
- * server enforces, and a transient failure of the newest input is retried 1.5 s → 3 s → 6 s (F6). A same-PC display is
- * told to refresh through the channel — it then reads its own view; the message carries no state (F2).
+ * Pairing status for this member + a debounced declaration of the current input to one publisher. Every input change
+ * reaches `publish()` — the publisher alone decides what is already on the server (Sol R3-F1). The key is pairing AND
+ * input, so a new pairing (`Buat Kode Baru`) on an unchanged checkout publishes it at once (R1 F3). Numbering starts
+ * above the pairing's stored mark from status/pair/state answers (R3-F2). A same-PC display is told to refresh through
+ * the channel — it then reads its own view; the message carries no state (F2).
  */
 export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
   const [status, setStatus] = useState<Status | null>(null)
-  const refresh = useCallback(() => {
-    api<Status>("/customer-display/status").then(setStatus).catch(() => undefined)
+  // The highest stored publication mark seen from the server (status, pair, state answers); the publisher's floor.
+  const serverSeq = useRef(0)
+  const adopt = useCallback((s: Status) => {
+    if (typeof s.seq === "number") serverSeq.current = Math.max(serverSeq.current, s.seq)
+    setStatus(s)
   }, [])
+  const refresh = useCallback(() => {
+    api<Status>("/customer-display/status").then(adopt).catch(() => undefined)
+  }, [adopt])
   useEffect(refresh, [refresh])
   const key = JSON.stringify(input)
   const pairId = status?.paired ? status.pairId : null
-  const last = useRef<string | null>(null)
   const slug = useRef(tenantSlug)
   useEffect(() => {
     slug.current = tenantSlug
@@ -41,10 +46,14 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
   const publisher = useRef<ReturnType<typeof createPublisher<{ pairId: string; key: string }>> | null>(null)
   useEffect(() => {
     const p = createPublisher<{ pairId: string; key: string }>({
+      keyOf: ({ pairId: pid, key: k }) => `${pid}|${k}`,
+      floor: () => serverSeq.current,
       send: async ({ pairId: pid, key: k }, seq) => {
         try {
           const r = await api<Status & { stale?: boolean }>("/customer-display/state", { body: { ...(JSON.parse(k) as object), seq } })
-          last.current = `${pid}|${k}`
+          if (typeof r.seq === "number") serverSeq.current = Math.max(serverSeq.current, r.seq)
+          if (!r.paired) setStatus((s) => (s ? { ...s, paired: false, pairId: null } : s))
+          if (r.stale) return { applied: false, seq: r.seq ?? null }
           try {
             const ch = new BroadcastChannel(DISPLAY_CHANNEL)
             ch.postMessage({ tenantSlug: slug.current, pairId: pid } satisfies DisplayHint)
@@ -52,9 +61,10 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
           } catch {
             // No BroadcastChannel: the display still updates on its next poll.
           }
-          if (!r.paired) setStatus((s) => (s ? { ...s, paired: false, pairId: null } : s))
+          return { applied: true, seq: r.seq ?? null }
         } catch (e) {
           if (!permanent(e)) throw e
+          return null
         }
       },
     })
@@ -65,11 +75,11 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
     }
   }, [])
   useEffect(() => {
-    if (!pairId || last.current === `${pairId}|${key}`) return
+    if (!pairId) return
     const id = setTimeout(() => publisher.current?.publish({ pairId, key }), 250)
     return () => clearTimeout(id)
   }, [key, pairId])
-  const onPaired = (s: Status) => setStatus(s)
+  const onPaired = adopt
   return { status, refresh, onPaired }
 }
 
@@ -87,7 +97,7 @@ export function CustomerDisplayButton({ display, owner }: { display: ReturnType<
     try {
       const p = await api<Pairing>("/customer-display/pair", { body: {} })
       setPairing(p)
-      display.onPaired({ paired: true, pairId: p.pairId, expiresAt: p.expiresAt, shiftBound: p.shiftBound, hasQris: p.hasQris })
+      display.onPaired({ paired: true, pairId: p.pairId, seq: p.seq, expiresAt: p.expiresAt, shiftBound: p.shiftBound, hasQris: p.hasQris })
     } catch (err) {
       setMsg(err instanceof ApiError ? err.body.message : "Gagal membuat kode layar. Coba lagi.")
     } finally {

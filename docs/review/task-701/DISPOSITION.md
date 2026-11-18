@@ -39,3 +39,17 @@ same seven specs passed 30/30 (3 desktop-only skips), the second through the led
 0 flaky), and `customer-display` passed 9/9 under `--repeat-each=3`. Boundary: REVIEW_REQUIRED (R4); the run closes
 BLOCKED pending Sol R3.
 
+## Sol R3 (`R3-sol.md`, REQUEST_CHANGES) — DO ordering guard verified; two P2 publisher lifecycle findings
+
+| # | Sev | Finding | Fix | Regression | Mutations |
+|---|---|---|---|---|---|
+| R3-F1 | P2 | The hook skipped `publish()` when the input equalled the last acknowledged one, so returning to A after B failed left B's retry alive; it then landed and stayed | The hook declares every input change to the publisher (its `last.current` shortcut is gone). Dedup lives in the publisher: `target` (current input) vs `acked` (key the server is known to hold). Every `publish()` cancels a pending retry; the current input is skipped only when `target === acked` and nothing is in flight. A transient failure sets `acked = null` (the request may have landed), so returning to A after B failed re-sends A. | unit "A applied → B fails → back to A before B's retry…" (B's retry cancelled, even a late-firing timer sends nothing, sends `A, B, A`) and "skipped only when the server holds it and nothing else is in flight"; e2e: QRIS (A) shown → Tunai (B) aborted once at the network → back to QRIS before 1.5 s → after 5 s no Tunai publication was sent again, the display shows the QRIS card and no `Cara bayar:` | T701-R3-M1 (unit), T701-R3-M2 (e2e, hook shortcut restored) |
+| R3-F2 | P2 | `lastSeq` restarted at 0 per mounted publisher while the pairing kept its high-water mark; a remount/second counter with an earlier clock was rejected and the stale answer was treated as success | The tenant object returns the pairing's stored `seq` from pair (0), status and every state answer (read after the write). The hook keeps the highest seen in `serverSeq` and gives it to the publisher as `floor`: `seq = max(clock, last + 1, floor + 1)`. `send` reports `{ applied, seq }`; a `stale` answer lifts `lastSeq` to the mark and, only while that input is still the current target, is sent once more (a second stale parks it — no loop); a stale answer for a superseded input is dropped. | worker "pair, status and state report the pairing's stored mark; a fresh counter numbered below it is told so" (A at 2000, B at 1000 → `stale` + `seq 2000`, B at 2001 applies on the same pairing); unit: floor numbering with an earlier clock, stale → one resend → acknowledged, superseded stale dropped, second stale stops | T701-R3-M3, M4 (unit), T701-R3-M5 (worker) |
+
+Verification of the R3 fixes (run `RUN-20261118T125336Z-519c2283`): migrations, isolation, e2e (30 expected, 0
+unexpected, 0 flaky via the JSON report; customer-display at 390/768/1280 incl. the A→B-fail→A step), `pnpm check`
+and unit (Tests  194 passed (194)) PASS. The first `worker` record was FAIL with only `[ELIFECYCLE] … exit code 1` captured (the same
+uncaptured-transient pattern as TASK-701's first run); a direct re-run and a ledger re-record with the full output
+teed to a file both passed 445/445 in 63 files, and `pnpm check` (which runs the same suite) passed in between. The
+ledger keeps both worker records. Boundary: REVIEW_REQUIRED (R4); the run closes BLOCKED pending Sol R4.
+

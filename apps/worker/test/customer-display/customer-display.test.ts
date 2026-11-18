@@ -17,7 +17,7 @@ beforeEach(() => {
   hostCache.clear()
 })
 
-type Pair = { pairUrl: string; token: string; pairId: string; expiresAt: number; shiftBound: boolean; qrSvg: string }
+type Pair = { pairUrl: string; token: string; pairId: string; seq: number; expiresAt: number; shiftBound: boolean; qrSvg: string }
 type View = {
   pairId: string
   state: Record<string, unknown> & { kind: string }
@@ -379,6 +379,24 @@ describe("Sol R2-F1 publication ordering (TASK-701)", () => {
     const q = await pair(t.cookie)
     expect(await data(await post("/customer-display/state", t.cookie, { ...CHECKOUT, seq: 5 }))).toMatchObject({ state: { kind: "checkout" } })
     expect((await data<View>(await view("layarurut", kodeOf(q)))).state).toMatchObject({ kind: "checkout", totalIdr: 15500 })
+  })
+
+  it("R3-F2: pair, status and state report the pairing's stored mark; a fresh counter numbered below it is told so", async () => {
+    const t = await checkoutGerai("layarseq")
+    const p = await pair(t.cookie)
+    expect(p.seq).toBe(0)
+    const status = async () => data<{ seq: number; pairId: string }>(await appGet("/customer-display/status", t.cookie))
+    expect(await status()).toMatchObject({ seq: 0, pairId: p.pairId })
+    // Counter #1 (fast clock) publishes A at 2000.
+    expect(await data(await post("/customer-display/state", t.cookie, { ...CHECKOUT, seq: 2000 }))).toMatchObject({ seq: 2000, state: { kind: "checkout" } })
+    expect((await status()).seq).toBe(2000)
+    // Counter #2 / a remount with an earlier clock: B at 1000 is stale and the answer carries the mark to rebase on.
+    const b = { ...CHECKOUT, lines: [{ kind: "ongkir", amountIdr: 20000 }], totalIdr: 20000 }
+    expect(await data(await post("/customer-display/state", t.cookie, { ...b, seq: 1000 }))).toMatchObject({ stale: true, seq: 2000, state: null })
+    // Rebased above the mark, the same pairing takes B — no re-pair.
+    expect(await data(await post("/customer-display/state", t.cookie, { ...b, seq: 2001 }))).toMatchObject({ seq: 2001, state: { totalIdr: 20000 } })
+    expect((await data<View>(await view("layarseq", kodeOf(p)))).state).toMatchObject({ totalIdr: 20000 })
+    expect((await status()).seq).toBe(2001)
   })
 })
 

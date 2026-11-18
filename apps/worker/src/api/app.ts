@@ -1090,7 +1090,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const token = newToken(32)
     const v = await displayOp(c, { op: "pair", tokenHash: await sha256Hex(token) })
     const pairUrl = `${hostOrigin(c.req.raw)}/kasir/layar-pelanggan?gerai=${encodeURIComponent(c.get("membership")!.tenantSlug)}&kode=${token}`
-    return ok({ pairUrl, token, pairId: v.pairId, expiresAt: v.expiresAt, shiftBound: v.shiftBound, hasQris: v.hasQris, qrSvg: qrSvg(pairUrl, { title: "QR Layar Pelanggan" }) }, 201)
+    return ok({ pairUrl, token, pairId: v.pairId, seq: v.seq, expiresAt: v.expiresAt, shiftBound: v.shiftBound, hasQris: v.hasQris, qrSvg: qrSvg(pairUrl, { title: "QR Layar Pelanggan" }) }, 201)
   })
   r("GET", "/customer-display/status", "app_member", "role", async (c) => ok(await displayOp(c, { op: "status" })))
   r("POST", "/customer-display/unpair", "app_member", "role", async (c) => ok(await displayOp(c, { op: "unpair" })))

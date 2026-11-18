@@ -1044,4 +1044,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - R2-F1 verification: worker 444, unit 190, migrations, isolation, `pnpm check` PASS. One e2e run (seven specs) ended
   29 passed / 1 failed with the failing test not captured (line reporter summary only); the next two full runs passed
   30/30 and `customer-display` 9/9 repeated. The ledger keeps both e2e records; later runs use `--reporter=line,json`.
+- Sol R3 verified the DO ordering guard and raised two publisher lifecycle P2s. R3-F1: the hook's "same as last
+  acknowledged" shortcut skipped `publish()` on a return to A and left B's retry alive — dedup now lives inside the
+  publisher (`target` vs `acked`; every declaration cancels a retry; a transient failure clears `acked`). R3-F2: a
+  remounted publisher restarted numbering under the pairing's stored mark — pair/status/state now return `seq`, the
+  publisher uses it as a floor and resends a still-current input once after a `stale` answer. Lesson: when a component
+  holds a long-lived worker (publisher), any dedup outside it hides transitions the worker must see; and a server-side
+  sequence gate needs its high-water mark handed back to every client that numbers against it.
+- R3 verification: one `worker` ledger record failed with only `ELIFECYCLE` captured; re-run and re-record (output
+  teed, `pipefail`) passed 445/445 and `pnpm check` passed in between — recorded as an uncaptured transient. Ledger
+  checks now tee their output so the next such failure is diagnosable.
 

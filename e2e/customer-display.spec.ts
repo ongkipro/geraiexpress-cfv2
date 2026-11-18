@@ -7,6 +7,7 @@ import { APP, lastMail, uniqueEmail } from "./helpers"
 const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64")
 
 test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima kasih → putus", async ({ page, context, request, browser }, info) => {
+  test.setTimeout(120_000) // the R3-F1 step waits out a retry schedule
   const email = uniqueEmail("e2e-layar")
   const api = context.request
   const h = { origin: APP, "content-type": "application/json" }
@@ -99,6 +100,30 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
   await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
+
+  // Sol R3-F1: A (QRIS, on the display) → B (Tunai) fails once at the network → back to A before B's 1.5 s retry.
+  // B must never be sent again or shown; A stays.
+  await expect(screen.getByRole("img", { name: "QRIS gerai" })).toBeVisible()
+  let bFailed = false
+  const bLater: string[] = []
+  await page.route("**/api/app/customer-display/state", (r) => {
+    const m = (r.request().postDataJSON() as { method?: string } | null)?.method
+    if (m === "tunai" && !bFailed) {
+      bFailed = true
+      return r.abort("failed")
+    }
+    if (m === "tunai") bLater.push(m)
+    return r.continue()
+  })
+  await page.getByRole("button", { name: "Tunai" }).click()
+  await expect.poll(() => bFailed).toBe(true)
+  await page.getByRole("button", { name: "QRIS gerai" }).click()
+  await page.waitForTimeout(5_000) // past B's first (1.5 s) and second (3 s) retry slots
+  expect(bLater).toEqual([])
+  await expect(screen.getByRole("img", { name: "QRIS gerai" })).toBeVisible()
+  await expect(screen.getByText("Cara bayar:")).toHaveCount(0)
+  await page.unroute("**/api/app/customer-display/state")
+
   await page.getByRole("button", { name: "Tunai" }).click()
   await expect(screen.getByText("Cara bayar:")).toBeVisible()
   await page.getByLabel("Uang diterima").fill("20000")

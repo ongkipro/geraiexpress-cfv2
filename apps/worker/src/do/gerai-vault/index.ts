@@ -534,7 +534,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       | { op: "unpair" }
       | { op: "state"; input: Record<string, unknown>; seq: number | null; trackingHost: string; resolved?: DisplayResolved; catalog?: Record<string, string> },
     now: number = Date.now(),
-  ): Promise<{ ok: true; value: { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState; stale?: boolean } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
+  ): Promise<{ ok: true; value: { paired: boolean; pairId: string | null; seq: number; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState; stale?: boolean } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -544,7 +544,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         if (!/^[0-9a-f]{64}$/.test(op.tokenHash)) return { ok: false as const, error: { status: 400, code: "DISPLAY_INVALID", message: "Permintaan tidak valid." } }
         const p = pairDisplay(sql, userId, op.tokenHash, now)
         this.audit(tenantId, now, "user", userId, "customer_display.pair", { shiftBound: p.shiftBound })
-        return { ok: true as const, value: { paired: true, ...p, hasQris } }
+        return { ok: true as const, value: { paired: true, ...p, seq: 0, hasQris } }
       }
       if (op.op === "unpair") {
         if (unpairDisplay(sql, userId, now) > 0) this.audit(tenantId, now, "user", userId, "customer_display.unpair", {})
@@ -564,9 +564,11 @@ export class GeraiVaultDO extends DurableObject<Env> {
           if (!p) return { ok: false as const, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
           state = p
         } else return { ok: false as const, error: { status: 422, code: "DISPLAY_INVALID", message: "Status layar tidak dikenal." } }
+        const applied = setDisplayState(sql, userId, state, now, op.seq)
+        // Read after the write: `seq` is the pairing's high-water mark either way (Sol R3-F2).
         const status = displayStatus(sql, userId, now)
         // A live pairing that did not take the write already holds a newer publication: report it, keep it.
-        if (setDisplayState(sql, userId, state, now, op.seq) === 0 && status.paired) return { ok: true as const, value: { ...status, hasQris, stale: true } }
+        if (applied === 0 && status.paired) return { ok: true as const, value: { ...status, hasQris, stale: true } }
         return { ok: true as const, value: { ...status, hasQris, state } }
       }
       return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris } }

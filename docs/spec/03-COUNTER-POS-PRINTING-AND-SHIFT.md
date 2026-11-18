@@ -241,7 +241,11 @@ di meja kasir.`
   1.5 s, 3 s and 6 s and the retry is cancelled when the input or pairing changes (F6). Publications are serialised
   (one in flight, the newest queued input goes next) and carry a strictly increasing `seq`; the tenant object stores
   `state_seq` per pairing and applies a write only when its `seq` is greater (else it answers `stale: true`), so an
-  older publication delayed by the area lookup never replaces a newer one (Sol R2-F1). Pair, status and view carry a
+  older publication delayed by the area lookup never replaces a newer one (Sol R2-F1). Pair (`0`), status and every
+  state answer return the pairing's stored `seq`; the counter numbers above the highest it has seen, and a `stale`
+  answer for the input that is still current is resent once above the mark (R3-F2). The counter hands every input
+  change to the publisher, which skips only an input the server is known to hold with nothing else in flight; any
+  change cancels a pending retry, and a transient failure makes the stored content unknown (R3-F1). Pair, status and view carry a
   non-secret `pairId` (the session row id). After a push the counter posts `{ tenantSlug, pairId }` on a same-origin
   `BroadcastChannel`; it is only a "refresh now" hint — the display then reads its own `view` with its own `kode` and
   never shows message contents (F2). Closing the dialog drops the one-time QR view; reopening shows the status and

@@ -152,17 +152,19 @@ export function pairDisplay(sql: SqlStorage, userId: string, tokenHash: string, 
   return { pairId, expiresAt, shiftBound: !!shift }
 }
 
-export function displayStatus(sql: SqlStorage, userId: string, now: number): { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean } {
+/** This member's live pairing. `seq` is its stored publication high-water mark (Sol R3-F2): a counter seeds its
+ *  numbering from it so a remounted page or a slower clock still publishes above it. */
+export function displayStatus(sql: SqlStorage, userId: string, now: number): { paired: boolean; pairId: string | null; seq: number; expiresAt: number | null; shiftBound: boolean } {
   const r = sql
-    .exec<{ id: string; expires_at: number; shift_id: string | null }>(
-      `SELECT d.id, d.expires_at, d.shift_id FROM customer_display_sessions d LEFT JOIN cashier_shifts s ON s.id = d.shift_id
+    .exec<{ id: string; state_seq: number; expires_at: number; shift_id: string | null }>(
+      `SELECT d.id, d.state_seq, d.expires_at, d.shift_id FROM customer_display_sessions d LEFT JOIN cashier_shifts s ON s.id = d.shift_id
        WHERE d.created_by_user_id = ? AND d.revoked_at IS NULL AND d.expires_at > ? AND (d.shift_id IS NULL OR s.state = 'open')
        ORDER BY d.created_at DESC LIMIT 1`,
       userId,
       now,
     )
     .toArray()[0]
-  return { paired: !!r, pairId: r?.id ?? null, expiresAt: r?.expires_at ?? null, shiftBound: !!r?.shift_id }
+  return { paired: !!r, pairId: r?.id ?? null, seq: r?.state_seq ?? 0, expiresAt: r?.expires_at ?? null, shiftBound: !!r?.shift_id }
 }
 
 /** Replaces the state on this member's live pairings. With a counter `seq` (Sol R2-F1) only pairings whose last

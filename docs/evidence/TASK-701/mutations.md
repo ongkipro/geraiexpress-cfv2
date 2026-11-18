@@ -42,3 +42,13 @@ Script-driven: each mutation applied, the named suite run, the file restored fro
 | T701-R2-M2 | publisher without the in-flight guard (publications overlap) | unit `display-sync.test.ts` | exit 1: "never has two publications in flight…"; "an older failed publication is not retried…" |
 | T701-R2-M3 | a failed input is retried even when a newer one exists | unit `display-sync.test.ts` | exit 1: "an older failed publication is not retried once a newer input exists" |
 
+## Sol R3 (2026-11-18)
+
+| Id | Finding | Mutation | Suite | Red |
+|---|---|---|---|---|
+| T701-R3-M1 | R3-F1 | a transient failure keeps the old acknowledgement | unit | "A applied → B fails → back to A before B's retry…" |
+| T701-R3-M2 | R3-F1 | the hook's skip of the last acknowledged input restored | e2e desktop-1280 | `expect(bLater).toEqual([])` — B's retry was sent after the return to A |
+| T701-R3-M3 | R3-F2 | numbering ignores the server floor | unit | "a fresh publisher with an earlier clock numbers above the pairing's stored mark" |
+| T701-R3-M4 | R3-F2 | a stale answer counts as acknowledged | unit | "a stale answer for the current input … resends once"; "a stale answer for a superseded input is dropped…" |
+| T701-R3-M5 | R3-F2 | status reports `seq: 0` | worker | "pair, status and state report the pairing's stored mark…" |
+
