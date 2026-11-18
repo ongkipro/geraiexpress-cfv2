@@ -113,10 +113,11 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
           try {
             const unit = v.unit === "kg" ? 1000 : 1
             const svc = v.svc === "cargo" ? "cargo" : "regular"
-            // P×L×T exactly as submitted: none, or all three whole numbers 1..300 (never rewrite `-20` or `1.5`).
-            const dims = (["lengthCm", "widthCm", "heightCm"] as const).map((k) => (v[k] ?? "").trim())
-            if (dims.some(Boolean) && !dims.every((x) => /^[1-9][0-9]{0,2}$/.test(x) && Number(x) <= 300)) throw new AppError(422, "INVALID_QUOTE", DIMS_MSG, { dims: DIMS_MSG })
-            const input = parseQuoteInput({ destinationAreaId: v.destId, weightGram: Math.round(Number((v.weight ?? "").replace(",", ".")) * unit) || 0, mode: "none", lengthCm: dims[0], widthCm: dims[1], heightCm: dims[2] }, origin)
+            // P×L×T from the ORIGINAL form strings (not the 200-char display copy), trimmed: none, or all three up to
+            // three digits and 1..300 (`020` is 20; `-20`, `1.5`, `0` and a suffix past the display cap are refused).
+            const dims = (["lengthCm", "widthCm", "heightCm"] as const).map((k) => String(f.get(k) ?? "").trim())
+            if (dims.some(Boolean) && !dims.every((x) => /^\d{1,3}$/.test(x) && Number(x) >= 1 && Number(x) <= 300)) throw new AppError(422, "INVALID_QUOTE", DIMS_MSG, { dims: DIMS_MSG })
+            const input = parseQuoteInput({ destinationAreaId: v.destId, weightGram: Math.round(Number((v.weight ?? "").replace(",", ".")) * unit) || 0, mode: "none", lengthCm: dims[0] ? Number(dims[0]) : "", widthCm: dims[1] ? Number(dims[1]) : "", heightCm: dims[2] ? Number(dims[2]) : "" }, origin)
             const q = await runQuote(env, c.tenantId, input, Date.now(), { rateKey: `ms-quote:${c.tenantId}`, perMinute: 60 })
             const ofClass = q.cards.filter((x) => x.serviceClass === svc)
             const cards = ofClass.filter((x) => x.available).sort((a, b) => a.flow.counterDueIdr - b.flow.counterDueIdr)

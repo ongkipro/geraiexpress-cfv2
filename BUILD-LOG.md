@@ -1155,4 +1155,8 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   on phones; Space on the mini-site menu trigger. Mutations R1-M1..M10 red.
   Lesson: a message-text comparison cannot prove who owns a custom validity message. Track ownership where the setter
   is called.
+- Sol R2 (6/8 resolved) remaining items fixed in run `RUN-20261118T185551Z-7ca80cd6`: `/cara-kerja` now separates
+  COD Barang from COD Ongkir (service fee Non-COD/DFOD only; COD credits net proceeds, never debits the balance); the
+  P×L×T guard reads the original form strings (accepts `020`, refuses a suffix past the 200-char display cap).
+  Mutations R2-M1..M3 red. Lesson: validate the submitted value, not a display copy derived from it.
 

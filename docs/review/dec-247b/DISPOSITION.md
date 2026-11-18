@@ -20,3 +20,13 @@ replaced by `? IS NOT NULL`, which keeps one binding, and then failed on the own
 
 Ledger: `apps/worker/src/do/gerai-vault/index.ts` (the single `publicShell` caller, one line) was not in the run's
 declared surface; it is recorded as an accepted scope expansion (`expand-scope`, verification `worker`).
+
+# Round 2 — disposition of GPT-6.2 Sol R2 (`R2-sol.md`, REQUEST_CHANGES on `f80c966`)
+
+Sol verified that six of the eight R1 findings are resolved. The two remaining items were fixed in run
+`RUN-20261118T185551Z-7ca80cd6`.
+
+| # | Sev | Finding | Fix | Regression | Mutation (red) |
+|---|---|---|---|---|---|
+| R2-1 | P1 | `/cara-kerja` still blurred COD Barang and COD Ongkir, and said COD debits later | Step 4 and pipeline stops 2, 3 and 5 now follow spec 02 §3.3 and `computeFlow`. Non-COD pays shipping, plus packing and the counter service fee if any, at the counter; the net tariff is debited at issue. In COD Barang and COD Ongkir (DFOD) the recipient pays the courier's bill on delivery. The counter service fee applies only to Non-COD and DFOD; COD Barang takes packing only, if chosen. For COD, Mengantar deducts shipping and COD fees from the proceeds and credits the rest, so the seller balance is never debited. | `brand.test.ts` `/cara-kerja`: exact COD Barang / DFOD / service-fee / net-credit sentences; the R1 wording absent | R2-M1: R1 stop-2 wording → red |
+| R2-2 | P2 | Dimension guard rejected `020` and validated the 200-char display copy | The guard reads the original `formData` strings (trimmed, not truncated). Any dimension supplied means all three must be `^\d{1,3}$` and 1..300; the values are passed on as numbers. | `identity.test.ts`: `"20" + 198 spaces + "cm"` → 422; `020 × " 40 " × 30` → 200 and `(20×40×30 cm)` | R2-M2: read from the display copy → red; R2-M3: leading zero refused again → red |

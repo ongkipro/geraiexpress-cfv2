@@ -272,12 +272,16 @@ describe("brand site DEC-247", () => {
     // Sol R1 P1: the two payment paths are told apart (spec 02 §3.3) — Non-COD pays at the counter and is debited at
     // issue; COD is paid by the recipient to the courier and netted from the COD credit when it settles.
     const pipe = h.slice(h.indexOf('<ol class="pipe">'), h.indexOf("</ol>", h.indexOf('<ol class="pipe">')))
-    expect(pipe).toContain("Non-COD: ongkir dibayar di loket. COD: tagihan dibayar penerima kepada kurir")
-    expect(pipe).toContain("(Non-COD memotong saldo saat itu)")
-    expect(pipe).toContain("untuk COD, ongkir dan biaya COD dipotong dari dana COD saat cair")
-    expect(h).toContain("Non-COD memotong saldo sebesar ongkir bersih mitra saat resi terbit; COD tidak memotong saldo saat itu.")
-    expect(h).not.toContain("Pelanggan membayar tarif publik di loket dan kasnya tercatat")
-    expect(h).not.toContain("dilewati setiap kiriman, dicatat otomatis")
+    // Sol R2: COD Barang vs COD Ongkir (DFOD): the service fee is Non-COD/DFOD only (spec 02 §3.3 `S`), and COD credits
+    // net proceeds (Mengantar deducts its charges) rather than debiting the seller balance.
+    expect(pipe).toContain("COD Barang dan COD Ongkir: penerima membayar tagihan kurir saat paket tiba. Biaya jasa loket hanya untuk Non-COD dan COD Ongkir.")
+    expect(pipe).toContain("(hanya Non-COD yang memotong saldo saat itu)")
+    expect(pipe).toContain("Untuk COD, Mengantar memotong ongkir dan biaya COD dari dana tagihan, lalu mengkreditkan sisanya ke saldo.")
+    expect(h).toContain("COD Barang: hanya packing bila dipilih. COD Ongkir: packing dan biaya jasa loket bila ada.")
+    expect(h).toContain("COD tidak memotong saldo: Mengantar memotong ongkir dan biaya COD dari dana tagihan, lalu mengkreditkan sisanya ke saldo.")
+    expect(h).toContain("apakah saldo dipotong saat resi terbit (Non-COD) atau menerima dana COD bersih")
+    for (const wrong of ["Pelanggan membayar tarif publik di loket dan kasnya tercatat", "dilewati setiap kiriman, dicatat otomatis", "biaya packing dan layanan untuk COD", "packing atau biaya layanan bila ada", "kapan saldo terpotong"])
+      expect(h, wrong).not.toContain(wrong)
   })
 
   it("DEC-247B /hubungi-kami: two borderless porcelain panels, partners vs senders and recipients", async () => {

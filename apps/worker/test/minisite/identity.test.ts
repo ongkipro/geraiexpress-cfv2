@@ -162,6 +162,14 @@ describe("mini-site identity (DEC-247)", () => {
       expect(h, dims.join("x")).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
       expect(h, dims.join("x")).not.toContain("Ongkir Reguler ke")
     }
+    // Sol R2: the original strings are validated, not the 200-char display copy — a suffix past the cap is refused …
+    const long = await q({ weight: "1", svc: "regular", lengthCm: "20" + " ".repeat(198) + "cm", widthCm: "40", heightCm: "30" })
+    expect(long.status).toBe(422)
+    expect(await long.text()).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
+    // … and a zero-padded value the browser accepts (`020`) quotes as 20 cm.
+    const padded = await q({ weight: "1", svc: "regular", lengthCm: "020", widthCm: " 40 ", heightCm: "30" })
+    expect(padded.status).toBe(200)
+    expect(await padded.text()).toContain("(20×40×30 cm)")
   })
 
   it("/kirim: COD price field is always in the HTML (no-JS) and toggled by the inline COD script", async () => {
