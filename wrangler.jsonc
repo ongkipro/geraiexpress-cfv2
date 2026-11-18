@@ -1,7 +1,7 @@
 // GeraiExpress v2 — one Worker for every host (ARCHITECTURE §3, spec 07 §3).
-// Resource identifiers below are placeholders for local development. Creating the real D1/KV/R2/Queue resources and
-// replacing these ids is an owner-approved action (docs/WORKFLOW.md §8); a deploy with a placeholder id fails instead of
-// auto-provisioning a resource.
+// Top-level resource identifiers are placeholders for local development. `env.staging` and `env.production` carry the
+// real APAC resources created 2026-11-18 (owner-approved, docs/runbooks/production-zones.md §1); both pin the Worker to
+// Singapore (`aws:ap-southeast-1`) so D1 and Durable Object round trips stay in APAC.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "geraiexpress-cfv2",
@@ -84,11 +84,11 @@
     "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
   },
   "env": {
-    // Staging: separate Worker, D1, DO namespace and buckets (spec 07 §7). Values are filled by TASK-109 after the owner
-    // creates the resources; deploy runs only through the protected GitHub `staging` environment.
+    // Staging: separate Worker, D1, DO namespace and buckets (spec 07 §7). Resources created 2026-11-18 (TASK-109).
     "staging": {
       "name": "geraiexpress-cfv2-staging",
       "workers_dev": false,
+      "placement": { "mode": "targeted", "region": "aws:ap-southeast-1" },
       "preview_urls": false,
       // spec 07 §7 / spec 11 §2: staging platform hosts as Custom Domains; mini-sites `<slug>-stg.geraimitra.com` reach the staging
       // Worker through the more specific `*-stg.geraimitra.com/*` route (production keeps `*/*`).
@@ -110,12 +110,10 @@
         "PARTNER_TRANSPORT": "direct",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@mail.geraiexpress.com",
-        // Set by the owner when the Turnstile widget for *.geraimitra.com is created (AWAITING_OWNER); empty → public
-        // forms refuse with a polite message instead of accepting unverified submissions.
-        "TURNSTILE_SITE_KEY": "",
-        // Zone id of the SaaS zone (team test zone on staging, geraimitra.com on production) — set by the owner (AWAITING_OWNER).
-        // Empty → custom-domain calls fail closed with a polite message.
-        "CF_SAAS_ZONE_ID": ""
+        // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAF6YLggBbRId8AR2",
+        // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
+        "CF_SAAS_ZONE_ID": "d07b150f9b2180da692c5787ce1d954a"
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
@@ -124,7 +122,7 @@
         {
           "binding": "DB",
           "database_name": "geraiexpress-control-staging",
-          "database_id": "00000000-0000-4000-8000-000000000002",
+          "database_id": "c25337ba-21be-4ae7-ab55-7c7a8df89bbb",
           "migrations_dir": "packages/db/migrations/control"
         }
       ],
@@ -135,7 +133,7 @@
         ]
       },
       "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media-staging" }],
-      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "00000000000000000000000000000002" }],
+      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "ca9f844f1d7845cfb71de035884502cb" }],
       "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
       "queues": {
         "producers": [
@@ -158,11 +156,11 @@
     },
     // Production: routes per spec 11 §1–2 and spec 10 §5 (TASK-602). Platform hosts are explicit Custom Domains (never
     // `*.geraiexpress.com/*`, so a Worker fetch to `relay.` reaches the VPS); the tenant zone takes `*/*` plus an explicit
-    // `cname.geraimitra.com/*` (O2O safety). Resource ids below stay placeholders until the owner creates the resources, so
-    // `wrangler deploy --env production` fails instead of provisioning anything (runbook: docs/runbooks/production-zones.md).
+    // `cname.geraimitra.com/*` (O2O safety). Resources created 2026-11-18 (runbook: docs/runbooks/production-zones.md).
     "production": {
       "name": "geraiexpress-cfv2-production",
       "workers_dev": false,
+      "placement": { "mode": "targeted", "region": "aws:ap-southeast-1" },
       "preview_urls": false,
       "routes": [
         { "pattern": "geraiexpress.com", "custom_domain": true },
@@ -183,12 +181,10 @@
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@mail.geraiexpress.com",
-        // Set by the owner when the Turnstile widget for *.geraimitra.com is created (AWAITING_OWNER); empty → public
-        // forms refuse with a polite message instead of accepting unverified submissions.
-        "TURNSTILE_SITE_KEY": "",
-        // Zone id of the SaaS zone (team test zone on staging, geraimitra.com on production) — set by the owner (AWAITING_OWNER).
-        // Empty → custom-domain calls fail closed with a polite message.
-        "CF_SAAS_ZONE_ID": ""
+        // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAF6YLggBbRId8AR2",
+        // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
+        "CF_SAAS_ZONE_ID": "d07b150f9b2180da692c5787ce1d954a"
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
@@ -197,7 +193,7 @@
         {
           "binding": "DB",
           "database_name": "geraiexpress-control-production",
-          "database_id": "00000000-0000-4000-8000-000000000003",
+          "database_id": "e845e4b8-0c24-422d-8b92-0f31d1408ae9",
           "migrations_dir": "packages/db/migrations/control"
         }
       ],
@@ -208,7 +204,7 @@
         ]
       },
       "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media-production" }],
-      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "00000000000000000000000000000003" }],
+      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "b560e2279c45431e87620ad52dccb01f" }],
       "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
       "queues": {
         "producers": [
