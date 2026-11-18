@@ -1,23 +1,14 @@
 {
-  "activeRun": "RUN-20261118T132524Z-b80efae9",
-  "activeTask": "TASK-701",
-  "capability": "full-stack-development",
-  "job": "release",
+  "activeRun": null,
   "lastRun": {
-    "finishedAt": "2026-11-18T13:19:57Z",
+    "finishedAt": "2026-11-18T13:33:32Z",
     "result": "BLOCKED",
-    "runId": "RUN-20261118T131308Z-6159ef9a"
+    "runId": "RUN-20261118T132524Z-b80efae9"
   },
-  "model": "claude-opus-5-5",
-  "observedHead": "94588b5cde7961beea2af60e40562b69ddd8fed5",
+  "observedHead": "53fe32fadc3d214979f3447886047e4ee257292a",
   "observedState": "IN_PROGRESS",
   "project": "geraiexpress-cfv2",
-  "provider": "anthropic",
-  "reasoningEffort": "low",
-  "requirement": "PR-22",
-  "risk": "R4",
   "schemaVersion": 1,
   "statusAuthority": "STATUS.md",
-  "updatedAt": "2026-11-18T13:33:18Z",
-  "worker": "claude-code"
+  "updatedAt": "2026-11-18T13:33:32Z"
 }
