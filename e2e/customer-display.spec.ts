@@ -35,22 +35,43 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
 
   // Pair from /kasir.
   await page.goto(`${APP}/kasir`)
-  // Release-gate finding: the status read started when the dialog opens is answered (not paired) before the pairing but
-  // delivered after it; it must not undo the pairing.
+  // Release-gate finding REL-1 (barriers per Sol R6-F1, no sleeps): the first status read is answered by the server
+  // BEFORE pairing (paired: false) and held; pairing completes; only then is the old answer delivered. The counter must
+  // stay connected after the old answer has been processed.
+  const barrier = () => {
+    let open!: () => void
+    const done = new Promise<void>((r) => (open = r))
+    return { open, done }
+  }
+  const captured = barrier()
+  const release = barrier()
+  const fulfilled = barrier()
+  let held = false
   await page.route("**/api/app/customer-display/status", async (r) => {
+    if (held) return r.continue()
+    held = true
     const answered = await r.fetch()
-    await new Promise((x) => setTimeout(x, 1_500))
+    expect(((await answered.json()) as { data: { paired: boolean } }).data.paired).toBe(false)
+    captured.open()
+    await release.done
     await r.fulfill({ response: answered })
+    fulfilled.open()
   })
   await page.getByRole("button", { name: /^Layar Pelanggan/ }).click()
+  await captured.done // the old answer exists (not paired) before we pair
   const dialog = page.getByRole("dialog", { name: "Layar Pelanggan" })
   await dialog.getByRole("button", { name: "Pasangkan Layar" }).click()
   await expect(dialog.getByRole("img", { name: "QR untuk memasangkan layar pelanggan" })).toBeVisible()
   const pairUrl = (await dialog.locator("code").innerText()).trim()
   expect(pairUrl).toMatch(/\/kasir\/layar-pelanggan\?gerai=l[0-9a-z]+&kode=[A-Za-z0-9_-]{43}$/)
   await page.keyboard.press("Escape")
-  await page.waitForTimeout(2_000) // the delayed, older status answer has now been delivered
+  await expect(page.getByRole("button", { name: "Layar Pelanggan (terhubung)" })).toBeVisible() // pair result applied
+  release.open()
+  await fulfilled.done // the old answer reached the page...
+  // ...and was processed: let the page settle its promise chain and commit a render (two frames + a task).
+  await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 0)))))
   await expect(page.getByRole("button", { name: "Layar Pelanggan (terhubung)" })).toBeVisible()
+  expect(await page.getByRole("button", { name: "Layar Pelanggan", exact: true }).count()).toBe(0)
   await page.unroute("**/api/app/customer-display/status")
 
   // The paired device: a fresh context with no cookies, same viewport as this project.

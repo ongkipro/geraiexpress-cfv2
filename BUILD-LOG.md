@@ -1071,4 +1071,7 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   to be timeouts while another repository's tests and Postgres loaded the host (load ≈ 6/8) — Workers tests hit the
   15 s limit, an e2e issue step stayed `Memproses…` past 5 s. `heavy-run` locks only this repo's runs; check `uptime`
   before blaming code, and re-record only after the cause is captured.
+- Sol R6-F1: a race regression must order its steps with barriers, never sleeps — hold the old response
+  (`route.fetch()` then a gated `fulfill`), open the gate only after the newer result is visible, then await delivery
+  and a render before asserting. The barrier version fails at all three viewports under the mutation.
 

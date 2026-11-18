@@ -64,3 +64,6 @@ Script-driven: each mutation applied, the named suite run, the file restored fro
 |---|---|---|---|---|
 | T701-REL-M1 | status race after pairing | status answers applied regardless of generation | e2e desktop-1280 | `getByRole('button', { name: 'Layar Pelanggan (terhubung)' })` not found |
 
+R6-F1 re-check (barrier version of the regression): T701-REL-M1 re-run across phone-390, tablet-768 and desktop-1280 —
+exit 1, 3 failed, each at the post-release `Layar Pelanggan (terhubung)` assertion.
+

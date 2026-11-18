@@ -713,7 +713,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 
 ### TASK-701: Layar Pelanggan — customer-facing counter display
 - **State:** Sol R1–R4 fixed, R5 APPROVE on `94588b5`; the release e2e gate then caught a status race after pairing
-  (REL-1, `docs/review/task-701/DISPOSITION.md`) — fixed, awaiting Sol R6; not merged.
+  (REL-1, `docs/review/task-701/DISPOSITION.md`) — fixed; Sol R6 confirmed it and R6-F1 (test barriers) is done —
+  awaiting Sol R7; not merged.
 - **Requirement:** PR-22; visual 07 (`/kasir/layar-pelanggan`); spec 03 §5
 - **Risk Level:** R3 declared (auth-free paired read surface, server-built zero-leak DTO, tenant SQLite migration
   `0024`); the ledger boundary escalates it to **R4** (diff-risk: token hashing in the tenant object) — review as R4.

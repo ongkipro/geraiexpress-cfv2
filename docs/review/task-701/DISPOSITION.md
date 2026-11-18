@@ -97,3 +97,13 @@ PASS once the load eased. This also explains the earlier `ELIFECYCLE`-only failu
 (reverting the TASK-701 `DONE` marker to "awaiting R6") was edited without being in the run's declared surface — plus
 REVIEW_REQUIRED (R4). The run closed BLOCKED pending Sol R6; the release run after R6 declares `TASKS.md`.
 
+## Sol R6 (`R6-sol.md`, REQUEST_CHANGES, test-only) — REL-1 production fix confirmed sound
+
+| # | Sev | Finding | Fix | Verification |
+|---|---|---|---|---|
+| R6-F1 | P2 | The REL-1 regression used sleeps (1.5 s delayed delivery, 2 s wait); if pairing took longer than the delay the old answer arrived first and the test passed without exercising the race | `e2e/customer-display.spec.ts` uses explicit barriers, no sleeps: only the first status request is intercepted; `route.fetch()` is awaited and its JSON asserted `paired: false`; `captured` opens before `Pasangkan Layar` is clicked; delivery is held until the pair URL and `Layar Pelanggan (terhubung)` are visible; then `release` opens, the test awaits `fulfilled` plus two animation frames and a task in the page, and asserts the button still reads `(terhubung)` and no plain `Layar Pelanggan` button exists | Spec 3/3 (390/768/1280). Mutation T701-REL-M1 (generation check removed) now fails at all three viewports, each at the post-release assertion (line 73, after `release.open()` on line 69) |
+
+R6-F1 run `RUN-20261118T141234Z-68d34359` (test-only change): e2e (30 expected, 0 unexpected, 0 flaky, JSON) and
+`pnpm check` (unit 195, Workers 445) PASS on the first attempt; boundary REVIEW_REQUIRED (R4) with nothing out of
+scope. The run closes BLOCKED pending Sol R7.
+
