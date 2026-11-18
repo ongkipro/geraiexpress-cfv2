@@ -125,9 +125,11 @@ export const HOME_SCRIPT = `<script defer src="/three.min.js"></script><script d
 })();
 (function(){
   // The courier marquee's pause button (WCAG 2.2.2): the paused state holds until pressed again, whatever has focus.
+  // Progressive enhancement: the marquee moves (data-ready) only once this handler exists, and never under reduced motion.
   var b=document.querySelector(".mq-pause"),m=document.querySelector(".marquee");
-  if(!b||!m)return;
+  if(!b||!m||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
   b.addEventListener("click",function(){var on=b.getAttribute("aria-pressed")!=="true";b.setAttribute("aria-pressed",on?"true":"false");if(on)m.setAttribute("data-paused","");else m.removeAttribute("data-paused")});
+  m.setAttribute("data-ready","");
 })();
 (function(){
   // Raka's parcel, label and scan beam move only while the stage is on screen; still under reduced motion (DEC-249).
@@ -317,7 +319,7 @@ const FITUR_SHOWCASE = `<section class="sec" aria-labelledby="satu-layar-title">
 </div></section>
 
 <section class="sec" aria-labelledby="bukti-title"><div class="wrap">
-<div class="shead"><h2 id="bukti-title">Selisih antara laci kasir dan mutasi ekspedisi langsung terlihat per resi</h2><p class="sub">Dua kebiasaan loket yang paling sering memakan waktu kini dikerjakan sistem.</p></div>
+<div class="shead"><h2 id="bukti-title">Setelah sinkronisasi, tinjau selisih kas loket dan mutasi Mengantar, termasuk per resi jika sudah tercocokkan</h2><p class="sub">Dua kebiasaan loket yang paling sering memakan waktu kini dikerjakan sistem.</p></div>
 <div class="proof">
 <div class="tile"><span class="idx">01</span><h3>Dari catatan campur ke rekonsiliasi 1:1 per resi</h3><p>Catatan manual sering menyisakan selisih ongkir dan potongan COD yang belum cair. GeraiExpress mencocokkan kas loket dengan mutasi Mengantar untuk setiap nomor resi.</p>
 <div class="float rb" aria-label="Contoh perbandingan catatan manual dan rekonsiliasi per resi (data contoh)">

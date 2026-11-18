@@ -1236,4 +1236,8 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `GX_REUSE_SERVER`; unit tests added. The marquee gets a keyboard pause button that holds `data-paused`, and a
   1,476 px cap so wide screens never show an empty tail. The `/fitur` finance wording is honest. Home 6,279 px.
   Mutations D249R1-M1..M6 red.
+- Sol R2 (three edge cases) fixed in run `RUN-20261118T223606Z-06d5e437`. Protected paths are matched both as written
+  and via `realpath`, so symlink aliases and not-yet-created paths are covered. The marquee is a progressive
+  enhancement: static nine logos by default, motion and the pause button only after the script sets `data-ready`, and
+  none under reduced motion or without JS. The `/fitur` proof title is precise. Mutations D249R2-M1..M3 red.
 

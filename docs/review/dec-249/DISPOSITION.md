@@ -16,3 +16,15 @@ findings were fixed in run `RUN-20261118T221923Z-14db5701` with focused checks (
 Home height after the pause button: 6,279 px at 1440 (≤ 6,300). Note: the first run of D249R1-M1 survived because the
 test's symlink was new and failed the age check anyway. The test now ages the link and its target, so only the type
 guard keeps them, and M1 goes red.
+
+# Round 2 — GPT-6.2 Sol R2 (`R2-sol.md`)
+
+Everything else was verified resolved. The three edge cases were fixed in run `RUN-20261118T223606Z-06d5e437` with
+focused checks: `pnpm check:fast`, unit `clean-e2e-state.test.mjs` 7/7, `vitest run test/brand` 22/22,
+`check-page.mjs` 10/10, e2e `brand.spec.ts --project desktop-1280` 14/0/0.
+
+| # | Finding | Fix | Regression | Mutation (red) |
+|---|---|---|---|---|
+| R2-1 | A live process persisting through a symlink alias did not protect the real folder | Every protected path is stored as written (`path.resolve`, which also covers one not created yet) and with symlinks resolved (`realpathSync`). A candidate is protected when either of its own spellings matches. | Unit: `active-run -> state-e2e-x` in `activePaths` keeps `state-e2e-x`; a not-yet-created path is accepted | D249R2-M1 (`realpath` dropped) |
+| R2-2 | Without JavaScript the marquee moved but had no pause control | Progressive enhancement: the default CSS is a static wrap of the nine logos (duplicate track and pause button hidden, no animation). The inline script attaches the pause handler and only then sets `data-ready`, and it does nothing under reduced motion. Animation, edge fade, the duplicate track and the button all hang off `.marquee[data-ready]`. | e2e with `javaScriptEnabled: false`: animation `none`, `.mq-ctl` hidden, duplicate track hidden, nine logos visible; worker CSS/script assertions | D249R2-M2 (animated without JS → e2e red), D249R2-M3 (`data-ready` under reduced motion → worker red) |
+| R2-3 | The `/fitur` proof title still overstated | "Setelah sinkronisasi, tinjau selisih kas loket dan mutasi Mengantar, termasuk per resi jika sudah tercocokkan" | `brand.test.ts` exact title | — (copy) |

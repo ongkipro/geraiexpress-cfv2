@@ -525,6 +525,16 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   await sp.waitForTimeout(300)
   await expect(sp.locator("[data-raka]")).not.toHaveClass(/is-playing/)
   await still.close()
+  // Sol R2: without JavaScript the marquee is a static wrap of the nine logos with no pause button.
+  const nojs = await browser.newContext({ javaScriptEnabled: false, viewport: page.viewportSize()! })
+  const np = await nojs.newPage()
+  await np.goto(`${apex}/`)
+  expect(await np.locator(".mq-track").evaluate((el) => getComputedStyle(el).animationName)).toBe("none")
+  await expect(np.locator(".mq-ctl")).toBeHidden()
+  await expect(np.locator('.mq-list[aria-hidden="true"]')).toBeHidden()
+  await expect(np.locator(".mq-list").first().locator("img")).toHaveCount(9)
+  for (const img of await np.locator(".mq-list").first().locator("img").all()) await expect(img).toBeVisible()
+  await nojs.close()
   // /fitur: the showcase and the proof band sit between the page head and the six pillars.
   await page.goto(`${apex}/fitur`)
   const order = await page.evaluate(() => ["satu-layar-title", "bukti-title", "kasir-title"].map((id) => document.getElementById(id)!.getBoundingClientRect().top + scrollY))

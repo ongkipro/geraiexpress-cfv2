@@ -3,7 +3,7 @@
 // touches: anything that is not a real directory (files, symlinks), the `keep` folder(s), any folder a live process
 // is persisting to (`--persist-to <dir>` in `/proc/*/cmdline` on Linux), or folders not named `state-e2e-*`.
 // Runs from playwright.config.ts (skipped with GX_REUSE_SERVER) and on demand via `pnpm clean:e2e-state`.
-import { lstatSync, readdirSync, readFileSync, readlinkSync, rmSync } from "node:fs"
+import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -55,7 +55,18 @@ export function pruneStaleE2eState({ root = ".wrangler", maxAgeMs = 2 * 3600_000
   } catch {
     return []
   }
-  const protectedDirs = new Set([...[keep].flat(), ...(activePaths ?? activePersistPaths())].filter(Boolean).map((k) => path.resolve(k)))
+  // Both spellings of every protected path: as written (also for one not created yet) and with symlinks resolved, so
+  // `.wrangler/active-run -> .wrangler/state-e2e-x` protects the real folder too.
+  const real = (p) => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return null
+    }
+  }
+  const protectedDirs = new Set(
+    [...[keep].flat(), ...(activePaths ?? activePersistPaths())].filter(Boolean).flatMap((k) => [path.resolve(k), real(k)]).filter(Boolean),
+  )
   const removed = []
   for (const name of names) {
     if (!name.startsWith("state-e2e-")) continue
@@ -63,7 +74,7 @@ export function pruneStaleE2eState({ root = ".wrangler", maxAgeMs = 2 * 3600_000
     try {
       const st = lstatSync(dir)
       if (!st.isDirectory() || st.isSymbolicLink()) continue
-      if (protectedDirs.has(path.resolve(dir))) continue
+      if (protectedDirs.has(path.resolve(dir)) || protectedDirs.has(real(dir))) continue
       if (now - newestMtime(dir) < maxAgeMs) continue
       rmSync(dir, { recursive: true, force: true })
       removed.push(dir)

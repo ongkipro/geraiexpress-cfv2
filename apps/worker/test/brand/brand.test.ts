@@ -245,8 +245,15 @@ describe("brand site DEC-247", () => {
     ])
     // Marquee: CSS-only, pauses on hover/focus, a static wrap under reduced motion.
     const css = /<style>([\s\S]*?)<\/style>/.exec(h)![1]!
-    expect(css).toContain(".marquee:hover .mq-track,.marquee:focus-within .mq-track,.marquee[data-paused] .mq-track{animation-play-state:paused}")
-    expect(css).toContain("@media(prefers-reduced-motion:reduce){.mq-ctl{display:none}.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}")
+    // Sol R2: static by default; motion and the pause button only once the script has set data-ready.
+    expect(css).toContain(".mq-track{display:block}")
+    expect(css).toContain(".mq-list[aria-hidden]{display:none}")
+    expect(css).toContain(".marquee[data-ready] .mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}")
+    expect(css).toContain(".marquee[data-ready]:hover .mq-track,.marquee[data-ready]:focus-within .mq-track,.marquee[data-paused] .mq-track{animation-play-state:paused}")
+    expect(css).toContain(".mq-ctl{display:none;justify-content:flex-end;margin-top:-18px}.marquee[data-ready]+.mq-ctl{display:flex}")
+    expect(css).toContain("@media(prefers-reduced-motion:reduce){.mq-ctl{display:none!important}.mq-track{animation:none!important}}")
+    expect(h).toContain('if(!b||!m||matchMedia("(prefers-reduced-motion: reduce)").matches)return;')
+    expect(h).toContain('m.setAttribute("data-ready","");')
     // Sol R1: never wider than one track (no empty tail on wide screens), and a real pause control (WCAG 2.2.2).
     expect(css).toContain(".marquee{max-width:1476px;margin:0 auto;overflow:hidden;")
     expect(h).toContain('<button type="button" class="mq-pause" aria-pressed="false" aria-label="Jeda animasi daftar ekspedisi">')
@@ -402,7 +409,7 @@ describe("brand site DEC-247", () => {
     expect(h.indexOf('aria-labelledby="bukti-title"')).toBeLessThan(h.indexOf('<section class="sec tight" aria-label="Enam modul GeraiExpress">'))
     // Sol R1 (R1-5): honest finance wording — a computed Saldo Aman from the last sync, differences visible per resi.
     expect(h).toContain("Anda melihat perhitungan Saldo Aman dari sinkronisasi terakhir setelah cadangan ongkir retur, serta paket yang menunggu dijemput kurir.")
-    expect(h).toContain('<h2 id="bukti-title">Selisih antara laci kasir dan mutasi ekspedisi langsung terlihat per resi</h2>')
+    expect(h).toContain('<h2 id="bukti-title">Setelah sinkronisasi, tinjau selisih kas loket dan mutasi Mengantar, termasuk per resi jika sudah tercocokkan</h2>')
     expect(h).not.toMatch(/tahu persis berapa Saldo Aman|tidak lagi selisih/)
     // 1. Layered product UI: faded KPI layer behind a floating table card, synthetic data labelled as such.
     expect(h).toContain('<figure class="layers">')

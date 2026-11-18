@@ -74,6 +74,16 @@ describe("pruneStaleE2eState", () => {
     expect(existsSync(dir)).toBe(true)
   })
 
+  it("a live process persisting through a symlink alias (active-run -> state-e2e-x) protects the real folder (Sol R2)", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "gx-prune-"))
+    const dir = oldDir(root, "state-e2e-x")
+    const alias = path.join(root, "active-run")
+    symlinkSync(dir, alias)
+    const notYet = path.join(root, "state-e2e-not-created-yet")
+    expect(pruneStaleE2eState({ root, now, activePaths: [alias, notYet] })).toEqual([])
+    expect(existsSync(dir)).toBe(true)
+  })
+
   it("reads `--persist-to` (both forms) from a /proc-like tree, resolved against the process cwd", () => {
     const proc = mkdtempSync(path.join(tmpdir(), "gx-proc-"))
     const cwd = mkdtempSync(path.join(tmpdir(), "gx-cwd-"))
