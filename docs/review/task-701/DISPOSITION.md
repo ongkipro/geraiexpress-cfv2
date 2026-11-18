@@ -83,3 +83,16 @@ the cashier pairs before that answer returns, the older `paired: false` answer l
 overwrites it, so the counter believes it is unpaired and stops publishing. Likely also the uncaptured 29/1 e2e failure
 recorded in the R2 run. TASK-701 was not merged or deployed; the fix and its regression follow and need review.
 
+| # | Sev | Finding | Fix | Regression | Mutation |
+|---|---|---|---|---|---|
+| REL-1 | P2 | An older `GET /customer-display/status` answer overwrote a newer pair result (counter shows unpaired, stops publishing) | The hook numbers its status reads (`generation`); pair, unpair and an unpaired state answer bump the generation, and a status answer from an older generation is dropped (`display-dialog.tsx`). | e2e: the status read issued when the dialog opens is answered by the server before pairing but delivered 1.5 s later; after pairing the button must still read `Layar Pelanggan (terhubung)` | T701-REL-M1 (generation check removed → exactly the release-gate failure: `Layar Pelanggan (terhubung)` not found) |
+
+Verification of REL-1 (run `RUN-20261118T134151Z-e4270286`, outputs teed, e2e via JSON): unit 195, Workers 445,
+`pnpm check` and e2e (30 expected, 0 unexpected, 0 flaky) PASS. Two earlier records in this run were FAIL and both
+causes were captured this time: `pnpm check` — five unrelated Workers tests (pickup, listing, labels, dispatch) hit the
+15 s test timeout at 22–37 s each while another repository's test suite and Postgres loaded the host (load ≈ 6 on 8
+cores; the `worker` record minutes earlier passed 445/445); e2e — at phone-390 `Resi terbit` was not visible within
+5 s because issuing was still running (`Memproses…`, INV in draft, no error) under the same load. Both re-recorded
+PASS once the load eased. This also explains the earlier `ELIFECYCLE`-only failures. Boundary: REVIEW_REQUIRED (R4);
+the run closes BLOCKED pending Sol R6.
+

@@ -58,3 +58,9 @@ Script-driven: each mutation applied, the named suite run, the file restored fro
 |---|---|---|---|---|
 | T701-R4-M1 | R4-F1 | the stale branch keeps `acked` (line removed) | unit `display-sync.test.ts` | "R4-F1: A applied → B in flight → back to A → B answers stale at 2000…" |
 
+## Release-gate finding (2026-11-18)
+
+| Id | Finding | Mutation | Suite | Red |
+|---|---|---|---|---|
+| T701-REL-M1 | status race after pairing | status answers applied regardless of generation | e2e desktop-1280 | `getByRole('button', { name: 'Layar Pelanggan (terhubung)' })` not found |
+

@@ -35,6 +35,13 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
 
   // Pair from /kasir.
   await page.goto(`${APP}/kasir`)
+  // Release-gate finding: the status read started when the dialog opens is answered (not paired) before the pairing but
+  // delivered after it; it must not undo the pairing.
+  await page.route("**/api/app/customer-display/status", async (r) => {
+    const answered = await r.fetch()
+    await new Promise((x) => setTimeout(x, 1_500))
+    await r.fulfill({ response: answered })
+  })
   await page.getByRole("button", { name: /^Layar Pelanggan/ }).click()
   const dialog = page.getByRole("dialog", { name: "Layar Pelanggan" })
   await dialog.getByRole("button", { name: "Pasangkan Layar" }).click()
@@ -42,7 +49,9 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   const pairUrl = (await dialog.locator("code").innerText()).trim()
   expect(pairUrl).toMatch(/\/kasir\/layar-pelanggan\?gerai=l[0-9a-z]+&kode=[A-Za-z0-9_-]{43}$/)
   await page.keyboard.press("Escape")
+  await page.waitForTimeout(2_000) // the delayed, older status answer has now been delivered
   await expect(page.getByRole("button", { name: "Layar Pelanggan (terhubung)" })).toBeVisible()
+  await page.unroute("**/api/app/customer-display/status")
 
   // The paired device: a fresh context with no cookies, same viewport as this project.
   const device = await browser.newContext({ viewport: info.project.use.viewport ?? { width: 1280, height: 800 } })

@@ -32,9 +32,24 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
     if (typeof s.seq === "number") serverSeq.current = Math.max(serverSeq.current, s.seq)
     setStatus(s)
   }, [])
+  // Release-gate finding: a status read started before a pair/unpair/state answer must not overwrite it. Every
+  // authoritative answer bumps the generation; a status answer from an older generation is dropped.
+  const generation = useRef(0)
   const refresh = useCallback(() => {
-    api<Status>("/customer-display/status").then(adopt).catch(() => undefined)
+    const g = ++generation.current
+    api<Status>("/customer-display/status")
+      .then((s) => {
+        if (g === generation.current) adopt(s)
+      })
+      .catch(() => undefined)
   }, [adopt])
+  const authoritative = useCallback(
+    (s: Status) => {
+      generation.current++
+      adopt(s)
+    },
+    [adopt],
+  )
   useEffect(refresh, [refresh])
   const key = JSON.stringify(input)
   const pairId = status?.paired ? status.pairId : null
@@ -52,7 +67,10 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
         try {
           const r = await api<Status & { stale?: boolean }>("/customer-display/state", { body: { ...(JSON.parse(k) as object), seq } })
           if (typeof r.seq === "number") serverSeq.current = Math.max(serverSeq.current, r.seq)
-          if (!r.paired) setStatus((s) => (s ? { ...s, paired: false, pairId: null } : s))
+          if (!r.paired) {
+            generation.current++
+            setStatus((s) => (s ? { ...s, paired: false, pairId: null } : s))
+          }
           if (r.stale) return { applied: false, seq: r.seq ?? null }
           try {
             const ch = new BroadcastChannel(DISPLAY_CHANNEL)
@@ -79,7 +97,7 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
     const id = setTimeout(() => publisher.current?.publish({ pairId, key }), 250)
     return () => clearTimeout(id)
   }, [key, pairId])
-  const onPaired = adopt
+  const onPaired = authoritative
   return { status, refresh, onPaired }
 }
 

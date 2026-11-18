@@ -1062,4 +1062,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `RUN-20261118T133332Z-d154b173` re-ran the gates — and its e2e caught a real status race after pairing (closed FAIL;
   fix below). Lesson: chain ledger finish and commit with `&&`, and keep ledger
   free-text fields ASCII.
+- REL-1 (found by the release e2e gate once it reported JSON): an older status answer overwrote the pair result. The
+  hook now numbers status reads and drops answers older than the last pair/unpair/unpaired-state answer. Regression
+  delivers a pre-pairing status answer after the pairing (`route.fetch()` then a delayed `fulfill`); mutation
+  T701-REL-M1 reproduces the gate failure exactly. Lesson: an "uncaptured flaky" e2e failure was a real race — keep
+  machine-readable reports on every gate so the second occurrence names its cause.
+- Host contention, now diagnosed: with outputs teed and e2e reported as JSON, the "uncaptured" gate failures turned out
+  to be timeouts while another repository's tests and Postgres loaded the host (load ≈ 6/8) — Workers tests hit the
+  15 s limit, an e2e issue step stayed `Memproses…` past 5 s. `heavy-run` locks only this repo's runs; check `uptime`
+  before blaming code, and re-record only after the cause is captured.
 
