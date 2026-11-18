@@ -1113,4 +1113,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   the file passed 3/3 alone and the gates re-recorded PASS.
 - GPT-6.1 Sol R1 APPROVE on `d0fda4b` (no P0/P1); its non-blocking labelling note applied (bento note + proof-chart
   caption, asserted). Release run `RUN-20261118T163352Z-76a6989f`.
+- Live 2026-11-18 (owner-authorized): `main` fast-forwarded to `65beef5` and pushed; `pnpm build` (web-app WebP in
+  `dist/assets/app/`) + bundle-audit PASS; Workers staging `8b462e39-292e-41ab-a16e-510086c6afbe`, production
+  `a14187ab-4378-4f88-abec-1bd711ea374f` (each verified serving the new markup before checks). `geraiexpress.com/`,
+  `/biaya-dan-paket` 200 (no `Set-Cookie`), `/produk-kasir-loket.webp` 200 `image/webp`, `www` 301, app/owner `/masuk`
+  200; probes staging 5/5, production 6/6. One production probe right after deploy reported `owner-health` 200 at
+  1335 ms (> 1000 ms latency limit, a cold start); three re-runs were 141–298 ms and 6/6 PASS. No D1 or tenant migration.
 
