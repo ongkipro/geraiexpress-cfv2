@@ -57,7 +57,12 @@ export function DaftarPage() {
     let alive = true
     const t = setTimeout(() => {
       api<{ items: Area[] }>(`/onboarding/areas?q=${encodeURIComponent(query.trim())}`)
-        .then((r) => alive && setAreas(r.items))
+        .then((r) => {
+          if (!alive) return
+          // A new result set never keeps an index from the old one (`areas[hl]` is always defined).
+          setAreas(r.items)
+          setHl(-1)
+        })
         .catch(() => alive && setAreas([]))
     }, 300)
     return () => {
@@ -136,14 +141,23 @@ export function DaftarPage() {
                 aria-controls="area-results"
                 aria-activedescendant={showList && hl >= 0 ? `area-opt-${hl}` : undefined}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setArea(null); setListOpen(true); setHl(-1) }}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setArea(null)
+                  setListOpen(true)
+                  setHl(-1)
+                  // Below 3 characters there is no search: stale results must not reopen on an arrow key.
+                  if (e.target.value.trim().length < 3) setAreas([])
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                     if (!areas.length || area) return
                     e.preventDefault()
                     setListOpen(true)
                     const n = areas.length
-                    setHl((i) => (e.key === "ArrowDown" ? (i + 1) % n : (i <= 0 ? n - 1 : i - 1)))
+                    const next = e.key === "ArrowDown" ? (hl + 1) % n : hl <= 0 ? n - 1 : hl - 1
+                    setHl(next)
+                    document.getElementById(`area-opt-${next}`)?.scrollIntoView({ block: "nearest" })
                   } else if (e.key === "Enter" && showList && hl >= 0) {
                     e.preventDefault()
                     pickArea(areas[hl]!)

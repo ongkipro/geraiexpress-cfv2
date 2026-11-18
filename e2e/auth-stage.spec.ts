@@ -138,6 +138,29 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await page.getByLabel("WhatsApp gerai").fill("081234567777")
   await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
   await expect(page.getByLabel("HP PIC")).toHaveValue("081200000001")
+  // Below 3 characters the old results are dropped: an arrow key opens nothing (results exist first).
+  await area.fill("coblong")
+  await expect(list).toBeVisible()
+  await area.fill("co")
+  await area.press("ArrowDown")
+  await expect(list).toBeHidden()
+  await expect(area).not.toHaveAttribute("aria-activedescendant", /.+/)
+  // Sol R1 (supervisor pre-review): a short viewport with the coordinates open scrolls inside the centre only;
+  // Latitude, Longitude and `Ajukan Gerai` stay reachable, and the page itself never scrolls.
+  await page.setViewportSize({ width: 1280, height: 560 })
+  await page.getByText("Titik koordinat peta (opsional)").click()
+  for (const target of [page.getByLabel("Latitude"), page.getByLabel("Longitude"), page.getByRole("button", { name: "Ajukan Gerai" })]) {
+    await target.scrollIntoViewIfNeeded()
+    await expect(target).toBeInViewport()
+  }
+  const short = await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("[data-auth-main]")!
+    return { page: document.documentElement.scrollHeight - innerHeight, inner: main.scrollHeight - main.clientHeight, top: main.scrollTop }
+  })
+  expect(short.page).toBe(0)
+  expect(short.inner).toBeGreaterThan(0)
+  expect(short.top).toBeGreaterThan(0)
+  await expect(page.locator("footer")).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
@@ -149,7 +172,8 @@ test("DEC-248: slot Turnstile 65px dipesan saat widget nyata dikonfigurasi, teta
   await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js*", (r) =>
     r.fulfill({
       contentType: "text/javascript",
-      body: 'window.turnstile={render:function(el,o){var d=document.createElement("div");d.style.height="65px";d.setAttribute("data-size",o.size);setTimeout(function(){el.appendChild(d);o.callback("stub-token")},300);return "w1"},reset:function(){},remove:function(){}}',
+      body:
+        'window.__tsResets=0;window.turnstile={render:function(el,o){window.__tsCb=o.callback;var d=document.createElement("div");d.style.height="65px";d.setAttribute("data-size",o.size);setTimeout(function(){el.appendChild(d);o.callback("stub-token")},300);return "w1"},reset:function(){window.__tsResets++;setTimeout(function(){window.__tsCb("stub-token-2")},300)},remove:function(){}}',
     }),
   )
   for (const path of ["/masuk", "/daftar-akun"]) {
@@ -170,4 +194,17 @@ test("DEC-248: slot Turnstile 65px dipesan saat widget nyata dikonfigurasi, teta
       await fits(page, `${path} with widget ${size.width}x${size.height}`)
     }
   }
+  // Widget-enabled retry (Sol R1): a failed sign-in resets the widget; `Masuk` waits for the fresh token.
+  await page.setViewportSize(SIZES[0]!)
+  await page.goto(`${APP}/masuk`)
+  const masuk = page.getByRole("button", { name: "Masuk", exact: true })
+  await expect(masuk).toBeEnabled()
+  await page.getByLabel("Email").fill(uniqueEmail("e2e-248-retry"))
+  await page.getByLabel("Kata sandi").fill("salah-sekali-9")
+  await masuk.click()
+  await expect(page.getByRole("alert")).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { __tsResets: number }).__tsResets)).toBe(1)
+  await expect(masuk).toBeDisabled()
+  await expect(masuk).toBeEnabled()
+  await fits(page, "/masuk after a failed attempt with widget")
 })

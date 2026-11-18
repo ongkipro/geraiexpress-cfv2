@@ -16,3 +16,14 @@ Notes:
   and that the submit button does not move. M6 then went red.
 - On a phone the consent's long synthetic email broke mid-word with `break-all`. It now wraps only where needed
   (`overflow-wrap:anywhere`).
+
+## Supervisor pre-review (before Sol R2), run `RUN-20261118T204207Z-e384cd2b`
+
+These three details were applied with focused checks only, as the fast protocol allows (`pnpm typecheck` +
+`auth-stage.spec.ts --project desktop-1280`, 2/2). The single full ledger gate runs once, before release.
+
+| # | Detail | Change | Regression | Mutation |
+|---|---|---|---|---|
+| S1 | Old area results could reopen on an arrow key, or leave `hl` past a shrunk result set | Typing below 3 characters clears the results; every new result set resets `hl` to -1; arrow navigation computes the next index and scrolls that option into view (`block: "nearest"`) | Results exist (`coblong`), then `co` + `ArrowDown`: no list and no `aria-activedescendant` | D248P-M1 (results kept below 3 characters) → red. Its first run survived because the precondition (results present) was implicit; the test now makes it explicit. |
+| S2 | Widget-enabled retry | — (behaviour already in `useTurnstile().reset`) | Stubbed widget on `/masuk`: a failed sign-in calls `turnstile.reset` once, `Masuk` is disabled until the fresh token arrives, then enabled; the page still fits | — |
+| S3 | Short viewport with the coordinates open | — (the centre's `overflow-y-auto` fallback) | 1280×560, Tahap 3, `+ Titik koordinat peta` opened: Latitude, Longitude and `Ajukan Gerai` scroll into view inside the centre; the page itself does not scroll (`scrollHeight == innerHeight`), and no footer | — |
