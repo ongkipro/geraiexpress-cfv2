@@ -9,3 +9,11 @@ owner:/totp?mode=required :: dotuiux exit=0 summary: 0 fail · 0 warn · 0 allow
 # overflow 0 px on every captured state (/totp codes, /totp recovery, /totp new authenticator, /akun).
 # Screens: totp-kode-pemulihan-{1440,390}, totp-kode-pemulihan-masuk-{1440,390}, totp-autentikator-baru-{1440,390},
 #          akun-{1440,390}, akun-dialog-kode-baru-1440, akun-dialog-ganti-autentikator-1440.
+# --- Polish round (DEC-246 (6), same day): console account menu without `Situs Utama GeraiExpress`; ShellBrand logo frameless.
+owner:/akun :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 3 not checked · 35 pass :: geometry exit=0
+owner:/totp?mode=required :: dotuiux exit=0 summary: 0 fail · 0 warn · 0 allowed · 4 not checked · 36 pass :: geometry exit=0
+owner:/ (Ringkasan, shell brand) :: dotuiux exit=0 summary: 0 fail · 0 warn · 1 allowed · 4 not checked · 35 pass :: geometry exit=0
+# Measured at 1440: logo 47x28 px, no border on the image or its parent (computed 0px), beside a 36 px title stack;
+# sidebar collapsed to icons: logo 31x20 px. Account menu: `Profil Saya`, text size, `Keluar`; 0 `Situs Utama` items.
+# Screens: brand-logo-1440, brand-logo-ciut-1440, menu-akun-1440 (+ all earlier screens re-captured, 0 errors, 0 overflow).
+

@@ -349,5 +349,7 @@ test("DEC-244: Super Admin periksa ulang, verifikasi diskon, antrean sinkronisas
   await expect(page.getByRole("heading", { name: "Antrean Sinkronisasi" })).toBeVisible()
   await expect(page.getByText("Perlu dicocokkan")).toBeVisible()
   await page.getByRole("button", { name: "Menu akun" }).click()
-  await expect(page.getByRole("menuitem", { name: /Situs Utama GeraiExpress/ })).toHaveAttribute("target", "_blank")
+  // DEC-246: the console account menu opens the admin's own `/akun`; no marketing-site link.
+  await expect(page.getByRole("menuitem", { name: "Profil Saya" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: /Situs Utama GeraiExpress/ })).toHaveCount(0)
 })

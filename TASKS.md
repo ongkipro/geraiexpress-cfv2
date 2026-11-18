@@ -725,7 +725,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   Requirement: DEC-246 (1)–(5). Allowed Paths: `packages/db/migrations/control/0019_super_admin_recovery_codes.sql`,
   `packages/db/src/schema/control.ts`, `apps/worker/src/api/owner.ts`, `apps/worker/src/auth/{account,recovery}/**`,
   `apps/worker/test/auth/**`, `apps/worker/test/migrations/**`, `apps/web-owner/src/**`, `e2e/super-admin.spec.ts`,
-  `e2e/onboarding.spec.ts` (clicks past the one-time codes screen),
+  `e2e/onboarding.spec.ts` (clicks past the one-time codes screen), `apps/web-app/src/components/admin/shell.tsx`
+  (`ShellBrand` frameless logo, DEC-246 (6)), `e2e/admin-shell.spec.ts` (no console site link),
   `docs/evidence/DEC-246/**`, `DECISIONS.md`, `docs/spec/05`, `docs/spec/06`, `docs/visual/07`, `docs/SYSTEM-MAP.md`,
   `STATUS.md`, `BUILD-LOG.md`, `TASKS.md`.
   Accepted Invariants: recovery codes stored as peppered hashes only and consumed once (atomic `UPDATE … WHERE used_at

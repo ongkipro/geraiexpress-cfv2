@@ -409,7 +409,7 @@ export interface NavUserProps {
   onLogout: () => void
   profileTo?: string
   helpTo?: string
-  /** DEC-244: public pages opened in a new tab (Gerai: `Halaman Publik Gerai`; console: `Situs Utama GeraiExpress`). */
+  /** DEC-244: public pages opened in a new tab (Gerai: `Halaman Publik Gerai`). The console has none (DEC-246). */
   externalLinks?: Array<{ label: string; sublabel?: string; href: string; icon?: typeof UserIcon }>
   /** Breakpoint from which the chip shows name + role (DEC-243/244: the console's busier right track waits for 2xl). */
   labelFrom?: "xl" | "2xl"
@@ -503,11 +503,10 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
 export function ShellBrand({ title, subtitle, mark, logoSrc }: { title: string; subtitle: ReactNode; mark: string; logoSrc?: string }) {
   return (
     <div className="flex h-12 items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-      {/* Console: the GeraiExpress logo (DEC-244). Gerai workspace: the tenant's own initial (white-label, DEC-202). */}
+      {/* Console: the GeraiExpress logo (DEC-244), frameless and sized to the two-line title stack (DEC-246). Gerai
+          workspace: the tenant's own initial (white-label, DEC-202). */}
       {logoSrc ? (
-        <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/85 bg-white p-1 group-data-[collapsible=icon]:size-8">
-          <img src={logoSrc} alt="" className="h-auto w-full" />
-        </span>
+        <img src={logoSrc} alt="" aria-hidden className="h-7 w-auto shrink-0 group-data-[collapsible=icon]:h-5" />
       ) : (
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground group-data-[collapsible=icon]:size-8">
           {mark}

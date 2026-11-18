@@ -961,4 +961,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   synthetic recovery codes and a TOTP key from a throwaway local state (`.wrangler/state-ui-246`, deleted).
 - Deploy (after review): `wrangler d1 migrations apply DB --remote --env staging|production` (0019 only), then both
   Workers; no tenant migration, no new secret.
+- Polish (DEC-246 (6), owner same day): `ConsoleShell` drops the `Situs Utama GeraiExpress` account-menu link (and its
+  `siteHost` helper); `ShellBrand` renders `logoSrc` as a bare `h-7 w-auto` image (`h-5` in the icon rail) — measured
+  47×28 px beside the 36 px title stack, 31×20 px collapsed. `e2e/admin-shell.spec.ts` now asserts `Profil Saya` and no
+  site link. Re-run: owner e2e 11 passed, UI gates `/akun` `/totp` `/` 0 fail 0 warn, `pnpm check` exit 0 (unit 180,
+  Workers 428, bundle-audit PASS). Not recorded in `RUN-20261118T100235Z-2224a130`: its baseline is `932b5c2` and HEAD
+  has moved, so the post-review boundary needs a fresh run.
 

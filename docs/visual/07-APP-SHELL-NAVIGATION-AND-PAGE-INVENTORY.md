@@ -49,7 +49,7 @@
 | Page body | Title row → in-page tabs → filters/toolbar → content → sticky action bar when the page has a commit action | A second navigation sidebar |
 
 Account menu (`Ani ▾`, DEC-244): header (name, email, `Pemilik · <gerai>` / `Kasir · <gerai>`) · `Halaman Publik Gerai` (the
-gerai's mini-site host, new tab; Super Admin: `Situs Utama GeraiExpress`) · `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`
+gerai's mini-site host, new tab; Super Admin: none since DEC-246) · `Profil Saya` · `Ukuran Teks: Normal (100%) / Besar (112%) / Sangat Besar (125%)`
 (same three steps as `docs/visual/01`) · `Bantuan & Panduan` · `Keluar`. Text size scales the root rem (never
 `zoom`, never locks browser zoom).
 

@@ -78,9 +78,6 @@ function crumbsOf(path: string, tab: string | undefined): Crumb[] {
   return child ? [{ label: section.label, to: section.to }, { label: child.label }] : [{ label: section.label }]
 }
 
-/** The platform marketing site: the console runs on `owner.<apex>`, the site on `<apex>` (same port locally). */
-const siteHost = () => location.host.replace(/^owner(-staging)?\./, (_m, stg: string | undefined) => (stg ? "staging." : ""))
-
 async function logout() {
   await api("/auth/logout", { body: {} }).catch(() => undefined)
   window.location.assign("/masuk")
@@ -138,7 +135,7 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
           ]}
         />
       }
-      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout, profileTo: "/akun", labelFrom: "2xl", externalLinks: [{ label: "Situs Utama GeraiExpress", sublabel: siteHost(), href: `${location.protocol}//${siteHost()}` }] }}
+      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout, profileTo: "/akun", labelFrom: "2xl" }}
       crumbs={crumbsOf(path, tab)}
       toolbar={
         <>
