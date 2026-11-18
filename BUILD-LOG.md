@@ -1220,4 +1220,14 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   1. `max-width:34ch` on titles still wrapped a 43-character title; the home lets section titles span the container.
   2. `pkill -f` matching its own command line killed the deploy shell during DEC-247B cleanup (no harm); WORKFLOW
      now says to stop servers by PID.
+- Supervisor pre-review upgrade (run `RUN-20261118T215923Z-e1ef6987`). Raka is now a render of the hero's own
+  Three.js rig, not a flat SVG cartoon. A scratch copy of `hero-studio-3d.src.js` was patched to build only the GE
+  kiosk and the partner character, freeze the loop and expose the scene; the scanner arch, orbit pods and floating
+  disc were hidden. A white front desk, a dark 100 mm thermal printer with an `AWB 100×150 mm` label, a digital scale
+  reading `1.000 g` and kraft parcels were added, with a transparent soft-shadow floor. It was rendered headless
+  (SwiftShader) at 1040×880 into `apps/web-app/public/loket-mitra-3d.webp` (33 KB, alpha) and served via
+  `BRAND_ASSETS`. Two floating UI pills sit below the counter, with an honest caption. The compact pricing shows its
+  feature list again (tight list): the home is 6,253 px at 1440, and the bound was raised to ≤ 6,300 as the supervisor
+  allowed. Mutations D249-M6..M7 red. Note: raising `lookAt.x` moves the subject left on screen; the framing was
+  corrected once.
 

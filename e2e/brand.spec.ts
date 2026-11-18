@@ -464,7 +464,7 @@ test("Brand DEC-247B: halaman dalam (lompat langkah, pipeline, indeks FAQ, foote
   }
 })
 
-// DEC-249: the slim home (<= 6,200px at 1440) keeps the 3D hero, runs the courier marquee (paused on hover, a static
+// DEC-249: the slim home (<= 6,300px at 1440) keeps the 3D hero, runs the courier marquee (paused on hover, a static
 // wrap under reduced motion) and shows Raka's counter with motion only on screen; /fitur opens with the moved showcase.
 test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya", async ({ page, browser }, info) => {
   const apex = APP.replace("app.", "")
@@ -475,7 +475,8 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   await expect(page.locator("#stageWrapper canvas#webglCanvas")).toHaveCount(1)
   if (info.project.name === "desktop-1280") {
     await page.setViewportSize({ width: 1440, height: 900 })
-    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(6200)
+    // ≤ 6,300 px (supervisor pre-review: the compact pricing keeps its feature list; was ≤ 6,200 without it).
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(6300)
   }
   const track = page.locator(".mq-track")
   await page.locator("section.partners").scrollIntoViewIfNeeded()
@@ -486,7 +487,10 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   const raka = page.locator("[data-raka]")
   await raka.scrollIntoViewIfNeeded()
   await expect(raka).toHaveClass(/is-playing/)
-  await expect(page.getByRole("img", { name: /^Ilustrasi Raka, mitra loket GeraiExpress/ })).toBeVisible()
+  const render = page.getByRole("img", { name: /^Ilustrasi 3D Raka, mitra loket GeraiExpress/ })
+  await expect(render).toBeVisible()
+  await expect.poll(() => render.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBe(1040)
+  await expect(page.locator(".raka-stage .rk-pill")).toHaveCount(2)
   await expect(page.locator('section[aria-labelledby="toko-title"] .chips li')).toHaveCount(8)
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
   // Reduced motion: the marquee is a static wrap of nine logos (no duplicate track), Raka stays still.

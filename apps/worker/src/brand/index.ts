@@ -6,6 +6,7 @@ import {
   BIAYA_SCRIPT,
   CARA_SCRIPT,
   HOME_SCRIPT,
+  LOKET_3D,
   PRODUCT_SHOT,
   renderBiaya,
   renderCaraKerja,
@@ -32,6 +33,7 @@ const BRAND_ASSETS = new Set([
   "/three.min.js",
   "/hero-studio-3d.min.js",
   PRODUCT_SHOT.src,
+  LOKET_3D.src,
   ...["jne", "jt", "sicepat", "sap", "lion", "anteraja", "idexpress", "pos", "spx"].map((c) => `/couriers/${c}.svg`),
 ])
 

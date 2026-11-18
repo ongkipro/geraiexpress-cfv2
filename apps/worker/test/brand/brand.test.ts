@@ -250,15 +250,27 @@ describe("brand site DEC-247", () => {
     expect(css).toContain("mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)")
     // Raka: a labelled illustration, motion only on screen and never under reduced motion.
     const raka = h.slice(h.indexOf('<section class="sec" aria-labelledby="toko-title">'), h.indexOf("</section>", h.indexOf('aria-labelledby="toko-title"')))
-    expect(raka).toContain('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 470" class="raka-svg" role="img" aria-labelledby="rk-t">')
-    expect(raka).toMatch(/<title id="rk-t">Ilustrasi Raka, mitra loket GeraiExpress[^<]+<\/title>/)
+    // Supervisor pre-review: one 3D language with the hero — a render of its own rig, not a flat cartoon.
+    expect(raka).toContain('<img src="/loket-mitra-3d.webp" alt="Ilustrasi 3D Raka, mitra loket GeraiExpress, di meja loket dengan printer label thermal, timbangan digital, dan paket kardus" width="1040" height="880" loading="lazy" decoding="async">')
+    expect(raka).not.toContain("<svg")
+    expect([...raka.matchAll(/<span class="rk-pill rk-float[^"]*" aria-hidden="true"><b>([^<]+)<\/b> · ([^<]+)<\/span>/g)].map((m) => `${m[1]} · ${m[2]}`)).toEqual(["Timbangan · 1.000 g", "Label 100×150 mm · Siap Tempel"])
+    expect(raka).toContain('<figcaption class="note">Ilustrasi 3D meja loket mitra GeraiExpress.</figcaption>')
     expect(raka).toContain('<h2 id="toko-title">Ubah tokomu jadi titik kirim paket warga &amp; penjual online sekitar</h2>')
     expect([...raka.matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1])).toEqual([
       "Konter Pulsa &amp; Kuota", "Fotokopi &amp; Percetakan", "Warung &amp; Toko Kelontong", "Toko ATK &amp; Buku",
       "Ruko Jasa &amp; Laundry", "Koperasi &amp; BUMDes", "Dropshipper &amp; Reseller", "Gudang UMKM Online",
     ])
     expect(h).toContain('var r=document.querySelector("[data-raka]");\n  if(!r||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;')
-    expect(css).toContain("@media(prefers-reduced-motion:reduce){.raka-stage .rk-float,.raka-stage .rk-scan path{animation:none!important}}")
+    expect(css).toContain("@media(prefers-reduced-motion:reduce){.raka-stage .rk-float{animation:none!important}}")
+    // The compact pricing keeps its feature list on the home page (supervisor pre-review).
+    expect(css).toContain("main:has(>.hero-bleed) .readout .incl{margin-top:14px;gap:6px;font-size:.9rem}")
+    expect(css).not.toContain(".readout .incl,main:has(>.hero-bleed) .readout hr{display:none}")
+    const img = await exports.default.fetch(`${APEX}/loket-mitra-3d.webp`)
+    expect(img.status).toBe(200)
+    expect(img.headers.get("content-type")).toContain("image/webp")
+    const bytes = new Uint8Array(await img.arrayBuffer())
+    expect(bytes.byteLength).toBeLessThan(60_000)
+    expect(String.fromCharCode(...bytes.slice(8, 12))).toBe("WEBP")
   })
 
   it("DEC-247B inner pages: centered PageHead with eyebrow pill and dot grid on all nine inner pages", async () => {

@@ -211,23 +211,25 @@ ul.rates li:last-child{border-bottom:0}
 .mq-list .pbadge{width:152px;flex-shrink:0}
 @keyframes gx-mq{to{transform:translateX(-50%)}}
 @media(prefers-reduced-motion:reduce){.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}.mq-list{flex-wrap:wrap;justify-content:center;padding:0 16px}.mq-list[aria-hidden]{display:none}}
-/* DEC-249 home: Raka, the counter partner (stylized SVG on a porcelain stage) + store-type chips */
+/* DEC-249 home: Raka's 3D counter (render of the hero's own rig) on a porcelain stage + floating UI pills */
 .raka-grid{display:grid;gap:32px;align-items:center}@media(min-width:900px){.raka-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px}}
-.raka-stage{margin:0;background:var(--tile);border-radius:28px;padding:18px 14px 6px;overflow:hidden;min-width:0}
-.raka-svg{display:block;width:100%;height:auto}
-.raka-stage .rk-float,.raka-stage .rk-scan path:last-child{transform-box:fill-box}
+.raka-stage{position:relative;margin:0;background:radial-gradient(circle at 50% 30%,rgba(11,79,227,.06),transparent 70%),var(--tile);border-radius:28px;padding:20px 16px 14px;min-width:0}
+.raka-stage img{display:block;width:100%;height:auto}
+.raka-stage .note{margin:4px 0 0;text-align:center;font-size:.8125rem;color:var(--slate)}
+.rk-pill{position:absolute;display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.06),0 12px 28px -12px rgba(15,23,42,.24);font-size:.8125rem;color:var(--body);white-space:nowrap}
+.rk-pill b{color:var(--ink);font-weight:700}
+.rk-a{bottom:24%;right:3%}.rk-b{bottom:12%;left:4%}
 .raka-stage.is-playing .rk-float{animation:gx-float 4.2s var(--ease) infinite}.raka-stage.is-playing .rk-late{animation-delay:-2.1s}
-.raka-stage.is-playing .rk-scan path:last-child{animation:gx-beam 2.4s ease-in-out infinite}
 @keyframes gx-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-@keyframes gx-beam{0%,100%{opacity:.35}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.raka-stage .rk-float,.raka-stage .rk-scan path{animation:none!important}}
+@media(prefers-reduced-motion:reduce){.raka-stage .rk-float{animation:none!important}}
+@media(max-width:420px){.rk-pill{font-size:.75rem;padding:6px 10px}}
 .chips{list-style:none;margin:26px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .chips li{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 20px -12px rgba(15,23,42,.18);font-weight:600;font-size:.9375rem;color:var(--ink);line-height:1.25}
 .chips li::before{content:"";width:8px;height:8px;border-radius:999px;background:var(--action);box-shadow:0 0 0 4px var(--tint);flex-shrink:0}
 @media(max-width:400px){.chips{grid-template-columns:1fr}}
 /* DEC-249: a slimmer home (<= 6,200px at 1440): tighter rhythm, one-line section titles, compact pricing and FAQ */
 @media(min-width:900px){main:has(>.hero-bleed) section.sec{padding-bottom:56px}main:has(>.hero-bleed) .shead{margin-bottom:28px}main:has(>.hero-bleed) .shead .sub{max-width:76ch}main:has(>.hero-bleed) .shead h2{max-width:none}}
-main:has(>.hero-bleed) .readout .incl,main:has(>.hero-bleed) .readout hr{display:none}
+main:has(>.hero-bleed) .readout .incl{margin-top:14px;gap:6px;font-size:.9rem}
 main:has(>.hero-bleed) .bento{gap:16px}main:has(>.hero-bleed) .bento .tile{padding:1.5rem}
 main:has(>.hero-bleed) .closing{padding-bottom:64px}
 @media(min-width:900px){main:has(>.hero-bleed) .closing .callout{padding:40px}}main:has(>.hero-bleed) .more{margin-top:12px}

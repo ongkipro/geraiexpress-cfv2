@@ -22,6 +22,17 @@ export const courierImg = (key: string, h = 26, decorative = false) => {
   return `<img src="/couriers/${key}.svg" alt="${decorative ? "" : e(c.name)}" width="${Math.round((c.w * h) / 20)}" height="${h}" decoding="async">`
 }
 
+/**
+ * DEC-249: Raka's counter, rendered offline from the hero's own Three.js rig (partner character, GE kiosk, PBR
+ * materials, soft shadows) with a thermal printer, a digital scale and kraft parcels added; served via `BRAND_ASSETS`.
+ */
+export const LOKET_3D = {
+  src: "/loket-mitra-3d.webp",
+  width: 1040,
+  height: 880,
+  alt: "Ilustrasi 3D Raka, mitra loket GeraiExpress, di meja loket dengan printer label thermal, timbangan digital, dan paket kardus",
+}
+
 /** The product screenshot on the home pedestal (served through `BRAND_ASSETS`). */
 export const PRODUCT_SHOT = {
   src: "/produk-kasir-loket.webp",
@@ -198,50 +209,10 @@ export function renderHome(app: string): string {
 
 <section class="sec" aria-labelledby="toko-title"><div class="wrap raka-grid">
 <figure class="raka-stage" data-raka>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 470" class="raka-svg" role="img" aria-labelledby="rk-t">
-<title id="rk-t">Ilustrasi Raka, mitra loket GeraiExpress, memindai paket di meja kasir dengan timbangan dan printer label thermal</title>
-<defs>
-<linearGradient id="rk-skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D49A6A"/><stop offset="1" stop-color="#B97C4E"/></linearGradient>
-<linearGradient id="rk-vest" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173A8F"/><stop offset="1" stop-color="#012676"/></linearGradient>
-<linearGradient id="rk-shirt" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6EBF3"/></linearGradient>
-<linearGradient id="rk-desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E9EEF6"/></linearGradient>
-<linearGradient id="rk-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCE3EE"/><stop offset="1" stop-color="#C9D3E2"/></linearGradient>
-<linearGradient id="rk-beam" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00A6FE" stop-opacity=".55"/><stop offset="1" stop-color="#00A6FE" stop-opacity="0"/></linearGradient>
-<filter id="rk-sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0F172A" flood-opacity=".14"/></filter>
-</defs>
-<g filter="url(#rk-sh)"><rect x="150" y="26" width="260" height="46" rx="12" fill="#012676"/></g>
-<text x="280" y="55" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" font-weight="800" letter-spacing="1.5" fill="#fff">LOKET MULTI-EKSPEDISI</text>
-<rect x="356" y="128" width="150" height="8" rx="4" fill="#CBD5E1"/>
-<g><path d="M372 100h44v28h-44z" fill="#C8935A"/><path d="M372 100l8-8h44l-8 8z" fill="#DDB07A"/><path d="M416 100l8-8v28l-8 8z" fill="#AE7A47"/><rect x="390" y="100" width="8" height="28" fill="#E8C99B"/></g>
-<g><path d="M436 108h52v20h-52z" fill="#C8935A"/><path d="M436 108l7-7h52l-7 7z" fill="#DDB07A"/><path d="M488 108l7-7v20l-7 7z" fill="#AE7A47"/><rect x="458" y="108" width="8" height="20" fill="#E8C99B"/></g>
-<path d="M126 330c0-62 30-104 82-104s82 42 82 104z" fill="url(#rk-shirt)"/>
-<path d="M134 330c2-52 24-88 58-98l16 44 16-44c34 10 56 46 58 98z" fill="url(#rk-vest)"/>
-<path d="M192 232l16 44 16-44-16 8z" fill="#fff"/>
-<rect x="228" y="268" width="30" height="20" rx="6" fill="#0060FE"/>
-<text x="243" y="283" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="800" fill="#fff">GE</text>
-<rect x="196" y="204" width="24" height="26" rx="8" fill="#B97C4E"/>
-<circle cx="208" cy="168" r="40" fill="url(#rk-skin)"/>
-<circle cx="168" cy="172" r="8" fill="#C38657"/><circle cx="248" cy="172" r="8" fill="#C38657"/>
-<path d="M168 162c-2-30 16-46 42-46 24 0 42 14 40 40-6-12-18-18-34-18-20 0-30 8-48 24z" fill="#1F2937"/>
-<ellipse cx="194" cy="172" rx="4" ry="5" fill="#1F2937"/><ellipse cx="224" cy="172" rx="4" ry="5" fill="#1F2937"/>
-<path d="M196 190q12 10 24 0" stroke="#7C3F1D" stroke-width="3" stroke-linecap="round" fill="none"/>
-<circle cx="186" cy="184" r="5" fill="#E8956B" opacity=".45"/><circle cx="232" cy="184" r="5" fill="#E8956B" opacity=".45"/>
-<path d="M262 262c22 6 40 22 52 40l-18 14c-12-14-24-24-40-30z" fill="url(#rk-shirt)"/>
-<circle cx="312" cy="314" r="13" fill="url(#rk-skin)"/>
-<g class="rk-scan"><path d="M306 296l40-14 8 20-40 14z" fill="#334155"/><path d="M346 282l10-3 7 18-9 5z" fill="#0F172A"/><rect x="318" y="310" width="12" height="24" rx="4" transform="rotate(-20 324 322)" fill="#1E293B"/>
-<path d="M360 292l70 44v-20z" fill="url(#rk-beam)"/></g>
-<g filter="url(#rk-sh)"><path d="M36 330h488l-10 26H46z" fill="url(#rk-desk)"/></g>
-<path d="M46 356h468v94a14 14 0 0 1-14 14H60a14 14 0 0 1-14-14z" fill="url(#rk-front)"/>
-<rect x="46" y="356" width="468" height="4" fill="#0060FE" opacity=".85"/><rect x="66" y="380" width="96" height="10" rx="5" fill="#fff" opacity=".7"/>
-<path d="M392 322h112l6 10H386z" fill="#94A3B8"/><rect x="398" y="332" width="100" height="14" rx="4" fill="#475569"/>
-<rect x="410" y="334" width="62" height="10" rx="2" fill="#0B1220"/><text x="441" y="342.4" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" font-weight="700" fill="#5EEAD4">1.000 g</text>
-<g class="rk-float"><path d="M404 262h74v60h-74z" fill="#C8935A"/><path d="M404 262l14-14h74l-14 14z" fill="#DDB07A"/><path d="M478 262l14-14v60l-14 14z" fill="#AE7A47"/><rect x="434" y="262" width="12" height="60" fill="#E8C99B"/>
-<rect x="412" y="282" width="34" height="26" rx="3" fill="#fff"/><path d="M416 288h2v14h-2zm4 0h1v14h-1zm3 0h3v14h-3zm5 0h1v14h-1zm3 0h2v14h-2zm4 0h1v14h-1zm3 0h2v14h-2z" fill="#0F172A"/></g>
-<g class="rk-float rk-late"><rect x="70" y="300" width="96" height="30" rx="8" fill="#fff" stroke="#E2E8F0" stroke-width="2"/><rect x="84" y="298" width="68" height="5" rx="2.5" fill="#1E293B"/>
-<path d="M90 300V246h56v54z" fill="#fff" stroke="#E2E8F0" stroke-width="2"/><text x="118" y="262" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" font-weight="700" fill="#0F172A">AWB</text>
-<path d="M98 270h2v18h-2zm4 0h1v18h-1zm3 0h3v18h-3zm5 0h1v18h-1zm3 0h2v18h-2zm4 0h1v18h-1zm3 0h3v18h-3zm5 0h1v18h-1zm3 0h2v18h-2z" fill="#0F172A"/><circle cx="154" cy="315" r="3" fill="#22C55E"/></g>
-</svg>
-<figcaption class="sr">Raka, ilustrasi mitra loket (bukan foto orang sungguhan).</figcaption>
+<img src="${LOKET_3D.src}" alt="${e(LOKET_3D.alt)}" width="${LOKET_3D.width}" height="${LOKET_3D.height}" loading="lazy" decoding="async">
+<span class="rk-pill rk-float rk-a" aria-hidden="true"><b>Timbangan</b> · 1.000 g</span>
+<span class="rk-pill rk-float rk-late rk-b" aria-hidden="true"><b>Label 100×150 mm</b> · Siap Tempel</span>
+<figcaption class="note">Ilustrasi 3D meja loket mitra GeraiExpress.</figcaption>
 </figure>
 <div class="raka-copy">
 <h2 id="toko-title">Ubah tokomu jadi titik kirim paket warga &amp; penjual online sekitar</h2>
