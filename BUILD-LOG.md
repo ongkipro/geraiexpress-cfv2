@@ -1245,4 +1245,5 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `emulateMedia` at 390 and 1280). Mutation D249R3-M1 red.
 - Sol R4 (one test detail) fixed in run `RUN-20261118T225529Z-db3fe622`: the DEC-249 e2e restores the project
   viewport after the 1440/1920 checks, so the reduced-motion fallback is proven at 1280 too (mutation re-run red).
+- GPT-6.2 Sol R5 APPROVE on `72728f8` (zero open findings) after R1 (5), R2 (3), R3 (1) and R4 (1) fixes.
 
