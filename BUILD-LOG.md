@@ -1230,4 +1230,10 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   feature list again (tight list): the home is 6,253 px at 1440, and the bound was raised to ≤ 6,300 as the supervisor
   allowed. Mutations D249-M6..M7 red. Note: raising `lookAt.x` moves the subject left on screen; the framing was
   corrected once.
+- Sol R1 (5 findings) fixed in run `RUN-20261118T221923Z-14db5701` (`docs/review/dec-249/DISPOSITION.md`). The e2e state
+  pruner only removes real, idle, unprotected `state-e2e-*` directories: an `lstat` type guard, resolved `keep`, the
+  newest mtime over the whole tree, and live `--persist-to` paths from `/proc`; it skips the automatic run under
+  `GX_REUSE_SERVER`; unit tests added. The marquee gets a keyboard pause button that holds `data-paused`, and a
+  1,476 px cap so wide screens never show an empty tail. The `/fitur` finance wording is honest. Home 6,279 px.
+  Mutations D249R1-M1..M6 red.
 

@@ -6,8 +6,9 @@ const port = Number(process.env.GX_E2E_PORT ?? 8787)
 // Fresh local state per run (rate limits and data from an earlier run must not leak into this one).
 const state = `.wrangler/state-e2e-${process.env.GX_E2E_RUN ?? Date.now().toString(36)}`
 process.env.GX_E2E_RUN ??= state.slice(-8)
-// DEC-249: drop abandoned `.wrangler/state-e2e-*` folders older than 2 h (never the current run's).
-pruneStaleE2eState({ keep: state })
+// DEC-249: drop abandoned `.wrangler/state-e2e-*` folders older than 2 h — never this run's, never one a live
+// `wrangler dev` persists to, and not at all when attaching to an existing server (GX_REUSE_SERVER).
+if (!(process.env.GX_REUSE_SERVER && process.env.GX_REUSE_SERVER !== "0")) pruneStaleE2eState({ keep: state })
 // DEC-249 fast iteration: GX_SKIP_BUILD=1 reuses the last `pnpm build` (focused runs and UI mutations boot in seconds);
 // GX_REUSE_SERVER=1 attaches to a `wrangler dev` already listening on GX_E2E_PORT.
 const buildCmd = process.env.GX_SKIP_BUILD && process.env.GX_SKIP_BUILD !== "0" ? "" : "pnpm build && "

@@ -124,6 +124,12 @@ export const HOME_SCRIPT = `<script defer src="/three.min.js"></script><script d
   new IntersectionObserver(function(es){es.forEach(function(x){g.classList.toggle("is-playing",x.isIntersecting)})},{threshold:.15}).observe(g);
 })();
 (function(){
+  // The courier marquee's pause button (WCAG 2.2.2): the paused state holds until pressed again, whatever has focus.
+  var b=document.querySelector(".mq-pause"),m=document.querySelector(".marquee");
+  if(!b||!m)return;
+  b.addEventListener("click",function(){var on=b.getAttribute("aria-pressed")!=="true";b.setAttribute("aria-pressed",on?"true":"false");if(on)m.setAttribute("data-paused","");else m.removeAttribute("data-paused")});
+})();
+(function(){
   // Raka's parcel, label and scan beam move only while the stage is on screen; still under reduced motion (DEC-249).
   var r=document.querySelector("[data-raka]");
   if(!r||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
@@ -205,6 +211,7 @@ export function renderHome(app: string): string {
 <ul class="mq-list" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
 <ul class="mq-list" aria-hidden="true">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28, true)}</li>`).join("")}</ul>
 </div></div>
+<div class="wrap mq-ctl"><button type="button" class="mq-pause" aria-pressed="false" aria-label="Jeda animasi daftar ekspedisi"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="1.5" width="3" height="9" rx="1"/><rect x="7" y="1.5" width="3" height="9" rx="1"/></svg></button></div>
 </section>
 
 <section class="sec" aria-labelledby="toko-title"><div class="wrap raka-grid">
@@ -283,7 +290,7 @@ ${closing(app, "/fitur", "Lihat Semua Fitur")}`
 const FITUR_SHOWCASE = `<section class="sec" aria-labelledby="satu-layar-title"><div class="wrap show-grid">
 <div>
 <h2 id="satu-layar-title">Lihat jelas untung loket, saldo Mengantar, dan status tiap resi dalam satu layar</h2>
-<p class="sub">Setiap resi tunai, QRIS, maupun COD tercatat otomatis antara laci kasir dan mutasi akun seller Mengantar. Anda tahu persis berapa Saldo Aman yang siap ditarik dan paket mana yang menunggu dijemput kurir.</p>
+<p class="sub">Setiap resi tunai, QRIS, maupun COD tercatat otomatis antara laci kasir dan mutasi akun seller Mengantar. Anda melihat perhitungan Saldo Aman dari sinkronisasi terakhir setelah cadangan ongkir retur, serta paket yang menunggu dijemput kurir.</p>
 <ul class="chk">
 <li>${IC.check}<span>Kasir melihat tarif publik; modal dan margin hanya di akun Pemilik</span></li>
 <li>${IC.check}<span>Rekonsiliasi per resi antara kas loket dan mutasi Mengantar</span></li>
@@ -310,7 +317,7 @@ const FITUR_SHOWCASE = `<section class="sec" aria-labelledby="satu-layar-title">
 </div></section>
 
 <section class="sec" aria-labelledby="bukti-title"><div class="wrap">
-<div class="shead"><h2 id="bukti-title">Uang laci kasir dan saldo ekspedisi tidak lagi selisih di akhir minggu</h2><p class="sub">Dua kebiasaan loket yang paling sering memakan waktu kini dikerjakan sistem.</p></div>
+<div class="shead"><h2 id="bukti-title">Selisih antara laci kasir dan mutasi ekspedisi langsung terlihat per resi</h2><p class="sub">Dua kebiasaan loket yang paling sering memakan waktu kini dikerjakan sistem.</p></div>
 <div class="proof">
 <div class="tile"><span class="idx">01</span><h3>Dari catatan campur ke rekonsiliasi 1:1 per resi</h3><p>Catatan manual sering menyisakan selisih ongkir dan potongan COD yang belum cair. GeraiExpress mencocokkan kas loket dengan mutasi Mengantar untuk setiap nomor resi.</p>
 <div class="float rb" aria-label="Contoh perbandingan catatan manual dan rekonsiliasi per resi (data contoh)">

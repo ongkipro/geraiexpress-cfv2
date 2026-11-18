@@ -484,6 +484,28 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   await page.locator(".marquee").hover()
   expect(await track.evaluate((el) => getComputedStyle(el).animationPlayState)).toBe("paused")
   await expect(page.locator('.mq-list[aria-hidden="true"] img[alt=""]')).toHaveCount(9)
+  // Sol R1: the pause button holds the marquee still (keyboard), whatever has focus afterwards; pressed again it runs.
+  await page.mouse.move(2, 2)
+  const pause = page.getByRole("button", { name: "Jeda animasi daftar ekspedisi" })
+  await pause.focus()
+  await page.keyboard.press("Enter")
+  await expect(pause).toHaveAttribute("aria-pressed", "true")
+  await page.keyboard.press("Tab")
+  await expect(pause).not.toBeFocused()
+  expect(await track.evaluate((el) => getComputedStyle(el).animationPlayState)).toBe("paused")
+  await pause.focus()
+  await page.keyboard.press(" ")
+  await expect(pause).toHaveAttribute("aria-pressed", "false")
+  await page.locator("h1").focus().catch(() => {})
+  await page.mouse.move(2, 2)
+  expect(await track.evaluate((el) => getComputedStyle(el).animationPlayState)).toBe("running")
+  if (info.project.name === "desktop-1280") {
+    // At 1920 the marquee is never wider than one track, so the loop never shows an empty tail.
+    await page.setViewportSize({ width: 1920, height: 900 })
+    const w = await page.evaluate(() => ({ box: document.querySelector(".marquee")!.getBoundingClientRect().width, list: document.querySelector(".mq-list")!.getBoundingClientRect().width }))
+    expect(w.box).toBeLessThanOrEqual(w.list)
+    await page.setViewportSize({ width: 1440, height: 900 })
+  }
   const raka = page.locator("[data-raka]")
   await raka.scrollIntoViewIfNeeded()
   await expect(raka).toHaveClass(/is-playing/)

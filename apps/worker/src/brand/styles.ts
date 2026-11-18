@@ -204,13 +204,16 @@ ul.rates li:last-child{border-bottom:0}
 @media(min-width:1024px){.pgrid{grid-template-columns:repeat(9,minmax(0,1fr))}}
 .pgrid-gap{margin-bottom:56px}
 /* DEC-249 home: infinite courier marquee (pauses on hover/focus, static wrap under reduced motion) */
-.marquee{overflow:hidden;padding:6px 0 18px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.marquee{max-width:1476px;margin:0 auto;overflow:hidden;padding:6px 0 18px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .mq-track{display:flex;width:max-content;animation:gx-mq 42s linear infinite}
-.marquee:hover .mq-track,.marquee:focus-within .mq-track{animation-play-state:paused}
+.marquee:hover .mq-track,.marquee:focus-within .mq-track,.marquee[data-paused] .mq-track{animation-play-state:paused}
+.mq-ctl{display:flex;justify-content:flex-end;margin-top:-18px}
+.mq-pause{display:inline-grid;place-items:center;width:44px;height:44px;border:0;border-radius:999px;background:var(--tile);color:var(--slate);cursor:pointer}
+.mq-pause:hover{color:var(--ink);background:#EBEEF4}.mq-pause[aria-pressed=true]{color:var(--action);background:var(--tint)}
 .mq-list{display:flex;gap:12px;margin:0;padding:0 12px 0 0;list-style:none}
 .mq-list .pbadge{width:152px;flex-shrink:0}
 @keyframes gx-mq{to{transform:translateX(-50%)}}
-@media(prefers-reduced-motion:reduce){.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}.mq-list{flex-wrap:wrap;justify-content:center;padding:0 16px}.mq-list[aria-hidden]{display:none}}
+@media(prefers-reduced-motion:reduce){.mq-ctl{display:none}.marquee{-webkit-mask-image:none;mask-image:none;padding:0}.mq-track{animation:none;width:auto;display:block}.mq-list{flex-wrap:wrap;justify-content:center;padding:0 16px}.mq-list[aria-hidden]{display:none}}
 /* DEC-249 home: Raka's 3D counter (render of the hero's own rig) on a porcelain stage + floating UI pills */
 .raka-grid{display:grid;gap:32px;align-items:center}@media(min-width:900px){.raka-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px}}
 .raka-stage{position:relative;margin:0;background:radial-gradient(circle at 50% 30%,rgba(11,79,227,.06),transparent 70%),var(--tile);border-radius:28px;padding:20px 16px 14px;min-width:0}

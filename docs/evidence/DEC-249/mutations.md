@@ -17,3 +17,14 @@ Each mutation was applied, `vitest run test/brand` was run, and the file was res
 |---|---|---|---|
 | D249-M6 | `apps/worker/src/brand/index.ts` | `/loket-mitra-3d.webp` dropped from `BRAND_ASSETS` | exit 1 — "DEC-249 home …" (asset 404) |
 | D249-M7 | `apps/worker/src/brand/styles.ts` | pricing feature list hidden on the home page again | exit 1 — "DEC-249 home …" |
+
+## Sol R1 fixes (run `RUN-20261118T221923Z-14db5701`)
+
+| Id | File | Mutation | Suite | Result |
+|---|---|---|---|---|
+| D249R1-M1 | `scripts/dev/clean-e2e-state.mjs` | files and symlinks are pruned too | unit `clean-e2e-state.test.mjs` | exit 1 — "never removes a regular file or a symlink…" |
+| D249R1-M2 | `scripts/dev/clean-e2e-state.mjs` | `keep` compared without resolving | unit | exit 1 — "keeps the current run's folder whether `keep` is relative or absolute" |
+| D249R1-M3 | `scripts/dev/clean-e2e-state.mjs` | age from the folder itself only | unit | exit 1 — "an old folder with a fresh file deep inside…" |
+| D249R1-M4 | `scripts/dev/clean-e2e-state.mjs` | live `--persist-to` folders not protected | unit | exit 1 — "a folder a live process persists to is never removed" |
+| D249R1-M5 | `apps/worker/src/brand/styles.ts` | pause state not honoured by CSS | `vitest run test/brand` | exit 1 — "DEC-249 home …" |
+| D249R1-M6 | `apps/worker/src/brand/styles.ts` | marquee width uncapped | `vitest run test/brand` | exit 1 — "DEC-249 home …" |
