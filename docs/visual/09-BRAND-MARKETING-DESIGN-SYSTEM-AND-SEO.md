@@ -22,6 +22,10 @@
 
 ## 2. Sistem Token Visual (Brand Design System)
 
+> **DEC-247 (2026-11-18):** pita penutup gelap `#061B52`, garis tepi kartu `--gx-line`, kartu bertepi dan navigasi
+> `<details>` di ponsel **digantikan** oleh sistem *Borderless White-Gallery* di §6. Token di bawah tetap berlaku
+> untuk warna merek (`--gx-navy`, `--gx-action`), tipografi dan aset; aturan permukaan dan komposisi mengikuti §6.
+
 Palet diturunkan langsung dari vektor logo resmi **GeraiExpress (`GE`)** dan dijaga selaras dengan ruang kerja aplikasi (`#2E47BA` / `#203551`), serta telah teruji kontras **WCAG 2.1 AA/AAA**.
 
 ### 2.1 Warna & Kontras Permukaan
@@ -186,3 +190,48 @@ Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis terse
 - [x] **10/10 Halaman Lulus `check-page.mjs`:** `0 fail, 0 warn` — panjang `<title>` `55–70` karakter, `meta description` `120–155` karakter berakhiran titik, `canonical` absolut `https://`, `og:image` + `og:image:alt`, `Organization` + `BreadcrumbList` valid dengan `<nav aria-label="Breadcrumb">` terlihat.
 - [x] **Zero Overflow & Kenyamanan Baca (`dotuiux`):** `horizontalOverflowPx === 0` pada `1440×900` dan `390×844`, target sentuh `>= 44px`, kontras teks lulus WCAG AA, nol ikon dekoratif `Sparkles`.
 - [x] **Kompatibilitas Penuh Tes Otomatis:** `apps/worker/test/brand/brand.test.ts` dan `e2e/brand.spec.ts` hijau 100%.
+
+---
+
+## 6. DEC-247 — *Borderless White-Gallery* (berlaku untuk 10 halaman `geraiexpress.com` dan mini-site)
+
+Diadaptasi dari sistem `adsbook.id` (referensi baca-saja) ke identitas loket GeraiExpress.
+
+### 6.1 Token permukaan
+
+| Token | Nilai | Peran |
+| --- | --- | --- |
+| `--bg-page` | `#FFFFFF` | Kanvas dari atas sampai sebelum footer, satu galeri terang (tanpa pita gelap). |
+| `--bg-tile` | `#F4F6FA` | Satu-satunya permukaan lembut: tile bento, alas (*pedestal*) screenshot, panel harga, kolom GeraiExpress di perbandingan, panggung penutup, footer. **Tanpa garis tepi.** Radius `24px` (tile kurir `16px`). |
+| `--bg-float` | `#FFFFFF` + `--shadow-float: 0 20px 50px -12px rgba(15,23,42,.08), 0 2px 6px -1px rgba(15,23,42,.04)` | Artefak UI sintetis yang "melayang" di atas tile (satu per tile). |
+| `--hairline` | `1px solid rgba(15,23,42,.07)` | Hanya baris terbuka (perbandingan, FAQ) dan garis atas footer — tidak pernah kotak empat sisi. |
+| Tinta | `#0F172A` / `#012676` judul, `#475569` isi, `#94A3B8` redup | 90 % netral. |
+| Sinyal merek | `#0B4FE3` (hover `#083CB3`, tint `#EFF6FF`) | Hanya CTA utama, status aktif/terpilih, kolom pemenang. Tanpa pil warna-warni. |
+
+### 6.2 Komposisi
+
+- **Header tunggal** di semua halaman (beku-kaca di atas hero 3D `100svh` yang tetap dipertahankan). Desktop `≥ 960px`: grid `1fr auto 1fr` (logo tanpa bingkai + `by Mengantar` · nav tengah bergaris bawah tanpa lompatan tebal · `Masuk` + pil `Daftar Gerai`). Ponsel `< 960px`: urutan jempol `[ikon Masuk 44×44]` lalu `[menu dua bilah ⇄ ×, 44×44]` membuka kartu dropdown beku-kaca selebar layar (`left/right 1rem`, maks `440px`, bilah aksen `2px`, latar diredupkan, tutup dengan `Escape`/klik di luar, `inert`), tiap item dengan petunjuk satu baris, pil `Daftar Gerai →` dan tautan `Sudah terdaftar? Masuk ke ruang kerja`.
+- **Bebas *AI slop*:** tanpa pil *eyebrow* di atas seksi di bawah hero; seksi dibuka `h2` rapat (`letter-spacing -0.028em`, `line-height 1.12`, maks `24ch`) + satu kalimat (`#475569`, maks `54ch`), jarak `72–96px`; tanpa tautan `Pelajari … →` di ujung tile; tanpa kartu-di-dalam-kartu; tanpa ikon di kotak berwarna.
+- **Beranda (paritas `adsbook.id`, owner 2026-11-18):** `#ringkasan` (kiri `h1` + CTA, kanan panggung `#F4F6FA` dengan satu kartu `Tinjau Tarif Loket` mengambang) → strip 9 kurir (tile `#F4F6FA` `16px`) → **showcase UI berlapis** (kiri `h2` + 3 poin, kanan `.layer-back` KPI + sparkline memudar di belakang `.layer-front` tabel *Ringkasan Ekspedisi Loket*, tanpa garis penghubung, ber-*figcaption* data contoh) → bento 12 kolom `01`–`06` (6/6/4/4/4/12) dengan artefak sintetis → alas screenshot POS nyata (WebP, tepi optik `1px rgba(15,23,42,.08)`, *mask* pudar di bawah, tanpa bingkai perangkat; tetap `loading="lazy"`, e2e memastikan `naturalWidth > 0`) → **band bukti dua permukaan** `01` rekonsiliasi 1:1 per resi · `02` tiga lapis privasi → layanan Reguler/Kargo/COD → peralatan → **paket radio asimetris + perbandingan terbuka** (markup sama persis dengan `/biaya-dan-paket`) → **5 FAQ garis rambut** (`+` berputar 45° menjadi `×`, kata-kata sama dengan `/tanya-jawab`) + `Semua pertanyaan →` → penutup.
+- **Panggung penutup (semua halaman):** tiga pil langkah putih bernomor (`1 · Daftar akun pemilik`, `2 · Verifikasi titik jemput & akun Mengantar`, `3 · Buka kasir & cetak resi pertama`) di atas tombol utama.
+- **`/biaya-dan-paket`:** kolom kiri `5fr` radio asli (`Mitra Gerai Standar — Rp 0`, `Mitra Gerai + Domain Sendiri (Pro)`) dengan `:has()` + cadangan JS `data-active` + `@media (forced-colors: active)`; kanan `7fr` panel `#F4F6FA` berisi rincian pilihan, CTA dan daftar fitur sesuai keputusan (tanpa angka diskon karangan). Matriks perbandingan terbuka bergaris rambut: *Manual ekspedisi satu-satu* · *Sistem keagenan kunci perangkat* · **GeraiExpress** (kolom ber-*wash* `#F4F6FA`, tanpa nama merek pesaing).
+- **`/tanya-jawab`:** akordion `<details>` terbuka dengan garis rambut, bukan kartu.
+- **Penutup + footer:** panggung `#F4F6FA` berpusat (tanpa tepi) mengalir ke footer `#F4F6FA` dengan garis rambut atas.
+  Tautan "langkah berikutnya" antar-subhalaman (pita *internal linking* §4) kini menjadi tombol kedua di panggung penutup.
+- **Screenshot produk:** diambil sebagai Kasir (tampilan pemilik memuat modal dan estimasi laba, yang tidak boleh tampil di halaman publik).
+- **Validasi formulir:** tidak ada gelembung validasi bawaan peramban berbahasa Inggris; pesan `setCustomValidity` berbahasa Indonesia.
+
+### 6.3 Mini-site `<slug>.geraimitra.com` (white-label) — rilis DEC-247B
+
+Token §6.1 dengan identitas gerai sendiri (tanpa logo/nama GeraiExpress di kepala halaman): logo gerai dari `/logo`
+(hanya media `purpose='logo'` milik tenant host itu) atau monogram inisial; favicon SVG inisial; `Buka Peta`
+(koordinat, atau alamat); satu CTA WhatsApp; strip kurir aktif gerai (`/couriers/*.svg` dari host yang sama);
+`Cek Ongkir` Reguler + Kargo (≥ 5 kg, Non-COD) + opsi P×L×T; kolom `Harga barang COD` muncul tanpa muat ulang di
+`/kirim`; logo kurir di `/lacak`. SSR < 35 KB per halaman.
+
+### 6.4 Gate tambahan (DEC-247)
+
+`check-page.mjs` 0 fail 0 warn di 10 halaman; `dotuiux` 0 fail; screenshot `1440×900` dan `390×844` (beranda atas
+sampai footer, menu ponsel terbuka, `/biaya-dan-paket`, mini-site `/` dan `/kirim`) tanpa *overflow* dan tanpa
+galat konsol/CSP; mutasi merah tercatat di `docs/evidence/DEC-247/`.
+

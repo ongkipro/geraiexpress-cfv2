@@ -129,3 +129,209 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await ctx.close()
   })
 }
+
+// DEC-247 Borderless White-Gallery: ten pages with zero console/page/CSP errors and zero horizontal overflow on every
+// viewport project; the product screenshot loads.
+const BRAND_PAGES = ["/", "/fitur", "/ekspedisi", "/cara-kerja", "/biaya-dan-paket", "/simulasi-kasir", "/tanya-jawab", "/hubungi-kami", "/ketentuan", "/privasi"]
+test("Brand DEC-247: sepuluh halaman tanpa error konsol/CSP dan tanpa geser horizontal", async ({ page }) => {
+  const apex = APP.replace("app.", "")
+  const errors: string[] = []
+  page.on("console", (m) => { if (m.type() === "error") errors.push(`${page.url()} console: ${m.text()}`) })
+  page.on("pageerror", (e) => errors.push(`${page.url()} pageerror: ${e.message}`))
+  for (const p of BRAND_PAGES) {
+    await page.goto(`${apex}${p}`)
+    await page.evaluate(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP ${e.violatedDirective}`)))
+    await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 700) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 30)) } })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), p).toBe(0)
+    await expect(page.locator(".mnav-dim"), p).toHaveCount(1)
+  }
+  await page.goto(`${apex}/`)
+  const shot = page.locator('img[src="/produk-kasir-loket.webp"]')
+  await shot.scrollIntoViewIfNeeded()
+  await expect.poll(() => shot.evaluate((i) => (i as HTMLImageElement).naturalWidth)).toBe(1440)
+  expect(errors).toEqual([])
+})
+
+// DEC-247: phone thumb order [Masuk] [menu ⇄ ×]; the menu opens a screen-aligned card (inert toggles, focus moves in),
+// closes on Escape (focus back on the button), on an outside tap and on a menu link.
+test("Brand DEC-247: menu ponsel [Masuk] [Menu] buka, Escape, klik luar, fokus", async ({ page }, info) => {
+  test.skip(info.project.name === "desktop-1280", "the phone menu exists below 960 px")
+  const apex = APP.replace("app.", "")
+  await page.goto(`${apex}/fitur`)
+  const btn = page.locator("#mnav-btn")
+  const acct = page.locator(".hdr a.acct")
+  const menu = page.locator("#mnav")
+  await expect(page.locator(".dnav")).toBeHidden()
+  await expect(acct).toHaveAttribute("href", `${APP}/masuk`)
+  for (const b of [acct, btn]) {
+    const box = (await b.boundingBox())!
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+  }
+  expect((await acct.boundingBox())!.x).toBeLessThan((await btn.boundingBox())!.x)
+  await expect(btn).toHaveAttribute("aria-expanded", "false")
+  await expect(menu).toHaveAttribute("inert", "")
+  await expect(menu).toBeHidden()
+
+  await btn.click()
+  await expect(btn).toHaveAttribute("aria-expanded", "true")
+  await expect(btn).toHaveAttribute("aria-label", "Tutup menu navigasi")
+  await expect(menu).toBeVisible()
+  await expect(menu).not.toHaveAttribute("inert", "")
+  await expect(page.locator("#mnav a").first()).toBeFocused()
+  await expect(menu.getByRole("link", { name: /Fitur/ })).toHaveAttribute("aria-current", "page")
+  await expect(menu.getByText("Sembilan kurir mitra, Reguler & Kargo")).toBeVisible()
+  await expect(menu.getByRole("link", { name: "Daftar Gerai", exact: true })).toHaveAttribute("href", `${APP}/daftar-akun`)
+  await expect(menu.getByRole("link", { name: "Sudah terdaftar? Masuk ke ruang kerja" })).toHaveAttribute("href", `${APP}/masuk`)
+  const vw = page.viewportSize()!.width
+  await expect.poll(async () => (await menu.boundingBox())!.y).toBeGreaterThan(40)
+  const card = (await menu.boundingBox())!
+  expect(card.x).toBeGreaterThanOrEqual(15)
+  expect(card.x + card.width).toBeLessThanOrEqual(vw - 15)
+  expect(card.width).toBeLessThanOrEqual(440)
+  // Every row fits on one line: the hint never wraps.
+  for (const hint of await menu.locator(".r-h").all()) expect((await hint.boundingBox())!.height).toBeLessThan(24)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+
+  await page.keyboard.press("Escape")
+  await expect(btn).toHaveAttribute("aria-expanded", "false")
+  await expect(menu).toHaveAttribute("inert", "")
+  await expect(menu).toBeHidden()
+  await expect(btn).toBeFocused()
+
+  await btn.click()
+  await expect(menu).toBeVisible()
+  await page.mouse.click(vw / 2, page.viewportSize()!.height - 12)
+  await expect(btn).toHaveAttribute("aria-expanded", "false")
+  await expect(menu).toBeHidden()
+  await expect(page).toHaveURL(/\/fitur$/)
+
+  await btn.click()
+  await menu.getByRole("link", { name: /Biaya & Paket/ }).click()
+  await expect(page).toHaveURL(/\/biaya-dan-paket$/)
+  await expect(page.locator("#mnav-btn")).toHaveAttribute("aria-expanded", "false")
+  await expect(page.locator("#mnav")).toBeHidden()
+})
+
+// DEC-247: desktop header at 1440 px is a 3-column grid with the nav centred and an underline (no weight change).
+test("Brand DEC-247: header desktop 1440 tiga kolom, nav di tengah", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "one desktop project")
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const apex = APP.replace("app.", "")
+  await page.goto(`${apex}/ekspedisi`)
+  const nav = page.locator(".dnav")
+  await expect(nav).toBeVisible()
+  await expect(page.locator("#mnav-btn")).toBeHidden()
+  await expect(page.locator(".hdr a.acct")).toBeHidden()
+  await expect(page.locator(".hdr .login-lk")).toBeVisible()
+  await expect(page.locator(".hdr .hact .cta")).toHaveText("Daftar Gerai")
+  await expect(nav.getByRole("link")).toHaveText(["Fitur", "Ekspedisi", "Cara Kerja", "Biaya & Paket", "Simulasi Kasir"])
+  await expect(nav.getByRole("link", { name: "Ekspedisi" })).toHaveAttribute("aria-current", "page")
+  const n = (await nav.boundingBox())!
+  expect(Math.abs(n.x + n.width / 2 - 720)).toBeLessThan(4)
+  const link = nav.getByRole("link", { name: "Fitur" })
+  const before = await link.evaluate((a) => [getComputedStyle(a).fontWeight, a.getBoundingClientRect().width])
+  await link.hover()
+  await page.waitForTimeout(350)
+  expect(await link.evaluate((a) => [getComputedStyle(a).fontWeight, a.getBoundingClientRect().width])).toEqual(before)
+  expect(await link.evaluate((a) => getComputedStyle(a, "::after").transform)).not.toBe("matrix(0, 0, 0, 1, 0, 0)")
+  // Same header geometry on the home (frosted over the 3D hero).
+  await page.goto(`${apex}/`)
+  const home = (await page.locator(".dnav").boundingBox())!
+  expect(Math.round(home.x)).toBe(Math.round(n.x))
+  expect(Math.round(home.y)).toBe(Math.round(n.y))
+})
+
+// DEC-247: the asymmetric pricing — choosing a tier radio swaps the readout and its CTA.
+test("Brand DEC-247: radio paket mengganti panel rincian", async ({ page }) => {
+  const apex = APP.replace("app.", "")
+  await page.goto(`${apex}/biaya-dan-paket`)
+  const std = page.locator('.readout[data-plan="standar"]')
+  const pro = page.locator('.readout[data-plan="pro"]')
+  await expect(page.getByRole("radio", { name: /Mitra Gerai Standar/ })).toBeChecked()
+  await expect(std).toBeVisible()
+  await expect(pro).toBeHidden()
+  await expect(std.getByRole("link", { name: "Daftar Gerai" })).toHaveAttribute("href", `${APP}/daftar-akun`)
+  await page.locator(".tier", { hasText: "Domain Sendiri (Pro)" }).click()
+  await expect(page.getByRole("radio", { name: /Domain Sendiri \(Pro\)/ })).toBeChecked()
+  await expect(pro).toBeVisible()
+  await expect(std).toBeHidden()
+  await expect(pro).toHaveAttribute("data-active", "")
+  await expect(std).not.toHaveAttribute("data-active", "")
+  await expect(pro.getByRole("link", { name: "Hubungi Kemitraan" })).toHaveAttribute("href", "/hubungi-kami")
+  await expect(pro).toContainText("Seluruh fasilitas Mitra Gerai Standar")
+  await page.getByRole("radio", { name: /Mitra Gerai Standar/ }).check()
+  await expect(std).toBeVisible()
+  await expect(pro).toBeHidden()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+})
+
+// DEC-247 §2.4: on an en-US browser a brand form without `novalidate` gets Indonesian constraint messages, cleared on input.
+test("Brand DEC-247: validasi form berbahasa Indonesia di browser en-US", async ({ browser }) => {
+  const ctx = await browser.newContext({ locale: "en-US" })
+  const page = await ctx.newPage()
+  await page.goto(`${APP.replace("app.", "")}/hubungi-kami`)
+  const msgs = await page.evaluate(() => {
+    const f = document.createElement("form")
+    f.innerHTML = '<label for="v-mail">Email</label><input id="v-mail" type="email" required><label for="v-n">Jumlah</label><input id="v-n" type="number" min="1" max="9"><input id="v-p" pattern="[0-9]{4}" aria-label="PIN" placeholder="1234"><button>Kirim</button>'
+    document.body.append(f)
+    const mail = f.querySelector<HTMLInputElement>("#v-mail")!, n = f.querySelector<HTMLInputElement>("#v-n")!, p = f.querySelector<HTMLInputElement>("#v-p")!
+    const out: string[] = []
+    f.reportValidity(); out.push(mail.validationMessage)
+    mail.value = "salah"; mail.dispatchEvent(new Event("input", { bubbles: true })); out.push(String(mail.validity.customError))
+    f.reportValidity(); out.push(mail.validationMessage)
+    mail.value = "nama@toko.id"; mail.dispatchEvent(new Event("input", { bubbles: true })); out.push(String(mail.validity.valid))
+    n.value = "12"; f.reportValidity(); out.push(n.validationMessage)
+    n.value = "3"; n.dispatchEvent(new Event("input", { bubbles: true })); p.value = "ab"; f.reportValidity(); out.push(p.validationMessage)
+    return out
+  })
+  expect(msgs).toEqual([
+    "Kolom Email wajib diisi.",
+    "false",
+    "Format email belum benar (contoh: nama@domain.com).",
+    "true",
+    "Nilai maksimal 9.",
+    "Format PIN belum sesuai (contoh: 1234).",
+  ])
+  await ctx.close()
+})
+
+// DEC-247A (supervisor visual check): the product screenshot on the home pedestal must really load — served as
+// image/webp through BRAND_ASSETS and decoded once scrolled into view (it stays `loading="lazy"` below the fold).
+test("Brand DEC-247: screenshot kasir di pedestal termuat (WebP, naturalWidth > 0)", async ({ page }) => {
+  const apex = APP.replace("app.", "")
+  const res = await page.request.get(`${apex}/produk-kasir-loket.webp`)
+  expect(res.status()).toBe(200)
+  expect(res.headers()["content-type"]).toBe("image/webp")
+  await page.goto(`${apex}/`)
+  const img = page.locator("figure.shot img")
+  await img.scrollIntoViewIfNeeded()
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth), { timeout: 10_000 }).toBe(1440)
+  expect(await img.getAttribute("alt")).toMatch(/^Layar kasir GeraiExpress/)
+})
+
+// DEC-247A home parity: the pricing radios and the FAQ rows also work on the home page.
+test("Brand DEC-247: beranda memuat paket, perbandingan, FAQ dan langkah penutup", async ({ page }) => {
+  const apex = APP.replace("app.", "")
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.goto(`${apex}/`)
+  const pricing = page.locator("[data-pricing]")
+  await pricing.scrollIntoViewIfNeeded()
+  const pro = pricing.locator('.readout[data-plan="pro"]')
+  await expect(pro).toBeHidden()
+  await pricing.locator(".tier", { hasText: "Domain Sendiri (Pro)" }).click()
+  await expect(pro).toBeVisible()
+  await expect(pricing.locator('.readout[data-plan="standar"]')).toBeHidden()
+  await expect(page.locator("table.cmp")).toBeVisible()
+  const faq = page.locator('section[aria-labelledby="faq-title"] details')
+  await expect(faq).toHaveCount(5)
+  const second = faq.nth(1)
+  await expect(second).not.toHaveAttribute("open", "")
+  await second.locator("summary").click()
+  await expect(second).toHaveAttribute("open", "")
+  await expect(page.locator(".closing .cl-steps li")).toHaveCount(3)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+  expect(errors).toEqual([])
+})
+

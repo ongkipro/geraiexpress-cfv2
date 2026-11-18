@@ -59,7 +59,7 @@ export const BRAND_PAGES: Record<string, BrandPageMeta> = {
     crumb: "Simulasi Kasir",
     titleStem: "Simulasi Meja Kasir & Struk Agen Kirim Paket",
     description: "Simulasi interaktif meja kasir GeraiExpress dengan data contoh: hitung ongkir per gram atau kargo, pilih layanan COD, dan tinjau struk pelanggan loket.",
-    ogAlt: "Simulasi meja kasir agen pengiriman paket dan pratinjau struk pelanggan GeraiExpress",
+    ogAlt: "Simulasi meja kasir agen pengiriman paket dan contoh struk pelanggan GeraiExpress",
   },
   "/tanya-jawab": {
     crumb: "Tanya Jawab",
@@ -94,6 +94,86 @@ export const PRIMARY_NAV: Array<[string, string]> = [
   ["/biaya-dan-paket", "Biaya & Paket"],
   ["/simulasi-kasir", "Simulasi Kasir"],
 ]
+
+/** Phone menu rows: every page a visitor may look for, with one short line of what is there. */
+export const MENU_ROWS: Array<[string, string, string]> = [
+  ["/fitur", "Fitur", "Kasir, cetak resi, retur & keuangan"],
+  ["/ekspedisi", "Ekspedisi", "Sembilan kurir mitra, Reguler & Kargo"],
+  ["/cara-kerja", "Cara Kerja", "Lima langkah daftar & peralatan loket"],
+  ["/biaya-dan-paket", "Biaya & Paket", "Rp 0 pendaftaran, opsi domain Pro"],
+  ["/simulasi-kasir", "Simulasi Kasir", "Hitung ongkir & struk tanpa login"],
+  ["/tanya-jawab", "Tanya Jawab", "Syarat lokasi, saldo, COD & retur"],
+  ["/hubungi-kami", "Hubungi Kami", "Email & WhatsApp tim kemitraan"],
+]
+
+/**
+ * Shared page script (every brand page, inline like the page demos; the apex sends no CSP).
+ * (1) Phone menu: [Masuk] [menu ⇄ ×] opens a screen-aligned card; Escape, outside click, a menu link, `pageshow`
+ * and widening past 960 px close it; `inert` + `aria-expanded` follow the state; focus moves in and back.
+ * (2) Indonesian constraint validation safety net (DEC-247 §2.4): a form without `novalidate` never shows the
+ * browser's English bubble; only messages this net set itself are cleared (on input, change and the next submit).
+ */
+export const SHELL_SCRIPT = `<script>
+(function(){
+  var d=document,b=d.getElementById("mnav-btn"),m=d.getElementById("mnav"),k=d.getElementById("mnav-dim"),h=d.querySelector(".hdr");
+  if(!b||!m||!k||!h)return;
+  function isO(){return b.getAttribute("aria-expanded")==="true"}
+  function set(o,back){
+    if(o)d.documentElement.style.setProperty("--hdr-b",Math.round(h.getBoundingClientRect().bottom)+"px");
+    b.setAttribute("aria-expanded",o?"true":"false");
+    b.setAttribute("aria-label",o?"Tutup menu navigasi":"Buka menu navigasi");
+    if(o)m.removeAttribute("inert");else m.setAttribute("inert","");
+    m.classList.toggle("open",o);k.classList.toggle("open",o);
+    if(o)h.setAttribute("data-menu-open","");else h.removeAttribute("data-menu-open");
+    d.documentElement.style.overflow=o?"hidden":"";
+    if(o){var a=m.querySelector("a");if(a)a.focus({preventScroll:true})}else if(back)b.focus();
+  }
+  b.addEventListener("click",function(){set(!isO())});
+  d.addEventListener("pointerdown",function(e){if(isO()&&!m.contains(e.target)&&!b.contains(e.target))set(false)});
+  d.addEventListener("keydown",function(e){if(e.key==="Escape"&&isO()){e.preventDefault();set(false,true)}});
+  m.addEventListener("click",function(e){if(e.target.closest("a"))set(false)});
+  m.addEventListener("focusout",function(e){var t=e.relatedTarget;if(isO()&&t&&!m.contains(t)&&t!==b)set(false)});
+  addEventListener("pageshow",function(){if(isO())set(false)});
+  var mq=matchMedia("(min-width:960px)");
+  if(mq.addEventListener)mq.addEventListener("change",function(e){if(e.matches&&isO())set(false)});
+})();
+(function(){
+  var d=document,ours=new WeakMap();
+  function isF(t){return t&&typeof t.setCustomValidity==="function"&&"validity" in t}
+  function name(el){var l=el.labels&&el.labels[0];return((el.getAttribute("data-validity-label")||(l?l.textContent:"")||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").replace(/[*:]+\\s*$/,"").trim()).slice(0,60)}
+  function msg(el){
+    var v=el.validity,k=el.tagName==="SELECT"?"select":el.tagName==="TEXTAREA"?"textarea":(el.type||"text"),n=name(el),x=n?" "+n:" ini";
+    if(v.valueMissing){
+      if(el.getAttribute("data-msg-missing"))return el.getAttribute("data-msg-missing");
+      if(k==="checkbox")return"Centang kotak ini untuk melanjutkan.";
+      if(k==="radio")return n?"Pilih salah satu "+n+".":"Pilih salah satu opsi.";
+      if(k==="select")return n?"Pilih "+n+" terlebih dahulu.":"Pilih salah satu opsi terlebih dahulu.";
+      return"Kolom"+x+" wajib diisi.";
+    }
+    var inv=el.getAttribute("data-msg-invalid");if(inv)return inv;
+    if(v.badInput)return k==="number"?"Masukkan angka yang valid.":"Isian belum valid.";
+    if(v.typeMismatch)return k==="email"?"Format email belum benar (contoh: nama@domain.com).":k==="url"?"Masukkan alamat URL lengkap (diawali https://).":"Format isian belum sesuai.";
+    if(v.patternMismatch){var p=el.getAttribute("placeholder");return"Format"+x+" belum sesuai"+(p?" (contoh: "+p+")":"")+"."}
+    if(v.tooLong)return"Maksimal "+el.maxLength+" karakter.";
+    if(v.tooShort)return"Minimal "+el.minLength+" karakter.";
+    if(v.rangeUnderflow)return"Nilai minimal "+el.min+".";
+    if(v.rangeOverflow)return"Nilai maksimal "+el.max+".";
+    if(v.stepMismatch)return"Masukkan kelipatan "+(el.step||"1")+".";
+    return"Isian belum valid.";
+  }
+  function release(el){var o=ours.get(el);if(o===undefined)return;ours.delete(el);if(el.validity.customError&&el.validationMessage===o)el.setCustomValidity("")}
+  d.addEventListener("invalid",function(e){
+    var el=e.target;if(!isF(el))return;
+    if(el.validity.customError&&ours.get(el)!==el.validationMessage)return;
+    release(el);
+    if(el.validity.valid){e.preventDefault();return}
+    var s=msg(el);el.setCustomValidity(s);ours.set(el,s);
+  },true);
+  function edit(e){if(isF(e.target))release(e.target)}
+  d.addEventListener("input",edit,true);d.addEventListener("change",edit,true);
+  d.addEventListener("click",function(e){var t=e.target,btn=t&&t.closest?t.closest("button,input[type=submit]"):null;if(btn&&btn.form&&btn.type==="submit")[].forEach.call(btn.form.elements,function(x){if(isF(x))release(x)})},true);
+})();
+</script>`
 
 /** Owner SEO convention: rendered `<title>` is 55–70 chars with ` - {Brand}` suffix. */
 export function fitTitle(stem: string, brand: string): string {
@@ -192,6 +272,7 @@ export function renderShell(o: {
       : `<nav class="wrap crumbs" aria-label="Breadcrumb"><ol><li><a href="/">Beranda</a></li><li aria-hidden="true">/</li><li aria-current="page">${e(o.meta.crumb)}</li></ol></nav>`
 
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.className="js"</script>
 <title>${e(title)}</title>
 <meta name="description" content="${e(o.meta.description)}">
 <meta name="author" content="${e(brand)}">
@@ -217,37 +298,45 @@ ${o.noindex ? '<meta name="robots" content="noindex">' : '<meta name="robots" co
 <a class="skip" href="#konten-utama">Langsung ke isi utama</a>
 <header class="hdr"><div class="wrap top">
 <a class="brand" href="/" aria-label="${e(brand)}, by Mengantar, ke beranda"><img src="/logo.svg" alt="" width="44" height="26"><span class="brand-txt"><span class="brand-name">${e(brand)}</span><span class="brand-by">by Mengantar</span></span></a>
-<nav class="dnav" aria-label="Menu utama">${PRIMARY_NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
+<nav class="dnav" aria-label="Menu utama">${PRIMARY_NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${e(t)}</a>`).join("")}</nav>
 <div class="hact">
 <a class="login-lk" href="${e(o.appOrigin)}/masuk">Masuk</a>
 <a class="cta sm" href="${e(o.appOrigin)}/daftar-akun">Daftar Gerai</a>
-<details class="mnav"><summary aria-label="Buka menu navigasi">Menu</summary><nav class="mnav-panel" aria-label="Menu seluler">${PRIMARY_NAV.map(([h, t]) => `<a href="${h}"${o.path === h ? ' aria-current="page"' : ""}>${t}</a>`).join("")}<a href="/tanya-jawab"${o.path === "/tanya-jawab" ? ' aria-current="page"' : ""}>Tanya Jawab</a><a href="/hubungi-kami"${o.path === "/hubungi-kami" ? ' aria-current="page"' : ""}>Hubungi Kami</a><a href="${e(o.appOrigin)}/masuk">Masuk ke Ruang Kerja</a></nav></details>
+<a class="hround acct" href="${e(o.appOrigin)}/masuk" aria-label="Masuk ke ruang kerja" title="Masuk"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.6" r="3.1" stroke="currentColor" stroke-width="1.65"/><path d="M4.4 16.4C5.1 13.7 7.25 12.1 10 12.1C12.75 12.1 14.9 13.7 15.6 16.4" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"/></svg></a>
+<button type="button" id="mnav-btn" class="hround burger" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="mnav"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path class="bar bar-t" d="M4 7H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="square"/><path class="bar bar-b" d="M4 13H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="square"/></svg></button>
+<a class="hround nojs-menu" href="#peta-situs" aria-label="Lihat semua halaman"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 7H16M4 13H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="square"/></svg></a>
 </div>
 </div></header>
+<div id="mnav-dim" class="mnav-dim" aria-hidden="true"></div>
+<nav id="mnav" class="mnav" aria-label="Menu navigasi" inert>
+<ul>${MENU_ROWS.map(([h, t, hint]) => `<li><a href="${h}"${o.path === h ? ' aria-current="page"' : ""}><span class="r-t"><span class="r-l">${e(t)}</span><span class="r-h">${e(hint)}</span></span><span class="r-m" aria-hidden="true"></span></a></li>`).join("")}</ul>
+<div class="mnav-foot"><a class="cta" href="${e(o.appOrigin)}/daftar-akun">Daftar Gerai <span aria-hidden="true">→</span></a><a class="mnav-sec" href="${e(o.appOrigin)}/masuk">Sudah terdaftar? <b>Masuk ke ruang kerja</b></a></div>
+</nav>
 ${breadcrumbHtml}
 <main id="konten-utama">${o.body}</main>
 <footer class="ftr"><div class="wrap">
 <div class="fgrid">
-<div><a class="brand" href="/" style="margin-bottom:8px" aria-label="${e(brand)}, by Mengantar, ke beranda"><img src="/logo.svg" alt="" width="38" height="22"><span class="brand-txt"><span class="brand-name">${e(brand)}</span><span class="brand-by">by Mengantar</span></span></a>
+<div><a class="brand" href="/" aria-label="${e(brand)}, by Mengantar, ke beranda"><img src="/logo.svg" alt="" width="38" height="22"><span class="brand-txt"><span class="brand-name">${e(brand)}</span><span class="brand-by">by Mengantar</span></span></a>
 <p style="margin:0;max-width:44ch">Perangkat lunak meja kasir, cetak resi thermal, dan rekonsiliasi saldo multi-ekspedisi untuk loket dan toko di seluruh Indonesia.</p></div>
-<div class="fcol"><h3>Produk &amp; Panduan</h3><ul>
+<nav class="fcol" id="peta-situs" aria-labelledby="ft-produk"><h3 id="ft-produk">Produk &amp; Panduan</h3><ul>
 <li><a href="/fitur">Fitur Meja Kasir</a></li>
 <li><a href="/ekspedisi">Daftar Ekspedisi &amp; Kargo</a></li>
 <li><a href="/cara-kerja">Cara Kerja &amp; Peralatan</a></li>
 <li><a href="/biaya-dan-paket">Biaya &amp; Skema Mitra</a></li>
 <li><a href="/simulasi-kasir">Simulasi Kasir Tanpa Login</a></li>
-</ul></div>
-<div class="fcol"><h3>Bantuan &amp; Legal</h3><ul>
+</ul></nav>
+<nav class="fcol" aria-labelledby="ft-bantuan"><h3 id="ft-bantuan">Bantuan &amp; Legal</h3><ul>
 <li><a href="/tanya-jawab">Tanya Jawab Calon Mitra</a></li>
 <li><a href="/hubungi-kami">Hubungi Kami</a></li>
 <li><a href="/ketentuan">Ketentuan Layanan</a></li>
 <li><a href="/privasi">Kebijakan Privasi (UU PDP)</a></li>
+<li><a href="${e(o.appOrigin)}/daftar-akun">Daftar Gerai Baru</a></li>
 <li><a href="${e(o.appOrigin)}/masuk">Masuk Mitra Terdaftar</a></li>
-</ul></div>
+</ul></nav>
 </div>
 <div class="flegal">
 ${legalLines.length ? `<p style="margin:0">${legalLines.map(e).join(" · ")}</p>` : ""}
 <p style="margin:0">© ${new Date().getUTCFullYear()} ${e(brand)}. Jaringan agen kirim paket multi-ekspedisi.</p>
 </div>
-</div></footer>${o.script ?? ""}</body></html>`
+</div></footer>${SHELL_SCRIPT}${o.script ?? ""}</body></html>`
 }

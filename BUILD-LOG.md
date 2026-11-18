@@ -1083,3 +1083,32 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   and D1 stayed 23; a dry-run seconds later showed `v23 -> v24` and the real run migrated. Production waited for five
   consecutive 401s on the new public route and dry-ran first.
 
+## 2026-11-18 — DEC-247A Borderless white-gallery brand site (branch `dec-247`, awaiting Sol review)
+
+- Scope: owner cross-team UI/UX directive (adapt the `adsbook.id` white-gallery system, read-only reference) — split
+  by the owner into Release A (brand site, this branch) and Release B (mini-site, courier logos, Indonesian validation
+  in both SPAs; preserved byte-identical in worktree `dec-247b`, to continue after A is live). Built by three parallel
+  agents in one worktree on disjoint files; the two non-brand agents were stopped cleanly when the owner split the
+  release (no mutation left applied, verified), their work copied to `dec-247b` and compared with `cmp` before the
+  non-brand changes were reverted here.
+- Brand: one header on all ten pages with the `[Masuk][menu]` frosted dropdown (Escape/outside close, focus return,
+  no-JS fallback to the footer site map), the 100svh 3D hero kept, white `#FFFFFF` page + one `#F4F6FA` borderless
+  surface, single brand signal `#0B4FE3`; 12-col bento 01–06 with synthetic floating artifacts; soft-pedestal POS
+  screenshot `produk-kasir-loket.webp` (66.8 KB) captured as a **Kasir** (an owner view shows cost and margin, which
+  together reveal the discount); home parity with `adsbook.id` added on the owner's request (layered KPI/table
+  showcase, two-surface proof band, the pricing radios and comparison shared with `/biaya-dan-paket`, five FAQ rows
+  shared with `/tanya-jawab`, closing with three numbered steps on every page); inline Indonesian validation helper.
+- Deviations (agent, accepted): small text uses `#5B6A80` (the runbook's `#94A3B8`/old slate fail contrast on
+  porcelain; `#94A3B8` only for decoration); header and hero glass blur 10px (dotuiux), the phone dropdown keeps 20px;
+  the sub-page "next step" links are the closing callout's second button; brand HTML is ~48–70 KB raw (13–18 KB
+  gzipped), above visual 09's unenforced "< 35 KB" figure.
+- Gotchas: (1) the "empty white box" the supervisor saw on the pedestal was `loading="lazy"` in a full-page
+  screenshot, not a missing asset — the image stays lazy (below the fold) and an e2e now scrolls to it and requires
+  `image/webp` + `naturalWidth` 1440; evidence shots scroll the page first. (2) A new `.bars` class collided with the
+  thermal-label barcode `.bars` in bento 02 and drew a barcode across the proof bars — renamed to `rb-*`; check new
+  class names against the existing stylesheet before shipping. (3) `.tiers{align-content:center}` floated the pricing
+  radios away from their legend; top-aligned. (4) A lint run caught a collapsed `\\s` escape inside an inline script
+  (the shipped regex would have been `/s+/`); covered by a test. (5) Two Workers runs failed only on vitest-pool infra
+  (`bad port` at pool start; `EnvironmentTeardownError` in the untouched `admin/recheck.test.ts` under host load ~6/8);
+  the file passed 3/3 alone and the gates re-recorded PASS.
+

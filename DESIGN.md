@@ -100,6 +100,10 @@ Sections (in order): outlet name + address + hours + WhatsApp → three tabs (`C
 `Didukung jaringan resmi GeraiExpress` + privacy link.
 Type / color / shape: system stack; Mengantar blue `#2E47BA` for the one primary per page; white canvas, `#F7F9FC`
 band; 6–8 px radius; no cards, no imagery (no owner photos exist yet — the outlet logo slot is reserved).
+DEC-247B (released after the brand site) supersedes the surfaces: white-gallery tokens of visual 09 §6 (`#FFFFFF` canvas, `#F4F6FA`
+borderless surfaces, floating white artifacts, hairlines only for open rows) with the gerai's own identity — outlet
+logo from `/logo` or an initials monogram, initial-letter favicon, `Buka Peta`, enabled-courier strip, Reguler +
+Kargo + P×L×T quotes, COD price revealed without reload, courier logo on `/lacak`.
 ### Composition contract
 C1: SSR HTML + inline CSS < 35 KB; JavaScript only for the area search and the Turnstile widget.
 C2: one column ≤ 640 px for forms on every width; header and tabs span the 960 px frame.
@@ -112,8 +116,20 @@ Picked-by: owner directive 2026-11-17 (DEC-245). Full tokens, page map, SEO cont
 Surface/job: shop owners deciding "is this worth signing up for and does it fit my counter?" — ten SSR pages.
 Sections (home): frosted header (logo + `by Mengantar`) → full-bleed 3D studio hero → `#ringkasan` (h1, CTAs,
 synthetic rate preview with courier logos) → partner strip (9 Mengantar couriers) → benefits band → closing band.
+DEC-247 (2026-11-18): borderless white-gallery per visual 09 §6 — one header with the `[Masuk][menu]` mobile
+dropdown, rate-check stage, borderless courier strip, 12-col bento `01`–`06`, soft-pedestal POS screenshot, pricing
+summary, `#F4F6FA` closing callout and footer; the dark band, card borders and section eyebrow pills are retired.
 ### Composition contract
 C1: SSR, no client framework, no cookies on the apex; JS only for the home preview + 3D hero and `/simulasi-kasir`;
 three.js is loaded on `/` only, deferred, paused off-screen, reduced-motion aware, with a pause control.
 C2: real courier logos only; no invented customers, metrics, testimonials or counts (nine couriers, never `10+`).
 C3: titles 55–70 with ` - GeraiExpress`, descriptions 120–155, single h1, breadcrumbs on sub-pages.
+
+## Workspace additions (DEC-247B, released after the brand site)
+
+- `<CourierLogo>` (`apps/web-app/src/components/admin/courier-logo.tsx`): the nine official courier SVGs at a fixed
+  box size beside courier names (`/kasir`, `/kasir/cek-cepat`, `/kasir/layar-pelanggan`, `/pengaturan/ekspedisi`,
+  `/kasir/cek-resi`), initials monogram for an unknown code; decorative (`alt=""`) when the name is already text.
+- `installIndonesianValidation` at both SPA roots: constraint messages in Indonesian via `setCustomValidity`, so no
+  English browser bubble can appear; forms with their own field errors keep `noValidate`.
+

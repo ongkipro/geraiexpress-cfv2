@@ -774,6 +774,21 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `e2e/super-admin.spec.ts` covers `Profil Saya` → codes → recovery login; ≥ 2 mutations red
   (`docs/evidence/DEC-246/mutations.md`); UI gates 0 fail on `/akun` and `/totp` at 1440×900 and 390×844 with
   screenshots; `pnpm check` exit 0; GPT-6.1 Sol review before live deploy.
+- **DEC-247A** Borderless white-gallery brand site `geraiexpress.com` (R2, DEC-247 (1); owner split 2026-11-18: ships
+  first). Allowed Paths: `apps/worker/src/brand/**`, `apps/worker/test/brand/**`, `e2e/brand.spec.ts`,
+  `apps/web-app/public/produk-kasir-loket.webp`, `docs/visual/09`, `DESIGN.md`, `DECISIONS.md`,
+  `docs/evidence/DEC-247/brand-*`, `STATUS.md`, `BUILD-LOG.md`, `TASKS.md`.
+  Accepted Invariants: DEC-245 SEO bounds and factual guards (nine couriers, no invented numbers or competitor names,
+  no price for Pro until decided), no cookies or `/api` on the apex, every SSR interpolation escaped, the 100svh 3D
+  hero kept, the product screenshot taken as a Kasir (no cost/margin on a public page), no new npm dependency, no
+  English browser validation bubble.
+  Done when: `check-page.mjs` 0 fail 0 warn on all ten pages; worker `test/brand` green; `e2e/brand.spec.ts` green at
+  390/768/1280 (mobile `[Masuk][menu]` dropdown with Escape/outside close, pricing radios, Indonesian validation);
+  `dotuiux` 0 fail on `/`, `/biaya-dan-paket`, `/tanya-jawab`; red mutations in `docs/evidence/DEC-247/brand-mutations.md`;
+  screenshots `brand-home-1440/390`, `brand-pricing-1440` (0 overflow, 0 console errors); `pnpm check` exit 0; Sol review.
+- **DEC-247B** Dynamic mini-site, courier logos across the workspace, Indonesian validation in both SPAs (R2,
+  DEC-247 (2)–(4)) — worktree `dec-247b`, after DEC-247A is live. Contract: visual 09 §6.3, DESIGN.md workspace
+  additions.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
   dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
   tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or
@@ -792,7 +807,7 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
 | **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production), 232; ADR-0006 §7 |
-| **Post-launch** | TASK-701..705, DEC-245, DEC-246 | PR-22 (P1), PR-23 (P2), PR-24 (P2), DEC-241 (P2), DEC-242 (P1, done), DEC-245 (brand landing), DEC-246 (Super Admin account + recovery codes) | — |
+| **Post-launch** | TASK-701..705, DEC-245, DEC-246, DEC-247 | PR-22 (P1), PR-23 (P2), PR-24 (P2), DEC-241 (P2), DEC-242 (P1, done), DEC-245 (brand landing), DEC-246 (Super Admin account + recovery codes), DEC-247 (white-gallery + mini-site + courier logos + validation) | — |
 
 Milestone notes carried forward:
 - **M3 additions (DEC-229):** Paket Massal Excel/CSV import + Riwayat Massal, Cek Resi, Cetak Resi Massal, Akun Saya;

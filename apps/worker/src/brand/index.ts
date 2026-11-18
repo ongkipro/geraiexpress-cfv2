@@ -3,7 +3,9 @@
 // `platform_legal_profile` rendering filled fields only (DEC-218), and interactive synthetic counter demos.
 import { notFoundHtml } from "../http/pages"
 import {
+  BIAYA_SCRIPT,
   HOME_SCRIPT,
+  PRODUCT_SHOT,
   renderBiaya,
   renderCaraKerja,
   renderEkspedisi,
@@ -27,6 +29,7 @@ const BRAND_ASSETS = new Set([
   "/og-geraiexpress.png",
   "/three.min.js",
   "/hero-studio-3d.min.js",
+  PRODUCT_SHOT.src,
   ...["jne", "jt", "sicepat", "sap", "lion", "anteraja", "idexpress", "pos", "spx"].map((c) => `/couriers/${c}.svg`),
 ])
 
@@ -99,10 +102,10 @@ export async function handleBrand(request: Request, env: Env, host: string): Pro
                   : path === "/hubungi-kami"
                     ? renderHubungi(legal, appOrigin)
                     : path === "/ketentuan"
-                      ? renderKetentuan(legal)
-                      : renderPrivasi(legal)
+                      ? renderKetentuan(legal, appOrigin)
+                      : renderPrivasi(legal, appOrigin)
 
-  const script = path === "/" ? HOME_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT : undefined
+  const script = path === "/" ? HOME_SCRIPT + BIAYA_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT : path === "/biaya-dan-paket" ? BIAYA_SCRIPT : undefined
   const html = renderShell({
     path,
     meta,
