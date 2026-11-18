@@ -922,3 +922,23 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - CI on `eae92f6` failed again on the reduced-motion resize test: CI's software WebGL draws ~3 fps, so the 60-frame
   settle took > 20 s (the poll limit for "drawing stopped"). Poll every 1 s for up to 90 s, test budget 180 s; product
   code unchanged. Local CI-browser probe: ~6.5 fps, settle done after 62 frames.
+
+## 2026-11-18 — Cloudflare staging + production provisioned and deployed (TASK-109 / TASK-602, owner-authorized)
+
+- Scope: owner authorization 2026-11-18 ("setup gas termasuk geraiexpress.com … langsung comit push deploy"). Created
+  APAC D1 ×2, R2 ×2, KV ×2 and 8 queues; filled real ids, Singapore placement (`placement.region aws:ap-southeast-1`),
+  `TURNSTILE_SITE_KEY` and `CF_SAAS_ZONE_ID` into `wrangler.jsonc` (`c6ed6b0`); control migrations `0000`–`0018` on
+  both D1s; probe tenant rows + `pnpm do:migrate` (DO v23); 10 secrets per env via `wrangler secret bulk`; deployed
+  staging `c51a2428` then production `d3794756`. Full record: `docs/runbooks/production-zones.md` §5.
+- Evidence: `pnpm check` exit 0 on `c6ed6b0` (unit 180, Workers 414, bundle-audit PASS); dry-run deploy listed every
+  binding for both envs; `pnpm probes --env staging` 5/5 PASS; production 5/6 (relay 526, TASK-601); landing, `www`
+  301, `/masuk` on app/owner, hooks and probe hosts 200; `cf-placement: local-SIN`.
+- Gotchas: (1) `wrangler secret bulk` on a Worker that does not exist yet creates it (non-interactive fallback "yes"),
+  so secrets can go in before the first deploy and the `secrets.required` check passes. (2) `ALERT_WEBHOOK_URL` must be
+  empty, not `disabled`: `sendAlert` only skips an empty value; a non-URL becomes a failed delivery on every alert.
+  (3) Fresh Custom Domains resolve publicly at once, but a local `systemd-resolved` that looked them up earlier keeps
+  NXDOMAIN for the zone SOA minimum (1800 s); `resolvectl flush-caches` cleared it for `pnpm do:migrate`.
+- Not done (owner): GitHub protected environments + deploy secrets, Super Admin bootstrap per env, alert webhook +
+  drill, relay Origin CA / rollout (TASK-601), Email Sending inbox tests (TASK-112). No `.delivery` run: this is a live
+  ops record, not a task result; TASK-109/602 stay open.
+

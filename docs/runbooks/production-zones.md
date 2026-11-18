@@ -1,7 +1,7 @@
 # Runbook — Production zones, Cloudflare for SaaS, monitoring (TASK-602, DEC-228, spec 11 §2, OBSERVABILITY.md)
 
-Every step is a **production action: the owner approves each one.** Nothing here has been run against production.
-Order: TASK-109 staging first (same steps on the team test zone), then production.
+Every step is a **production action: the owner approves each one.** §1–§3 ran on 2026-11-18 under the owner's
+explicit authorization (record in §5). Order: TASK-109 staging first, then production.
 
 ## 1. Resources (owner, Cloudflare dashboard or `wrangler`)
 
@@ -50,3 +50,45 @@ approval flow (which would also call the live Partner API):
 
 `pnpm exec wrangler rollback <version-id> --env production` (owner approval). D1/DO migrations are expand-only within a
 release; restore paths in `docs/runbooks/backups-and-restore.md`.
+
+## 5. Live record — 2026-11-18 (owner-authorized, account `ca58f2ac62b7c66e46e6ce654f585034`)
+
+Wrangler ran with OAuth (`env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN pnpm exec wrangler …`) so an inherited
+zone-scoped token never took over. Config commit `c6ed6b0`.
+
+| Resource | Staging | Production |
+|---|---|---|
+| D1 (`--location apac`, `running_in_region` APAC) | `geraiexpress-control-staging` `c25337ba-21be-4ae7-ab55-7c7a8df89bbb` | `geraiexpress-control-production` `e845e4b8-0c24-422d-8b92-0f31d1408ae9` |
+| R2 (location hint APAC) | `geraiexpress-media-staging` | `geraiexpress-media-production` |
+| KV | `geraiexpress-cache-staging` `ca9f844f1d7845cfb71de035884502cb` | `geraiexpress-cache-production` `b560e2279c45431e87620ad52dccb01f` |
+| Queues | `gx-{mengantar-webhooks,mengantar-finance-sync,bulk,hostnames}-staging` | `gx-{mengantar-webhooks,mengantar-finance-sync,bulk,hostnames}-production` |
+| Placement | `aws:ap-southeast-1` (`cf-placement: local-SIN`) | `aws:ap-southeast-1` (`cf-placement: local-SIN`) |
+| Control migrations | `0000`–`0018` applied | `0000`–`0018` applied |
+| Probe tenant (D1 + `pnpm do:migrate`) | `probe-stg.geraimitra.com`, DO v0 → v23 | `probe.geraimitra.com`, DO v0 → v23 |
+| Secrets (`wrangler secret bulk`, values never printed) | 10/10; `MENGANTAR_PARTNER_SECRET` = sandbox Partner secret | 10/10; `MENGANTAR_PARTNER_SECRET` = placeholder until Mengantar issues the production Partner secret |
+| Worker version | `c51a2428-6b43-4a80-afa9-1419cdd72ddb` | `d3794756-571a-40ce-8d69-d736ffb24586` |
+
+`ALERT_WEBHOOK_URL` is set **empty** on both: `telemetry/alerts.ts` skips delivery only for an empty value (a
+non-URL such as `disabled` would turn every alert into a failed fetch), so alerts are `alert.fired` log events until the
+owner sets the channel webhook (`wrangler secret put ALERT_WEBHOOK_URL --env <env>`), then runs the §3 alert drill.
+Zone step 6: `CF_SAAS_API_TOKEN` reads `custom_hostnames/quota` (200) and the fallback origin `fallback.geraimitra.com`
+(`active`). Vars: `TURNSTILE_SITE_KEY` `0x4AAAAAAF6YLggBbRId8AR2`, `CF_SAAS_ZONE_ID` `d07b150f9b2180da692c5787ce1d954a`.
+
+Live HTTPS checks after deploy:
+
+| URL | Result |
+|---|---|
+| `https://geraiexpress.com/`, `/healthz` | 200, 200 (brand landing title "Aplikasi Kasir Agen Kirim Paket Multi-Ekspedisi - GeraiExpress") |
+| `https://www.geraiexpress.com/` | 301 → `https://geraiexpress.com/` |
+| `https://app.geraiexpress.com/masuk`, `/healthz` | 200, 200 (CSP + `x-frame-options: DENY`; `*.map` 404) |
+| `https://owner.geraiexpress.com/masuk`, `/healthz` | 200, 200 |
+| `https://hooks.geraiexpress.com/healthz` | 200 |
+| `https://probe.geraimitra.com/healthz` | 200 |
+| `https://geraimitra.com/` | 404 neutral page (`noindex`, "Halaman tidak ditemukan") |
+| `pnpm probes --env staging` | PASS 5/5 |
+| `pnpm probes --env production` | 5/6 — `relay-health` 526 (Cloudflare cannot validate the relay origin certificate: TASK-601 Origin CA on the `99ribu-prod` Traefik is still an owner step) |
+
+Not done here: GitHub `staging`/`production` protected environments and deploy-workflow secrets (TASK-109), first Super
+Admin bootstrap per environment (TASK-106), alert drill (§3.3), relay rollout (TASK-601), Email Sending inbox tests
+(TASK-112). Rollback: `wrangler rollback <previous version> --env <env>` (§4); the first deploy has no previous version,
+so a rollback means `wrangler delete` of the env Worker after owner approval.
