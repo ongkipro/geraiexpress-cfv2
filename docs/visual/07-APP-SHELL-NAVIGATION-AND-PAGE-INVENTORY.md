@@ -111,10 +111,20 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 
 ### 3.1 Auth & onboarding (`app.`)
 
+DEC-248 auth stage (owner 2026-11-19), for every route in this table and the Super Admin `/masuk` + `/totp`. One white
+viewport (`h-dvh`) with no page footer and no page scroll; the centre scrolls inside itself only when the viewport is
+too short (a phone keyboard). A quiet top bar holds the brand escape on the left: `← GeraiExpress` linking to the brand
+site on `app.`, a static mark on `owner.`. The contextual switch sits on the right: `Belum punya akun? Daftar`,
+`Sudah punya akun? Masuk`, `Kembali`, `Keluar`; on phones only the link shows. The form is a frameless block dead
+centre: 380px for sign-in/OTP/TOTP, 440px for register. It has a 24px `-0.02em` semibold title, a one-line `#64748B`
+subtitle, inputs 44px on phones and 40px on desktop (the largest the DEC-239 desk contract allows), a `Lihat` /
+`Sembunyikan` text toggle inside every password field, and a `#0B4FE3` primary. Not allowed: split screens,
+illustrations, testimonials, card-in-card, and colored alert boxes for routine notices.
+
 | Route | Role | Title | Primary | Content blocks (order) | Notes |
 |---|---|---|---|---|---|
-| `/masuk` | P | Masuk | `Masuk` | email, password, Turnstile, `Lupa kata sandi?`, `Daftar gerai` link | No sidebar; centered 440 px card |
-| `/daftar` | P | Daftar Gerai | `Kirim Kode` | email → 6-digit OTP → password → data gerai → titik jemput (map + `area_id`) → ringkasan | Resumable; step indicator `1/5` |
+| `/masuk` | P | Masuk | `Masuk` | email, password (`Lihat`), `Lupa kata sandi?`, Turnstile; top-right `Belum punya akun? Daftar` | DEC-248 auth stage, 380px, zero scroll |
+| `/daftar-akun` → `/daftar` | P → O | Daftar Gerai · Identitas gerai · Titik jemput kurir | `Kirim Kode` → `Buat Akun` → `Lanjut ke Titik Jemput →` → `Ajukan Gerai` | indicator `1 · Akun — 2 · Gerai — 3 · Titik Jemput`. **1** email → 6-digit code (mono, quiet `Ganti email` / `Kirim ulang`) → name + password. **2** nama gerai, alamat gerai with a fixed `.geraimitra.com` suffix, WhatsApp gerai \| email akun Mengantar. **3** kecamatan search (results float over the form), street, `PIC penjemputan` \| `HP PIC` (pre-filled from WhatsApp gerai), `+ Titik koordinat peta (opsional)` disclosure, Mengantar consent, `← Kembali` + `Ajukan Gerai` (the old summary step is folded in) | DEC-248, 440px, every step zero scroll at 1440×900, 1366×768, 390×844 |
 | `/daftar/status` | O | Status Pengajuan | — | timeline `Diajukan → Ditinjau → Akun Mengantar → Aktif`, contact line | Shown until approved |
 | `/undangan/:token` | P | Gabung sebagai Kasir | `Buat Akun` | outlet name, inviter, password form | 7-day single-use |
 | `/lupa-sandi`, `/atur-sandi/:token` | P | Atur Ulang Kata Sandi | `Kirim Tautan` / `Simpan` | — | — |

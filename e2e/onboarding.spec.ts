@@ -17,7 +17,7 @@ function totp(secretB32: string, at = Date.now()): string {
 }
 
 // Approvals need ≥ 768 px (visual 07 §2); the applicant side runs at every width.
-test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) → Super Admin approves → seller connected", async ({ page, browser, request, viewport }) => {
+test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) → Super Admin approves → seller connected", async ({ page, browser, request, viewport }) => {
   test.skip((viewport?.width ?? 0) < 1280, "approval flow: desktop project (single bootstrap per environment)")
   const email = uniqueEmail("e2e-apply")
   const slug = `e2e${Date.now().toString(36)}`
@@ -37,11 +37,10 @@ test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) →
   await page.getByLabel("Cari kelurahan / kecamatan / kode pos").fill("coblong")
   await page.getByRole("button", { name: /Dago, Coblong/ }).click()
   await page.getByLabel("Alamat lengkap titik jemput").fill("Jl. Uji No. 1")
-  await page.getByLabel("Nama penanggung jawab").fill("Bu Rina")
-  await page.getByLabel("HP penanggung jawab").fill("081234560000")
-  await page.getByRole("button", { name: "Lanjut" }).click()
+  await page.getByLabel("PIC penjemputan").fill("Bu Rina")
+  await expect(page.getByLabel("HP PIC")).toHaveValue("081234560000") // pre-filled from WhatsApp gerai
   await page.getByRole("checkbox").check()
-  await page.getByRole("button", { name: "Kirim Pengajuan" }).click()
+  await page.getByRole("button", { name: "Ajukan Gerai" }).click()
   await expect(page.getByRole("heading", { name: "Status Pengajuan" })).toBeVisible()
 
   // Super Admin (first admin bootstrap in this fresh state, or reuse when another test bootstrapped already).

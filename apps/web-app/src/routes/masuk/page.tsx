@@ -38,22 +38,22 @@ export function MasukPage() {
     <AuthCard
       title="Masuk"
       description="Masuk ke ruang kerja gerai Anda."
-      footer={
+      corner={
         <span>
-          Belum punya akun? <Link to="/daftar-akun" className="font-medium text-primary underline-offset-4 hover:underline">Daftar gerai</Link>
+          <span className="hidden sm:inline">Belum punya akun? </span><Link to="/daftar-akun">Daftar</Link>
         </span>
       }
     >
-      <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         {error ? <FormAlert tone={locked ? "warn" : "danger"}>{error}</FormAlert> : null}
         <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} required />
         <TextField label="Kata sandi" name="password" type="password" autoComplete="current-password" value={password} onChange={setPassword} required />
-        <div className="flex justify-end">
-          <Link to="/lupa-sandi" className="text-base md:text-sm font-medium text-primary underline-offset-4 hover:underline">
+        <div className="-mt-1 flex justify-end">
+          <Link to="/lupa-sandi" className="inline-flex min-h-11 items-center text-sm font-medium text-[#64748B] underline-offset-4 hover:text-[#0F172A] hover:underline md:min-h-9">
             Lupa kata sandi?
           </Link>
         </div>
-        <div ref={turnstileBox} />
+        <div ref={turnstileBox} className="empty:hidden" />
         {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
         <Button type="submit" size="lg" disabled={pending || !ts.ready}>
           {pending ? "Memproses…" : "Masuk"}

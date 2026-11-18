@@ -27,7 +27,7 @@ export function LupaSandiPage() {
   }
 
   return (
-    <AuthCard title="Atur Ulang Kata Sandi" description="Kami kirim tautan untuk membuat kata sandi baru." footer={<Link to="/masuk" className="font-medium text-primary underline-offset-4 hover:underline">Kembali ke Masuk</Link>}>
+    <AuthCard title="Atur Ulang Kata Sandi" description="Kami kirim tautan untuk membuat kata sandi baru." corner={<Link to="/masuk" className="font-medium text-primary underline-offset-4 hover:underline">Kembali ke Masuk</Link>}>
       {sent ? (
         <FormAlert tone="safe">Jika email terdaftar, tautan atur ulang sudah dikirim. Periksa kotak masuk dan folder spam. Tautan berlaku 30 menit.</FormAlert>
       ) : (

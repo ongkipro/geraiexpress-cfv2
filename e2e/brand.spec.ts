@@ -345,7 +345,9 @@ test("Brand DEC-247: beranda memuat paket, perbandingan, FAQ dan langkah penutup
   await expect(second).not.toHaveAttribute("open", "")
   await second.locator("summary").click()
   await expect(second).toHaveAttribute("open", "")
-  await expect(page.locator(".closing .cl-steps li")).toHaveCount(3)
+  // DEC-248: the closing callout no longer lists three steps.
+  await expect(page.locator(".closing .cl-steps")).toHaveCount(0)
+  await expect(page.locator(".closing .row a")).toHaveCount(2)
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
   expect(errors).toEqual([])
 })

@@ -39,13 +39,10 @@ const IC = {
 
 const lockTxt = (t: string) => `<span class="lock">${IC.lock}${t}</span>`
 
-const CLOSING_STEPS = ["Daftar akun pemilik", "Verifikasi titik jemput &amp; akun Mengantar", "Buka kasir &amp; cetak resi pertama"]
-
-/** Closing callout on every page: one centered porcelain stage with three numbered steps, flowing into the footer. */
+/** Closing callout on every page: one quiet centered porcelain stage (title, one sentence, two actions) flowing into the footer. DEC-248 dropped the three-step pills. */
 const closing = (app: string, secondHref: string, secondLabel: string) => `<section class="closing" aria-labelledby="tutup-title"><div class="wrap"><div class="callout">
 <h2 id="tutup-title">Siap membuka loket kirim paket di toko Anda?</h2>
 <p>Gunakan perangkat yang sudah ada di meja kasir. Pengajuan titik jemput ditinjau tim kami dan akun Mengantar gerai terhubung otomatis.</p>
-<ol class="cl-steps" aria-label="Tiga langkah memulai">${CLOSING_STEPS.map((t, i) => `<li><span class="cl-n">${i + 1}</span>${t}</li>`).join("")}</ol>
 <div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai</a><a class="cta ghost" href="${secondHref}">${e(secondLabel)}</a></div>
 </div></div></section>`
 

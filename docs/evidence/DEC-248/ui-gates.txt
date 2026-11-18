@@ -1,0 +1,12 @@
+### dotuiux http://app.geraiexpress.localhost:55187/masuk
+summary: 0 fail · 0 warn · 0 allowed · 4 not checked · 36 pass
+### admin-geometry http://app.geraiexpress.localhost:55187/masuk
+geometry exit 0 fails 0
+### dotuiux http://app.geraiexpress.localhost:55187/daftar-akun
+summary: 0 fail · 0 warn · 0 allowed · 4 not checked · 36 pass
+### admin-geometry http://app.geraiexpress.localhost:55187/daftar-akun
+geometry exit 0 fails 0
+### dotuiux http://owner.geraiexpress.localhost:55187/masuk
+summary: 0 fail · 0 warn · 0 allowed · 4 not checked · 36 pass
+### admin-geometry http://owner.geraiexpress.localhost:55187/masuk
+geometry exit 0 fails 0

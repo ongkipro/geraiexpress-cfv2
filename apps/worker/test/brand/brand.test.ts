@@ -342,7 +342,7 @@ describe("brand site DEC-247", () => {
     }
   })
 
-  it("home parity (DEC-247A): layered showcase, proof band 01/02, pricing + comparison, five FAQ, closing steps", async () => {
+  it("home parity (DEC-247A): layered showcase, proof band 01/02, pricing + comparison, five FAQ, quiet closing (DEC-248)", async () => {
     const h = await html("/")
     // 1. Layered product UI: faded KPI layer behind a floating table card, synthetic data labelled as such.
     expect(h).toContain('<figure class="layers">')
@@ -366,14 +366,16 @@ describe("brand site DEC-247", () => {
     const all = await html("/tanya-jawab")
     for (const q of faq.matchAll(/<summary>([^<]+)<\/summary>/g)) expect(all).toContain(`<summary>${q[1]}</summary>`)
     expect(faq).toContain('<a href="/tanya-jawab">Semua pertanyaan →</a>')
-    // 5. Closing with three numbered steps on every page.
+    // 5. DEC-248 (owner 2026-11-19): the closing is quiet — title, one sentence, two actions; no three-step pills.
     for (const p of PAGES) {
       const c = block(await html(p), '<section class="closing"', "</section>")
-      expect(c, p).toMatch(/<ol class="cl-steps"[^>]*><li><span class="cl-n">1<\/span>Daftar akun pemilik<\/li><li><span class="cl-n">2<\/span>Verifikasi titik jemput &amp; akun Mengantar<\/li><li><span class="cl-n">3<\/span>Buka kasir &amp; cetak resi pertama<\/li><\/ol>/)
+      expect(c, p).toMatch(/^<section class="closing" aria-labelledby="tutup-title"><div class="wrap"><div class="callout">\n<h2 id="tutup-title">Siap membuka loket kirim paket di toko Anda\?<\/h2>\n<p>[^<]+<\/p>\n<div class="row"><a class="cta" href="[^"]+\/daftar-akun">Daftar Gerai<\/a><a class="cta ghost" href="\/[a-z-]+">[^<]+<\/a><\/div>/)
+      expect(c, p).not.toMatch(/cl-steps|cl-n|<ol/)
     }
     const css = /<style>([\s\S]*?)<\/style>/.exec(h)![1]!
     expect(css).toContain('.faq summary::after{content:"+"')
     expect(css).toContain(".faq details[open] summary::after{transform:rotate(45deg)")
+    expect(css).not.toContain(".cl-steps")
   })
 })
 

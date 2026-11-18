@@ -16,7 +16,8 @@ test.describe("TASK-105 accounts", () => {
     await page.getByLabel("Kata sandi").fill("sandi-e2e-kuat-1")
     await page.getByRole("button", { name: "Buat Akun" }).click()
     // The account step continues into the outlet application (TASK-203).
-    await expect(page.getByText("Langkah 3/5 · Data gerai")).toBeVisible()
+    // DEC-248: `1 · Akun — 2 · Gerai — 3 · Titik Jemput`, now on Tahap 2.
+    await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("2 · Gerai")
     // No gerai yet → the workspace sends the applicant to the application status page.
     await page.goto(`${APP}/`)
     await expect(page).toHaveURL(/\/daftar\/status$/)

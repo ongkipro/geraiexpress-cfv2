@@ -1169,3 +1169,23 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `/simulasi-kasir` with zero `<select>`, WebP 200 `image/webp`, app/owner `/masuk` and `probe.geraimitra.com` 200;
   probes staging 5/5, production 6/6 (twice). No D1 or tenant migration.
 
+## 2026-11-19 — DEC-248 Quiet brand closing + minimalist auth stage + `1 · 2 · 3` register (branch `dec-248`, awaiting Sol review)
+
+- Scope: the owner directive of 2026-11-19. The brand closing drops the three step pills. `AuthCard` becomes one
+  white stage: `h-dvh`, no footer, no page scroll, the centre scrolling inside only on a very short viewport. The top
+  bar holds `← GeraiExpress` (brand site on `app.`, static on `owner.`) and the contextual switch (`corner`, which
+  replaces the old below-card `footer` prop). The form is frameless at 380/440px. `TextField` gains a `Lihat` /
+  `Sembunyikan` toggle for every password field, an OTP style and a fixed suffix (`.geraimitra.com`). Register is
+  `1 · Akun — 2 · Gerai — 3 · Titik Jemput`; Tahap 3 folds in the old summary step and pre-fills `HP PIC` from
+  WhatsApp gerai. The `POST /onboarding/application` payload is unchanged.
+- Recorded choices: auth inputs are 44px on phones and 40px on desktop, the largest the DEC-239 desk contract
+  allows; the owner's 42–44px would fail `admin-geometry`. Owner-requested no-homepage/logo changes respected: only the
+  closing pills were removed from the brand site. The consent sentence is kept word for word (legal), only smaller.
+- Gotchas:
+  1. `scrollHeight <= innerHeight` alone cannot prove zero scroll once the centre scrolls inside itself; the e2e also
+     requires the centre's own `scrollHeight == clientHeight`.
+  2. At 390×844, Tahap 3 overflowed by 74px with the PIC fields stacked; they now sit side by side with shorter
+     labels (`PIC penjemputan`, `HP PIC`).
+  3. An empty Turnstile container still took a flex gap (`empty:hidden`).
+  4. The indicator's `#94A3B8` failed contrast; it is now `#64748B`.
+

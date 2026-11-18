@@ -1,14 +1,14 @@
 {
   "activeRun": null,
   "lastRun": {
-    "finishedAt": "2026-11-18T19:31:55Z",
-    "result": "PASS",
-    "runId": "RUN-20261118T191916Z-38f6cb8b"
+    "finishedAt": "2026-11-18T20:01:45Z",
+    "result": "BLOCKED",
+    "runId": "RUN-20261118T193629Z-7980f3f5"
   },
-  "observedHead": "3c424be0ecf7dcfa21b92827c0d0bee29e7507f3",
+  "observedHead": "9fe447e1246d31705a15557233ea2889870d9b5b",
   "observedState": "IN_PROGRESS",
   "project": "geraiexpress-cfv2",
   "schemaVersion": 1,
   "statusAuthority": "STATUS.md",
-  "updatedAt": "2026-11-18T19:31:55Z"
+  "updatedAt": "2026-11-18T20:01:45Z"
 }

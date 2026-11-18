@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { AuthCard, FormAlert } from "../../components/auth/auth-card"
+import { AuthCard, FormAlert, RegisterSteps } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
@@ -67,36 +67,43 @@ export function DaftarAkunPage() {
     })
   }
 
-  const stepNo = step === "email" ? 1 : step === "otp" ? 2 : 3
+  // DEC-248: Tahap 1 of `1 · Akun — 2 · Gerai — 3 · Titik Jemput`; its three sub-states share one calm frame.
+  const quiet = "inline-flex min-h-11 items-center text-sm font-medium text-[#64748B] underline-offset-4 hover:text-[#0F172A] hover:underline disabled:opacity-50 md:min-h-9"
   return (
     <AuthCard
+      wide
       title="Daftar Gerai"
-      description={<span className="num">Langkah {stepNo}/5 · Akun pemilik</span>}
-      footer={
+      progress={<RegisterSteps current={1} />}
+      description={
+        step === "email" ? "Mulai dengan email pemilik. Kami kirim kode 6 digit." : step === "otp" ? `Kode dikirim ke ${email}. Berlaku 10 menit.` : "Nama dan kata sandi untuk masuk ke ruang kerja."
+      }
+      corner={
         <span>
-          Sudah punya akun? <Link to="/masuk" className="font-medium text-primary underline-offset-4 hover:underline">Masuk</Link>
+          <span className="hidden sm:inline">Sudah punya akun? </span><Link to="/masuk">Masuk</Link>
         </span>
       }
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
       {step === "email" ? (
-        <form className="flex flex-col gap-5" onSubmit={sendCode} noValidate>
-          <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} hint="Kode verifikasi 6 digit dikirim ke email ini." required />
+        <form className="flex flex-col gap-4" onSubmit={sendCode} noValidate>
+          <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
           <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
         </form>
       ) : null}
       {step === "otp" ? (
-        <form className="flex flex-col gap-5" onSubmit={verify} noValidate>
-          <FormAlert tone="safe">Kode dikirim ke {email}. Berlaku 10 menit.</FormAlert>
-          <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required />
+        <form className="flex flex-col gap-4" onSubmit={verify} noValidate>
+          <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
           <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
-          <Button type="button" variant="outline" size="lg" disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang kode</Button>
+          <div className="-mt-1 flex items-center justify-between">
+            <button type="button" className={quiet} disabled={pending} onClick={() => { setStep("email"); setCode(""); setError(null) }}>Ganti email</button>
+            <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
+          </div>
         </form>
       ) : null}
-      {step === "email" || step === "otp" ? <div ref={turnstileBox} /> : null}
+      {step === "email" || step === "otp" ? <div ref={turnstileBox} className="empty:hidden" /> : null}
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
-        <form className="flex flex-col gap-5" onSubmit={complete} noValidate>
+        <form className="flex flex-col gap-4" onSubmit={complete} noValidate>
           <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />
           <TextField label="Kata sandi" name="password" type="password" autoComplete="new-password" value={password} onChange={setPassword} error={fieldErrors.password} hint="Minimal 8 karakter." required />
           <Button type="submit" size="lg" disabled={pending}>{pending ? "Menyimpan…" : "Buat Akun"}</Button>

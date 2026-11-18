@@ -438,9 +438,6 @@ ul.rates button:hover{background:var(--action);color:#fff}
 .closing h2{margin:0 auto 8px}
 .closing p{margin:0 auto;color:var(--body);max-width:54ch}
 .closing .row{justify-content:center;margin-top:24px}
-.cl-steps{list-style:none;margin:22px 0 0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
-.cl-steps li{display:inline-flex;align-items:center;gap:9px;background:#fff;border-radius:999px;padding:7px 16px 7px 7px;box-shadow:var(--shadow-float);font-size:.9375rem;font-weight:600;color:var(--ink);text-align:left}
-.cl-n{display:inline-grid;place-items:center;width:26px;height:26px;flex-shrink:0;border-radius:999px;background:var(--tint);color:var(--action);font:700 .8125rem/1 var(--mono)}
 .more{margin:22px 0 0}.more a{color:var(--action);font-weight:650;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}.more a:hover{text-decoration:underline}
 .show-grid{display:grid;gap:40px;align-items:center}@media(min-width:960px){.show-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px}}
 .layers{position:relative;margin:0;background:var(--tile);border-radius:24px;padding:24px 16px 18px;overflow:hidden;min-width:0}
