@@ -1074,4 +1074,5 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol R6-F1: a race regression must order its steps with barriers, never sleeps — hold the old response
   (`route.fetch()` then a gated `fulfill`), open the gate only after the newer result is visible, then await delivery
   and a render before asserting. The barrier version fails at all three viewports under the mutation.
+- Sol R7 APPROVE on `7fe4b76`. Release run `RUN-20261118T142750Z-8cb203d3` (TASKS.md declared this time).
 

@@ -107,3 +107,8 @@ R6-F1 run `RUN-20261118T141234Z-68d34359` (test-only change): e2e (30 expected, 
 `pnpm check` (unit 195, Workers 445) PASS on the first attempt; boundary REVIEW_REQUIRED (R4) with nothing out of
 scope. The run closes BLOCKED pending Sol R7.
 
+## Sol R7 (`R7-sol.md`) — APPROVE on `7fe4b76`
+
+R6-F1 resolved; no new P0-P2. Release run `RUN-20261118T142750Z-8cb203d3` at the reviewed head re-executes worker,
+migrations, isolation, e2e and `pnpm check`, carries the review and finishes PASS before the release commit.
+
