@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { CheckCircle2Icon, MonitorOffIcon, PackageIcon, QrCodeIcon } from "lucide-react"
+import { CourierLogo } from "../../components/admin/courier-logo"
 import { createViewSync, DISPLAY_CHANNEL, isHintFor } from "./display-sync"
 
 // `/kasir/layar-pelanggan` (TASK-701, PR-22, spec 03 §5, visual 07): the chromeless customer-facing screen. Mounted
@@ -123,7 +124,11 @@ function Checkout({ s, qrisUrl }: { s: Extract<State, { kind: "checkout" }>; qri
       <div className="flex min-w-0 flex-col gap-5">
         <div>
           <p className="text-sm font-medium text-slate-500">Rincian pembayaran</p>
-          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">{s.courier}</h1>
+          {/* The courier is the catalog display name (server-built); it only picks a logo here. */}
+          <div className="mt-1 flex items-center gap-3">
+            <CourierLogo name={s.courier} decorative size="lg" />
+            <h1 className="min-w-0 text-2xl font-bold sm:text-3xl">{s.courier}</h1>
+          </div>
           <p className="mt-1 text-sm text-slate-600 tabular-nums sm:text-base">
             {[s.billableWeightGram ? `Berat ditagih ${kg(s.billableWeightGram)}` : null, s.eta, s.destination ? `Tujuan ${s.destination}` : null].filter(Boolean).join(" · ")}
           </p>
@@ -173,7 +178,7 @@ function Paid({ s }: { s: Extract<State, { kind: "paid" }> }) {
         <h1 className="text-[40px] leading-none font-bold">Terima kasih!</h1>
         <dl className="flex flex-col gap-2 text-base tabular-nums sm:text-lg">
           <div className="flex justify-between gap-4"><dt className="text-slate-600">Nomor kiriman</dt><dd className="font-semibold">INV {s.inv}</dd></div>
-          {s.courier ? <div className="flex justify-between gap-4"><dt className="text-slate-600">Ekspedisi</dt><dd className="text-right font-medium">{s.courier}</dd></div> : null}
+          {s.courier ? <div className="flex justify-between gap-4"><dt className="text-slate-600">Ekspedisi</dt><dd className="flex items-center justify-end gap-2 text-right font-medium"><CourierLogo name={s.courier} decorative />{s.courier}</dd></div> : null}
           {s.awb ? <div className="flex justify-between gap-4"><dt className="text-slate-600">No. resi</dt><dd className="font-mono font-medium break-all">{s.awb}</dd></div> : null}
           <div className="flex justify-between gap-4"><dt className="text-slate-600">Total</dt><dd className="font-semibold">{rp(s.totalIdr)}</dd></div>
           {s.cashReceivedIdr !== null ? <div className="flex justify-between gap-4"><dt className="text-slate-600">Tunai diterima</dt><dd className="font-medium">{rp(s.cashReceivedIdr)}</dd></div> : null}

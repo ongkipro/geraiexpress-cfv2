@@ -35,7 +35,7 @@ import { balanceSufficient } from "./finance/reserve"
 import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
 import { desk as returnDesk, handback as returnHandback, intake as returnIntake, issueCode as issueReturnCode, type ReturnError } from "./returns"
 import { bucketCounts, expireClaims, listBucket, moveClaim, noteConflict, openClaim, type Bucket, type ExceptionError, type ExceptionRow } from "./exceptions"
-import { insertDraft, parseDraft, publicProfile, publicTrack, purgeDrafts, readDraft, unlock as unlockTrack, type DraftInput, type DraftRow, type PublicProfile, type PublicTrack } from "./minisite"
+import { insertDraft, parseDraft, publicLogo, publicProfile, publicShell, publicTrack, purgeDrafts, readDraft, unlock as unlockTrack, type DraftInput, type DraftRow, type PublicProfile, type PublicShell, type PublicTrack } from "./minisite"
 import { claimPreset, maskingState, printedIdentity, readSettings, releasePreset, writeSettings, type Platform, type SettingsInput } from "./masking"
 import { isSenderMasked, maskPhone } from "@gx/domain/masking"
 import type { MaskPreset } from "@gx/domain/masking"
@@ -215,7 +215,7 @@ export type ExceptionsValue =
   | { kind: "moved" }
 export type ClaimPacket = { slug: string; kind: string; status: string; deadline_at: number | null; note: string | null; evidenceKeys: string[]; awb_number: string; courier_code: string; mengantar_order_code: string | null; actual_weight_gram: number | null; billable_weight_gram: number | null; content_declaration_text: string | null; cod_goods_amount_idr: number | null; issued_at: number | null }
 
-export type { PublicProfile, PublicTrack, DraftRow }
+export type { PublicProfile, PublicShell, PublicTrack, DraftRow }
 
 export type VaultRefusal = "TENANT_MISMATCH" | "TENANT_NOT_PROVISIONED" | "TENANT_NOT_READY"
 export type WebhookRefusal = VaultRefusal | VerifyFailure | "UNKNOWN_TOKEN"
@@ -1730,6 +1730,20 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     return { ok: true, value: publicProfile(this.ctx.storage.sql) }
+  }
+
+  /** Mini-site page shell (DEC-247): public profile + outlet pin + logo presence. Read only. */
+  async minisiteShell(tenantId: string): Promise<VaultResult<PublicShell | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: publicShell(this.ctx.storage.sql) }
+  }
+
+  /** R2 key of the outlet logo for the public `/logo` route (purpose `logo`, image types, this tenant only). Read only. */
+  async minisiteLogo(tenantId: string): Promise<VaultResult<{ key: string; contentType: string } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    return { ok: true, value: publicLogo(this.ctx.storage.sql, tenantId) }
   }
 
   /** Public QR pre-booking: allocates an INV slug (purpose `minisite_qr`) and stores the typed data for 48 h. */

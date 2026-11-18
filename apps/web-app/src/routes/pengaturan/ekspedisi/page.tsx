@@ -5,6 +5,7 @@ import { Switch } from "../../../components/ui/switch"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { api, ApiError } from "../../../lib/api"
 import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
+import { CourierLogo } from "../../../components/admin/courier-logo"
 import { SettingsLayout } from "../index/shared"
 import { toast } from "sonner"
 
@@ -25,7 +26,6 @@ const DISCOUNT_STATE: Record<string, string> = { belum_diterapkan: "belum ditera
 const pct = (bps: number) => `${(bps / 100).toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`
 
 const MODE_LABEL: Record<PickupMode, string> = { scheduled_pickup: "Dijemput kurir", drop_off_only: "Antar ke agen" }
-const MARK: Record<string, string> = { JNE: "JNE", SiCepat: "SCP", Sap: "SAP", iDexpress: "IDE", JT: "J&T", lion: "LION", anteraja: "ATR", pos: "POS", spx: "SPX", ninja: "NJV" }
 
 /**
  * Service pill label (DEC-240): a courier can hold several regular services (J&T Express + J&T ECO, SAP Express + SAP
@@ -92,7 +92,7 @@ export function PengaturanEkspedisiPage() {
               return (
                 <li key={r.courierCode} className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center md:px-5", !r.enabled && "bg-slate-50/60")}>
                   <div className="flex min-w-0 items-start gap-3">
-                    <span aria-hidden className={cn("grid h-8 w-12 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", !r.enabled && "opacity-60")}>{MARK[r.courierCode] ?? r.courierCode.slice(0, 4).toUpperCase()}</span>
+                    <CourierLogo code={r.courierCode} name={r.name} decorative className={cn(!r.enabled && "opacity-60")} />
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <span className={cn("text-sm font-semibold text-slate-950", !r.enabled && "text-muted-foreground")}>{r.name}</span>
                       <span className="flex flex-wrap gap-1.5">

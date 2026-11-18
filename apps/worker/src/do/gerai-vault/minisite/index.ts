@@ -21,6 +21,39 @@ export function publicProfile(sql: SqlStorage): PublicProfile | null {
   return o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, address: o.street_address, area: o.subdistrict_name, logoMediaId: o.logo_media_id } : null
 }
 
+/** Image types the public `/logo` route may serve (a `logo` upload can never be served as a PDF or anything else). */
+const LOGO_TYPES = "('image/png','image/jpeg','image/webp')"
+
+/**
+ * The mini-site page shell (DEC-247 §2.2): the public profile plus the outlet pin and whether a servable logo exists.
+ * `logoVersion` (a prefix of the media id) only busts caches of `/logo`; the media id itself never leaves the object.
+ */
+export type PublicShell = Omit<PublicProfile, "logoMediaId"> & { latitude: number | null; longitude: number | null; logoVersion: string | null }
+
+export function publicShell(sql: SqlStorage): PublicShell | null {
+  const o = sql
+    .exec<{ name: string; whatsapp: string | null; opening_hours: string | null; street_address: string | null; subdistrict_name: string | null; latitude: number | null; longitude: number | null; logo_id: string | null }>(
+      `SELECT o.name, o.whatsapp, o.opening_hours, o.street_address, o.subdistrict_name, o.latitude, o.longitude, m.id AS logo_id
+       FROM tenant_outlets o LEFT JOIN media_objects m ON m.id = o.logo_media_id AND m.purpose = 'logo' AND m.content_type IN ${LOGO_TYPES}
+       WHERE o.is_default = 1 LIMIT 1`,
+    )
+    .toArray()[0]
+  return o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, address: o.street_address, area: o.subdistrict_name, latitude: o.latitude, longitude: o.longitude, logoVersion: o.logo_id ? o.logo_id.slice(0, 8) : null } : null
+}
+
+/** The outlet's own logo for the public `/logo` route: only a `logo`-purpose image of this tenant, else null. */
+export function publicLogo(sql: SqlStorage, tenantId: string): { key: string; contentType: string } | null {
+  return (
+    sql
+      .exec<{ key: string; contentType: string }>(
+        `SELECT m.r2_key AS key, m.content_type AS contentType FROM tenant_outlets o JOIN media_objects m ON m.id = o.logo_media_id
+         WHERE o.is_default = 1 AND m.purpose = 'logo' AND m.tenant_id = ? AND m.content_type IN ${LOGO_TYPES} LIMIT 1`,
+        tenantId,
+      )
+      .toArray()[0] ?? null
+  )
+}
+
 /** `Rina Kartika` → `R*** K******` (spec 05 §3). */
 export function initialsMask(name: string | null | undefined): string | null {
   const t = (name ?? "").trim()

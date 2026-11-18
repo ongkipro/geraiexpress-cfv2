@@ -335,3 +335,105 @@ test("Brand DEC-247: beranda memuat paket, perbandingan, FAQ dan langkah penutup
   expect(errors).toEqual([])
 })
 
+
+// DEC-247B Part 5: the four simulator dropdowns are custom listboxes (no native <select>): mouse pick updates the rates
+// and the receipt; keyboard ArrowDown/Enter picks; Escape closes with focus back; opening one closes another; an
+// outside tap closes.
+test("Brand DEC-247B: dropdown custom simulasi kasir (klik, keyboard, Escape, satu terbuka, klik luar)", async ({ page }) => {
+  const apex = APP.replace("app.", "")
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  await page.goto(`${apex}/simulasi-kasir`)
+  await expect(page.locator("select")).toHaveCount(0)
+  const kota = page.locator("#kota-btn"), kotaList = page.locator("#kota-list")
+  const firstPrice = await page.locator("#rates button").first().textContent()
+  for (const id of ["kota", "cod", "pack", "bayar"]) {
+    const box = (await page.locator(`#${id}-btn`).boundingBox())!
+    expect(box.height, id).toBeGreaterThanOrEqual(44)
+  }
+  await kota.click()
+  await expect(kota).toHaveAttribute("aria-expanded", "true")
+  await expect(kotaList).toBeVisible()
+  await kotaList.getByRole("option", { name: /Medan Kota/ }).click()
+  await expect(kotaList).toBeHidden()
+  await expect(kota).toBeFocused()
+  await expect(page.locator("#kota-val")).toContainText("Medan Kota")
+  await expect(page.locator("#kota-opt-3")).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator("#kota")).toHaveValue("3")
+  await expect.poll(() => page.locator("#rates button").first().textContent()).not.toBe(firstPrice)
+  // Keyboard on another control.
+  const pack = page.locator("#pack-btn")
+  await pack.focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(page.locator("#pack-list")).toBeVisible()
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("Enter")
+  await expect(page.locator("#pack-val")).toContainText("Bubble wrap")
+  await expect(pack).toBeFocused()
+  // One open at a time; Escape; outside tap.
+  await page.locator("#bayar-btn").click()
+  await expect(page.locator("#bayar-list")).toBeVisible()
+  await page.locator("#cod-btn").click()
+  await expect(page.locator("#bayar-list")).toBeHidden()
+  await expect(page.locator("#cod-list")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.locator("#cod-list")).toBeHidden()
+  await expect(page.locator("#cod-btn")).toBeFocused()
+  // Focus moved without a pointer or Tab (assistive tech): opening another listbox still closes the first.
+  await page.locator("#bayar-btn").click()
+  await page.locator("#kota-btn").focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(page.locator("#kota-list")).toBeVisible()
+  await expect(page.locator("#bayar-list")).toBeHidden()
+  await page.keyboard.press("Escape")
+  await page.locator("#bayar-btn").click()
+  await page.locator("#bayar-list").getByRole("option", { name: "QRIS gerai" }).click()
+  await kota.click()
+  await page.locator("h1").click()
+  await expect(kotaList).toBeHidden()
+  // The receipt reads the hidden inputs.
+  await page.getByRole("button", { name: /^Pilih J&T Express/ }).click()
+  await expect(page.locator("#struk")).toContainText("Medan Kota, Kota Medan")
+  await expect(page.locator("#struk")).toContainText("Packing Tambahan  Rp 3.000")
+  await expect(page.locator("#struk")).toContainText("Cara Bayar: QRIS gerai")
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+  expect(errors).toEqual([])
+})
+
+// DEC-247B Part 1: /cara-kerja jump strip and pipeline (pulse only while on screen; still under reduced motion);
+// /tanya-jawab pill index; the phone footer puts its two link columns side by side.
+test("Brand DEC-247B: halaman dalam (lompat langkah, pipeline, indeks FAQ, footer 2 kolom)", async ({ page, browser }, info) => {
+  const apex = APP.replace("app.", "")
+  await page.goto(`${apex}/cara-kerja`)
+  await page.locator('.jump a[href="#langkah-4"]').click()
+  await expect(page).toHaveURL(/#langkah-4$/)
+  await expect(page.locator("#langkah-4-title")).toBeInViewport()
+  const pipe = page.locator("[data-pipeline]")
+  await pipe.scrollIntoViewIfNeeded()
+  await expect(pipe).toHaveClass(/is-playing/)
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect(pipe).not.toHaveClass(/is-playing/)
+  const still = await browser.newContext({ reducedMotion: "reduce", viewport: page.viewportSize()! })
+  const sp = await still.newPage()
+  await sp.goto(`${apex}/cara-kerja`)
+  await sp.locator("[data-pipeline]").scrollIntoViewIfNeeded()
+  await sp.waitForTimeout(400)
+  await expect(sp.locator("[data-pipeline]")).not.toHaveClass(/is-playing/)
+  await expect(sp.locator(".pulse")).toBeHidden()
+  expect(await sp.locator(".node").first().evaluate((n) => getComputedStyle(n).backgroundColor)).toBe("rgb(11, 79, 227)")
+  await still.close()
+
+  await page.goto(`${apex}/tanya-jawab`)
+  await page.locator('.faq-index a[href="#perangkat-cetak"]').click()
+  await expect(page.locator("#perangkat-cetak-title")).toBeInViewport()
+
+  const cols = await page.locator("footer .fcol").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)))
+  if (info.project.name !== "desktop-1280") expect(cols[0]).toBe(cols[1])
+  const links = await page.locator("#peta-situs a").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+  for (const h of links) expect(h).toBeGreaterThanOrEqual(24)
+  for (const p of ["/fitur", "/cara-kerja", "/tanya-jawab", "/hubungi-kami", "/ekspedisi", "/simulasi-kasir"]) {
+    await page.goto(`${apex}${p}`)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), p).toBeLessThanOrEqual(0)
+    await expect(page.locator(".phead .eyebrow"), p).toBeVisible()
+  }
+})

@@ -1,0 +1,277 @@
+### dotuiux /kasir (exit 0)
+dotuiux check http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir
+viewports 390/1366/1536 · reduced motion at 390
+mode: --surface admin (body ≥ 14px; public hero-height and first-viewport-words skipped)
+
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)
+            390/1366/1536px div "Barang berbahaya (DG) · baterai, cairan," — inside form "1Tujuan & spesifikasi paketNon-CODCOD Ba"
+ALLOWED     primary-actions      > 1 primary per viewport, > 3 button-like in first viewport (§14)
+            allowed: admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
+ALLOWED     nav-label            nav/tab label > 16 chars or wraps (§16)
+            allowed: tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
+NOT CHECKED contrast             text contrast < 4.5:1 (large < 3:1) (§4)
+NOT CHECKED first-viewport-words > 60 words in the first viewport (public surface) (§16)
+NOT CHECKED hero-height          hero > 85% of viewport with no next-section peek (public surface) (§16)
+PASS        tiny-text, overflow-x, target-size, input-zoom, zoom-lock, img-alt, contact-count, contact-placement, floating-widget, placeholder-content, lcp-entrance, reduced-motion, loop-pause, blank-noopener, whatsapp-green, duplicate-href, body-size, h1-length, sidebar-group, marker-count, emphasis, icon-overload, stock-image, image-reuse, blur, display-tracking, heading-skip, section-count, eyebrow-overuse, numbered-labels, mono-overuse, transition-all, ease-in, duration
+note: contrast not measured at 390px for 15 text element(s) over an image, gradient, video, overlay, or off-screen: span "Kiriman Satuan", span "BB", h1 "Kiriman Satuan", …; check them by hand
+note: contrast not measured at 1366px for 32 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Paket Massal", …; check them by hand
+note: contrast not measured at 1536px for 32 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Paket Massal", …; check them by hand
+
+summary: 0 fail · 1 warn · 2 allowed · 3 not checked · 34 pass
+Gates measure harm and slop signals, not taste: review the live render before sign-off.
+
+
+### admin-geometry /kasir (exit 0)
+# admin-geometry: desk (DEC-239)
+
+URL: http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir
+
+- PASS 390px root-font (fontSize; allowed 16; seen 16)
+- PASS 390px text-floor (textSize; min 12; seen 12, 14, 16, 20)
+- PASS 390px input-font-mobile (fontSize; allowed 16; seen 16)
+- PASS 390px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 390px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 390px gradient (gradient; forbidden; seen none)
+- PASS 390px icon-tile (iconTile; forbidden; seen none)
+- PASS 390px touch-target (minSide; min 44; seen 44)
+- PASS 390px touch-target-toggle (labelTarget; min 44; seen 48)
+- PASS 1366px root-font (fontSize; allowed 16; seen 16)
+- PASS 1366px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1366px button-height (height; allowed 32/36/40; seen 32, 36)
+- PASS 1366px input-height (height; allowed 36/40; seen 36)
+- PASS 1366px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1366px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1366px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1366px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1366px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1366px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1366px shadow (shadowBlur; max 3; seen 2)
+- PASS 1366px gradient (gradient; forbidden; seen none)
+- PASS 1366px icon-tile (iconTile; forbidden; seen none)
+- PASS 1366px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+- PASS 1536px root-font (fontSize; allowed 16; seen 16)
+- PASS 1536px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1536px button-height (height; allowed 32/36/40; seen 32, 36)
+- PASS 1536px input-height (height; allowed 36/40; seen 36)
+- PASS 1536px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1536px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1536px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1536px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1536px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1536px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1536px shadow (shadowBlur; max 3; seen 2)
+- PASS 1536px gradient (gradient; forbidden; seen none)
+- PASS 1536px icon-tile (iconTile; forbidden; seen none)
+- PASS 1536px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+
+
+### dotuiux /kasir/cek-cepat (exit 0)
+dotuiux check http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir%2Fcek-cepat
+viewports 390/1366/1536 · reduced motion at 390
+mode: --surface admin (body ≥ 14px; public hero-height and first-viewport-words skipped)
+
+WARN        body-size            dominant paragraph text < 16px (admin: < 14px) (§16)
+            390/1366/1536px body copy — 12px
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)
+            390/1366/1536px div "Barang berbahaya (DG) · baterai, cairan," — inside form "1Tujuan & spesifikasi paketNon-CODCOD Ba"
+ALLOWED     primary-actions      > 1 primary per viewport, > 3 button-like in first viewport (§14)
+            allowed: admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
+ALLOWED     nav-label            nav/tab label > 16 chars or wraps (§16)
+            allowed: tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
+NOT CHECKED contrast             text contrast < 4.5:1 (large < 3:1) (§4)
+NOT CHECKED first-viewport-words > 60 words in the first viewport (public surface) (§16)
+NOT CHECKED hero-height          hero > 85% of viewport with no next-section peek (public surface) (§16)
+NOT CHECKED eyebrow-overuse      small uppercase/tracked kicker above > 50% of section headings (TASK-174)
+PASS        tiny-text, overflow-x, target-size, input-zoom, zoom-lock, img-alt, contact-count, contact-placement, floating-widget, placeholder-content, lcp-entrance, reduced-motion, loop-pause, blank-noopener, whatsapp-green, duplicate-href, h1-length, sidebar-group, marker-count, emphasis, icon-overload, stock-image, image-reuse, blur, display-tracking, heading-skip, section-count, numbered-labels, mono-overuse, transition-all, ease-in, duration
+note: contrast not measured at 390px for 14 text element(s) over an image, gradient, video, overlay, or off-screen: span "Cek Ongkir", span "BB", h1 "Cek Ongkir Cepat", …; check them by hand
+note: contrast not measured at 1366px for 27 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+note: contrast not measured at 1536px for 27 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+
+summary: 0 fail · 2 warn · 2 allowed · 4 not checked · 32 pass
+Gates measure harm and slop signals, not taste: review the live render before sign-off.
+
+
+### admin-geometry /kasir/cek-cepat (exit 0)
+# admin-geometry: desk (DEC-239)
+
+URL: http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir%2Fcek-cepat
+
+- PASS 390px root-font (fontSize; allowed 16; seen 16)
+- PASS 390px text-floor (textSize; min 12; seen 12, 14, 16, 20)
+- PASS 390px input-font-mobile (fontSize; allowed 16; seen 16)
+- PASS 390px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 390px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 390px gradient (gradient; forbidden; seen none)
+- PASS 390px icon-tile (iconTile; forbidden; seen none)
+- PASS 390px touch-target (minSide; min 44; seen 44)
+- PASS 390px touch-target-toggle (labelTarget; min 44; seen 48)
+- PASS 1366px root-font (fontSize; allowed 16; seen 16)
+- PASS 1366px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1366px button-height (height; allowed 32/36/40; seen 36)
+- PASS 1366px input-height (height; allowed 36/40; seen 36)
+- PASS 1366px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1366px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1366px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1366px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1366px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1366px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1366px shadow (shadowBlur; max 3; seen 2)
+- PASS 1366px gradient (gradient; forbidden; seen none)
+- PASS 1366px icon-tile (iconTile; forbidden; seen none)
+- PASS 1366px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+- PASS 1536px root-font (fontSize; allowed 16; seen 16)
+- PASS 1536px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1536px button-height (height; allowed 32/36/40; seen 36)
+- PASS 1536px input-height (height; allowed 36/40; seen 36)
+- PASS 1536px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1536px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1536px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1536px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1536px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1536px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1536px shadow (shadowBlur; max 3; seen 2)
+- PASS 1536px gradient (gradient; forbidden; seen none)
+- PASS 1536px icon-tile (iconTile; forbidden; seen none)
+- PASS 1536px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+
+
+### dotuiux /kasir/cek-resi (exit 0)
+dotuiux check http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir%2Fcek-resi
+viewports 390/1366/1536 · reduced motion at 390
+mode: --surface admin (body ≥ 14px; public hero-height and first-viewport-words skipped)
+
+ALLOWED     primary-actions      > 1 primary per viewport, > 3 button-like in first viewport (§14)
+            allowed: admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
+ALLOWED     nav-label            nav/tab label > 16 chars or wraps (§16)
+            allowed: tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
+NOT CHECKED contrast             text contrast < 4.5:1 (large < 3:1) (§4)
+NOT CHECKED first-viewport-words > 60 words in the first viewport (public surface) (§16)
+NOT CHECKED hero-height          hero > 85% of viewport with no next-section peek (public surface) (§16)
+NOT CHECKED eyebrow-overuse      small uppercase/tracked kicker above > 50% of section headings (TASK-174)
+NOT CHECKED mono-overuse         > 12% of visible text in a monospace face outside code/tables (TASK-174)
+PASS        tiny-text, overflow-x, target-size, input-zoom, zoom-lock, img-alt, contact-count, contact-placement, floating-widget, placeholder-content, lcp-entrance, reduced-motion, loop-pause, blank-noopener, whatsapp-green, duplicate-href, body-size, h1-length, sidebar-group, marker-count, emphasis, icon-overload, card-in-card, stock-image, image-reuse, blur, display-tracking, heading-skip, section-count, numbered-labels, transition-all, ease-in, duration
+note: contrast not measured at 390px for 7 text element(s) over an image, gradient, video, overlay, or off-screen: span "Cek Resi", span "BB", h1 "Cek Resi", …; check them by hand
+note: contrast not measured at 1366px for 20 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+note: contrast not measured at 1536px for 20 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+
+summary: 0 fail · 0 warn · 2 allowed · 5 not checked · 33 pass
+Gates measure harm and slop signals, not taste: review the live render before sign-off.
+
+
+### admin-geometry /kasir/cek-resi (exit 0)
+# admin-geometry: desk (DEC-239)
+
+URL: http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fkasir%2Fcek-resi
+
+- PASS 390px root-font (fontSize; allowed 16; seen 16)
+- PASS 390px text-floor (textSize; min 12; seen 12, 14, 16, 20)
+- PASS 390px input-font-mobile (fontSize; allowed 16; seen 16)
+- PASS 390px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 390px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 390px gradient (gradient; forbidden; seen none)
+- PASS 390px icon-tile (iconTile; forbidden; seen none)
+- PASS 390px touch-target (minSide; min 44; seen 44)
+- NOT-CHECKED 390px touch-target-toggle (labelTarget; min 44; seen none)
+- PASS 1366px root-font (fontSize; allowed 16; seen 16)
+- PASS 1366px text-floor (textSize; min 12; seen 12, 14, 24)
+- PASS 1366px button-height (height; allowed 32/36/40; seen 36, 40)
+- PASS 1366px input-height (height; allowed 36/40; seen 36)
+- PASS 1366px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1366px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1366px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1366px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1366px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1366px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1366px shadow (shadowBlur; max 3; seen 2)
+- PASS 1366px gradient (gradient; forbidden; seen none)
+- PASS 1366px icon-tile (iconTile; forbidden; seen none)
+- PASS 1366px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+- PASS 1536px root-font (fontSize; allowed 16; seen 16)
+- PASS 1536px text-floor (textSize; min 12; seen 12, 14, 24)
+- PASS 1536px button-height (height; allowed 32/36/40; seen 36, 40)
+- PASS 1536px input-height (height; allowed 36/40; seen 36)
+- PASS 1536px input-font-desktop (fontSize; allowed 14; seen 14)
+- PASS 1536px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1536px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1536px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1536px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1536px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1536px shadow (shadowBlur; max 3; seen 2)
+- PASS 1536px gradient (gradient; forbidden; seen none)
+- PASS 1536px icon-tile (iconTile; forbidden; seen none)
+- PASS 1536px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+
+
+### dotuiux /pengaturan/ekspedisi (exit 0)
+dotuiux check http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fpengaturan%2Fekspedisi
+viewports 390/1366/1536 · reduced motion at 390
+mode: --surface admin (body ≥ 14px; public hero-height and first-viewport-words skipped)
+
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)
+            390/390/390/390/390/390px span "Reguler · COD · diskon 20% (sesuai)" — inside div "Daftar ekspedisi9 dari 9 aktifJNEReguler"
+            390/390/390/390px span "Cargo · diskon 20% (belum diterapkan)" — inside div "Daftar ekspedisi9 dari 9 aktifJNEReguler"
+            390px div "Penjemputan JNE" — inside div "Daftar ekspedisi9 dari 9 aktifJNEReguler"
+            390px div "Penjemputan SiCepat" — inside div "Daftar ekspedisi9 dari 9 aktifJNEReguler"
+            390px div "Penjemputan SAP Express" — inside div "Daftar ekspedisi9 dari 9 aktifJNEReguler"
+            … 6 more
+ALLOWED     primary-actions      > 1 primary per viewport, > 3 button-like in first viewport (§14)
+            allowed: admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
+ALLOWED     nav-label            nav/tab label > 16 chars or wraps (§16)
+            allowed: tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
+NOT CHECKED contrast             text contrast < 4.5:1 (large < 3:1) (§4)
+NOT CHECKED first-viewport-words > 60 words in the first viewport (public surface) (§16)
+NOT CHECKED hero-height          hero > 85% of viewport with no next-section peek (public surface) (§16)
+NOT CHECKED eyebrow-overuse      small uppercase/tracked kicker above > 50% of section headings (TASK-174)
+PASS        tiny-text, overflow-x, target-size, input-zoom, zoom-lock, img-alt, contact-count, contact-placement, floating-widget, placeholder-content, lcp-entrance, reduced-motion, loop-pause, blank-noopener, whatsapp-green, duplicate-href, body-size, h1-length, sidebar-group, marker-count, emphasis, icon-overload, stock-image, image-reuse, blur, display-tracking, heading-skip, section-count, numbered-labels, mono-overuse, transition-all, ease-in, duration
+note: contrast not measured at 390px for 47 text element(s) over an image, gradient, video, overlay, or off-screen: span "Ekspedisi Aktif", span "BB", h1 "Ekspedisi Aktif", …; check them by hand
+note: contrast not measured at 1366px for 72 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+note: contrast not measured at 1536px for 72 text element(s) over an image, gradient, video, overlay, or off-screen: span "Gerai Contoh", span "Dashboard", span "Buat Pengiriman", …; check them by hand
+
+summary: 0 fail · 1 warn · 2 allowed · 4 not checked · 33 pass
+Gates measure harm and slop signals, not taste: review the live render before sign-off.
+
+
+### admin-geometry /pengaturan/ekspedisi (exit 0)
+# admin-geometry: desk (DEC-239)
+
+URL: http://app.geraiexpress.localhost:55185/internal/dev/preview?token=***&as=ev-logo-mwme6x3t-jp%40contoh.test&to=%2Fpengaturan%2Fekspedisi
+
+- PASS 390px root-font (fontSize; allowed 16; seen 16)
+- PASS 390px text-floor (textSize; min 12; seen 12, 14, 20)
+- NOT-CHECKED 390px input-font-mobile (fontSize; allowed 16; seen none)
+- PASS 390px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 390px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 390px gradient (gradient; forbidden; seen none)
+- PASS 390px icon-tile (iconTile; forbidden; seen none)
+- PASS 390px touch-target (minSide; min 44; seen 44)
+- PASS 390px touch-target-toggle (labelTarget; min 44; seen 44)
+- PASS 1366px root-font (fontSize; allowed 16; seen 16)
+- PASS 1366px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1366px button-height (height; allowed 32/36/40; seen 36)
+- NOT-CHECKED 1366px input-height (height; allowed 36/40; seen none)
+- NOT-CHECKED 1366px input-font-desktop (fontSize; allowed 14; seen none)
+- PASS 1366px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1366px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1366px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1366px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1366px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1366px shadow (shadowBlur; max 3; seen 2)
+- PASS 1366px gradient (gradient; forbidden; seen none)
+- PASS 1366px icon-tile (iconTile; forbidden; seen none)
+- PASS 1366px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+- PASS 1536px root-font (fontSize; allowed 16; seen 16)
+- PASS 1536px text-floor (textSize; min 12; seen 12, 14, 16, 24)
+- PASS 1536px button-height (height; allowed 32/36/40; seen 36)
+- NOT-CHECKED 1536px input-height (height; allowed 36/40; seen none)
+- NOT-CHECKED 1536px input-font-desktop (fontSize; allowed 14; seen none)
+- PASS 1536px sidebar-width (width; allowed 256/48/56; seen 256)
+- PASS 1536px header-height (height; allowed 64; seen 64)
+- NOT-CHECKED 1536px table-head-height (height; allowed 40; seen none)
+- NOT-CHECKED 1536px table-cell-font (fontSize; allowed 14; seen none)
+- PASS 1536px radius (borderRadius; allowed 4/6/8/10/12; seen 8, 10)
+- PASS 1536px shadow (shadowBlur; max 3; seen 2)
+- PASS 1536px gradient (gradient; forbidden; seen none)
+- PASS 1536px icon-tile (iconTile; forbidden; seen none)
+- PASS 1536px accent-surfaces (accentSurface; ≤ 5 distinct; seen rgb(46, 71, 186), rgb(30, 126, 52), rgb(154, 91, 0))
+
+

@@ -4,6 +4,7 @@
 import { notFoundHtml } from "../http/pages"
 import {
   BIAYA_SCRIPT,
+  CARA_SCRIPT,
   HOME_SCRIPT,
   PRODUCT_SHOT,
   renderBiaya,
@@ -16,6 +17,7 @@ import {
   renderPrivasi,
   renderSimulasi,
   renderTanyaJawab,
+  SEL_SCRIPT,
   SIM_SCRIPT,
 } from "./pages"
 import { BRAND_PAGES, renderShell, type Legal } from "./seo"
@@ -105,7 +107,7 @@ export async function handleBrand(request: Request, env: Env, host: string): Pro
                       ? renderKetentuan(legal, appOrigin)
                       : renderPrivasi(legal, appOrigin)
 
-  const script = path === "/" ? HOME_SCRIPT + BIAYA_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT : path === "/biaya-dan-paket" ? BIAYA_SCRIPT : undefined
+  const script = path === "/" ? HOME_SCRIPT + BIAYA_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT + SEL_SCRIPT : path === "/cara-kerja" ? CARA_SCRIPT : path === "/biaya-dan-paket" ? BIAYA_SCRIPT : undefined
   const html = renderShell({
     path,
     meta,

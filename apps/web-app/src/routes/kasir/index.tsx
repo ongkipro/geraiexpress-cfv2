@@ -353,7 +353,7 @@ export function KasirPage() {
   return (
     <div className="flex flex-col gap-4 pb-28 lg:pb-0">
       <PageTitle title="Kiriman Satuan" description="Cek ongkir, pilih ekspedisi, isi pihak, bayar dan cetak — satu layar.">
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-start">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start">
           <ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} />
           {displayButton}
         </div>

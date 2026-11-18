@@ -8,16 +8,26 @@ import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { PageTitle } from "../../../shell/states"
 import { Panel } from "../../../components/admin/page"
+import { CourierLogo, type CourierKey } from "../../../components/admin/courier-logo"
 
 // `/kasir/cek-resi` (spec 03 §1.4, DEC-229): one search (INV / AWB / HP penerima) → timeline per koli. An AWB not
 // created by this gerai gets the courier's public tracking page instead (Mengantar only returns the seller's orders).
 interface Item { slug: string; awb: string | null; courier: string; service: string; status: string; dispatchState: string; recipient: string | null; area: string | null; createdAt: number; history: Array<{ date: string; status: string | null; category: string | null }> | null; events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }> }
 type Result = { kind: "found"; items: Item[] } | { kind: "foreign"; awb: string } | { kind: "none" }
-// Official public tracking pages (couriers' own sites).
-const COURIER_TRACK: Array<[string, string]> = [
-  ["JNE", "https://www.jne.co.id/tracking-package"],
-  ["J&T", "https://jet.co.id/track"],
-  ["SiCepat", "https://www.sicepat.com/checkAwb"],
+// The nine active Mengantar couriers' own public tracking pages (DEC-247), checked on the couriers' official sites on
+// 2026-11-18. None is prefilled with the AWB: JNE and J&T gate the lookup behind a captcha and no other site documents
+// a query parameter, so the operator pastes the resi there. SiCepat's tracking box is on its home page (its old
+// `/checkAwb` redirects there); `sap-express.id` redirects to `sapx.id`.
+const COURIER_TRACK: Array<{ key: CourierKey; name: string; url: string }> = [
+  { key: "jne", name: "JNE", url: "https://www.jne.co.id/tracking-package" },
+  { key: "jt", name: "J&T Express", url: "https://jet.co.id/track" },
+  { key: "sicepat", name: "SiCepat", url: "https://www.sicepat.com/" },
+  { key: "sap", name: "SAP Express", url: "https://www.sapx.id/id/cek-awb" },
+  { key: "lion", name: "Lion Parcel", url: "https://lionparcel.com/track/stt" },
+  { key: "anteraja", name: "Anteraja", url: "https://anteraja.id/id/tracking" },
+  { key: "idexpress", name: "iDexpress", url: "https://idexpress.com/lacak-paket" },
+  { key: "pos", name: "Pos Indonesia", url: "https://www.posindonesia.co.id/id/tracking" },
+  { key: "spx", name: "SPX Express", url: "https://spx.co.id/track" },
 ]
 const when = (ms: number) => new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms)
 
@@ -56,8 +66,15 @@ export function CekResiPage() {
           <Panel>
             <h2 className="text-sm font-semibold md:text-base">Resi ini bukan kiriman gerai Anda</h2>
             <p className="mt-1 text-base md:text-sm text-muted-foreground">Lacak resi <span className="font-medium tabular-nums text-foreground">{res.awb}</span> di situs ekspedisinya:</p>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {COURIER_TRACK.map(([name, url]) => <li key={name}><a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-lg border px-4 text-base md:text-sm font-medium">{name}</a></li>)}
+            <ul className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 lg:grid-cols-3">
+              {COURIER_TRACK.map((c) => (
+                <li key={c.key}>
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="flex h-12 items-center gap-3 rounded-lg border border-slate-200 bg-white pr-3 pl-1.5 text-base font-medium transition-colors outline-none hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm">
+                    <CourierLogo code={c.key} name={c.name} decorative className="border-0" />
+                    <span className="min-w-0 truncate">{c.name}</span>
+                  </a>
+                </li>
+              ))}
             </ul>
           </Panel>
         ) : null}
@@ -67,7 +84,7 @@ export function CekResiPage() {
               <Panel as="li" key={it.slug}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h2 className="text-sm font-semibold md:text-base">{res.items.length > 1 ? `Koli ${i + 1} · ` : ""}<Link to="/kiriman/$slug" params={{ slug: it.slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {it.slug.toUpperCase()}</Link></h2>
-                  <p className="text-base md:text-sm tabular-nums">{it.courier} · {it.awb ?? "belum ada resi"}</p>
+                  <p className="flex items-center gap-2 text-base md:text-sm tabular-nums"><CourierLogo name={it.courier} decorative />{it.courier} · {it.awb ?? "belum ada resi"}</p>
                 </div>
                 <p className="text-base md:text-sm text-muted-foreground">{it.recipient ?? "—"}{it.area ? ` · ${it.area}` : ""} · dibuat {when(it.createdAt)}</p>
                 <ol className="mt-3 flex flex-col gap-2 border-l-2 pl-4">

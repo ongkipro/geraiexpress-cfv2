@@ -1120,3 +1120,32 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   200; probes staging 5/5, production 6/6. One production probe right after deploy reported `owner-health` 200 at
   1335 ms (> 1000 ms latency limit, a cold start); three re-runs were 141–298 ms and 6/6 PASS. No D1 or tenant migration.
 
+## 2026-11-19 — DEC-247B Brand inner pages, mini-site owner rules, courier logos, validation (branch `dec-247b`, awaiting Sol review)
+
+- Scope: the owner mandate after DEC-247A went live, in six parts. (1) Nine brand inner pages adopt the `adsbook.id`
+  inner-page architecture: PageHead, PillarRows + CapabilityList, StepFlow + SignalPipelineStrip, grouped FAQ, two
+  contact panels. (2) Mini-site owner rules. (3) Courier logos and tracking links in the workspace. (4) Indonesian
+  validation. (5) Custom listboxes on `/simulasi-kasir`. (6) Compact footer rhythm. The brand site was built by the
+  integrator. The mini-site and the workspace parts were finished by the two DEC-247 agents, resumed in `dec-247b`
+  (rebased on `b0af329`) on disjoint files, then reviewed and gated here.
+- Content guards: every claim on the new pages comes from mechanics the product already has and the existing pages
+  already state. Examples: CSV 200 rows, the 48-hour QR, reprint with a reason, two books, Kasir projection, and the
+  PR-14 contact book. The UI cards are labelled as illustrations with example data. Pillar 01 reuses the Kasir
+  screenshot.
+- Recorded exception: footer text links use a 28px rhythm on the owner's request, below AGENTS.md §3.6's 44px phone
+  target. This applies to footer text links only; WCAG 2.5.8's 24px is met (DECISIONS DEC-247, visual 09 §6.2).
+  Visible breadcrumbs stay (centered) because visual 09 §3 ties `BreadcrumbList` JSON-LD to the visible trail.
+- Gotchas:
+  1. A grid `li` (square bullets) turned an inline `<code>` into its own grid column. Each point is now wrapped in one
+     `<span>`, asserted by test.
+  2. The first run of mutation T247B-M2 ("opening one listbox closes the others") survived, because a mouse click
+     already closes the first listbox through the outside-tap handler. The e2e now moves focus without a pointer and
+     the mutation goes red.
+  3. A closed listbox hides its options from `getByRole`; assert by option id.
+  4. `dec-247b` had no local `.dev.vars`, so every e2e failed at signup until a synthetic one was generated (local
+     random values, gitignored).
+  5. The workspace agent found an 18px overflow on `/kasir/cek-cepat` at 768: quote rows with the "Buat Kiriman"
+     button now stay on one line only from `lg`.
+- Not covered: there is no screenshot of a mini-site on a custom domain, because e2e cannot seed a custom hostname.
+  The footer rule is proven by a worker test on `kirim.tokoberkah.id` for `/`, `/kirim` and `/lacak`.
+

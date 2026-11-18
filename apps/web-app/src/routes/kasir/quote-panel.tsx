@@ -11,6 +11,7 @@ import { api, ApiError } from "../../lib/api"
 import { ErrorState, LoadingState } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { CheckboxField, Panel } from "../../components/admin/page"
+import { CourierLogo } from "../../components/admin/courier-logo"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
 
 // Quote form + courier cards (visual 05 §2, PR-06). Used by `Cek Ongkir Cepat` (no INV) and by `Buat Pengiriman`
@@ -84,9 +85,6 @@ const courierRule = (code: string, cod: boolean) => {
   const r = RULES[code]
   return [cod ? r?.cod : null, r?.any].filter(Boolean).join(" · ")
 }
-const CODE: Record<string, string> = { JNE: "JNE", SiCepat: "SCP", Sap: "SAP", iDexpress: "IDE", JT: "J&T", lion: "LION", anteraja: "ATR", pos: "POS", spx: "SPX", ninja: "NJV" }
-/** Short courier mark for the row badge (cargo/ECO share their courier's mark). */
-const courierCode = (c: { serviceCode: string; courierCode?: string }) => CODE[c.courierCode ?? ""] ?? CODE[c.serviceCode] ?? c.serviceCode.slice(0, 4).toUpperCase()
 
 /** Step heading inside a POS card: numbered dot + 14/16px title. */
 export function StepTitle({ n, title, id }: { n: number; title: string; id?: string }) {
@@ -379,7 +377,9 @@ export function QuotePanel({
                     onClick={selectable ? () => select!.onSelect(req!, c) : undefined}
                     onKeyDown={selectable ? (e) => (e.key === " " || e.key === "Enter") && (e.preventDefault(), select!.onSelect(req!, c)) : undefined}
                     className={cn(
-                      "flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:flex-nowrap",
+                      "flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2.5 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      // Logo + name + price + the `Buat Kiriman dari Tarif Ini` button do not fit one tablet line: wrap below lg.
+                      onChoose ? "lg:flex-nowrap" : "sm:flex-nowrap",
                       selectable && "cursor-pointer hover:border-slate-300 hover:bg-slate-50/70",
                       checked ? "border-primary bg-accent/60 hover:border-primary hover:bg-accent/60" : "border-slate-200 bg-white",
                       !c.available && "bg-slate-50/60",
@@ -390,9 +390,8 @@ export function QuotePanel({
                         {checked ? <span className="size-2 rounded-full bg-primary" /> : null}
                       </span>
                     ) : null}
-                    <span aria-hidden className={cn("grid h-7 w-11 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600", !c.available && "opacity-50")}>
-                      {courierCode(c)}
-                    </span>
+                    {/* The name is printed beside it: decorative (cargo/ECO share their courier's logo). */}
+                    <CourierLogo code={c.courierCode ?? c.serviceCode} name={c.courierName || c.name} decorative className={cn(!c.available && "opacity-50")} />
                     <span className="flex min-w-[8rem] flex-1 flex-col gap-0.5">
                       <span className={cn("flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-slate-900", !c.available && "text-muted-foreground")}>
                         <span className="truncate">{c.name}</span>

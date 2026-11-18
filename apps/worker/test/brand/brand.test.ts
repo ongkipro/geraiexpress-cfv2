@@ -217,9 +217,89 @@ describe("brand site DEC-247", () => {
 
   it("/tanya-jawab: open hairline <details> rows, no boxed cards", async () => {
     const h = await html("/tanya-jawab")
-    expect(h.match(/<details[ >]/g)?.length).toBe(12)
-    expect(h.match(/<div class="faq-group"><h2>/g)?.length).toBe(3)
+    expect(h.match(/<details[ >]/g)?.length).toBe(14)
+    // DEC-247B: four 4fr/8fr groups, each reachable from a pill in the page head.
+    const ids = [...h.matchAll(/<section class="fgroup" id="([a-z-]+)"/g)].map((m) => m[1])
+    expect(ids).toEqual(["pendaftaran-lokasi", "perangkat-cetak", "saldo-cod-keuangan", "operasional-retur"])
+    const head = h.slice(h.indexOf('<section class="phead"'), h.indexOf("</section>", h.indexOf('<section class="phead"')))
+    expect([...head.matchAll(/<a href="#([a-z-]+)">/g)].map((m) => m[1])).toEqual(ids)
     expect(h).not.toContain('class="card"')
+  })
+
+  it("DEC-247B inner pages: centered PageHead with eyebrow pill and dot grid on all nine inner pages", async () => {
+    const eyebrows: Record<string, string> = {
+      "/fitur": "Fitur loket", "/ekspedisi": "Jaringan kurir", "/cara-kerja": "Alur kemitraan", "/biaya-dan-paket": "Skema kemitraan",
+      "/simulasi-kasir": "Simulasi meja kasir", "/tanya-jawab": "Pusat jawaban", "/hubungi-kami": "Hubungi kami",
+      "/ketentuan": "Ketentuan layanan", "/privasi": "Kebijakan privasi",
+    }
+    for (const [p, eyebrow] of Object.entries(eyebrows)) {
+      const h = await html(p)
+      expect(h, p).toMatch(new RegExp(`<section class="phead" aria-labelledby="page-title"><div class="dots" aria-hidden="true"></div><div class="wrap head">\n<p class="eyebrow"><span class="esq" aria-hidden="true"></span>${eyebrow}</p>\n<h1 id="page-title">`))
+      expect(h.match(/<h1[ >]/g)?.length, p).toBe(1)
+    }
+    const css = await (await get("/")).text()
+    expect(css).toContain("radial-gradient(rgb(15 23 42 / .09) 1px,transparent 1.4px);background-size:22px 22px")
+    expect(css).toContain(".phead .head{position:relative;display:grid;gap:16px;justify-items:center;text-align:center}")
+  })
+
+  it("DEC-247B /fitur: six alternating pillar rows (screen, artifacts, specs) and the everyday capability list", async () => {
+    const h = await html("/fitur")
+    const rows = [...h.matchAll(/<article class="prow( flip)?" id="([a-z-]+)"/g)]
+    expect(rows.map((m) => m[2])).toEqual(["kasir", "kirim-dari-rumah", "paket-massal", "pickup", "retur", "keuangan"])
+    expect(rows.map((m) => Boolean(m[1]))).toEqual([false, true, false, true, false, true])
+    // Each point is one grid item (a bare <code> would otherwise become its own column).
+    expect(h.match(/<ul class="sqlist">(?:<li><span>[^]*?<\/span><\/li>){3}<\/ul>/g)?.length).toBe(6)
+    expect(h).toContain('<figure class="shot pshot"><div class="shot-stage"><img src="/produk-kasir-loket.webp"')
+    expect(h.match(/<dl class="spec"/g)?.length).toBe(2)
+    expect(h).toContain("<dt>200 baris</dt>")
+    const caps = h.slice(h.indexOf('<dl class="caps">'), h.indexOf("</dl>", h.indexOf('<dl class="caps">')))
+    expect(caps.match(/<div><dt>/g)?.length).toBe(6)
+    expect(h).toContain('<h2 id="harian-title">Dan yang Anda perlukan setiap hari</h2>')
+    expect(h).not.toContain('class="grid3"')
+  })
+
+  it("DEC-247B /cara-kerja: jump strip, five step rows with roles, and the motion-guarded pipeline", async () => {
+    const h = await html("/cara-kerja")
+    expect([...h.matchAll(/<li><a href="#(langkah-\d)">/g)].map((m) => m[1])).toEqual(["langkah-1", "langkah-2", "langkah-3", "langkah-4", "langkah-5"])
+    expect(h.match(/<article class="prow( flip)?" id="langkah-\d"/g)?.length).toBe(5)
+    expect(h.match(/<dl class="who"><div><dt>[^<]+<\/dt><dd>[^<]+<\/dd><\/div><div><dt>Sistem GeraiExpress &amp; Mengantar<\/dt>/g)?.length).toBe(5)
+    expect(h).toContain('<section class="sec tight pipeline" aria-labelledby="alur-title" data-pipeline>')
+    expect(h.match(/<li class="stop" style="--n:\d">/g)?.length).toBe(5)
+    expect(h).toContain('<li class="pulse" aria-hidden="true"></li>')
+    expect(h).toContain('IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return')
+    expect(h).toContain("@media(prefers-reduced-motion:reduce){.pipeline .node,.pipeline .pulse{animation:none!important")
+    expect(h).not.toContain('<ol class="steps">')
+  })
+
+  it("DEC-247B /hubungi-kami: two borderless porcelain panels, partners vs senders and recipients", async () => {
+    const h = await html("/hubungi-kami")
+    expect([...h.matchAll(/<section class="cpanel" aria-labelledby="([a-z-]+)">\n<h2 id="\1">([^<]+)<\/h2>/g)].map((m) => m[2])).toEqual([
+      "Calon Mitra &amp; Pemilik Gerai",
+      "Pengirim / Penerima Paket di Salah Satu Gerai",
+    ])
+    expect(h).toMatch(/<a href="[^"]+\/masuk">Masuk ke ruang kerja gerai<\/a>/)
+    expect(h).toContain("UU PDP")
+    expect(h).not.toContain('class="tile"')
+  })
+
+  it("DEC-247B /simulasi-kasir: zero native <select>, four custom listboxes feeding hidden inputs", async () => {
+    const h = await html("/simulasi-kasir")
+    expect(h).not.toMatch(/<select[ >]/)
+    const ids = [...h.matchAll(/<div class="sel" data-sel><input type="hidden" id="(\w+)" value="[^"]*">\n<button type="button" id="\1-btn" class="sel-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="\1-list" aria-labelledby="\1-lbl \1-val">/g)].map((m) => m[1])
+    expect(ids).toEqual(["kota", "cod", "pack", "bayar"])
+    expect(h.match(/role="listbox" tabindex="-1"/g)?.length).toBe(4)
+    expect(h.match(/<svg class="opt-check"/g)?.length).toBe(4 + 2 + 3 + 3)
+    expect(h).toContain('<form class="sim-stage" id="sim"')
+    expect(h).not.toMatch(/<form[^>]*style=|<div class="grid2" style=|<h2 style=/)
+    expect(h).toContain("list.forEach(function(o){if(o!==me)o.close(false)})")
+  })
+
+  it("DEC-247B footer: compact link rhythm and two link columns on phones", async () => {
+    const css = await (await get("/")).text()
+    expect(css).toContain(".fcol ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;align-content:start}")
+    expect(css).toContain(".fcol a{color:var(--body);text-decoration:none;display:inline-flex;align-items:center;min-height:28px;line-height:1.45}")
+    expect(css).toContain(".fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 24px}.fbrand{grid-column:1/-1}")
+    expect(css).not.toContain("min-height:44px}.fcol a:hover")
   })
 
   it("DEC-247 asset: the product screenshot is served as WebP from the allow-list", async () => {

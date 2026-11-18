@@ -316,8 +316,8 @@ ${breadcrumbHtml}
 <main id="konten-utama">${o.body}</main>
 <footer class="ftr"><div class="wrap">
 <div class="fgrid">
-<div><a class="brand" href="/" aria-label="${e(brand)}, by Mengantar, ke beranda"><img src="/logo.svg" alt="" width="38" height="22"><span class="brand-txt"><span class="brand-name">${e(brand)}</span><span class="brand-by">by Mengantar</span></span></a>
-<p style="margin:0;max-width:44ch">Perangkat lunak meja kasir, cetak resi thermal, dan rekonsiliasi saldo multi-ekspedisi untuk loket dan toko di seluruh Indonesia.</p></div>
+<div class="fbrand"><a class="brand" href="/" aria-label="${e(brand)}, by Mengantar, ke beranda"><img src="/logo.svg" alt="" width="38" height="22"><span class="brand-txt"><span class="brand-name">${e(brand)}</span><span class="brand-by">by Mengantar</span></span></a>
+<p class="fbrand-p">Perangkat lunak meja kasir, cetak resi thermal, dan rekonsiliasi saldo multi-ekspedisi untuk loket dan toko di seluruh Indonesia.</p></div>
 <nav class="fcol" id="peta-situs" aria-labelledby="ft-produk"><h3 id="ft-produk">Produk &amp; Panduan</h3><ul>
 <li><a href="/fitur">Fitur Meja Kasir</a></li>
 <li><a href="/ekspedisi">Daftar Ekspedisi &amp; Kargo</a></li>

@@ -786,9 +786,20 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   390/768/1280 (mobile `[Masuk][menu]` dropdown with Escape/outside close, pricing radios, Indonesian validation);
   `dotuiux` 0 fail on `/`, `/biaya-dan-paket`, `/tanya-jawab`; red mutations in `docs/evidence/DEC-247/brand-mutations.md`;
   screenshots `brand-home-1440/390`, `brand-pricing-1440` (0 overflow, 0 console errors); `pnpm check` exit 0; Sol review.
-- **DEC-247B** Dynamic mini-site, courier logos across the workspace, Indonesian validation in both SPAs (R2,
-  DEC-247 (2)–(4)) — worktree `dec-247b`, after DEC-247A is live. Contract: visual 09 §6.3, DESIGN.md workspace
-  additions.
+- **DEC-247B** Brand inner pages + dynamic mini-site, courier logos across the workspace, Indonesian validation
+  (R2, DEC-247 (1)–(4); owner mandate 2026-11-18/19, parts 1–6) — worktree `dec-247b`, after DEC-247A is live.
+  Contract: visual 09 §6.2 (inner pages, simulator listboxes, footer rhythm) and §6.3 (mini-site owner decisions),
+  DESIGN.md workspace additions. Allowed: `apps/worker/src/{brand,minisite}/**`,
+  `apps/worker/src/do/gerai-vault/{index.ts,minisite/**}`, `apps/worker/test/{brand,minisite}/**`,
+  `apps/web-app/**`, `apps/web-owner/src/main.tsx`, `e2e/{brand,minisite,courier-logos}.spec.ts`,
+  `docs/evidence/DEC-247B/**`, contract docs. Done when: nine inner pages open with the centered PageHead; `/fitur`
+  six pillar rows + capability list; `/cara-kerja` jump strip, five role rows, motion-guarded pipeline;
+  `/tanya-jawab` four 4fr/8fr groups with a pill index; `/hubungi-kami` two porcelain panels; `/simulasi-kasir` has
+  zero `<select>` (four keyboard-operable listboxes); compact footer; mini-site footer attribution only on
+  `*.${TENANT_ZONE}` and WhatsApp out of the header (unit + e2e); nine courier logos + official tracking links in the
+  workspace; Indonesian validation in both SPAs and the public mini-site forms; `check-page.mjs` 10/10 0 fail 0 warn,
+  unit, Workers, e2e `brand` + `minisite` + `courier-logos`, red mutations, screenshots in `docs/evidence/DEC-247B/`,
+  `pnpm check`.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
   dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
   tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or

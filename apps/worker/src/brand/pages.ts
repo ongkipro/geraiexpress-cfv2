@@ -49,7 +49,12 @@ const closing = (app: string, secondHref: string, secondLabel: string) => `<sect
 <div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai</a><a class="cta ghost" href="${secondHref}">${e(secondLabel)}</a></div>
 </div></div></section>`
 
-const pageHead = (h1: string, lead: string) => `<div class="wrap phead"><h1>${h1}</h1><p class="lead">${lead}</p></div>`
+/** Inner-page opening (adsbook `PageHead` parity): masked dot grid, mono eyebrow pill, centered h1 and lead. */
+const pageHead = (eyebrow: string, h1: string, lead: string, extra = "") => `<section class="phead" aria-labelledby="page-title"><div class="dots" aria-hidden="true"></div><div class="wrap head">
+<p class="eyebrow"><span class="esq" aria-hidden="true"></span>${eyebrow}</p>
+<h1 id="page-title">${h1}</h1>
+<p class="lead">${lead}</p>${extra}
+</div></section>`
 
 export const HOME_SCRIPT = `<script defer src="/three.min.js"></script><script defer src="/hero-studio-3d.min.js"></script><script>
 (function(){
@@ -315,37 +320,121 @@ ${faqList(HOME_FAQ)}
 ${closing(app, "/fitur", "Lihat Semua Fitur")}`
 }
 
-export function renderFitur(app: string): string {
-  const mods: Array<[string, string]> = [
-    ["Kasir satu layar &amp; cek cepat", "Di komputer, layar kasir terbagi 60/40: pengirim, penerima, berat gram, dimensi, dan packing di kiri; ringkasan tagihan dan tombol terbitkan resi tetap di kanan."],
-    ["Kirim dari rumah (QR INV)", "Pelanggan mengisi alamat dari rumah lewat situs gerai Anda lalu membawa QR <code>INV</code> ke loket. Kasir memindai QR, menimbang ulang, menerima pembayaran, dan mencetak label."],
-    ["Paket massal CSV (200 baris)", "Pelanggan toko online yang mengirim puluhan paket sekaligus cukup mengunggah berkas CSV, membetulkan baris alamat yang kurang tepat, lalu menerbitkan dan mencetak resi massal."],
-    ["Pickup &amp; Surat Jalan kurir", "Saat kurir menjemput, kasir memindai resi per ekspedisi. Paket milik kurir lain langsung ditolak dengan bunyi peringatan agar tidak tertukar."],
-    ["Meja Retur &amp; klaim kendala", "Paket gagal kirim yang kembali dicatat ke Meja Retur dan menghasilkan Kode Ambil bagi pengirim asli. Paket terlambat, rusak, atau hilang dipantau tenggat klaimnya."],
-    ["Keuangan dua buku &amp; peran aman", "Akun Kasir hanya menampilkan harga jual pelanggan. Akun Pemilik melihat Saldo Aman setelah cadangan ongkir retur, mutasi Mengantar, laba per kiriman, dan selisih sinkronisasi."],
-  ]
-  return `${pageHead("Fitur kasir loket, cetak resi &amp; keuangan agen", "Enam modul terpadu yang memisahkan tugas cepat kasir di depan pelanggan dari pengawasan margin, saldo, dan rekonsiliasi milik pemilik gerai.")}
+type Pillar = { id: string; label: string; title: string; points: string[]; visual: string }
 
-<section class="sec tight" aria-labelledby="modul-title"><div class="wrap">
-<div class="shead"><h2 id="modul-title">Dari meja depan sampai pembukuan belakang</h2><p class="sub">Setiap layar dirancang agar satu paket selesai dalam hitungan detik, tanpa salah ketik alamat maupun salah serah kurir.</p></div>
-<div class="grid3">${mods.map(([t, p], i) => `<article class="tile"><span class="idx">${String(i + 1).padStart(2, "0")}</span><h3>${t}</h3><p>${p}</p></article>`).join("")}</div>
+const spec = (label: string, items: Array<[string, string]>) =>
+  `<dl class="spec" aria-label="${label}">${items.map(([v, l]) => `<div><dt>${v}</dt><dd>${l}</dd></div>`).join("")}</dl>`
+const stage = (inner: string) => `<div class="stage pstage" aria-hidden="true">${inner}</div>`
+
+/** `/fitur` pillars (adsbook `PillarRows` parity): a real screen, a synthetic UI artifact, or published numbers. */
+const PILLARS: Pillar[] = [
+  {
+    id: "kasir",
+    label: "Kasir loket",
+    title: "Satu layar kasir dari timbang sampai resi terbit",
+    points: [
+      "Di komputer, layar terbagi 60/40: pengirim, penerima, berat gram, dimensi, dan packing di kiri; tagihan dan tombol terbitkan resi tetap di kanan.",
+      "Tarif semua ekspedisi aktif tampil berdampingan sehingga kasir tinggal memilih.",
+      "Berat volumetrik dan batas nilai COD dihitung sebelum resi terbit.",
+    ],
+    visual: `<figure class="shot pshot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" loading="lazy" decoding="async"></div></figure>`,
+  },
+  {
+    id: "kirim-dari-rumah",
+    label: "Kirim dari rumah",
+    title: "Pelanggan mengisi alamat dari rumah, kasir cukup memindai QR",
+    points: [
+      "Pelanggan mengisi data paket di situs gerai Anda lalu membawa QR <code>INV</code> ke loket dalam 48 jam.",
+      "Kasir memindai QR, menimbang ulang, menerima pembayaran, lalu mencetak label.",
+      "Kode yang sama dipakai untuk struk dan lacak paket, jadi tidak ada antrean mengetik alamat.",
+    ],
+    visual: stage(`<div class="float"><div class="w-url">berkahjaya.geraimitra.com</div>
+<div class="w-pay w-gap"><div><div>Draf kiriman dari rumah</div><div class="w-big mono">INV 8K4M2P7</div><div>Tunjukkan QR ini ke kasir dalam 48 jam</div></div>${IC.qr}</div></div>`),
+  },
+  {
+    id: "paket-massal",
+    label: "Paket massal CSV",
+    title: "Puluhan paket toko online terbit dari satu berkas",
+    points: [
+      "Pelanggan toko online mengunggah berkas CSV hingga 200 baris sekaligus.",
+      "Baris dengan alamat atau kecamatan yang kurang tepat ditandai untuk dibetulkan lebih dulu.",
+      "Resi diterbitkan lalu dicetak massal ke label thermal 100 mm.",
+    ],
+    visual: spec("Angka paket massal dan cetak", [
+      ["200 baris", "per unggahan berkas CSV"],
+      ["100×150 mm", "label paket siap tempel"],
+      ["58 mm", "struk pelanggan dari printer Bluetooth"],
+      ["9 kurir", "mitra Mengantar dalam satu akun gerai"],
+    ]),
+  },
+  {
+    id: "pickup",
+    label: "Pickup &amp; Surat Jalan",
+    title: "Serah terima kurir tanpa paket tertukar",
+    points: [
+      "Saat kurir menjemput, kasir memilih ekspedisinya lalu memindai resi satu per satu.",
+      "Resi milik ekspedisi lain langsung ditolak dengan bunyi peringatan.",
+      "Paket yang lolos pindai masuk Surat Jalan sebelum ditandatangani kurir.",
+    ],
+    visual: stage(`<div class="float"><div class="w-head"><span>Pickup J&amp;T Express</span><span class="chip">Surat Jalan</span></div>
+<ul class="w-rows"><li><span class="mono">JT…5678</span><b>Terverifikasi</b></li><li><span class="mono">JT…5679</span><b>Terverifikasi</b></li><li><span class="mono">SPX…2201</span><span>Ditolak, kurir lain</span></li></ul></div>`),
+  },
+  {
+    id: "retur",
+    label: "Meja Retur &amp; klaim",
+    title: "Paket retur tersimpan rapi dan diambil dengan PIN",
+    points: [
+      "Paket gagal kirim yang kembali dipindai ke Meja Retur dan dicatat posisi raknya.",
+      "Pengirim asli menerima Kode Ambil lewat WhatsApp untuk menjemput barangnya.",
+      "Paket terlambat, rusak, atau hilang dipantau tenggat klaimnya.",
+    ],
+    visual: stage(`<div class="float"><div class="w-head"><span>Meja Retur · Rak B-03</span><span class="chip on">Menunggu diambil</span></div>
+<ul class="w-rows"><li><span>Resi</span><b class="mono">SC…4410</b></li><li><span>Pengirim asli</span><b>Ibu S. Nisa</b></li><li><span>Kode Ambil</span><span class="w-pin"><span>4</span><span>8</span><span>2</span><span>7</span></span></li></ul></div>`),
+  },
+  {
+    id: "keuangan",
+    label: "Keuangan dua buku",
+    title: "Kas loket dan saldo Mengantar dicocokkan per resi",
+    points: [
+      "Kas loket dicatat terpisah dari mutasi akun Mengantar, lalu dicocokkan per nomor resi.",
+      "Saldo Aman menyisihkan cadangan ongkir retur untuk kiriman COD yang masih di perjalanan.",
+      "Akun Kasir hanya menerima harga jual pelanggan; modal, diskon, dan laba khusus Pemilik.",
+    ],
+    visual: spec("Angka keuangan gerai", [
+      ["1:1", "kas loket dan mutasi Mengantar per resi"],
+      ["2 buku", "Kas Loket dan cermin akun Mengantar"],
+      ["0", "angka modal dan diskon di layar Kasir"],
+      ["2 peran", "Pemilik dan Kasir dengan akun terpisah"],
+    ]),
+  },
+]
+
+const CAPABILITIES: Array<[string, string]> = [
+  ["Format cetak 10×15 &amp; 58 mm", "Paket + Bukti 10×15, Paket saja 10×10 atau 10×15, dan roll thermal 58 mm dari printer Bluetooth."],
+  ["Audit cetak ulang beralasan", "Cetak pertama tercatat otomatis; cetak ulang meminta alasan singkat dan masuk riwayat audit loket."],
+  ["Layar Pelanggan dengan QRIS", "Layar kedua di meja kasir menampilkan total tagihan dan QRIS gerai kepada pelanggan."],
+  ["Buku alamat pelanggan langganan", "Kontak pengirim dan penerima tersimpan, sehingga data pelanggan langganan terisi dari pencarian nama atau nomor HP."],
+  ["Mode dropshipper aman retur", "Label mencetak nama toko online pengirim, sementara alamat retur tetap terkunci ke gerai Anda."],
+  ["API toko <code>/api/v1</code> &amp; konektor MCP", "Kunci API berbatas kuota harian dan titik akses MCP untuk cek tarif dan draf kiriman otomatis."],
+]
+
+export function renderFitur(app: string): string {
+  return `${pageHead("Fitur loket", "Fitur kasir loket, cetak resi &amp; keuangan agen", "Enam modul terpadu yang memisahkan tugas cepat kasir di depan pelanggan dari pengawasan margin, saldo, dan rekonsiliasi milik pemilik gerai.")}
+
+<section class="sec tight" aria-label="Enam modul GeraiExpress"><div class="wrap"><div class="prows">
+${PILLARS.map((p, i) => `<article class="prow${i % 2 ? " flip" : ""}" id="${p.id}" aria-labelledby="${p.id}-title">
+<div class="prow-text"><p class="plabel"><span class="pno" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>${p.label}</p>
+<h2 id="${p.id}-title">${p.title}</h2>
+<ul class="sqlist">${p.points.map((t) => `<li><span>${t}</span></li>`).join("")}</ul></div>
+${p.visual}
+</article>`).join("\n")}
+</div>
+<p class="note">Layar pertama adalah layar kasir sungguhan; kartu lainnya ilustrasi dengan data contoh.</p>
 </div></section>
 
-<section class="sec tight"><div class="wrap grid2">
-<div class="tile">
-<h2>Format cetak loket fleksibel</h2>
-<p>Pilih format sesuai printer yang tersedia di meja kasir Anda:</p>
-<ul class="chk">
-<li>${IC.check}<span><strong>10×15 · Paket + Bukti:</strong> bagian atas ditempel ke paket (barcode AWB dan QR lacak), bagian bawah disobek sebagai bukti kirim pelanggan.</span></li>
-<li>${IC.check}<span><strong>10×10 atau 10×15 · Paket saja:</strong> ukuran stiker thermal yang sudah biasa dipakai kurir.</span></li>
-<li>${IC.check}<span><strong>Roll thermal 58 mm:</strong> label tempel dan struk pelanggan berurutan dengan garis potong jelas dari printer Bluetooth.</span></li>
-</ul>
-<p class="note">Cetak pertama tercatat otomatis; cetak ulang resi memerlukan alasan singkat agar riwayat audit loket tetap terjaga.</p>
-</div>
-<div class="tile">
-<h2>API toko &amp; konektor MCP</h2>
-<p>Untuk gerai yang juga melayani gudang grosir atau sistem kasir internal, pemilik gerai dapat menerbitkan kunci API berbatas kuota harian (<code>/api/v1</code>) maupun titik akses MCP untuk otomasi cek tarif dan pembuatan draf kiriman.</p>
-</div>
+<section class="sec tight" aria-labelledby="harian-title"><div class="wrap">
+<div class="shead"><h2 id="harian-title">Dan yang Anda perlukan setiap hari</h2></div>
+<dl class="caps">${CAPABILITIES.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join("")}</dl>
 </div></section>
 ${closing(app, "/ekspedisi", "Lihat Daftar Ekspedisi")}`
 }
@@ -362,10 +451,10 @@ export function renderEkspedisi(app: string): string {
     ["pos", "Pos Reguler", "—", "Non-COD & COD (syarat tingkat terkirim)"],
     ["spx", "Standard", "—", "Non-COD & COD (wajib nilai barang)"],
   ]
-  return `${pageHead("Daftar ekspedisi reguler, kargo &amp; layanan COD", "Layani kiriman warga sekitar dan penjual online dari satu akun gerai, mulai dokumen 1 kg hingga karung kargo puluhan kilogram.")}
+  return `${pageHead("Jaringan kurir", "Daftar ekspedisi reguler, kargo &amp; layanan COD", "Layani kiriman warga sekitar dan penjual online dari satu akun gerai, mulai dokumen 1 kg hingga karung kargo puluhan kilogram.")}
 
 <section class="sec tight" aria-labelledby="jaringan-title"><div class="wrap">
-<ul class="pgrid" style="margin-bottom:56px" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
+<ul class="pgrid pgrid-gap" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
 <div class="shead"><h2 id="jaringan-title">Jaringan kurir dalam satu layar perbandingan</h2><p class="sub">Pemilik gerai bebas mengaktifkan atau menonaktifkan ekspedisi sesuai jadwal kurir penjemput di kecamatannya.</p></div>
 <div class="tbl-wrap"><table class="tbl">
 <thead><tr><th scope="col">Ekspedisi</th><th scope="col">Reguler &amp; Ekonomi</th><th scope="col">Kargo</th><th scope="col">Pembayaran &amp; catatan</th></tr></thead>
@@ -385,19 +474,99 @@ export function renderEkspedisi(app: string): string {
 ${closing(app, "/simulasi-kasir", "Coba Cek Tarif Contoh")}`
 }
 
-export function renderCaraKerja(app: string): string {
-  const steps: Array<[string, string]> = [
-    ["Daftar akun &amp; ajukan titik jemput", "Buat akun pemilik di GeraiExpress, pilih nama alamat gerai (misalnya <code>berkahjaya.geraimitra.com</code>), lalu isi alamat lengkap toko beserta kontak penanggung jawab penjemputan kurir."],
-    ["Tinjauan lokasi &amp; pembukaan akun Mengantar", "Tim kami memeriksa kelengkapan titik jemput. Begitu disetujui, akun seller Mengantar untuk gerai Anda dibuat dan dihubungkan secara otomatis."],
-    ["Tempel URL webhook &amp; atur printer", "Ikuti panduan tiga langkah di menu Pengaturan untuk menyalin Webhook Secret agar status paket diperbarui otomatis, lalu pilih ukuran kertas printer loket."],
-    ["Isi saldo kiriman &amp; terima pelanggan", "Top-up saldo akun Mengantar untuk kiriman Non-COD. Pelanggan datang membawa paket (atau QR dari rumah), kasir menimbang, menerima tunai atau QRIS, lalu menempel label resi."],
-    ["Serah terima pickup &amp; rekonsiliasi", "Pindai paket per kurir di menu Pickup &amp; Surat Jalan saat kurir tiba, lalu pantau pencairan COD dan laba harian di menu Keuangan pemilik."],
-  ]
-  return `${pageHead("Cara daftar &amp; peralatan buka loket kirim paket", "Pendaftaran tanpa biaya waralaba puluhan juta: dari pengajuan lokasi sampai siap menerima paket pelanggan dalam lima tahap yang jelas.")}
+type Step = { label: string; title: string; text: string; who: string; mitra: string; sistem: string; card: string }
 
-<section class="sec tight" aria-labelledby="langkah-title"><div class="wrap">
-<div class="shead"><h2 id="langkah-title">Lima langkah menjadi gerai aktif</h2><p class="sub">Setiap gerai memakai akun pengiriman resmi atas nama usahanya sendiri, sehingga mutasi saldo dan pencairan COD tetap transparan.</p></div>
-<ol class="steps">${steps.map(([t, p], i) => `<li><span class="step-no">${String(i + 1).padStart(2, "0")}</span><div><h3>${t}</h3><p>${p}</p></div></li>`).join("")}</ol>
+/** `/cara-kerja` steps (adsbook `StepFlow` parity): what the partner does vs what the system does, with a synthetic card. */
+const STEPS: Step[] = [
+  {
+    label: "Daftar &amp; Titik Jemput",
+    title: "Daftar akun &amp; ajukan titik jemput",
+    text: "Buat akun pemilik di GeraiExpress, pilih nama alamat gerai (misalnya <code>berkahjaya.geraimitra.com</code>), lalu isi alamat lengkap toko beserta kontak penanggung jawab penjemputan kurir.",
+    who: "Calon mitra",
+    mitra: "Mengisi data pemilik, alamat toko, dan kontak penjemputan kurir.",
+    sistem: "Mengirim kode verifikasi email dan mencatat pengajuan titik jemput untuk ditinjau.",
+    card: `<div class="float"><div class="w-url">berkahjaya.geraimitra.com</div>
+<ul class="w-rows w-gap"><li><span>Nama gerai</span><b>Gerai Berkah Jaya</b></li><li><span>Kecamatan</span><b>Coblong, Kota Bandung</b></li><li><span>Kontak jemput</span><b class="mono">08xx-xxxx-4821</b></li></ul></div>`,
+  },
+  {
+    label: "Tinjauan &amp; Akun",
+    title: "Tinjauan lokasi &amp; pembukaan akun Mengantar",
+    text: "Tim kami memeriksa kelengkapan titik jemput. Begitu disetujui, akun seller Mengantar untuk gerai Anda dibuat dan dihubungkan secara otomatis.",
+    who: "Calon mitra",
+    mitra: "Memantau status pengajuan lewat email dan dasbor.",
+    sistem: "Meninjau alamat jemput, lalu membuat dan menghubungkan akun seller Mengantar atas nama usaha Anda.",
+    card: `<div class="float"><div class="w-head"><span>Status pengajuan</span><span class="chip on">Disetujui</span></div>
+<ul class="w-rows"><li><span>Tinjauan titik jemput</span><b>Selesai</b></li><li><span>Akun seller Mengantar</span><b>Terhubung</b></li><li><span>Diskon mitra per ekspedisi</span><b>Dikonfirmasi</b></li></ul></div>`,
+  },
+  {
+    label: "Webhook &amp; Printer",
+    title: "Tempel URL webhook &amp; atur printer",
+    text: "Ikuti panduan tiga langkah di menu Pengaturan untuk menyalin Webhook Secret agar status paket diperbarui otomatis, lalu pilih ukuran kertas printer loket.",
+    who: "Pemilik gerai",
+    mitra: "Menyalin Webhook Secret dan memilih format label 100 mm atau struk 58 mm.",
+    sistem: "Menerima pembaruan status paket dari Mengantar secara otomatis.",
+    card: `<div class="float"><div class="w-head"><span>Pengaturan loket</span><span class="chip">3 langkah</span></div>
+<ul class="w-rows"><li><span>Webhook Secret</span><b>Tersalin</b></li><li><span>Status paket otomatis</span><b>Aktif</b></li><li><span>Format cetak</span><b>Label 100×150 mm</b></li></ul></div>`,
+  },
+  {
+    label: "Saldo &amp; Pelanggan",
+    title: "Isi saldo kiriman &amp; terima pelanggan",
+    text: "Top-up saldo akun Mengantar untuk kiriman Non-COD. Pelanggan datang membawa paket (atau QR dari rumah), kasir menimbang, menerima tunai atau QRIS, lalu menempel label resi.",
+    who: "Kasir",
+    mitra: "Menimbang paket, menerima tunai atau QRIS, lalu menempel label resi.",
+    sistem: "Menghitung berat volumetrik dan batas COD, menerbitkan resi, dan memotong saldo sebesar ongkir bersih mitra.",
+    card: `<div class="float"><div class="w-rcpt"><div><span>INV 8K4M2P7</span><span>LUNAS</span></div><div><span>J&amp;T · EZ 1.000 g</span><span>12.500</span></div><div><span>Bubble wrap</span><span>3.000</span></div><div class="tot"><span>Tunai</span><span>Rp 15.500</span></div></div></div>`,
+  },
+  {
+    label: "Pickup &amp; Rekonsiliasi",
+    title: "Serah terima pickup &amp; rekonsiliasi",
+    text: "Pindai paket per kurir di menu Pickup &amp; Surat Jalan saat kurir tiba, lalu pantau pencairan COD dan laba harian di menu Keuangan pemilik.",
+    who: "Kasir &amp; pemilik",
+    mitra: "Memindai paket per kurir sebelum Surat Jalan ditandatangani.",
+    sistem: "Mencocokkan kas loket dengan mutasi Mengantar per resi dan mencatat COD saat dananya cair.",
+    card: `<div class="float"><div class="w-head"><span>Pickup J&amp;T Express</span><span class="chip">Surat Jalan</span></div>
+<ul class="w-rows"><li><span class="mono">JT…5678</span><b>Terverifikasi</b></li><li><span class="mono">JT…5679</span><b>Terverifikasi</b></li><li><span>Rekonsiliasi</span><b>1:1 Cocok</b></li></ul></div>`,
+  },
+]
+
+const PIPE: Array<[string, string]> = [
+  ["Timbang &amp; Cek Tarif", "Berat aktual atau volumetrik, mana yang lebih besar, menentukan tarif tiap ekspedisi."],
+  ["Terima Tunai / QRIS", "Pelanggan membayar tarif publik di loket dan kasnya tercatat di buku kas loket."],
+  ["Cetak Resi Thermal", "Resi terbit lewat akun Mengantar gerai, lalu label 100 mm atau struk 58 mm tercetak."],
+  ["Pindai Surat Jalan Kurir", "Paket dipindai per kurir saat pickup; resi ekspedisi lain ditolak."],
+  ["Rekonsiliasi 1:1 &amp; COD Cair", "Kas loket dicocokkan dengan mutasi Mengantar per resi; COD dihitung saat dana cair."],
+]
+
+/** The pipeline pulse runs only while on screen; reduced motion (or no IntersectionObserver) keeps the finished state. */
+export const CARA_SCRIPT = `<script>
+(function(){
+  var p=document.querySelector("[data-pipeline]");
+  if(!p||!("IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  new IntersectionObserver(function(es){es.forEach(function(x){p.classList.toggle("is-playing",x.isIntersecting)})},{threshold:.3}).observe(p);
+})();
+</script>`
+
+export function renderCaraKerja(app: string): string {
+  const n = (i: number) => String(i + 1).padStart(2, "0")
+  return `${pageHead("Alur kemitraan", "Cara daftar &amp; peralatan buka loket kirim paket", "Pendaftaran tanpa biaya waralaba puluhan juta: dari pengajuan lokasi sampai siap menerima paket pelanggan dalam lima tahap yang jelas.")}
+
+<section class="sec tight" aria-label="Lima langkah menjadi gerai aktif"><div class="wrap">
+<ol class="jump" aria-label="Lompat ke langkah">${STEPS.map((s, i) => `<li><a href="#langkah-${i + 1}"><span class="jn" aria-hidden="true">${n(i)}</span>${s.label}</a></li>`).join("")}</ol>
+<div class="prows srows">
+${STEPS.map((s, i) => `<article class="prow${i % 2 ? " flip" : ""}" id="langkah-${i + 1}" aria-labelledby="langkah-${i + 1}-title">
+<div class="prow-text"><p class="plabel"><span class="pno">${n(i)}</span>${s.label}</p>
+<h2 id="langkah-${i + 1}-title">${s.title}</h2>
+<p class="ptext">${s.text}</p>
+<dl class="who"><div><dt>${s.who}</dt><dd>${s.mitra}</dd></div><div><dt>Sistem GeraiExpress &amp; Mengantar</dt><dd>${s.sistem}</dd></div></dl></div>
+<div class="stage pstage" aria-hidden="true">${s.card}</div>
+</article>`).join("\n")}
+</div>
+<p class="note">Kartu tiap langkah adalah ilustrasi dengan data contoh.</p>
+</div></section>
+
+<section class="sec tight pipeline" aria-labelledby="alur-title" data-pipeline><div class="wrap">
+<div class="shead"><h2 id="alur-title">Alur satu paket dari meja loket sampai saldo cair</h2><p class="sub">Lima titik yang dilewati setiap kiriman, dicatat otomatis tanpa pembukuan manual.</p></div>
+<ol class="pipe">${PIPE.map(([t, d], i) => `<li class="stop" style="--n:${i}"><span class="node" aria-hidden="true">${i + 1}</span><div><p class="stop-t">${t}</p><p class="stop-d">${d}</p></div></li>`).join("")}<li class="pulse" aria-hidden="true"></li></ol>
 </div></section>
 
 <section class="sec tight" aria-labelledby="alat-title"><div class="wrap">
@@ -491,7 +660,7 @@ function compareTable(): string {
 }
 
 export function renderBiaya(app: string): string {
-  return `${pageHead("Biaya pendaftaran &amp; skema komisi mitra loket", "Biaya dan pembagian margin kami buka sejak awal agar pemilik toko dapat menghitung perputaran modal loket secara realistis.")}
+  return `${pageHead("Skema kemitraan", "Biaya pendaftaran &amp; skema komisi mitra loket", "Biaya dan pembagian margin kami buka sejak awal agar pemilik toko dapat menghitung perputaran modal loket secara realistis.")}
 
 <section class="sec tight" aria-labelledby="paket-title"><div class="wrap">
 <div class="shead"><h2 id="paket-title">Pilih cara bermitra</h2><p class="sub">Mulai tanpa biaya langganan aplikasi, lalu tambahkan domain toko sendiri hanya bila dibutuhkan.</p></div>
@@ -599,87 +768,147 @@ export const SIM_SCRIPT = `<script>
 })();
 </script>`
 
+const CHEV = '<svg class="sel-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'
+const CHECK = '<svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'
+
+type SelOpt = [value: string, main: string, sub?: string]
+const optText = ([, main, sub]: SelOpt) => `<span class="opt-main">${e(main)}</span>${sub ? `<span class="opt-sub">${e(sub)}</span>` : ""}`
+
+/**
+ * Custom listbox dropdown (same pattern and CSS as the home `Kecamatan tujuan`): the chosen value lives in a hidden
+ * input `#id`, which fires `change` on pick, so page scripts read it like a native control. Behaviour: `SEL_SCRIPT`.
+ */
+function selBox(id: string, label: string, opts: SelOpt[], sel = 0): string {
+  return `<div class="fld"><span class="fld-lbl" id="${id}-lbl">${label}</span>
+<div class="sel" data-sel><input type="hidden" id="${id}" value="${e(opts[sel]![0])}">
+<button type="button" id="${id}-btn" class="sel-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}-list" aria-labelledby="${id}-lbl ${id}-val"><span id="${id}-val" class="sel-val">${optText(opts[sel]!)}</span>${CHEV}</button>
+<ul id="${id}-list" class="sel-list" role="listbox" tabindex="-1" aria-labelledby="${id}-lbl" hidden>${opts.map((o, i) => `<li role="option" id="${id}-opt-${i}" data-value="${e(o[0])}" aria-selected="${i === sel}" class="sel-opt"><span class="opt-text">${optText(o)}</span>${CHECK}</li>`).join("")}</ul>
+</div></div>`
+}
+
+/** Every `[data-sel]` listbox: click/keyboard (ArrowUp/Down, Home/End, Enter/Space, Escape, Tab), outside tap closes, one open at a time. */
+export const SEL_SCRIPT = `<script>
+(function(){
+  var list=[];
+  [].forEach.call(document.querySelectorAll("[data-sel]"),function(root){
+    var inp=root.querySelector("input"),btn=root.querySelector(".sel-btn"),box=root.querySelector(".sel-list"),val=root.querySelector(".sel-val");
+    var opts=[].slice.call(box.querySelectorAll("[role=option]")),hl=0,me={root:root};
+    function cur(){for(var i=0;i<opts.length;i++)if(opts[i].getAttribute("aria-selected")==="true")return i;return 0}
+    function setHl(i){hl=(i+opts.length)%opts.length;opts.forEach(function(o,k){o.classList.toggle("hl",k===hl)});box.setAttribute("aria-activedescendant",opts[hl].id);opts[hl].scrollIntoView({block:"nearest"})}
+    function open(){list.forEach(function(o){if(o!==me)o.close(false)});box.hidden=false;btn.setAttribute("aria-expanded","true");setHl(cur());box.focus()}
+    me.close=function(refocus){if(box.hidden)return;box.hidden=true;btn.setAttribute("aria-expanded","false");if(refocus)btn.focus()};
+    function pick(i){opts.forEach(function(o,k){o.setAttribute("aria-selected",k===i?"true":"false")});val.innerHTML=opts[i].querySelector(".opt-text").innerHTML;inp.value=opts[i].getAttribute("data-value");me.close(true);inp.dispatchEvent(new Event("change"))}
+    btn.addEventListener("click",function(){box.hidden?open():me.close(true)});
+    btn.addEventListener("keydown",function(ev){if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){ev.preventDefault();open()}});
+    box.addEventListener("keydown",function(ev){
+      if(ev.key==="ArrowDown"){ev.preventDefault();setHl(hl+1)}
+      else if(ev.key==="ArrowUp"){ev.preventDefault();setHl(hl-1)}
+      else if(ev.key==="Home"){ev.preventDefault();setHl(0)}
+      else if(ev.key==="End"){ev.preventDefault();setHl(opts.length-1)}
+      else if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();pick(hl)}
+      else if(ev.key==="Escape"){ev.preventDefault();ev.stopPropagation();me.close(true)}
+      else if(ev.key==="Tab"){me.close(false)}
+    });
+    opts.forEach(function(o,i){o.addEventListener("mousemove",function(){if(hl!==i)setHl(i)});o.addEventListener("click",function(){pick(i)})});
+    list.push(me);
+  });
+  document.addEventListener("pointerdown",function(ev){list.forEach(function(o){if(!o.root.contains(ev.target))o.close(false)})});
+})();
+</script>`
+
 export function renderSimulasi(app: string): string {
-  return `${pageHead("Simulasi meja kasir &amp; struk agen kirim paket", "Coba alur kasir GeraiExpress dengan data sintetis, tanpa mendaftar akun dan tanpa membuat tagihan ekspedisi sungguhan.")}
+  return `${pageHead("Simulasi meja kasir", "Simulasi meja kasir &amp; struk agen kirim paket", "Coba alur kasir GeraiExpress dengan data sintetis, tanpa mendaftar akun dan tanpa membuat tagihan ekspedisi sungguhan.")}
 <section class="sec tight"><div class="wrap sim">
-<form class="card" id="sim" onsubmit="return false">
-<h2>1. Rincian paket pelanggan</h2>
-<label for="kota">Kota tujuan</label>
-<select id="kota">${SIM_CITIES.map(([c], i) => `<option value="${i}">${e(c)}</option>`).join("")}</select>
-<label for="berat">Berat (gram)</label>
-<input id="berat" inputmode="numeric" value="1000">
+<form class="sim-stage" id="sim" onsubmit="return false" aria-labelledby="sim-1">
+<h2 id="sim-1">1. Rincian paket pelanggan</h2>
+<div class="sim-fields">
+${selBox("kota", "Kota tujuan", SIM_CITIES.map(([c], i): SelOpt => { const [main, sub] = c.split(", "); return [String(i), main!, sub] }))}
+<div class="fld"><label for="berat">Berat (gram)</label><input id="berat" inputmode="numeric" value="1000">
 <div class="qw">
 <button type="button" class="cta sm ghost" data-w="1000">1.000 g (1 kg)</button>
 <button type="button" class="cta sm ghost" data-w="2500">2.500 g (3 kg)</button>
 <button type="button" class="cta sm ghost" data-w="12000">12.000 g (Kargo)</button>
+</div></div>
+<div class="fld-2">
+${selBox("cod", "Jenis layanan", [["0", "Non-COD", "Bayar di loket"], ["150000", "COD", "Nilai barang Rp 150.000"]])}
+${selBox("pack", "Packing tambahan", [["0", "Tanpa packing"], ["3000", "Bubble wrap", "+Rp 3.000"], ["7000", "Kardus baru", "+Rp 7.000"]])}
 </div>
-<div class="grid2" style="gap:12px">
-<div><label for="cod">Jenis layanan</label><select id="cod"><option value="0">Non-COD (Bayar di loket)</option><option value="150000">COD Barang Rp 150.000</option></select></div>
-<div><label for="pack">Packing tambahan</label><select id="pack"><option value="0">Tanpa packing</option><option value="3000">Bubble wrap (+Rp 3.000)</option><option value="7000">Kardus baru (+Rp 7.000)</option></select></div>
+${selBox("bayar", "Cara bayar di loket", [["Tunai", "Tunai"], ["QRIS gerai", "QRIS gerai"], ["Transfer", "Transfer"]])}
 </div>
-<label for="bayar">Cara bayar di loket</label>
-<select id="bayar"><option>Tunai</option><option>QRIS gerai</option><option>Transfer</option></select>
-<h2 style="margin-top:14px">2. Pilih ekspedisi</h2>
-<ul class="rates" id="rates"></ul>
+<h2 class="sim-h">2. Pilih ekspedisi</h2>
+<div class="float sim-rates"><ul class="rates" id="rates"></ul></div>
 </form>
 <div class="sim-sticky">
-<div class="card">
+<div class="sim-stage">
 <h2>3. Hasil cetak di meja kasir</h2>
-<p>Klik salah satu harga ekspedisi untuk menerbitkan contoh struk pelanggan dan label tempel 100 mm.</p>
+<p class="sim-p">Klik salah satu harga ekspedisi untuk menerbitkan contoh struk pelanggan dan label tempel 100 mm.</p>
 <div class="receipt" id="struk" aria-live="polite">Pilih ekspedisi untuk melihat struk.</div>
 <div class="lbl-preview" aria-label="Contoh label tempel paket">
-<div style="display:flex;justify-content:space-between;gap:8px;font-weight:700;color:var(--ink)"><span id="lbl-meta">Label Thermal 100×150 mm</span><span class="chip">Contoh AWB</span></div>
+<div class="lbl-top"><span id="lbl-meta">Label Thermal 100×150 mm</span><span class="chip">Contoh AWB</span></div>
 <div class="lbl-bar" aria-hidden="true"></div>
-<p id="lbl-dest" style="margin:0;color:var(--body);font-size:.875rem">Barcode resi kurir dan QR lacak tercetak siap tempel ke paket.</p>
+<p id="lbl-dest" class="lbl-dest">Barcode resi kurir dan QR lacak tercetak siap tempel ke paket.</p>
 </div>
-<div class="row" style="margin-top:12px"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai Sekarang</a><a class="cta ghost" href="/fitur">Lihat Semua Fitur</a></div>
+<div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai Sekarang</a><a class="cta ghost" href="/fitur">Lihat Semua Fitur</a></div>
 </div>
 </div>
 </div></section>
 ${closing(app, "/fitur", "Lihat Semua Fitur")}`
 }
 
-const FAQ_GROUPS: Array<[string, Array<[string, string]>]> = [
+const FAQ_GROUPS: Array<[string, string, Array<[string, string]>]> = [
+  [
+    "pendaftaran-lokasi",
+    "Pendaftaran &amp; Lokasi",
     [
-      "Pendaftaran, Lokasi & Peralatan",
-      [
-        ["Apakah harus menyewa ruko besar di jalan raya untuk mendaftar?", "Tidak wajib ruko besar. Konter pulsa, fotokopi, toko kelontong, koperasi, maupun usaha rumahan yang memiliki akses masuk motor/mobil kurir penjemput dan jam buka jelas dapat mengajukan pendaftaran titik jemput."],
-        ["Apakah saya harus membeli printer atau timbangan khusus dari GeraiExpress?", "Tidak. Anda bebas memakai laptop/HP Android, timbangan digital, dan printer thermal 100 mm atau 58 mm merek apa saja yang sudah Anda miliki atau beli sendiri di toko komputer terdekat."],
-        ["Berapa lama pengajuan gerai ditinjau sampai bisa beroperasi?", "Setelah formulir titik jemput dikirim dan email terverifikasi, tim kami meninjau kelayakan alamat penjemputan. Begitu disetujui, akun pengiriman Mengantar dibuat otomatis dan Anda langsung dapat masuk ke ruang kerja kasir."],
-        ["Apa fungsi halaman namagerai.geraimitra.com yang didapat setiap mitra?", "Halaman tersebut adalah situs resmi toko Anda sendiri (tanpa bercampur nama gerai lain) yang bisa dibagikan ke grup WhatsApp lingkungan agar pelanggan dapat cek ongkir, mengisi data paket dari rumah menjadi kode QR, dan melacak resi."],
-      ],
+      ["Apakah harus menyewa ruko besar di jalan raya untuk mendaftar?", "Tidak wajib ruko besar. Konter pulsa, fotokopi, toko kelontong, koperasi, maupun usaha rumahan yang memiliki akses masuk motor/mobil kurir penjemput dan jam buka jelas dapat mengajukan pendaftaran titik jemput."],
+      ["Berapa lama pengajuan gerai ditinjau sampai bisa beroperasi?", "Setelah formulir titik jemput dikirim dan email terverifikasi, tim kami meninjau kelayakan alamat penjemputan. Begitu disetujui, akun pengiriman Mengantar dibuat otomatis dan Anda langsung dapat masuk ke ruang kerja kasir."],
+      ["Apa fungsi halaman namagerai.geraimitra.com yang didapat setiap mitra?", "Halaman tersebut adalah situs resmi toko Anda sendiri (tanpa bercampur nama gerai lain) yang bisa dibagikan ke grup WhatsApp lingkungan agar pelanggan dapat cek ongkir, mengisi data paket dari rumah menjadi kode QR, dan melacak resi."],
     ],
+  ],
+  [
+    "perangkat-cetak",
+    "Perangkat &amp; Cetak Resi",
     [
-      "Saldo, Komisi Ongkir & Pencairan COD",
-      [
-        ["Dari mana keuntungan pemilik gerai berasal?", "Pelanggan di loket membayar tarif pengiriman publik resmi sesuai struk, sedangkan saldo pengiriman gerai hanya dipotong tarif bersih setelah diskon mitra ekspedisi. Selisih diskon tersebut—ditambah jasa packing bila ada—menjadi laba kotor loket Anda."],
-        ["Bagaimana alur uang untuk paket COD (Bayar di Tempat)?", "Penerima membayar harga barang plus biaya layanan COD kepada kurir pengantar saat paket tiba. Setelah status paket Terkirim dan dana cair ke mutasi akun Mengantar gerai, sistem mencocokkan nilai pencairan per nomor resi secara otomatis."],
-        ["Apa yang dimaksud dengan indikator Saldo Aman di menu Keuangan?", "Saldo Aman adalah saldo akun Mengantar dikurangi estimasi cadangan biaya ongkir pergi-pulang untuk kiriman COD yang masih dalam perjalanan, sehingga pemilik gerai tahu berapa dana yang benar-benar bebas ditarik tanpa mengganggu operasional."],
-        ["Apakah karyawan kasir saya bisa melihat besaran diskon modal dan saldo pemilik?", "Tidak bisa. Akun dengan peran Kasir disaring di tingkat server sehingga hanya menerima tarif publik pelanggan dan ringkasan pembayaran loket; angka modal, persentase diskon kurir, mutasi Mengantar, dan laba bersih khusus untuk akun Pemilik."],
-      ],
+      ["Apakah saya harus membeli printer atau timbangan khusus dari GeraiExpress?", "Tidak. Anda bebas memakai laptop/HP Android, timbangan digital, dan printer thermal 100 mm atau 58 mm merek apa saja yang sudah Anda miliki atau beli sendiri di toko komputer terdekat."],
+      ["Format label dan struk apa saja yang bisa dicetak?", "Ada tiga pilihan: 10×15 Paket + Bukti (bagian atas ditempel ke paket, bagian bawah disobek sebagai bukti kirim pelanggan), 10×10 atau 10×15 Paket saja, dan roll thermal 58 mm dari printer Bluetooth untuk label tempel dan struk pelanggan."],
+      ["Bagaimana jika resi perlu dicetak ulang?", "Cetak pertama tercatat otomatis. Cetak ulang tetap bisa dilakukan, tetapi kasir perlu menuliskan alasan singkat agar riwayat audit loket tetap terjaga."],
     ],
+  ],
+  [
+    "saldo-cod-keuangan",
+    "Saldo, Komisi Ongkir &amp; Pencairan COD",
     [
-      "Operasional Harian, Dropship & Penanganan Retur",
-      [
-        ["Bisakah pelanggan online shop mengirim paket atas nama tokonya sendiri?", "Bisa. Fitur penyamaran pengirim tiga pihak memungkinkan label paket mencantumkan nama dan kontak toko reseller/dropshipper untuk penerima, namun alamat fisik pengembalian retur di sistem kurir tetap terkunci kembali ke gerai Anda."],
-        ["Bagaimana jika penerima menolak paket dan kiriman dikembalikan (retur)?", "Saat paket retur tiba kembali di gerai, kasir memindainya ke Meja Retur. Sistem mencatat posisi rak dan membuat Kode Ambil unik untuk dikirim ke pengirim asli agar penyerahan barang retur tercatat sah."],
-        ["Bagaimana cara mencegah paket salah diserahkan ke kurir ekspedisi lain?", "Gunakan menu Pickup & Surat Jalan sebelum menyerahkan tumpukan paket sore hari. Ketika kasir memilih kurir (misalnya J&T), pemindaian barcode resi milik ekspedisi lain akan langsung ditolak di layar."],
-        ["Apakah data nomor HP penerima aman pada halaman lacak publik?", "Sangat aman. Halaman lacak publik hanya menampilkan inisial nama serta kota/kecamatan sesuai prinsip pelindungan data pribadi (UU PDP). Rincian lengkap hanya terbuka apabila pelacak memasukkan 4 digit terakhir nomor HP penerima yang tepat."],
-      ],
+      ["Dari mana keuntungan pemilik gerai berasal?", "Pelanggan di loket membayar tarif pengiriman publik resmi sesuai struk, sedangkan saldo pengiriman gerai hanya dipotong tarif bersih setelah diskon mitra ekspedisi. Selisih diskon tersebut—ditambah jasa packing bila ada—menjadi laba kotor loket Anda."],
+      ["Bagaimana alur uang untuk paket COD (Bayar di Tempat)?", "Penerima membayar harga barang plus biaya layanan COD kepada kurir pengantar saat paket tiba. Setelah status paket Terkirim dan dana cair ke mutasi akun Mengantar gerai, sistem mencocokkan nilai pencairan per nomor resi secara otomatis."],
+      ["Apa yang dimaksud dengan indikator Saldo Aman di menu Keuangan?", "Saldo Aman adalah saldo akun Mengantar dikurangi estimasi cadangan biaya ongkir pergi-pulang untuk kiriman COD yang masih dalam perjalanan, sehingga pemilik gerai tahu berapa dana yang benar-benar bebas ditarik tanpa mengganggu operasional."],
+      ["Apakah karyawan kasir saya bisa melihat besaran diskon modal dan saldo pemilik?", "Tidak bisa. Akun dengan peran Kasir disaring di tingkat server sehingga hanya menerima tarif publik pelanggan dan ringkasan pembayaran loket; angka modal, persentase diskon kurir, mutasi Mengantar, dan laba bersih khusus untuk akun Pemilik."],
     ],
-  ]
+  ],
+  [
+    "operasional-retur",
+    "Operasional Harian, Dropship &amp; Retur",
+    [
+      ["Bisakah pelanggan online shop mengirim paket atas nama tokonya sendiri?", "Bisa. Fitur penyamaran pengirim tiga pihak memungkinkan label paket mencantumkan nama dan kontak toko reseller/dropshipper untuk penerima, namun alamat fisik pengembalian retur di sistem kurir tetap terkunci kembali ke gerai Anda."],
+      ["Bagaimana jika penerima menolak paket dan kiriman dikembalikan (retur)?", "Saat paket retur tiba kembali di gerai, kasir memindainya ke Meja Retur. Sistem mencatat posisi rak dan membuat Kode Ambil unik untuk dikirim ke pengirim asli agar penyerahan barang retur tercatat sah."],
+      ["Bagaimana cara mencegah paket salah diserahkan ke kurir ekspedisi lain?", "Gunakan menu Pickup & Surat Jalan sebelum menyerahkan tumpukan paket sore hari. Ketika kasir memilih kurir (misalnya J&T), pemindaian barcode resi milik ekspedisi lain akan langsung ditolak di layar."],
+      ["Apakah data nomor HP penerima aman pada halaman lacak publik?", "Sangat aman. Halaman lacak publik hanya menampilkan inisial nama serta kota/kecamatan sesuai prinsip pelindungan data pribadi (UU PDP). Rincian lengkap hanya terbuka apabila pelacak memasukkan 4 digit terakhir nomor HP penerima yang tepat."],
+    ],
+  ],
+]
 
 /** Open hairline FAQ rows (`+` turns into `×` when open). */
 const faqList = (items: Array<[string, string]>) =>
   `<div class="faq">${items.map(([q, a], i) => `<details${i === 0 ? " open" : ""}><summary>${e(q)}</summary><p class="ans">${e(a)}</p></details>`).join("")}</div>`
 
 /** The five homepage questions, picked from the `/tanya-jawab` groups (same wording on both pages). */
-const HOME_FAQ: Array<[string, string]> = [FAQ_GROUPS[0]![1][0]!, FAQ_GROUPS[0]![1][1]!, FAQ_GROUPS[1]![1][0]!, FAQ_GROUPS[1]![1][2]!, FAQ_GROUPS[2]![1][0]!]
+const faqAt = (g: number, q: number) => FAQ_GROUPS[g]![2][q]!
+const HOME_FAQ: Array<[string, string]> = [faqAt(0, 0), faqAt(1, 0), faqAt(2, 0), faqAt(2, 2), faqAt(3, 0)]
 
 export function renderTanyaJawab(app: string): string {
-  return `${pageHead("Tanya jawab syarat &amp; operasional agen paket", "Jawaban lugas atas pertanyaan yang paling sering diajukan pemilik konter dan toko sebelum membuka loket pengiriman multi-ekspedisi.")}
-<section class="sec tight"><div class="wrap">
-${FAQ_GROUPS.map(([title, items]) => `<div class="faq-group"><h2>${e(title)}</h2>${faqList(items)}</div>`).join("")}
+  const index = `<nav class="faq-index" aria-label="Kelompok pertanyaan">${FAQ_GROUPS.map(([id, title]) => `<a href="#${id}">${title}</a>`).join("")}</nav>`
+  return `${pageHead("Pusat jawaban", "Tanya jawab syarat &amp; operasional agen paket", "Jawaban lugas atas pertanyaan yang paling sering diajukan pemilik konter dan toko sebelum membuka loket pengiriman multi-ekspedisi.", index)}
+<section class="sec tight"><div class="wrap fgroups">
+${FAQ_GROUPS.map(([id, title, items]) => `<section class="fgroup" id="${id}" aria-labelledby="${id}-title"><h2 id="${id}-title">${title}</h2>${faqList(items)}</section>`).join("\n")}
 </div></section>
 ${closing(app, "/hubungi-kami", "Hubungi Tim Kami")}`
 }
@@ -687,36 +916,36 @@ ${closing(app, "/hubungi-kami", "Hubungi Tim Kami")}`
 export function renderHubungi(l: Legal | null, app: string): string {
   const email = l?.support_email || "bantuan@geraiexpress.com"
   const waDigits = l?.support_whatsapp ? l.support_whatsapp.replace(/\D/g, "").replace(/^(62|0)/, "") : ""
-  return `${pageHead("Hubungi tim kemitraan &amp; bantuan agen paket", "Konsultasikan kesiapan titik jemput toko Anda, aktivasi domain Pro, atau kendala operasional gerai bersama tim kami.")}
-<section class="sec tight"><div class="wrap grid2" style="align-items:start">
-<div class="tile">
-<h2>Saluran komunikasi resmi</h2>
-<p>Tim kemitraan dan bantuan teknis menjawab pertanyaan melalui saluran resmi berikut.</p>
-<dl class="w-rows contact">
+  return `${pageHead("Hubungi kami", "Hubungi tim kemitraan &amp; bantuan agen paket", "Konsultasikan kesiapan titik jemput toko Anda, aktivasi domain Pro, atau kendala operasional gerai bersama tim kami.")}
+<section class="sec tight"><div class="wrap contact2">
+<section class="cpanel" aria-labelledby="mitra-title">
+<h2 id="mitra-title">Calon Mitra &amp; Pemilik Gerai</h2>
+<p>Tim kemitraan dan bantuan teknis menjawab pertanyaan pendaftaran, domain Pro, dan operasional gerai melalui saluran resmi berikut.</p>
+<dl class="channels">
 <div><dt>Email kemitraan &amp; bantuan</dt><dd><a href="mailto:${e(email)}">${e(email)}</a></dd></div>
 ${l?.privacy_contact_email ? `<div><dt>Kontak pelindungan data pribadi</dt><dd><a href="mailto:${e(l.privacy_contact_email)}">${e(l.privacy_contact_email)}</a></dd></div>` : ""}
 ${l?.legal_name ? `<div><dt>Penyelenggara</dt><dd>${e(l.legal_name)}</dd></div>` : ""}
 ${l?.registered_address ? `<div><dt>Alamat terdaftar</dt><dd>${e(l.registered_address)}</dd></div>` : ""}
 </dl>
-${waDigits ? `<div class="row"><a class="cta ghost" href="https://wa.me/62${e(waDigits)}" rel="noopener">${IC.chat} Chat WhatsApp Resmi</a></div>` : ""}
-</div>
-<div class="tile">
-<h2>Ingin langsung mengajukan lokasi gerai?</h2>
-<p>Jika alamat toko sudah jelas dan nomor WhatsApp penanggung jawab penjemputan sudah siap, Anda bisa langsung mengisi formulir pendaftaran tanpa menunggu antrean chat.</p>
-<ul class="chk">
-<li>${IC.check}<span>Pencarian kecamatan titik jemput langsung di formulir</span></li>
-<li>${IC.check}<span>Status pengajuan dipantau lewat email &amp; dasbor</span></li>
-<li>${IC.check}<span>Baca <a href="/tanya-jawab">Tanya Jawab Calon Mitra</a> untuk persiapan alat</span></li>
+<div class="row">${waDigits ? `<a class="cta ghost" href="https://wa.me/62${e(waDigits)}" rel="noopener">${IC.chat} Chat WhatsApp Resmi</a>` : ""}<a class="cta" href="${e(app)}/daftar-akun">Ajukan Pendaftaran Gerai</a></div>
+<p class="cp-note">Sudah punya gerai? <a href="${e(app)}/masuk">Masuk ke ruang kerja gerai</a>.</p>
+</section>
+<section class="cpanel" aria-labelledby="pengirim-title">
+<h2 id="pengirim-title">Pengirim / Penerima Paket di Salah Satu Gerai</h2>
+<p>Setiap gerai mitra melayani dan mengelola data kiriman pelanggannya sendiri. Untuk pertanyaan tentang paket Anda, hubungi gerai tempat Anda mengirim lewat kontak di situs gerai tersebut.</p>
+<ul class="sqlist">
+<li><span>Cek status paket di menu <strong>Lacak Paket</strong> pada situs gerai (<code>namagerai.geraimitra.com</code>) dengan nomor resi.</span></li>
+<li><span>Rincian penerima hanya terbuka setelah verifikasi 4 angka terakhir nomor HP penerima.</span></li>
+<li><span>Permintaan terkait data pribadi (UU PDP) yang sampai ke kami akan kami teruskan ke gerai terkait.</span></li>
 </ul>
-<div class="row"><a class="cta" href="${e(app)}/daftar-akun">Ajukan Pendaftaran Gerai</a></div>
-</div>
+</section>
 </div></section>
 ${closing(app, "/tanya-jawab", "Baca Tanya Jawab")}`
 }
 
 export function renderKetentuan(l: Legal | null, app: string): string {
   const brand = l?.brand_name || "GeraiExpress"
-  return `${pageHead("Ketentuan layanan perangkat lunak gerai mitra", "Mengatur hak dan tanggung jawab operasional antara penyelenggara platform dan pemilik gerai mitra.")}
+  return `${pageHead("Ketentuan layanan", "Ketentuan layanan perangkat lunak gerai mitra", "Mengatur hak dan tanggung jawab operasional antara penyelenggara platform dan pemilik gerai mitra.")}
 <section class="sec tight"><div class="wrap prose">
 <p>Ketentuan ini mengatur penggunaan layanan ${e(brand)}${l?.legal_name ? `, dioperasikan oleh ${e(l.legal_name)}` : ""}, oleh gerai mitra terdaftar.</p>
 <h2>1. Peran perangkat lunak</h2>
@@ -733,7 +962,7 @@ ${closing(app, "/hubungi-kami", "Hubungi Tim Kami")}`
 
 export function renderPrivasi(l: Legal | null, app: string): string {
   const contact = l?.privacy_contact_email || l?.support_email || "bantuan@geraiexpress.com"
-  return `${pageHead("Kebijakan privasi &amp; pelindungan data kiriman", "Komitmen pengelolaan dan penyamaran data pribadi sesuai Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP).")}
+  return `${pageHead("Kebijakan privasi", "Kebijakan privasi &amp; pelindungan data kiriman", "Komitmen pengelolaan dan penyamaran data pribadi sesuai Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP).")}
 <section class="sec tight"><div class="wrap prose">
 <p>Kami mengolah data pribadi pengirim, penerima paket, pemilik gerai, dan staf kasir semata-mata untuk menyelenggarakan pengiriman paket, penagihan COD, pengembalian barang retur, keamanan sistem, dan pemenuhan kewajiban hukum di Indonesia.</p>
 <h2>1. Jenis data yang diolah</h2>
