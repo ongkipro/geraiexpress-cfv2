@@ -178,7 +178,7 @@ describe("brand site DEC-247", () => {
     expect(h).toContain('<h2 id="demo-title" class="demo-title">Tinjau Tarif Loket</h2>')
     expect(h).not.toMatch(/Pratinjau/)
     expect(h.match(/<li class="pbadge"><img src="\/couriers\//g)?.length).toBe(9)
-    const bento = h.slice(h.indexOf("<div class=\"bento\" data-bento>"), h.indexOf("</div>\n</div></section>", h.indexOf("data-bento")))
+    const bento = h.slice(h.indexOf("<div class=\"bento\" data-bento>"), h.indexOf("</div>\n<p class=\"note\">Ilustrasi fitur", h.indexOf("data-bento")))
     expect([...bento.matchAll(/<article class="tile ([^"]+)">/g)].map((m) => m[1])).toEqual(["s6", "s6", "s4", "s4", "s4 b5", "s12"])
     expect([...bento.matchAll(/<span class="idx">(\d\d)<\/span>/g)].map((m) => m[1])).toEqual(["01", "02", "03", "04", "05", "06"])
     expect(bento).not.toMatch(/<a /)
@@ -254,6 +254,9 @@ describe("brand site DEC-247", () => {
     expect(h).toMatch(/<div class="layer-back" aria-hidden="true">[\s\S]*Saldo Aman[\s\S]*<div class="spark">/)
     expect(h).toMatch(/<div class="layer-front float">[\s\S]*Ringkasan Ekspedisi Loket[\s\S]*Cocok 1:1/)
     expect(h).toContain("Data contoh untuk ilustrasi, bukan angka gerai sungguhan.")
+    // Sol R1 (non-blocking P2): every synthetic visual says it is an illustration.
+    expect(h).toMatch(/<div class="bento" data-bento>[\s\S]*?<\/div>\n<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan\.<\/p>\n<\/div><\/section>/)
+    expect(h).toMatch(/<div class="float rb"[\s\S]*?<p class="rb-note">Ilustrasi alur, bukan angka pengukuran\.<\/p>\n<\/div>/)
     // 2. Two porcelain proof surfaces 01 and 02.
     expect(h).toMatch(/<div class="proof">[\s\S]*<span class="idx">01<\/span><h3>Dari catatan campur ke rekonsiliasi 1:1 per resi[\s\S]*<span class="idx">02<\/span><h3>Tiga lapis privasi/)
     // 3. The same pricing radios and open comparison as /biaya-dan-paket, on the home page.

@@ -391,6 +391,7 @@ ul.rates button:hover{background:var(--action);color:#fff}
 .proof{display:grid;gap:20px}@media(min-width:900px){.proof{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}}
 .proof .float{margin-top:auto}
 .rb{display:grid;gap:12px}
+.rb-note{margin:2px 0 0;font-size:.75rem;color:var(--slate)}
 .rb-row{display:grid;grid-template-columns:7.2rem minmax(0,1fr) auto;gap:10px;align-items:center;font-size:.8125rem;color:var(--ink)}
 .rb-bar{height:10px;border-radius:999px;background:#EEF1F5;position:relative;overflow:hidden}
 .rb-bar>i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:#CBD5E1}.rb-bar.ok>i{background:var(--action)}

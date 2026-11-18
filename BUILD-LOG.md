@@ -1111,4 +1111,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   (the shipped regex would have been `/s+/`); covered by a test. (5) Two Workers runs failed only on vitest-pool infra
   (`bad port` at pool start; `EnvironmentTeardownError` in the untouched `admin/recheck.test.ts` under host load ~6/8);
   the file passed 3/3 alone and the gates re-recorded PASS.
+- GPT-6.1 Sol R1 APPROVE on `d0fda4b` (no P0/P1); its non-blocking labelling note applied (bento note + proof-chart
+  caption, asserted). Release run `RUN-20261118T163352Z-76a6989f`.
 

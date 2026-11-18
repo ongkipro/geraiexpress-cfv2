@@ -249,6 +249,7 @@ export function renderHome(app: string): string {
 <div class="w-pay"><div><div>Layar Pelanggan · Total tagihan</div><div class="w-big">Rp 15.500</div><div>Bayar dengan QRIS gerai</div></div>${IC.qr}</div>
 </div></article>
 </div>
+<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan.</p>
 </div></section>
 
 <section class="sec tight" aria-labelledby="layar-title"><div class="wrap">
@@ -264,6 +265,7 @@ export function renderHome(app: string): string {
 <div class="rb-row"><span>Catatan manual</span><span class="rb-bar"><i style="width:62%"></i></span><span class="num">Selisih</span></div>
 <div class="rb-row"><span>Potongan COD</span><span class="rb-bar"><i style="width:41%"></i></span><span class="num">Belum cair</span></div>
 <div class="rb-row"><span>GeraiExpress</span><span class="rb-bar ok"><i style="width:100%"></i></span><span class="num">Cocok 1:1</span></div>
+<p class="rb-note">Ilustrasi alur, bukan angka pengukuran.</p>
 </div></div>
 <div class="tile"><span class="idx">02</span><h3>Tiga lapis privasi pengirim, dropshipper, dan kasir</h3><p>Setiap pihak hanya melihat yang memang perlu dilihat, dari struk pelanggan sampai layar kasir.</p>
 <div class="float"><dl class="roles">

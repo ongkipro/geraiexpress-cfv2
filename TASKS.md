@@ -774,8 +774,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `e2e/super-admin.spec.ts` covers `Profil Saya` → codes → recovery login; ≥ 2 mutations red
   (`docs/evidence/DEC-246/mutations.md`); UI gates 0 fail on `/akun` and `/totp` at 1440×900 and 390×844 with
   screenshots; `pnpm check` exit 0; GPT-6.1 Sol review before live deploy.
-- **DEC-247A** Borderless white-gallery brand site `geraiexpress.com` (R2, DEC-247 (1); owner split 2026-11-18: ships
-  first). Allowed Paths: `apps/worker/src/brand/**`, `apps/worker/test/brand/**`, `e2e/brand.spec.ts`,
+- **DEC-247A** Borderless white-gallery brand site `geraiexpress.com` (R2, effective R3; DEC-247 (1); owner split
+  2026-11-18: ships first) — **DONE 2026-11-18**, Sol R1 APPROVE (`docs/review/dec-247a/`). Allowed Paths: `apps/worker/src/brand/**`, `apps/worker/test/brand/**`, `e2e/brand.spec.ts`,
   `apps/web-app/public/produk-kasir-loket.webp`, `docs/visual/09`, `DESIGN.md`, `DECISIONS.md`,
   `docs/evidence/DEC-247/brand-*`, `STATUS.md`, `BUILD-LOG.md`, `TASKS.md`.
   Accepted Invariants: DEC-245 SEO bounds and factual guards (nine couriers, no invented numbers or competitor names,
