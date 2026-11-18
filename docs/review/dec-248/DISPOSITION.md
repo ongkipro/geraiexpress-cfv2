@@ -40,3 +40,8 @@ e2e `auth-stage` + `onboarding` `--project desktop-1280` 3/3.
 | R2-2 | The active option was scrolled before React rendered a reopened list | The `scrollIntoView({ block: "nearest" })` moved into `useEffect(…, [showList, hl])` | 10 stubbed overflowing results, `Escape`, then `ArrowUp`: `area-opt-9` is active, `#area-results` has `scrollTop > 0`, and the option is in view | D248R2-M2 (effect removed) |
 
 The single full ledger gate (seo, unit, Workers, e2e, `pnpm check`) runs once, in the release run after Sol approves.
+
+# Round 3 — GPT-6.2 Sol R3 (`R3-sol.md`): APPROVE on `c59e509`
+
+Zero open findings. One release run (`seo`, e2e `auth-stage` + `auth` + `onboarding` + `brand`, `pnpm check`, which
+already runs unit + Workers) executes the full gate on the approved head before deploy.

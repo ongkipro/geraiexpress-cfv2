@@ -1193,4 +1193,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   area picker is a keyboard combobox. HP PIC follows WhatsApp gerai until edited. The Turnstile slot is reserved
   (65px, `size: "flexible"`) when a real site key is configured. Mutations D248R1-M1..M7 red. Lesson: a stub that
   renders at once cannot prove a reserved slot; delay it and assert that nothing moves.
+- Supervisor pre-review + Sol R2 combobox items fixed (results bound to their query; active option scrolled in an
+  effect). GPT-6.2 Sol R3 APPROVE on `c59e509` (zero open findings).
 

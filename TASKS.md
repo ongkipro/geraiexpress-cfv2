@@ -801,8 +801,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   workspace; Indonesian validation in both SPAs and the public mini-site forms; `check-page.mjs` 10/10 0 fail 0 warn,
   unit, Workers, e2e `brand` + `minisite` + `courier-logos`, red mutations, screenshots in `docs/evidence/DEC-247B/`,
   `pnpm check`.
-- **DEC-248** Quiet brand closing + minimalist auth stage + `1 · 2 · 3` register (R2, DEC-248; owner 2026-11-19) —
-  worktree `dec-248`. Contract: visual 07 §3.1, visual 09 §6.2. Allowed: `apps/worker/src/brand/**`,
+- **DEC-248** Quiet brand closing + minimalist auth stage + `1 · 2 · 3` register (R2, effective R3; DEC-248; owner 2026-11-19) — **DONE
+  2026-11-19**, GPT-6.2 Sol R3 APPROVE (`docs/review/dec-248/`). Contract: visual 07 §3.1, visual 09 §6.2. Allowed: `apps/worker/src/brand/**`,
   `apps/worker/test/brand/**`, `apps/web-app/src/components/auth/**`, the auth routes in both SPAs, `e2e/**`,
   `docs/evidence/DEC-248/**`, contract docs. Done when: no `cl-steps` on any brand page; `/masuk` (app + owner),
   `/daftar-akun` and both `/daftar` steps have 0 `<footer>`, no page scroll and no inner scroll at 1440×900, 1366×768
