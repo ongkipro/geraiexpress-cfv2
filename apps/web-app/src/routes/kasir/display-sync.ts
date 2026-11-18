@@ -85,8 +85,8 @@ export type PublishResult = { applied: boolean; seq: number | null }
  *   (R3-F2), so a remounted page or a slower clock still numbers above the server.
  * - `send` resolves `{ applied, seq }`, resolves `null` for a permanent refusal (not retried), and rejects on a
  *   transient failure: the input is retried after each of `delays` while it is still the current input.
- * - A `stale` answer for the input that is still current lifts the numbering to the server's mark and sends it once
- *   more; a stale answer for a superseded input is dropped, never republished.
+ * - A `stale` answer proves something newer is stored, so it clears `acked` (R4-F1). For the input that is still current
+ *   it lifts the numbering to the server's mark and sends it once more; a superseded input is dropped, never resent.
  */
 export function createPublisher<T>(opts: {
   send: (input: T, seq: number) => Promise<PublishResult | null>
@@ -130,7 +130,9 @@ export function createPublisher<T>(opts: {
             acked = key
             return
           }
-          // Stale: something newer is stored. Only the still-current input earns one resend above the mark.
+          // Stale: something newer is stored (another tab or counter), so whatever we last acknowledged may be gone
+          // (Sol R4-F1) — forget it before anything else. Only the still-current input earns one resend above the mark.
+          acked = null
           if (!current()) return
           if (rebased === key) parked = key
           else rebased = key

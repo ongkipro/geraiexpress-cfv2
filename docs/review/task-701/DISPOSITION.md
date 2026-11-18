@@ -53,3 +53,13 @@ uncaptured-transient pattern as TASK-701's first run); a direct re-run and a led
 teed to a file both passed 445/445 in 63 files, and `pnpm check` (which runs the same suite) passed in between. The
 ledger keeps both worker records. Boundary: REVIEW_REQUIRED (R4); the run closes BLOCKED pending Sol R4.
 
+## Sol R4 (`R4-sol.md`, REQUEST_CHANGES) — R3-F1 and R3-F2 verified; one P2
+
+| # | Sev | Finding | Fix | Regression | Mutation |
+|---|---|---|---|---|---|
+| R4-F1 | P2 | A `stale` answer for a superseded input (B) left `acked = A`, although it proves something newer (another tab's C) is stored; returning to A while B was in flight was then deduplicated away | In the stale branch the publisher clears `acked` **before** the "is this input still current" check (`display-sync.ts`). The final pump then sends the current A above the server's mark. | unit "R4-F1: A applied → B in flight → back to A → B answers stale at 2000: A is sent again above 2000" (sends `A, B, A`, last seq > 2000, then a clean no-op once A is acknowledged) | T701-R4-M1 (the line removed → that test red) |
+
+Verification (run `RUN-20261118T131308Z-6159ef9a`, outputs teed): unit 195, Workers 445, `pnpm check` (bundle-audit
+PASS) and e2e (30 expected, 0 unexpected, 0 flaky) all executed PASS on the first attempt. Boundary: REVIEW_REQUIRED
+(R4); the run closes BLOCKED pending Sol R5.
+

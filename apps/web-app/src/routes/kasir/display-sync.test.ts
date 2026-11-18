@@ -150,6 +150,25 @@ describe("createPublisher (Sol R2-F1, R3-F1, R3-F2, R1 F6)", () => {
     expect(h.inputs()).toEqual(["A", "B", "A"])
   })
 
+  it("R4-F1: A applied → B in flight → back to A → B answers stale at 2000: A is sent again above 2000", async () => {
+    const h = harness()
+    h.pub.publish("A")
+    h.sends[0]!.settle("applied") // acked = A at seq 1000
+    await tick()
+    h.pub.publish("B") // B in flight at 1001; meanwhile another tab stored C at 2000
+    h.pub.publish("A") // back to A while B is in flight
+    expect(h.inputs()).toEqual(["A", "B"])
+    h.sends[1]!.settle({ stale: 2_000 })
+    await tick()
+    expect(h.inputs()).toEqual(["A", "B", "A"]) // the old acknowledgement of A no longer suppresses it
+    expect(h.sends[2]!.seq).toBeGreaterThan(2_000)
+    h.sends[2]!.settle("applied")
+    await tick()
+    h.pub.publish("A")
+    await tick()
+    expect(h.inputs()).toEqual(["A", "B", "A"]) // acknowledged again: a clean no-op
+  })
+
   it("R3-F2: a fresh publisher with an earlier clock numbers above the pairing's stored mark (floor)", async () => {
     const h = harness({ clock: 1_000, floor: () => 2_000 })
     h.pub.publish("B")

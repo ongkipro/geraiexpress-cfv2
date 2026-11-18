@@ -52,3 +52,9 @@ Script-driven: each mutation applied, the named suite run, the file restored fro
 | T701-R3-M4 | R3-F2 | a stale answer counts as acknowledged | unit | "a stale answer for the current input … resends once"; "a stale answer for a superseded input is dropped…" |
 | T701-R3-M5 | R3-F2 | status reports `seq: 0` | worker | "pair, status and state report the pairing's stored mark…" |
 
+## Sol R4 (2026-11-18)
+
+| Id | Finding | Mutation | Suite | Red |
+|---|---|---|---|---|
+| T701-R4-M1 | R4-F1 | the stale branch keeps `acked` (line removed) | unit `display-sync.test.ts` | "R4-F1: A applied → B in flight → back to A → B answers stale at 2000…" |
+

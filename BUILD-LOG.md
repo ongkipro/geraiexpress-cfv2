@@ -1054,4 +1054,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - R3 verification: one `worker` ledger record failed with only `ELIFECYCLE` captured; re-run and re-record (output
   teed, `pipefail`) passed 445/445 and `pnpm check` passed in between — recorded as an uncaptured transient. Ledger
   checks now tee their output so the next such failure is diagnosable.
+- Sol R4: a `stale` answer must invalidate the publisher's acknowledgement just like a transient failure — it proves
+  the stored content moved. One line (`acked = null` first in the stale branch) + unit regression + mutation.
 
