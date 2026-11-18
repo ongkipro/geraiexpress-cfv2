@@ -31,6 +31,8 @@ export const mockFaults: {
   publicIpNotAllowed?: true
   /** `POST /address` waits on this promise first (tests interleave a request while dispatch is awaiting). */
   addressGate?: Promise<void>
+  /** The next area search waits on this promise first (one-shot; TASK-701 R2-F1 holds an older display publication). */
+  areaSearchGate?: Promise<void>
   /** Pos Indonesia COD create-order answers 403 with this eligibility status (create-order "Pos Indonesia"). */
   posCod?: "new_seller" | "insufficient" | "blocked"
   /** `GET /getReceiverScoreByNumberUser` answers 403 (not whitelisted) or 429 (daily limit). */
@@ -365,6 +367,11 @@ export const mockFetch: typeof fetch = async (input, init) => {
     return json(200, { success: true, data })
   }
   if (p.endsWith("/address/search")) {
+    if (mockFaults.areaSearchGate) {
+      const gate = mockFaults.areaSearchGate
+      delete mockFaults.areaSearchGate
+      await gate
+    }
     const kw = (url.searchParams.get("keyword") ?? "").toLowerCase()
     const areas = [
       { _id: "5fc62f5df8f44b34aa4c0d8c", PROVINCE_NAME: "Jawa Barat", CITY_NAME: "Kota Bandung", DISTRICT_NAME: "Coblong", SUBDISTRICT_NAME: "Dago", ZIP_CODE: "40135" },

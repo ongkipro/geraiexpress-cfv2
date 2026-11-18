@@ -1033,4 +1033,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   Lesson: "zero-leak" by dropping unknown keys is not a PII boundary while any allowed field is free text — accept ids
   and let the server name them. Gotcha: a retry helper must check `cancelled` inside the scheduled callback, not only
   before scheduling (found by the unit test, not by the reviewer).
+- Sol R2 confirmed F1..F7 and found R2-F1 (P2): the new awaited area lookup let an older publication commit after a
+  newer one. Fixed twice over: tenant `0024` gains `state_seq` (amended in place — `0024` has never been applied to a
+  deployed object) with a conditional `state_seq < seq` write, and the counter publishes through `createPublisher`
+  (serialised, coalescing, `max(Date.now(), last + 1)` seq, newest-only retry; replaces `runWithRetry`). Regression
+  holds A's area search on a one-shot mock gate (`mockFaults.areaSearchGate`) while B commits. Lesson: once a write
+  path gains an `await` between "decided" and "stored", ordering must be fixed before the await (a client seq) and
+  enforced at the store; reader-side ordering by store time cannot see it. Gotcha: `react-hooks/refs` rejects ref
+  reads/writes during render, including inside a `useState` initializer — create such objects in an effect.
+- R2-F1 verification: worker 444, unit 190, migrations, isolation, `pnpm check` PASS. One e2e run (seven specs) ended
+  29 passed / 1 failed with the failing test not captured (line reporter summary only); the next two full runs passed
+  30/30 and `customer-display` 9/9 repeated. The ledger keeps both e2e records; later runs use `--reporter=line,json`.
 

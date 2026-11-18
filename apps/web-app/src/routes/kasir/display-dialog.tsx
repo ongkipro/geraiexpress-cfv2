@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { CopyField } from "../../components/admin/page"
 import { LinkButton } from "../../components/admin/link-button"
 import { api, ApiError } from "../../lib/api"
-import { DISPLAY_CHANNEL, runWithRetry, type DisplayHint } from "./display-sync"
+import { createPublisher, DISPLAY_CHANNEL, type DisplayHint } from "./display-sync"
 
 // Layar Pelanggan on the counter (TASK-701, spec 03 §5.5): pair a second window or a phone by QR, keep it in step
 // with `/kasir`, unpair. The server builds every state the display shows; this side only sends ids and amounts.
@@ -19,8 +19,9 @@ const permanent = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.
 
 /**
  * Pairing status for this member + a debounced push of the current input. The push is keyed by pairing AND input, so
- * a new pairing (`Buat Kode Baru`) on an unchanged checkout publishes it at once (Sol R1 F3); a transient failure is
- * retried 1.5 s → 3 s → 6 s and the retry is cancelled when the input or pairing changes (F6). A same-PC display is
+ * a new pairing (`Buat Kode Baru`) on an unchanged checkout publishes it at once (Sol R1 F3). Pushes go through one
+ * serialised publisher (Sol R2-F1): never two in flight, the newest input wins, each carries an increasing `seq` the
+ * server enforces, and a transient failure of the newest input is retried 1.5 s → 3 s → 6 s (F6). A same-PC display is
  * told to refresh through the channel — it then reads its own view; the message carries no state (F2).
  */
 export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
@@ -32,19 +33,21 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
   const key = JSON.stringify(input)
   const pairId = status?.paired ? status.pairId : null
   const last = useRef<string | null>(null)
+  const slug = useRef(tenantSlug)
   useEffect(() => {
-    if (!pairId) return
-    const target = `${pairId}|${key}`
-    if (last.current === target) return
-    let cancel: (() => void) | null = null
-    const id = setTimeout(() => {
-      cancel = runWithRetry(async () => {
+    slug.current = tenantSlug
+  }, [tenantSlug])
+  // One publisher per mounted counter (created before the publishing effect below runs; stopped on unmount).
+  const publisher = useRef<ReturnType<typeof createPublisher<{ pairId: string; key: string }>> | null>(null)
+  useEffect(() => {
+    const p = createPublisher<{ pairId: string; key: string }>({
+      send: async ({ pairId: pid, key: k }, seq) => {
         try {
-          const r = await api<Status>("/customer-display/state", { body: JSON.parse(key) })
-          last.current = target
+          const r = await api<Status & { stale?: boolean }>("/customer-display/state", { body: { ...(JSON.parse(k) as object), seq } })
+          last.current = `${pid}|${k}`
           try {
             const ch = new BroadcastChannel(DISPLAY_CHANNEL)
-            ch.postMessage({ tenantSlug, pairId } satisfies DisplayHint)
+            ch.postMessage({ tenantSlug: slug.current, pairId: pid } satisfies DisplayHint)
             ch.close()
           } catch {
             // No BroadcastChannel: the display still updates on its next poll.
@@ -53,13 +56,19 @@ export function useCustomerDisplay(tenantSlug: string, input: DisplayInput) {
         } catch (e) {
           if (!permanent(e)) throw e
         }
-      })
-    }, 250)
+      },
+    })
+    publisher.current = p
     return () => {
-      clearTimeout(id)
-      cancel?.()
+      p.stop()
+      publisher.current = null
     }
-  }, [key, pairId, tenantSlug])
+  }, [])
+  useEffect(() => {
+    if (!pairId || last.current === `${pairId}|${key}`) return
+    const id = setTimeout(() => publisher.current?.publish({ pairId, key }), 250)
+    return () => clearTimeout(id)
+  }, [key, pairId])
   const onPaired = (s: Status) => setStatus(s)
   return { status, refresh, onPaired }
 }

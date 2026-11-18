@@ -26,6 +26,9 @@ CREATE TABLE customer_display_sessions (
   shift_id TEXT,
   state_json TEXT NOT NULL,
   state_updated_at INTEGER NOT NULL,
+  -- Sol R2-F1: the counter's publication order (ms-based, monotonic per counter page). A write applies only when its
+  -- seq is greater, so an older publication that finishes late can never replace a newer one. 0 = nothing published.
+  state_seq INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   revoked_at INTEGER

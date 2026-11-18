@@ -65,29 +65,72 @@ export function createViewSync<V extends Revision>(opts: { fetchView: () => Prom
 /** F6: delays between attempts of a failed state publication. */
 export const RETRY_DELAYS_MS = [1500, 3000, 6000] as const
 
+type Schedule = (fn: () => void, ms: number) => () => void
+const timer: Schedule = (fn, ms) => {
+  const id = setTimeout(fn, ms)
+  return () => clearTimeout(id)
+}
+
 /**
- * F6: runs `task`; on failure retries after each delay in turn while not cancelled. Returns the cancel function (call it
- * when the input or pairing changes, or on unmount). `schedule` is injectable for tests.
+ * The counter's state publisher (Sol R2-F1 + R1 F6). One publication in flight at a time; inputs published meanwhile
+ * coalesce to the newest, which goes next. Every send carries a strictly increasing `seq` (`max(clock, last + 1)`), which
+ * the tenant object uses to drop an older write that arrives late. `send` resolves on success or on a permanent refusal
+ * and rejects on a transient failure: that input is retried after each of `delays` while nothing newer was published
+ * (a newer input or `stop()` cancels the retry). `schedule` and `clock` are injectable for tests.
  */
-export function runWithRetry(
-  task: () => Promise<void>,
-  delays: readonly number[] = RETRY_DELAYS_MS,
-  schedule: (fn: () => void, ms: number) => () => void = (fn, ms) => {
-    const id = setTimeout(fn, ms)
-    return () => clearTimeout(id)
-  },
-): () => void {
-  let cancelled = false
-  let clear: (() => void) | null = null
-  const attempt = (n: number) => {
-    task().catch(() => {
-      if (cancelled || n >= delays.length) return
-      clear = schedule(() => !cancelled && attempt(n + 1), delays[n]!)
-    })
+export function createPublisher<T>(opts: { send: (input: T, seq: number) => Promise<void>; delays?: readonly number[]; schedule?: Schedule; clock?: () => number }) {
+  const delays = opts.delays ?? RETRY_DELAYS_MS
+  const schedule = opts.schedule ?? timer
+  const clock = opts.clock ?? Date.now
+  let inFlight = false
+  let next: { input: T } | null = null
+  let attempt = 0
+  let cancelRetry: (() => void) | null = null
+  let stopped = false
+  let lastSeq = 0
+  function pump() {
+    if (stopped || inFlight || !next) return
+    const { input } = next
+    next = null
+    inFlight = true
+    lastSeq = Math.max(clock(), lastSeq + 1)
+    opts
+      .send(input, lastSeq)
+      .then(
+        () => {
+          attempt = 0
+        },
+        () => {
+          if (stopped || next || attempt >= delays.length) {
+            attempt = 0
+            return
+          }
+          cancelRetry = schedule(() => {
+            cancelRetry = null
+            if (!stopped && !next) {
+              next = { input }
+              pump()
+            }
+          }, delays[attempt++]!)
+        },
+      )
+      .finally(() => {
+        inFlight = false
+        pump()
+      })
   }
-  attempt(0)
-  return () => {
-    cancelled = true
-    clear?.()
+  return {
+    publish(input: T) {
+      if (stopped) return
+      cancelRetry?.()
+      cancelRetry = null
+      attempt = 0
+      next = { input }
+      pump()
+    },
+    stop() {
+      stopped = true
+      cancelRetry?.()
+    },
   }
 }

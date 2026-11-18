@@ -783,6 +783,7 @@ export const customerDisplaySessions = sqliteTable(
     shiftId: text("shift_id"),
     stateJson: text("state_json").notNull(),
     stateUpdatedAt: integer("state_updated_at").notNull(),
+    stateSeq: integer("state_seq").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at").notNull(),
     revokedAt: integer("revoked_at"),

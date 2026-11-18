@@ -22,3 +22,20 @@ isolation, e2e, `pnpm check`), all executed PASS: unit 188, Workers 443 in 63 fi
 green, e2e 30 passed (customer-display at 390/768/1280 + checkout, pos-guards, quote, settings, shift, print), bundle-audit
 PASS. Boundary: REVIEW_REQUIRED (effective R4); the run closes BLOCKED pending Sol R2 and a release run follows at the
 reviewed head.
+
+## Sol R2 (`R2-sol.md`, REQUEST_CHANGES) — all seven R1 findings confirmed resolved; one new P2
+
+| # | Sev | Finding | Fix | Regression | Mutations |
+|---|---|---|---|---|---|
+| R2-F1 | P2 | The awaited area lookup let an older in-flight publication (A) reach the tenant object after a newer one (B) and overwrite it, with a newer `updatedAt` that the ordered reader then accepted | **Server:** `customer_display_sessions.state_seq` (tenant `0024`, not yet applied anywhere, so amended in place) holds the pairing's last applied publication order; `setDisplayState` writes only `WHERE state_seq < seq` and the route answers `stale: true` for a dropped write. A new pairing starts at 0. A request without `seq` (a counter page loaded before this fix) writes unconditionally as before and bumps `state_seq`. **Counter:** `createPublisher` (replaces `runWithRetry`) keeps one publication in flight, coalesces inputs published meanwhile to the newest, numbers each send `max(Date.now(), last + 1)`, and retries only the newest input (1.5 s → 3 s → 6 s; a newer input or unmount cancels). | worker "an older publication held in its area lookup cannot overwrite a newer one…" — A's area search waits on a one-shot mock gate (`mockFaults.areaSearchGate`), B commits, A is released: A answers `stale`, stored `state_json`/`state_seq` and the public view stay B; equal seq refused, higher applied, a new pairing starts fresh. Unit: no two in flight + coalescing + monotonic seq under a backwards clock; an older failed input is not retried once a newer one exists; bounded retry; cancel by newer input / stop | T701-R2-M1 (server), M2, M3 (counter) |
+
+Both layers are needed: the counter serialises its own publications, and the tenant object enforces order for
+anything that still races (two `/kasir` tabs, a retry crossing the network).
+
+Verification of the R2-F1 fix (run `RUN-20261118T122124Z-437e69ce`): worker 444 in 63 files, migrations, isolation,
+unit 190, `pnpm check` (bundle-audit PASS) all executed PASS. The first e2e record of this run was FAIL — 29 passed, 1
+failed — and the reporter kept only its summary line, so the failing test was not identified. Two later runs of the
+same seven specs passed 30/30 (3 desktop-only skips), the second through the ledger with a JSON report (0 unexpected,
+0 flaky), and `customer-display` passed 9/9 under `--repeat-each=3`. Boundary: REVIEW_REQUIRED (R4); the run closes
+BLOCKED pending Sol R3.
+

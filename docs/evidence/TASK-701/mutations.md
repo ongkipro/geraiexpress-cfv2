@@ -33,3 +33,12 @@ Script-driven: each mutation applied, the named suite run, the file restored fro
 | T701-R1-M10 | F6 | no retry after a failure | unit | both `runWithRetry` tests |
 | T701-R1-M11 | F3 | publication keyed by input only | e2e | new device stays idle after `Buat Kode Baru` |
 | T701-R1-M12 | F7 | browser `err.message` shown | e2e | Indonesian upload message not visible |
+
+## Sol R2-F1 (2026-11-18)
+
+| Id | Mutation | Suite | Result |
+|---|---|---|---|
+| T701-R2-M1 | `setDisplayState` condition `state_seq < ? + 1000000` (order effectively ignored) | worker `test/customer-display` | exit 1: "an older publication held in its area lookup cannot overwrite a newer one…" |
+| T701-R2-M2 | publisher without the in-flight guard (publications overlap) | unit `display-sync.test.ts` | exit 1: "never has two publications in flight…"; "an older failed publication is not retried…" |
+| T701-R2-M3 | a failed input is retried even when a newer one exists | unit `display-sync.test.ts` | exit 1: "an older failed publication is not retried once a newer input exists" |
+

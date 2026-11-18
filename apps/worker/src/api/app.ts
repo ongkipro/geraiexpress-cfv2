@@ -19,7 +19,7 @@ import { escposBytes, initials, labelsPdf, qrSvg, rollLines, rollText, suratJala
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
-import type { DisplayState } from "../do/gerai-vault/customer-display"
+import { publicationSeq, type DisplayState } from "../do/gerai-vault/customer-display"
 import { TABS, type ListQuery, type Tab } from "../do/gerai-vault/listing"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
 import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, OWNER_MEDIA, QRIS_MAX_BYTES, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
@@ -1120,7 +1120,10 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   }
   r("POST", "/customer-display/state", "app_member", "role", async (c) => {
     const input = await body(c)
-    const v = await displayOp(c, { op: "state", input, trackingHost: await trackingHost(c), ...(await displayText(c, input)) })
+    // Sol R2-F1: the counter numbers its publications (`seq`); the tenant object applies one only if it is newer than
+    // what the pairing holds, so a slow area lookup cannot let an older publication overwrite a newer one.
+    const seq = publicationSeq(input.seq)
+    const v = await displayOp(c, { op: "state", input, seq, trackingHost: await trackingHost(c), ...(await displayText(c, input)) })
     return ok({ ...v, state: v.state ? publicState(v.state) : null })
   })
   const DISPLAY_FAIL_LIMIT = 30

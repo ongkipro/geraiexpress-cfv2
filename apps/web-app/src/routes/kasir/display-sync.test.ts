@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { createViewSync, isHintFor, isNewer, runWithRetry } from "./display-sync"
+import { createPublisher, createViewSync, isHintFor, isNewer } from "./display-sync"
 
 const deferred = <T>() => {
   let resolve!: (v: T) => void
@@ -58,67 +58,102 @@ describe("view ordering (Sol R1 F5)", () => {
   })
 })
 
-describe("runWithRetry (Sol R1 F6)", () => {
-  it("retries a failed publication with the bounded delays, then stops", async () => {
-    const waits: number[] = []
-    const queue: Array<() => void> = []
-    let n = 0
-    runWithRetry(
-      async () => {
-        n++
-        throw new Error("network")
-      },
-      [1500, 3000, 6000],
-      (fn, ms) => {
-        waits.push(ms)
-        queue.push(fn)
-        return () => undefined
-      },
-    )
-    for (let i = 0; i < 5; i++) {
-      await tick()
-      queue.shift()?.()
+/** A controllable `send`: every call is recorded with its seq and settled by the test. */
+function harness() {
+  const sends: Array<{ input: string; seq: number; settle: (ok: boolean) => void }> = []
+  const timers: Array<{ ms: number; fn: () => void; cleared: boolean }> = []
+  let now = 1_000
+  const pub = createPublisher<string>({
+    send: (input, seq) =>
+      new Promise<void>((resolve, reject) => sends.push({ input, seq, settle: (ok) => (ok ? resolve() : reject(new Error("network"))) })),
+    delays: [1500, 3000, 6000],
+    schedule: (fn, ms) => {
+      const t = { ms, fn, cleared: false }
+      timers.push(t)
+      return () => (t.cleared = true)
+    },
+    clock: () => now,
+  })
+  const fire = () => {
+    const t = timers.find((x) => !x.cleared)
+    if (t) {
+      t.cleared = true
+      t.fn()
     }
+  }
+  return { pub, sends, timers, fire, setNow: (n: number) => (now = n) }
+}
+
+describe("createPublisher (Sol R2-F1, R1 F6)", () => {
+  it("never has two publications in flight; inputs published meanwhile coalesce to the newest; seq strictly increases", async () => {
+    const h = harness()
+    h.pub.publish("A")
+    h.pub.publish("B")
+    h.pub.publish("C")
+    expect(h.sends.map((x) => x.input)).toEqual(["A"]) // B and C wait; only the newest (C) will go
+    h.sends[0]!.settle(true)
     await tick()
-    expect(n).toBe(4) // first try + 3 retries
-    expect(waits).toEqual([1500, 3000, 6000])
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "C"])
+    expect(h.sends[1]!.seq).toBeGreaterThan(h.sends[0]!.seq) // clock unchanged: last + 1
+    h.setNow(500) // a clock that moves backwards never lowers seq
+    h.sends[1]!.settle(true)
+    h.pub.publish("D")
+    await tick()
+    expect(h.sends[2]!.seq).toBeGreaterThan(h.sends[1]!.seq)
   })
 
-  it("recovers on the next attempt and is cancellable", async () => {
-    const queue: Array<() => void> = []
-    let n = 0
-    let sent = 0
-    runWithRetry(
-      async () => {
-        n++
-        if (n === 1) throw new Error("503")
-        sent++
-      },
-      [1500],
-      (fn) => (queue.push(fn), () => undefined),
-    )
+  it("an older failed publication is not retried once a newer input exists (no stale rewrite)", async () => {
+    const h = harness()
+    h.pub.publish("A")
+    h.pub.publish("B")
+    h.sends[0]!.settle(false) // A fails while B is queued
     await tick()
-    queue.shift()!()
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "B"])
+    h.sends[1]!.settle(true)
     await tick()
-    expect(sent).toBe(1)
+    expect(h.timers).toHaveLength(0)
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "B"])
+  })
 
-    let cleared = false
-    const pending: Array<() => void> = []
-    let tries = 0
-    const cancel = runWithRetry(
-      async () => {
-        tries++
-        throw new Error("x")
-      },
-      [1500, 3000],
-      (fn) => (pending.push(fn), () => (cleared = true)),
-    )
+  it("F6: the newest input is retried with the bounded delays, then given up", async () => {
+    const h = harness()
+    h.pub.publish("A")
+    for (let i = 0; i < 4; i++) {
+      h.sends[i]!.settle(false)
+      await tick()
+      h.fire()
+      await tick()
+    }
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "A", "A", "A"])
+    expect(h.timers.map((t) => t.ms)).toEqual([1500, 3000, 6000])
+    expect(new Set(h.sends.map((x) => x.seq)).size).toBe(4) // every retry is a new, higher publication
+  })
+
+  it("F6: recovers on a retry; a newer input or stop() cancels a pending retry", async () => {
+    const h = harness()
+    h.pub.publish("A")
+    h.sends[0]!.settle(false)
     await tick()
-    cancel()
-    expect(cleared).toBe(true)
-    pending.shift()?.() // a timer that fired anyway does nothing after cancel
+    h.fire()
     await tick()
-    expect(tries).toBe(1) // a timer that fires after cancel runs no attempt
-    expect(pending).toHaveLength(0)
+    h.sends[1]!.settle(true)
+    await tick()
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "A"])
+
+    h.pub.publish("B")
+    h.sends[2]!.settle(false)
+    await tick()
+    expect(h.timers.at(-1)!.cleared).toBe(false)
+    h.pub.publish("C") // supersedes B's retry
+    expect(h.timers.at(-1)!.cleared).toBe(true)
+    await tick()
+    expect(h.sends.map((x) => x.input)).toEqual(["A", "A", "B", "C"])
+    h.sends[3]!.settle(false)
+    await tick()
+    h.pub.stop()
+    expect(h.timers.at(-1)!.cleared).toBe(true)
+    h.timers.at(-1)!.fn() // a timer that fires anyway after stop sends nothing
+    await tick()
+    expect(h.sends).toHaveLength(4)
   })
 })

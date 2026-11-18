@@ -5,7 +5,7 @@ import { env, exports } from "cloudflare:workers"
 import { runInDurableObject } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
 import { hostCache } from "../../src/host/lookup"
-import { resetMock } from "../../src/mengantar/mock"
+import { mockFaults, mockLog, resetMock } from "../../src/mengantar/mock"
 import { ownerOnlyKeysIn } from "../../src/dto/projection"
 import { appUser } from "../onboarding/helpers"
 import { APP, appGet } from "../webhooks/helpers"
@@ -340,6 +340,45 @@ describe("Sol R1 regressions (TASK-701)", () => {
     expect((await data<{ pairId: string }>(await appGet("/customer-display/status", t.cookie))).pairId).toBe(b.pairId)
     expect((await data<View>(await view("layarpairid", kodeOf(b)))).pairId).toBe(b.pairId)
     expect(b.pairId).not.toContain(b.token)
+  })
+})
+
+describe("Sol R2-F1 publication ordering (TASK-701)", () => {
+  it("an older publication held in its area lookup cannot overwrite a newer one; stored and public state stay newer", async () => {
+    const t = await checkoutGerai("layarurut")
+    const p = await pair(t.cookie)
+    const DAGO = "5fc62f5df8f44b34aa4c0d8c"
+    // A: Tebet Barat, Rp 12.500 (seq 1000) — its area search waits at the gate (cache cleared so it reaches the mock).
+    await env.CACHE_KV.delete("area:v1:barat")
+    let release!: () => void
+    mockFaults.areaSearchGate = new Promise<void>((r) => (release = r))
+    const seen = mockLog.length
+    const a = post("/customer-display/state", t.cookie, { ...CHECKOUT, seq: 1000, destinationLabel: "Barat", lines: [{ kind: "ongkir", amountIdr: 12500 }], totalIdr: 12500 })
+    for (let i = 0; i < 400 && !mockLog.slice(seen).some((l) => l.path === "/address/search"); i++) await new Promise((r) => setTimeout(r, 5))
+    expect(mockFaults.areaSearchGate).toBeUndefined() // A is inside the held lookup
+    // B: Dago, Rp 20.000 (seq 2000) commits first.
+    const b = await post("/customer-display/state", t.cookie, { ...CHECKOUT, seq: 2000, destinationAreaId: DAGO, destinationLabel: "Dago", lines: [{ kind: "ongkir", amountIdr: 20000 }], totalIdr: 20000 })
+    expect(b.status).toBe(200)
+    // Release A: it reaches the tenant object last and must be dropped as stale.
+    release()
+    const ra = await a
+    expect(ra.status).toBe(200)
+    expect(await data<{ stale?: boolean; state: unknown }>(ra)).toMatchObject({ stale: true, state: null })
+    const expectB = { kind: "checkout", totalIdr: 20000, destination: "Dago, Coblong, Kota Bandung, Jawa Barat" }
+    let stored: { state: Record<string, unknown>; seq: number } | null = null
+    await runInDurableObject(vaultFor(env, t.tenantId), (_i, s) => {
+      const r = s.storage.sql.exec<{ state_json: string; state_seq: number }>("SELECT state_json, state_seq FROM customer_display_sessions WHERE revoked_at IS NULL").toArray()[0]!
+      stored = { state: JSON.parse(r.state_json) as Record<string, unknown>, seq: r.state_seq }
+    })
+    expect(stored!).toMatchObject({ state: expectB, seq: 2000 })
+    expect((await data<View>(await view("layarurut", kodeOf(p)))).state).toMatchObject(expectB)
+    // A newer publication still applies; an equal seq does not (strictly increasing).
+    expect(await data(await post("/customer-display/state", t.cookie, { kind: "idle", seq: 2000 }))).toMatchObject({ stale: true })
+    expect(await data(await post("/customer-display/state", t.cookie, { kind: "idle", seq: 2001 }))).toMatchObject({ state: { kind: "idle" } })
+    // A new pairing starts from 0, so the counter's next publication applies there at once.
+    const q = await pair(t.cookie)
+    expect(await data(await post("/customer-display/state", t.cookie, { ...CHECKOUT, seq: 5 }))).toMatchObject({ state: { kind: "checkout" } })
+    expect((await data<View>(await view("layarurut", kodeOf(q)))).state).toMatchObject({ kind: "checkout", totalIdr: 15500 })
   })
 })
 

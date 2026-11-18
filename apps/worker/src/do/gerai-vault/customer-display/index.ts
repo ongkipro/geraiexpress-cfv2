@@ -165,10 +165,26 @@ export function displayStatus(sql: SqlStorage, userId: string, now: number): { p
   return { paired: !!r, pairId: r?.id ?? null, expiresAt: r?.expires_at ?? null, shiftBound: !!r?.shift_id }
 }
 
-/** Replaces the state on this member's live pairings; returns how many were updated. */
-export function setDisplayState(sql: SqlStorage, userId: string, state: DisplayState, now: number): number {
-  return sql.exec(`UPDATE customer_display_sessions SET state_json = ?, state_updated_at = ? WHERE created_by_user_id = ? AND ${LIVE}`, JSON.stringify(state), now, userId, now).rowsWritten
+/** Replaces the state on this member's live pairings. With a counter `seq` (Sol R2-F1) only pairings whose last
+ *  publication is older take it — 0 for a live pairing means this publication is stale and was dropped. Without one
+ *  (a counter page from before R2-F1) the write applies as before and the stored order never moves backwards. */
+export function setDisplayState(sql: SqlStorage, userId: string, state: DisplayState, now: number, seq: number | null): number {
+  if (seq === null) {
+    return sql.exec(`UPDATE customer_display_sessions SET state_json = ?, state_updated_at = ?, state_seq = state_seq + 1 WHERE created_by_user_id = ? AND ${LIVE}`, JSON.stringify(state), now, userId, now).rowsWritten
+  }
+  return sql.exec(
+    `UPDATE customer_display_sessions SET state_json = ?, state_updated_at = ?, state_seq = ? WHERE created_by_user_id = ? AND ${LIVE} AND state_seq < ?`,
+    JSON.stringify(state),
+    now,
+    seq,
+    userId,
+    now,
+    seq,
+  ).rowsWritten
 }
+
+/** The counter's publication order: a positive safe integer, else null (no ordering claim). */
+export const publicationSeq = (v: unknown): number | null => (typeof v === "number" && Number.isSafeInteger(v) && v > 0 ? v : null)
 
 export function unpairDisplay(sql: SqlStorage, userId: string, now: number): number {
   return sql.exec("UPDATE customer_display_sessions SET revoked_at = ? WHERE created_by_user_id = ? AND revoked_at IS NULL", now, userId).rowsWritten

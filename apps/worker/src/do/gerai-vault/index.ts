@@ -532,9 +532,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
       | { op: "pair"; tokenHash: string }
       | { op: "status" }
       | { op: "unpair" }
-      | { op: "state"; input: Record<string, unknown>; trackingHost: string; resolved?: DisplayResolved; catalog?: Record<string, string> },
+      | { op: "state"; input: Record<string, unknown>; seq: number | null; trackingHost: string; resolved?: DisplayResolved; catalog?: Record<string, string> },
     now: number = Date.now(),
-  ): Promise<{ ok: true; value: { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
+  ): Promise<{ ok: true; value: { paired: boolean; pairId: string | null; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState; stale?: boolean } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -564,8 +564,10 @@ export class GeraiVaultDO extends DurableObject<Env> {
           if (!p) return { ok: false as const, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
           state = p
         } else return { ok: false as const, error: { status: 422, code: "DISPLAY_INVALID", message: "Status layar tidak dikenal." } }
-        setDisplayState(sql, userId, state, now)
-        return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris, state } }
+        const status = displayStatus(sql, userId, now)
+        // A live pairing that did not take the write already holds a newer publication: report it, keep it.
+        if (setDisplayState(sql, userId, state, now, op.seq) === 0 && status.paired) return { ok: true as const, value: { ...status, hasQris, stale: true } }
+        return { ok: true as const, value: { ...status, hasQris, state } }
       }
       return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris } }
     })
