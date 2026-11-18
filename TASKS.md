@@ -787,7 +787,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `dotuiux` 0 fail on `/`, `/biaya-dan-paket`, `/tanya-jawab`; red mutations in `docs/evidence/DEC-247/brand-mutations.md`;
   screenshots `brand-home-1440/390`, `brand-pricing-1440` (0 overflow, 0 console errors); `pnpm check` exit 0; Sol review.
 - **DEC-247B** Brand inner pages + dynamic mini-site, courier logos across the workspace, Indonesian validation
-  (R2, DEC-247 (1)–(4); owner mandate 2026-11-18/19, parts 1–6) — worktree `dec-247b`, after DEC-247A is live.
+  (R2, effective R4; DEC-247 (1)–(4); owner mandate 2026-11-18/19, parts 1–6) — **DONE 2026-11-19**, GPT-6.2 Sol R4
+  APPROVE after R1–R3 fixes (`docs/review/dec-247b/`).
   Contract: visual 09 §6.2 (inner pages, simulator listboxes, footer rhythm) and §6.3 (mini-site owner decisions),
   DESIGN.md workspace additions. Allowed: `apps/worker/src/{brand,minisite}/**`,
   `apps/worker/src/do/gerai-vault/{index.ts,minisite/**}`, `apps/worker/test/{brand,minisite}/**`,

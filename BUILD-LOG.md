@@ -1162,4 +1162,5 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol R3 (R2-1 resolved) two P2 items fixed in run `RUN-20261118T190535Z-ceaa4c6e`: P×L×T validated untrimmed like
   the browser pattern; one uncapped last-wins lookup feeds both validation and the redisplay, and repeated dimension
   fields are refused. Mutations R3-M1..M3 red.
+- GPT-6.2 Sol R4 APPROVE on `3c424be` (zero open findings). Release run `RUN-20261118T191916Z-38f6cb8b`.
 
