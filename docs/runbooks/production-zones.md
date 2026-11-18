@@ -101,3 +101,4 @@ so a rollback means `wrangler delete` of the env Worker after owner approval.
 | 2026-11-18 | DEC-246 Super Admin `/akun` + recovery codes (`5901a9d`, Sol R2 APPROVE) | `0019_super_admin_recovery_codes` | `6bfb94c4-3300-4575-8d19-8eeee5677604` | `c8285eb3-be44-4939-8c1b-285686540e04` |
 | 2026-11-18 | TASK-701 Layar Pelanggan (`2d8caae`, Sol R7 APPROVE) | — (tenant `0024` via `pnpm do:migrate`, objects v24) | `82278278-ffd9-4846-9819-17400a07714a` | `62b42387-cdb0-4d0c-9135-ee59c078c989` |
 | 2026-11-18 | DEC-247A borderless white-gallery brand site (`65beef5`, Sol R1 APPROVE) | — | `8b462e39-292e-41ab-a16e-510086c6afbe` | `a14187ab-4378-4f88-abec-1bd711ea374f` |
+| 2026-11-19 | DEC-247B brand inner pages, mini-site owner rules, courier logos, Indonesian validation (`2877b41`, Sol R4 APPROVE) | — | `ed5a44e6-587f-4fa9-ae08-d12536a2309c` | `2ffcc646-d0b0-44fb-ba25-4f3628ab52fe` |

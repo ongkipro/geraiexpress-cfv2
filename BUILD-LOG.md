@@ -1163,4 +1163,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   the browser pattern; one uncapped last-wins lookup feeds both validation and the redisplay, and repeated dimension
   fields are refused. Mutations R3-M1..M3 red.
 - GPT-6.2 Sol R4 APPROVE on `3c424be` (zero open findings). Release run `RUN-20261118T191916Z-38f6cb8b`.
+- Live 2026-11-19 (owner-authorized): `main` fast-forwarded to `2877b41` and pushed; `pnpm build` + bundle-audit PASS;
+  Workers staging `ed5a44e6-587f-4fa9-ae08-d12536a2309c`, production `2ffcc646-d0b0-44fb-ba25-4f3628ab52fe` (each
+  verified serving the new `/fitur` markup before checks). Production brand pages 200 without `Set-Cookie`,
+  `/simulasi-kasir` with zero `<select>`, WebP 200 `image/webp`, app/owner `/masuk` and `probe.geraimitra.com` 200;
+  probes staging 5/5, production 6/6 (twice). No D1 or tenant migration.
 
