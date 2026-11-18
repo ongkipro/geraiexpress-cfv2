@@ -70,6 +70,7 @@ All routes require `aal2` TOTP verification and enforce strict non-impersonation
 | **3** | **`Tarif & Kurir`** | `/tarif` · Tabs = sidebar sub-tree (DEC-241): `Diskon & Cashback` · `Permintaan Mengantar` · `Kebijakan Diskon` | Set per-outlet × courier/service integer `bps` discounts & cashback (ceiling `max_discount_bps`, default 30 %; each rule verified against the observed Mengantar discount, DEC-230); maintain courier volumetric divisors, COD caps, and claim deadlines. |
 | **4** | **`Pengawasan`** | `/pengawasan` · Tabs = sidebar sub-tree (DEC-241): `Pantauan Kiriman` · `Radar Risiko COD` | Search any `INV` or AWB across tenants, monitor `reconciliation_needed` / `provider_unpaid_hold` / sync-mismatch queues, and audit cross-outlet COD phone RTS scores. |
 | **5** | **`Sistem & Audit`** | `/sistem` · Tabs = sidebar sub-tree (DEC-241): `Kesehatan Integrasi` · `Log Audit` · `Akses Admin` · `Profil Perusahaan` | Monitor Partner API quota & `partner-relay` reachability, inspect immutable audit logs, manage Super Admin recovery TOTP accounts, and edit the platform operator legal profile (`platform_legal_profile`, TOTP + audit reason). |
+| | *Account (DEC-246, not a menu: account menu `Profil Saya` + ⌘K)* | `/akun` — `Profil & Keamanan Akun` | Own profile, password, email, 2FA (authenticator rotation + 8 single-use recovery codes) and sessions; `GET/POST /account*` (`owner_aal2`; password, email, codes and rotation `owner_recent` + current password), `POST /auth/totp/recovery` (`owner_aal1`). |
 
 ---
 

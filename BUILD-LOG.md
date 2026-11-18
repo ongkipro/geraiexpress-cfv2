@@ -942,3 +942,23 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   drill, relay Origin CA / rollout (TASK-601), Email Sending inbox tests (TASK-112). No `.delivery` run: this is a live
   ops record, not a task result; TASK-109/602 stay open.
 
+## 2026-11-18 — DEC-246 Super Admin `/akun` + backup second factor (branch `dec-246`, awaiting Sol review)
+
+- Scope: owner directive 2026-11-18 ("halaman profile … ganti password juga 2nd verif buat berjaga2"). Control
+  `0019_super_admin_recovery_codes`; `apps/worker/src/auth/recovery` (codes + rotation ticket); `api/owner.ts` gains
+  `/auth/totp/recovery` and `/account*`; session list/revoke helpers take host contexts (app default unchanged);
+  web-owner `/akun`, `/totp` recovery/rotation/codes screens, `Profil Saya` in the account menu, ⌘K entry.
+- Design call recorded in DEC-246 (4): the directive said a recovery login with "reset TOTP" should set the account to
+  `pending`. In this code `pending` lets `POST /auth/totp/enrol` run on a password-only (`aal1`) session, so a thief
+  with the password could enrol their own authenticator. Instead the recovery answer carries a sealed rotation ticket
+  and the active secret is replaced only after a code from the new one verifies — same result for the owner.
+- Evidence: worker 14/14 new tests + auth/migrations 60/60; six mutations each turn exactly one test red; e2e owner
+  specs 11 passed (`onboarding.spec` now clicks past the one-time codes screen); UI gates 0 fail 0 warn on `/akun` and
+  `/totp`; screenshots `docs/evidence/DEC-246/`.
+- Gotchas: (1) `.dev.vars*` reads are denied to agents on this device — the worktree's `.dev.vars` was generated with
+  synthetic local values (ignored by Git), never copied. (2) A replayed `rotate-confirm` is refused by comparing the
+  ticket secret with the active one (the new secret's step guard cannot apply across secrets). (3) Screenshots show
+  synthetic recovery codes and a TOTP key from a throwaway local state (`.wrangler/state-ui-246`, deleted).
+- Deploy (after review): `wrangler d1 migrations apply DB --remote --env staging|production` (0019 only), then both
+  Workers; no tenant migration, no new secret.
+

@@ -61,6 +61,8 @@ test("TASK-203 apply (account → data gerai → titik jemput → ringkasan) →
   const secret = (await admin.locator("span.font-mono").textContent())!.trim()
   await admin.getByLabel("Kode TOTP").fill(totp(secret))
   await admin.getByRole("button", { name: "Verifikasi" }).click()
+  // DEC-246: the first confirmation shows the recovery codes once.
+  await admin.getByRole("button", { name: "Saya Sudah Menyimpan, Lanjut ke Konsol" }).click()
   await admin.getByRole("link", { name: "Gerai" }).first().click()
   await admin.getByRole("link", { name: "Toko Uji Coba" }).click()
   await admin.getByRole("button", { name: "Setujui & Buka Akun Seller Mengantar" }).click()

@@ -6,6 +6,9 @@ import { emit } from "@gx/telemetry"
 import { clearSessionCookie, isSecureRequest, setSessionCookie } from "../auth/cookies"
 import { sameOriginOk } from "../auth/csrf"
 import { login } from "../auth/flows"
+import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
+import { verifyPassword } from "../auth/password"
+import { canonicalRecoveryCode, consumeRecoveryCode, issueRecoveryCodes, openRotation, recoveryStatus, sealRotation } from "../auth/recovery"
 import { dispatchDue } from "../email/mailer"
 import { readSession, revokeSession, type Session } from "../auth/session"
 import * as throttle from "../auth/throttle"
@@ -83,17 +86,50 @@ export function requireReason(raw: unknown): string {
   return reason
 }
 
-async function checkTotp(env: Env, session: Session, code: unknown, now: number): Promise<void> {
-  const admin = await adminOf(env, session.user.id)
-  if (!admin?.totp_secret_encrypted || admin.totp_state === "reset") throw new AppError(409, "TOTP_NOT_ENROLLED", "TOTP belum diaktifkan. Minta Super Admin lain menyiapkan pendaftaran TOTP Anda.")
-  const lockKey = `totp-lock:${await sha256Hex(session.user.id)}`
+const notEnrolled = () => new AppError(409, "TOTP_NOT_ENROLLED", "TOTP belum diaktifkan. Minta Super Admin lain menyiapkan pendaftaran TOTP Anda.")
+
+/** The second-factor lock shared by TOTP codes and recovery codes (DEC-246): refuses while locked. */
+async function secondFactorGate(env: Env, userId: string, now: number): Promise<string> {
+  const lockKey = `totp-lock:${await sha256Hex(userId)}`
   const locked = await throttle.lockedUntil(env.DB, lockKey, now)
   if (locked) throw new AppError(429, "TOO_MANY_ATTEMPTS", "Terlalu banyak percobaan, coba lagi dalam 15 menit.", {}, { "retry-after": String(Math.ceil((locked - now) / 1000)) })
+  return lockKey
+}
+
+/** Counts one wrong second factor; the 5th within 15 minutes locks both TOTP and recovery codes for 15 minutes. */
+async function secondFactorWrong(env: Env, userId: string, lockKey: string, now: number): Promise<void> {
+  const fails = await throttle.hit(env.DB, `totp-fail:${userId}`, TOTP_MAX_WRONG - 1, TOTP_LOCK_MS, now)
+  if (!fails.allowed) await throttle.lock(env.DB, lockKey, now + TOTP_LOCK_MS, now).run()
+}
+
+const promoteSession = (env: Env, session: Session, now: number) => [
+  env.DB.prepare("UPDATE sessions SET aal = 'aal2', totp_verified_at = ? WHERE token_hash = ?").bind(now, session.row.token_hash),
+  throttle.clear(env.DB, `totp-fail:${session.user.id}`),
+]
+
+/** Signs out the user's other owner-console sessions (authenticator change, recovery with a lost phone). */
+const revokeOtherOwnerSessions = (env: Env, session: Session, now: number) =>
+  env.DB.prepare("UPDATE sessions SET revoked_at = ?1 WHERE user_id = ?2 AND host_context = 'owner' AND revoked_at IS NULL AND token_hash != ?3").bind(now, session.user.id, session.row.token_hash)
+
+/** Re-authentication for credential changes (codes, authenticator): current password, 5 tries per 15 minutes. */
+async function confirmPassword(env: Env, userId: string, password: unknown, now: number): Promise<void> {
+  const limit = await throttle.hit(env.DB, `owner-reauth:${userId}`, 5, 15 * 60_000, now)
+  if (!limit.allowed) throw new AppError(429, "TOO_MANY_ATTEMPTS", "Terlalu banyak percobaan, coba lagi dalam 15 menit.", {}, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) })
+  const u = await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(userId).first<{ password_hash: string }>()
+  if (!u || typeof password !== "string" || !(await verifyPassword(password, env.AUTH_SESSION_PEPPER, u.password_hash))) {
+    throw new AppError(400, "WRONG_PASSWORD", "Kata sandi saat ini salah.", { password: "Kata sandi saat ini salah." })
+  }
+}
+
+/** Verifies a TOTP code and promotes the session; `wasPending` = this confirmed an enrolment. */
+async function checkTotp(env: Env, session: Session, code: unknown, now: number): Promise<{ wasPending: boolean }> {
+  const admin = await adminOf(env, session.user.id)
+  if (!admin?.totp_secret_encrypted || admin.totp_state === "reset") throw notEnrolled()
+  const lockKey = await secondFactorGate(env, session.user.id, now)
   const secret = await decryptString(env.KEK_SECRET, admin.totp_secret_encrypted, "totp")
   const step = await verifyTotp(secret, typeof code === "string" ? code.trim() : "", now, admin.totp_last_step)
   if (step === null) {
-    const fails = await throttle.hit(env.DB, `totp-fail:${session.user.id}`, TOTP_MAX_WRONG - 1, TOTP_LOCK_MS, now)
-    if (!fails.allowed) await throttle.lock(env.DB, lockKey, now + TOTP_LOCK_MS, now).run()
+    await secondFactorWrong(env, session.user.id, lockKey, now)
     throw new AppError(400, "TOTP_INVALID", "Kode TOTP salah atau sudah dipakai.", { code: "Periksa kode di aplikasi autentikator." })
   }
   // Consume the step atomically (replay guard) and promote the session.
@@ -101,10 +137,8 @@ async function checkTotp(env: Env, session: Session, code: unknown, now: number)
     .bind(step, now, session.user.id)
     .first()
   if (!used) throw new AppError(400, "TOTP_INVALID", "Kode TOTP salah atau sudah dipakai.")
-  await env.DB.batch([
-    env.DB.prepare("UPDATE sessions SET aal = 'aal2', totp_verified_at = ? WHERE token_hash = ?").bind(now, session.row.token_hash),
-    throttle.clear(env.DB, `totp-fail:${session.user.id}`),
-  ])
+  await env.DB.batch(promoteSession(env, session, now))
+  return { wasPending: admin.totp_state !== "active" }
 }
 
 export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
@@ -152,9 +186,46 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
 
   r("POST", "/auth/totp/verify", "owner_aal1", "self", async (c) => {
     const b = await body(c)
-    await checkTotp(c.env, c.get("session"), b.code, now())
+    const s = c.get("session")
+    const t = now()
+    const { wasPending } = await checkTotp(c.env, s, b.code, t)
     emit("auth.otp", { outcome: "totp_verified" }, {}, { env: c.env.GX_ENV })
+    // DEC-246: the first confirmed enrolment comes with the backup codes, shown once.
+    if (wasPending && (await recoveryStatus(c.env, s.user.id)).remaining === 0) {
+      const { codes, statements } = await issueRecoveryCodes(c.env, s.user.id, t)
+      await c.env.DB.batch([...statements, auditStatement(c.env, { actorId: s.user.id, action: "super_admin.recovery_codes_regenerate", targetType: "user", targetId: s.user.id, reason: "kode pemulihan pertama saat pendaftaran TOTP", now: t })])
+      return ok({ aal: "aal2", recoveryCodes: codes })
+    }
     return ok({ aal: "aal2" })
+  })
+
+  // DEC-246: a single-use recovery code instead of the TOTP code (phone lost or replaced). Same lock as TOTP.
+  // `resetTotp` also returns a sealed new authenticator secret to pair at once and signs out the other owner sessions;
+  // the active secret stays until a code from the new one verifies (rotate-confirm), so the account never reverts to
+  // `pending` (where a password alone could enrol).
+  r("POST", "/auth/totp/recovery", "owner_aal1", "self", async (c) => {
+    const b = await body(c)
+    const s = c.get("session")
+    const t = now()
+    const admin = await adminOf(c.env, s.user.id)
+    if (!admin?.totp_secret_encrypted || admin.totp_state !== "active") throw notEnrolled()
+    const lockKey = await secondFactorGate(c.env, s.user.id, t)
+    const canonical = canonicalRecoveryCode(b.code)
+    if (!canonical || !(await consumeRecoveryCode(c.env, s.user.id, canonical, t))) {
+      await secondFactorWrong(c.env, s.user.id, lockKey, t)
+      throw new AppError(400, "RECOVERY_CODE_INVALID", "Kode pemulihan salah atau sudah dipakai.", { code: "Periksa lagi kode pemulihan Anda." })
+    }
+    const resetTotp = b.resetTotp === true
+    const { remaining } = await recoveryStatus(c.env, s.user.id)
+    await c.env.DB.batch([
+      ...promoteSession(c.env, s, t),
+      ...(resetTotp ? [revokeOtherOwnerSessions(c.env, s, t)] : []),
+      auditStatement(c.env, { actorId: s.user.id, action: "super_admin.recovery_code_used", targetType: "user", targetId: s.user.id, reason: "masuk dengan kode pemulihan cadangan", metadata: { remaining, resetTotp }, now: t }),
+    ])
+    emit("auth.otp", { outcome: "recovery_code_used" }, {}, { env: c.env.GX_ENV })
+    if (!resetTotp) return ok({ aal: "aal2", remaining })
+    const secret = newTotpSecret()
+    return ok({ aal: "aal2", remaining, rotation: { ...(await sealRotation(c.env, s.user.id, secret, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) } })
   })
 
   r("POST", "/auth/logout", "owner_aal1", "none", async (c) => {
@@ -207,10 +278,106 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       c.env.DB.prepare("UPDATE super_admins SET totp_secret_encrypted = NULL, totp_state = 'reset', totp_last_step = NULL, updated_at = ? WHERE user_id = ?").bind(t, target),
       // The reset admin's sessions end immediately.
       c.env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND host_context = 'owner' AND revoked_at IS NULL").bind(t, target),
+      // DEC-246: the old backup codes belong to the old enrolment; a new set comes with the next confirmation.
+      c.env.DB.prepare("DELETE FROM super_admin_recovery_codes WHERE user_id = ?").bind(target),
       auditStatement(c.env, { actorId: actor.id, action: "super_admin.totp_reset", targetType: "user", targetId: target, reason, now: t }),
     ])
     if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(404, "ADMIN_NOT_FOUND", "Super Admin tidak ditemukan.")
     return ok({ reset: true })
+  })
+
+  // DEC-246 `Profil & Keamanan Akun` (`/akun`): the Super Admin's own account. Reads and profile need aal2; credential
+  // changes need a TOTP within 15 minutes plus the current password (email and password check it inside the helper).
+  const SELF = "akun sendiri"
+  const audit = (c: OwnerCtx, action: string, t: number, metadata?: unknown) =>
+    auditStatement(c.env, { actorId: c.get("session").user.id, action, targetType: "user", targetId: c.get("session").user.id, reason: SELF, metadata, now: t })
+
+  r("GET", "/account", "owner_aal2", "self", async (c) => {
+    const s = c.get("session")
+    const t = now()
+    const admin = await c.env.DB.prepare("SELECT totp_state, enrolled_at, created_at FROM super_admins WHERE user_id = ?").bind(s.user.id).first<{ totp_state: string; enrolled_at: number | null; created_at: number }>()
+    return ok({
+      profile: { name: s.user.name, email: s.user.email, phone: s.user.phone },
+      totp: { state: admin?.totp_state ?? "pending", enrolledAt: admin?.enrolled_at ?? admin?.created_at ?? null, totpRecentUntil: (s.row.totp_verified_at ?? 0) + RECENT_TOTP_MS },
+      recoveryCodes: await recoveryStatus(c.env, s.user.id),
+      sessions: await listSessions(c.env, s.user.id, s.row.token_hash, t, ["owner", "app"]),
+    })
+  })
+
+  r("POST", "/account/profile", "owner_aal2", "self", async (c) => {
+    const t = now()
+    const profile = await updateProfile(c.env, c.get("session").user.id, await body(c), t)
+    await audit(c, "super_admin.profile_updated", t).run()
+    return ok({ profile })
+  })
+
+  r("POST", "/account/password", "owner_recent", "self", async (c) => {
+    const s = c.get("session")
+    const t = now()
+    await changePassword(c.env, s.user.id, s.row.token_hash, await body(c), t)
+    await audit(c, "super_admin.password_changed", t).run()
+    return ok({ changed: true })
+  })
+
+  r("POST", "/account/email/request", "owner_recent", "self", async (c) => {
+    return ok(await requestEmailChange(c.env, c.get("session").user.id, await body(c), await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), now()))
+  })
+
+  r("POST", "/account/email/confirm", "owner_recent", "self", async (c) => {
+    const s = c.get("session")
+    const t = now()
+    const res = await confirmEmailChange(c.env, s.user.id, s.row.token_hash, await body(c), t)
+    await audit(c, "super_admin.email_changed", t).run()
+    return ok(res)
+  })
+
+  r("POST", "/account/recovery-codes", "owner_recent", "self", async (c) => {
+    const s = c.get("session")
+    const t = now()
+    await confirmPassword(c.env, s.user.id, (await body(c)).password, t)
+    const { codes, statements } = await issueRecoveryCodes(c.env, s.user.id, t)
+    await c.env.DB.batch([...statements, auditStatement(c.env, { actorId: s.user.id, action: "super_admin.recovery_codes_regenerate", targetType: "user", targetId: s.user.id, reason: "buat ulang kode pemulihan cadangan", now: t })])
+    return ok({ codes, generatedAt: t })
+  })
+
+  r("POST", "/account/totp/rotate-start", "owner_recent", "self", async (c) => {
+    const s = c.get("session")
+    const t = now()
+    await confirmPassword(c.env, s.user.id, (await body(c)).password, t)
+    const admin = await adminOf(c.env, s.user.id)
+    if (!admin?.totp_secret_encrypted || admin.totp_state !== "active") throw notEnrolled()
+    const secret = newTotpSecret()
+    return ok({ ...(await sealRotation(c.env, s.user.id, secret, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) })
+  })
+
+  r("POST", "/account/totp/rotate-confirm", "owner_recent", "self", async (c) => {
+    const b = await body(c)
+    const s = c.get("session")
+    const t = now()
+    const secret = await openRotation(c.env, b.rotateTicket, s.user.id, t)
+    const admin = await adminOf(c.env, s.user.id)
+    if (!admin?.totp_secret_encrypted || admin.totp_state !== "active") throw notEnrolled()
+    // A ticket that was already confirmed carries the active secret: refuse the replay.
+    if ((await decryptString(c.env.KEK_SECRET, admin.totp_secret_encrypted, "totp")) === secret) throw new AppError(400, "ROTATE_TICKET_INVALID", "Sesi penggantian autentikator sudah berakhir. Mulai lagi dari awal.")
+    const step = await verifyTotp(secret, typeof b.code === "string" ? b.code.trim() : "", t, null)
+    if (step === null) throw new AppError(400, "TOTP_INVALID", "Kode dari autentikator baru salah. Pastikan Anda memindai kode QR yang baru.", { code: "Periksa kode di autentikator baru." })
+    // Swap only if nobody changed the secret meanwhile (optimistic check on the ciphertext we read).
+    const swapped = await c.env.DB.prepare("UPDATE super_admins SET totp_secret_encrypted = ?1, totp_state = 'active', totp_last_step = ?2, updated_at = ?3 WHERE user_id = ?4 AND totp_secret_encrypted = ?5 RETURNING user_id")
+      .bind(await encryptString(c.env.KEK_SECRET, secret, "totp"), step, t, s.user.id, admin.totp_secret_encrypted)
+      .first()
+    if (!swapped) throw new AppError(409, "TOTP_CHANGED", "Autentikator baru saja diganti dari sesi lain. Muat ulang halaman.")
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE sessions SET totp_verified_at = ? WHERE token_hash = ?").bind(t, s.row.token_hash),
+      revokeOtherOwnerSessions(c.env, s, t),
+      audit(c, "super_admin.totp_rotated", t),
+    ])
+    return ok({ rotated: true })
+  })
+
+  r("POST", "/account/sessions/revoke", "owner_aal2", "self", async (c) => {
+    const b = await body(c)
+    const s = c.get("session")
+    return ok(await revokeSessions(c.env, s.user.id, s.row.token_hash, { id: b.id, all: b.all === true || b.allOthers === true }, now(), ["owner", "app"]))
   })
 
   registerGeraiAdmin(app)

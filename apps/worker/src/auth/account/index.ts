@@ -7,6 +7,7 @@ import { AppError } from "../../http/envelope"
 import { normalizePhone08 } from "@gx/domain/contacts"
 import { hashPassword, passwordProblem, verifyPassword } from "../password"
 import { revokeOtherSessions } from "../session"
+import type { HostContextName } from "../cookies"
 import * as throttle from "../throttle"
 import { newOtp, tokenHash } from "../tokens"
 import { describeDevice, OTP_LOCK_MS, OTP_MAX_WRONG, OTP_PER_EMAIL, OTP_TTL_MS, validEmail, type AuthEnv } from "../flows"
@@ -116,30 +117,39 @@ export async function confirmEmailChange(env: AuthEnv, userId: string, keepHash:
 
 export interface SessionItem {
   id: string
+  host: HostContextName
   device: string
   createdAt: number
   lastSeenAt: number
   current: boolean
 }
 
-/** Live app sessions of the user; `id` is a short public handle, never the stored hash. */
-export async function listSessions(env: AuthEnv, userId: string, currentHash: string, now: number): Promise<SessionItem[]> {
-  const rows = await env.DB.prepare("SELECT token_hash, user_agent, created_at, last_seen_at FROM sessions WHERE user_id = ? AND host_context = 'app' AND revoked_at IS NULL AND expires_at > ? ORDER BY last_seen_at DESC LIMIT 20")
-    .bind(userId, now)
-    .all<{ token_hash: string; user_agent: string | null; created_at: number; last_seen_at: number }>()
-  return Promise.all(rows.results.map(async (r) => ({ id: await handleOf(env, r.token_hash), device: describeDevice(r.user_agent), createdAt: r.created_at, lastSeenAt: r.last_seen_at, current: r.token_hash === currentHash })))
+const inContexts = (contexts: HostContextName[]) => `host_context IN (${contexts.map((c) => `'${c === "owner" ? "owner" : "app"}'`).join(",")})`
+
+/** Live sessions of the user on the given hosts (app only by default; the Super Admin `/akun` lists owner + app).
+ *  `id` is a short public handle, never the stored hash. */
+export async function listSessions(env: AuthEnv, userId: string, currentHash: string, now: number, contexts: HostContextName[] = ["app"]): Promise<SessionItem[]> {
+  const rows = await env.DB.prepare(
+    `SELECT token_hash, host_context, user_agent, created_at, last_seen_at FROM sessions
+     WHERE user_id = ? AND ${inContexts(contexts)} AND revoked_at IS NULL AND expires_at > ? AND absolute_expires_at > ? ORDER BY last_seen_at DESC LIMIT 20`,
+  )
+    .bind(userId, now, now)
+    .all<{ token_hash: string; host_context: HostContextName; user_agent: string | null; created_at: number; last_seen_at: number }>()
+  return Promise.all(
+    rows.results.map(async (r) => ({ id: await handleOf(env, r.token_hash), host: r.host_context, device: describeDevice(r.user_agent), createdAt: r.created_at, lastSeenAt: r.last_seen_at, current: r.token_hash === currentHash })),
+  )
 }
 
 const handleOf = async (env: AuthEnv, hash: string) => (await tokenHash(env.AUTH_SESSION_PEPPER, "session-handle", hash)).slice(0, 24)
 
 /** Revokes one other session by handle, or every other session (`all`). The current session stays. */
-export async function revokeSessions(env: AuthEnv, userId: string, currentHash: string, b: { id?: unknown; all?: unknown }, now: number): Promise<{ revoked: number }> {
+export async function revokeSessions(env: AuthEnv, userId: string, currentHash: string, b: { id?: unknown; all?: unknown }, now: number, contexts: HostContextName[] = ["app"]): Promise<{ revoked: number }> {
   if (b.all === true) {
     const r = await revokeOtherSessions(env.DB, userId, currentHash, now).run()
     return { revoked: r.meta.changes ?? 0 }
   }
   const id = typeof b.id === "string" ? b.id : ""
-  const rows = await env.DB.prepare("SELECT token_hash FROM sessions WHERE user_id = ? AND host_context = 'app' AND revoked_at IS NULL").bind(userId).all<{ token_hash: string }>()
+  const rows = await env.DB.prepare(`SELECT token_hash FROM sessions WHERE user_id = ? AND ${inContexts(contexts)} AND revoked_at IS NULL`).bind(userId).all<{ token_hash: string }>()
   for (const r of rows.results) {
     if (r.token_hash === currentHash) continue
     if ((await handleOf(env, r.token_hash)) === id) {

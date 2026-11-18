@@ -1,0 +1,11 @@
+# DEC-246 UI gates (2026-11-18, local wrangler dev :55188, synthetic Super Admins "Bu Ratna (contoh)" / "Pak Dimas (contoh)")
+# dotuiux check --surface admin --viewports 390,1440 · admin-geometry.mjs --contract design/admin-contract.json --viewports 390,1440
+# Signed in through the local /internal/dev/preview (aal2, recent TOTP); the ops token is redacted from this record.
+owner:/akun :: dotuiux exit=0 summary: 0 fail · 0 warn · 2 allowed · 3 not checked · 35 pass :: geometry exit=0
+owner:/totp?mode=required :: dotuiux exit=0 summary: 0 fail · 0 warn · 0 allowed · 4 not checked · 36 pass :: geometry exit=0
+# First 390 px render: the `Sesi Perangkat Aktif` header action squeezed the title to three lines and the 2FA row icons
+# stood alone on a line; the bulk revoke moved to a bottom bar and icon + text share a row → re-captured, gates re-run.
+# Screenshot script (Playwright, real TOTP enrolment, 1440x900 + 390x844 DPR 2): 0 page/console errors; horizontal
+# overflow 0 px on every captured state (/totp codes, /totp recovery, /totp new authenticator, /akun).
+# Screens: totp-kode-pemulihan-{1440,390}, totp-kode-pemulihan-masuk-{1440,390}, totp-autentikator-baru-{1440,390},
+#          akun-{1440,390}, akun-dialog-kode-baru-1440, akun-dialog-ganti-autentikator-1440.

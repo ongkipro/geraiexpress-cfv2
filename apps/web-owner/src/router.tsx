@@ -11,6 +11,7 @@ import { PengawasanPage } from "./routes/pengawasan/page"
 import { SistemPage } from "./routes/sistem/page"
 import { TarifPage } from "./routes/tarif/index"
 import { TarifGeraiPage } from "./routes/tarif/gerai"
+import { OwnerAkunPage } from "./routes/akun/page"
 
 export interface OwnerMe {
   user: { id: string; name: string; email: string }
@@ -71,6 +72,7 @@ const tarifRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tar
 const tarifGeraiRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif/$tenantId", component: TarifGeraiPage })
 const pengawasanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/pengawasan", component: PengawasanPage })
 const sistemRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/sistem", component: SistemPage })
+const akunRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/akun", component: OwnerAkunPage })
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: OwnerMasukPage })
 const totpRoute = createRoute({
@@ -85,7 +87,7 @@ const totpRoute = createRoute({
 })
 
 export const routeTree = rootRoute.addChildren([
-  consoleRoute.addChildren([indexRoute, geraiRoute, pengajuanRoute, geraiDetailRoute, tarifRoute, tarifGeraiRoute, pengawasanRoute, sistemRoute]),
+  consoleRoute.addChildren([indexRoute, geraiRoute, pengajuanRoute, geraiDetailRoute, tarifRoute, tarifGeraiRoute, pengawasanRoute, sistemRoute, akunRoute]),
   masukRoute,
   totpRoute,
 ])

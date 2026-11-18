@@ -1,5 +1,5 @@
 import { Outlet, useRouterState } from "@tanstack/react-router"
-import { ActivityIcon, LayoutDashboardIcon, ShieldCheckIcon, StoreIcon, TagIcon } from "lucide-react"
+import { ActivityIcon, LayoutDashboardIcon, ShieldCheckIcon, StoreIcon, TagIcon, UserCogIcon } from "lucide-react"
 import { AdminShell, ShellBrand, SidebarStatusCard, type Crumb, type ShellCommand, type ShellNavGroup, type ShellNavItem } from "@shared/components/admin/shell"
 import { StatusBadge } from "@shared/components/admin/page"
 import { OperationalStatusIcon } from "@shared/components/admin/operational-status"
@@ -69,6 +69,7 @@ function activeChild(children: NavChild[], path: string, tab: string | undefined
 }
 
 function crumbsOf(path: string, tab: string | undefined): Crumb[] {
+  if (path === "/akun") return [{ label: "Profil & Keamanan Akun" }]
   const section = sectionOf(path)
   if (!section) return [{ label: "Konsol" }]
   const detail = DETAIL.find(([re]) => re.test(path))?.[1]
@@ -99,10 +100,10 @@ const KEYWORDS: Record<string, string> = {
   "/pengawasan?tab=risiko": "rts retur risiko",
   "/sistem?tab=audit": "audit log riwayat",
 }
-const COMMANDS: ShellCommand[] = NAV.flatMap((n) => {
+const COMMANDS: ShellCommand[] = NAV.flatMap((n): ShellCommand[] => {
   const group = GROUPS.find((g) => g.to.includes(n.to))!.label
   return n.children ? n.children.map((c) => ({ label: c.label, description: n.label, group, to: c.to, icon: n.icon, keywords: KEYWORDS[c.to] })) : [{ label: n.label, group, to: n.to, icon: n.icon }]
-})
+}).concat({ label: "Profil & Keamanan Akun", description: "Akun Saya", group: "Akun", to: "/akun", icon: UserCogIcon, keywords: "profil kata sandi password totp autentikator kode pemulihan 2fa sesi email" })
 
 export function ConsoleShell({ environment, userName, userEmail, pending }: { environment: "Produksi" | "Sandbox"; userName: string; userEmail: string; pending: number }) {
   const path = useRouterState({ select: (s) => s.location.pathname })
@@ -137,7 +138,7 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
           ]}
         />
       }
-      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout, labelFrom: "2xl", externalLinks: [{ label: "Situs Utama GeraiExpress", sublabel: siteHost(), href: `${location.protocol}//${siteHost()}` }] }}
+      user={{ name: userName, email: userEmail, role: "Super Admin", status: "TOTP aktif", onLogout: logout, profileTo: "/akun", labelFrom: "2xl", externalLinks: [{ label: "Situs Utama GeraiExpress", sublabel: siteHost(), href: `${location.protocol}//${siteHost()}` }] }}
       crumbs={crumbsOf(path, tab)}
       toolbar={
         <>

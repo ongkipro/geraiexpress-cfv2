@@ -279,6 +279,19 @@ export const superAdmins = sqliteTable("super_admins", {
   riskReview: integer("risk_review").notNull().default(0),
 })
 
+// DEC-246: single-use Super Admin recovery codes (peppered hash only).
+export const superAdminRecoveryCodes = sqliteTable(
+  "super_admin_recovery_codes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    codeHash: text("code_hash").notNull(),
+    usedAt: integer("used_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("super_admin_recovery_codes_user").on(t.userId, t.usedAt)],
+)
+
 export const tenantApplications = sqliteTable(
   "tenant_applications",
   {

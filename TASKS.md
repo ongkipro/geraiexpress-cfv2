@@ -721,6 +721,25 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   Done when: ten apex pages 200 with no `Set-Cookie`; `check-page.mjs` 0 fail 0 warn on all ten; UI evidence at
   1440×900 and 390×844 (`horizontalOverflowPx 0`, 0 console/page errors, every courier logo loads); integrated run
   `DEC-245` PASS 9/9; GPT-6.1 Sol APPROVE (`docs/review/dec-245/`).
+- **DEC-246** Super Admin `/akun` + backup second factor (R4, owner directive 2026-11-18, extends DEC-209).
+  Requirement: DEC-246 (1)–(5). Allowed Paths: `packages/db/migrations/control/0019_super_admin_recovery_codes.sql`,
+  `packages/db/src/schema/control.ts`, `apps/worker/src/api/owner.ts`, `apps/worker/src/auth/{account,recovery}/**`,
+  `apps/worker/test/auth/**`, `apps/worker/test/migrations/**`, `apps/web-owner/src/**`, `e2e/super-admin.spec.ts`,
+  `e2e/onboarding.spec.ts` (clicks past the one-time codes screen),
+  `docs/evidence/DEC-246/**`, `DECISIONS.md`, `docs/spec/05`, `docs/spec/06`, `docs/visual/07`, `docs/SYSTEM-MAP.md`,
+  `STATUS.md`, `BUILD-LOG.md`, `TASKS.md`.
+  Accepted Invariants: recovery codes stored as peppered hashes only and consumed once (atomic `UPDATE … WHERE used_at
+  IS NULL`); recovery shares the TOTP lock; rotation never removes the active secret before a code from the new one
+  verifies; no path returns the account to `pending` from a password alone; password/email change and rotation sign
+  out other sessions; every mutation audited; no code, secret or ticket in logs or responses beyond the one-time
+  display.
+  Done when: `apps/worker/test/auth/super-admin-account.test.ts` passes (profile; password change revokes others and
+  the old password fails; 8 codes issued once at first enrolment; recovery login, single use, shared 5-attempt lock;
+  `resetTotp` → rotation ticket, old sessions out; rotation abandoned keeps the old TOTP, confirmed switches it; codes
+  regenerated replace the old set; another admin's reset deletes the codes); control migration drift test passes;
+  `e2e/super-admin.spec.ts` covers `Profil Saya` → codes → recovery login; ≥ 2 mutations red
+  (`docs/evidence/DEC-246/mutations.md`); UI gates 0 fail on `/akun` and `/totp` at 1440×900 and 390×844 with
+  screenshots; `pnpm check` exit 0; GPT-6.1 Sol review before live deploy.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
   dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
   tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or
@@ -739,7 +758,7 @@ Every accepted requirement and decision has a delivering task (its `Requirement`
 | **M4** | TASK-401..405, close 499 | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206 (returns), 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 | PR-03 (mini-site), PR-19, PR-21 | DEC-202, 207, 214, 218 (footer), 228 (custom domains) |
 | **M6** | TASK-601..604 | production readiness | DEC-219, 228 (production), 232; ADR-0006 §7 |
-| **Post-launch** | TASK-701..705, DEC-245 | PR-22 (P1), PR-23 (P2), PR-24 (P2), DEC-241 (P2), DEC-242 (P1, done), DEC-245 (brand landing) | — |
+| **Post-launch** | TASK-701..705, DEC-245, DEC-246 | PR-22 (P1), PR-23 (P2), PR-24 (P2), DEC-241 (P2), DEC-242 (P1, done), DEC-245 (brand landing), DEC-246 (Super Admin account + recovery codes) | — |
 
 Milestone notes carried forward:
 - **M3 additions (DEC-229):** Paket Massal Excel/CSV import + Riwayat Massal, Cek Resi, Cetak Resi Massal, Akun Saya;
