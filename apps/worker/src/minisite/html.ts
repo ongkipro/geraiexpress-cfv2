@@ -32,6 +32,8 @@ export interface Shell {
   wa?: { text?: string } | false
   /** Owner decision 2026-11-18 (DEC-247B): the platform attribution shows on `*.<TENANT_ZONE>` only, never on a custom domain. */
   attribution: boolean
+  /** ADR-0005: tracking a dropship shipment — no outlet mark, name, place, map or chat anywhere on the page. */
+  masked?: boolean
 }
 
 const CSS = `:root{color-scheme:light;--ink:#0F172A;--body:#475569;--muted:#64748B;--faint:#94A3B8;--tile:#F4F6FA;--hair:rgba(15,23,42,.07);--ac:#0B4FE3;--ac-h:#083CB3;--tint:#EFF6FF;--danger:#B42318;--field:#7B879C;--float:0 20px 50px -12px rgba(15,23,42,.08),0 2px 6px -1px rgba(15,23,42,.04)}
@@ -117,7 +119,8 @@ export function courierImg(code: string | null, decorative = false, h = 22): str
 /** Up to two initials of the outlet name (`Gerai Berkah Jaya` → `GB`); `#` when it has no letter or digit. */
 export function initials(name: string, n = 2): string {
   const words = name.match(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu) ?? []
-  return words.slice(0, n).map((w) => w[0]!.toUpperCase()).join("") || "#"
+  // The first code point, not the first UTF-16 unit: `𠮷` is two units, and a lone surrogate breaks encodeURIComponent.
+  return words.slice(0, n).map((w) => Array.from(w)[0]!.toUpperCase()).join("") || "#"
 }
 
 /** White-label favicon: the outlet initial on the accent tile (never the platform mark). */
@@ -152,34 +155,36 @@ const HINTS: Record<Shell["tab"], string> = { ongkir: "Bandingkan ongkir ekspedi
  */
 export function page(s: Shell, body: string, scripts = "", after = ""): string {
   const o = s.outlet
-  const where = [o.address, o.area].filter(Boolean).join(", ")
-  const map = mapUrl(o)
-  const chatHref = s.wa !== false && o.whatsapp ? wa(o.whatsapp, s.wa?.text) : null
+  const masked = s.masked === true
+  const where = masked ? "" : [o.address, o.area].filter(Boolean).join(", ")
+  const map = masked ? null : mapUrl(o)
+  const chatHref = !masked && s.wa !== false && o.whatsapp ? wa(o.whatsapp, s.wa?.text) : null
   const chat = chatHref ? `<a class="btn soft" href="${e(chatHref)}" rel="noopener">Chat WhatsApp Gerai</a>` : ""
   const visit =
-    where || o.openingHours || map || chat
+    !masked && (where || o.openingHours || map || chat)
       ? `<section class="sec" id="lokasi" aria-labelledby="visit"><div class="visit"><div><h2 id="visit">Lokasi &amp; Jam Buka</h2>${where ? `<p>${e(where)}</p>` : ""}${o.openingHours ? `<p>Buka ${e(o.openingHours)}</p>` : ""}</div>${map || chat ? `<div class="acts">${map ? `<a class="btn white" href="${e(map)}" target="_blank" rel="noopener">Buka Peta</a>` : ""}${chat}</div>` : ""}</div></section>`
       : ""
-  const mark = o.logoVersion ? `<img class="mark" src="/logo?v=${e(o.logoVersion)}" alt="Logo ${e(o.name)}" width="44" height="44">` : `<span class="mark mono" aria-hidden="true">${e(initials(o.name))}</span>`
-  const kec = district(o.area)
+  const mark = masked ? '<span class="mark mono" aria-hidden="true">#</span>' : o.logoVersion ? `<img class="mark" src="/logo?v=${e(o.logoVersion)}" alt="Logo ${e(o.name)}" width="44" height="44">` : `<span class="mark mono" aria-hidden="true">${e(initials(o.name))}</span>`
+  const kec = masked ? null : district(o.area)
+  const shown = masked ? "Lacak Paket" : o.name
   const cur = (id: Shell["tab"]) => (s.tab === id ? ' aria-current="page"' : "")
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${e(s.title)}</title><link rel="icon" type="image/svg+xml" href="${e(favicon(o.name))}"><meta name="description" content="${e(s.description)}"><link rel="canonical" href="${e(s.canonical)}">
+<title>${e(s.title)}</title><link rel="icon" type="image/svg+xml" href="${e(favicon(masked ? "" : o.name))}"><meta name="description" content="${e(s.description)}"><link rel="canonical" href="${e(s.canonical)}">
 ${s.noindex ? '<meta name="robots" content="noindex">' : ""}<meta name="theme-color" content="#FFFFFF"><meta property="og:title" content="${e(s.title)}"><meta property="og:description" content="${e(s.description)}"><meta property="og:type" content="website">
 <style>${CSS}</style></head><body>
-<header class="hdr"><div class="wrap bar"><a class="brand" href="/">${mark}<span><h1>${e(o.name)}</h1>${kec ? `<small>${e(kec)}</small>` : ""}</span></a>
+<header class="hdr"><div class="wrap bar"><a class="brand" href="/">${mark}<span><h1>${e(shown)}</h1>${kec ? `<small>${e(kec)}</small>` : ""}</span></a>
 <nav class="tabs" aria-label="Menu gerai">${TABS.map(([id, href, label]) => `<a href="${href}"${cur(id)}>${label}</a>`).join("")}</nav>
 <a class="btn pri send" href="/kirim">Kirim Paket</a><a class="mbtn" id="mnav-btn" href="#mnav" role="button" aria-controls="mnav" aria-expanded="false" aria-label="Buka menu"><i aria-hidden="true"></i>Menu</a></div></header>
 <nav class="mnav" id="mnav" aria-label="Menu gerai (ponsel)">${TABS.map(([id, href, label]) => `<a href="${href}"${cur(id)}>${label}<small>${HINTS[id]}</small></a>`).join("")}${chatHref ? `<a class="mwa" href="${e(chatHref)}" rel="noopener">Chat WhatsApp Gerai<small>Tanya gerai langsung</small></a>` : ""}</nav><div class="dim" id="mnav-dim"></div>
 <main class="wrap">${body}${after}${visit}</main>
-<footer><div class="wrap">${s.attribution ? "<span>Didukung jaringan resmi GeraiExpress</span>" : `<span>${e(o.name)}</span>`}<a href="${e(s.brandOrigin)}/privasi" rel="noopener">Kebijakan Privasi</a></div></footer>
+<footer><div class="wrap">${s.attribution ? "<span>Didukung jaringan resmi GeraiExpress</span>" : `<span>${e(shown)}</span>`}<a href="${e(s.brandOrigin)}/privasi" rel="noopener">Kebijakan Privasi</a></div></footer>
 ${MENU_SCRIPT}${VALIDATION_SCRIPT}${scripts}</body></html>`
 }
 
 /** Phone menu: [Menu ⇄ ×] opens the page list (no JS: `#mnav` via `:target`); Escape, outside click, a link, wide screens close it. */
 export const MENU_SCRIPT = `<script>(()=>{const d=document,b=d.getElementById('mnav-btn'),m=d.getElementById('mnav'),k=d.getElementById('mnav-dim'),h=d.querySelector('.hdr');if(!b||!m||!k||!h)return;m.setAttribute('inert','');
 const isO=()=>b.getAttribute('aria-expanded')==='true',set=(o,back)=>{if(o)d.documentElement.style.setProperty('--hdr-b',Math.round(h.getBoundingClientRect().bottom)+8+'px');b.setAttribute('aria-expanded',o?'true':'false');b.setAttribute('aria-label',o?'Tutup menu':'Buka menu');if(o)m.removeAttribute('inert');else m.setAttribute('inert','');m.classList.toggle('open',o);k.classList.toggle('open',o);if(o){const a=m.querySelector('a');if(a)a.focus({preventScroll:true})}else if(back)b.focus()};
-b.addEventListener('click',ev=>{ev.preventDefault();set(!isO())});d.addEventListener('pointerdown',ev=>{if(isO()&&!m.contains(ev.target)&&!b.contains(ev.target))set(false)});
+b.addEventListener('click',ev=>{ev.preventDefault();set(!isO())});b.addEventListener('keydown',ev=>{if(ev.key===' '||ev.key==='Spacebar'){ev.preventDefault();set(!isO())}});d.addEventListener('pointerdown',ev=>{if(isO()&&!m.contains(ev.target)&&!b.contains(ev.target))set(false)});
 d.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&isO()){ev.preventDefault();set(false,true)}});m.addEventListener('click',ev=>{if(ev.target.closest('a'))set(false)});addEventListener('pageshow',()=>{if(isO())set(false)});
 const mq=matchMedia('(min-width:960px)');if(mq.addEventListener)mq.addEventListener('change',ev=>{if(ev.matches&&isO())set(false)})})()</script>`
 
@@ -188,7 +193,7 @@ const mq=matchMedia('(min-width:960px)');if(mq.addEventListener)mq.addEventListe
  * CSP, so it is inline): on `invalid` a field gets an Indonesian message worded from its label (`data-msg-missing` /
  * `data-msg-invalid` override it), and only messages this net set are cleared — on input, change and the next submit.
  */
-export const VALIDATION_SCRIPT = `<script>(()=>{const d=document,ours=new WeakMap,isF=t=>t&&typeof t.setCustomValidity==='function'&&'validity' in t,
+export const VALIDATION_SCRIPT = `<script>(()=>{const d=document,ours=new WeakSet,wr=new WeakSet;let me=false;const isF=t=>t&&typeof t.setCustomValidity==='function'&&'validity' in t,
 lab=f=>((f.getAttribute('data-validity-label')||(f.labels&&f.labels[0]&&f.labels[0].textContent)||f.getAttribute('aria-label')||'').replace(/\\s+/g,' ').replace(/[*:]+\\s*$/,'').trim()).slice(0,60),
 msg=f=>{const v=f.validity,l=lab(f),n=l?' '+l:' ini',t=f.tagName==='SELECT'?'select':f.type;
 if(v.valueMissing)return f.getAttribute('data-msg-missing')||(t==='checkbox'?'Centang kotak ini untuk melanjutkan.':t==='radio'?(l?'Pilih salah satu '+l+'.':'Pilih salah satu opsi.'):t==='select'?'Pilih'+n+' terlebih dahulu.':'Kolom'+n+' wajib diisi.');
@@ -198,8 +203,8 @@ if(v.patternMismatch)return 'Format'+n+' belum sesuai'+(f.placeholder?' (contoh:
 if(v.tooLong)return 'Maksimal '+f.maxLength+' karakter.';if(v.tooShort)return 'Minimal '+f.minLength+' karakter.';
 if(v.rangeUnderflow)return 'Nilai minimal '+f.min+'.';if(v.rangeOverflow)return 'Nilai maksimal '+f.max+'.';
 if(v.stepMismatch)return 'Masukkan kelipatan '+(f.step||'1')+'.';return 'Isian belum valid.'},
-rel=f=>{const o=ours.get(f);if(o===undefined)return;ours.delete(f);if(f.validity.customError&&f.validationMessage===o)f.setCustomValidity('')};
-d.addEventListener('invalid',ev=>{const f=ev.target;if(!isF(f))return;if(f.validity.customError&&ours.get(f)!==f.validationMessage)return;rel(f);if(f.validity.valid){ev.preventDefault();return}const m=msg(f);f.setCustomValidity(m);ours.set(f,m)},true);
+put=(f,m)=>{if(!wr.has(f)){const n=f.setCustomValidity;f.setCustomValidity=x=>{if(!me)ours.delete(f);n.call(f,x)};wr.add(f)}me=true;try{f.setCustomValidity(m)}finally{me=false}if(m)ours.add(f);else ours.delete(f)},rel=f=>{if(ours.has(f))put(f,'')};
+d.addEventListener('invalid',ev=>{const f=ev.target;if(!isF(f))return;if(f.validity.customError&&!ours.has(f))return;rel(f);if(f.validity.valid){ev.preventDefault();return}put(f,msg(f))},true);
 for(const t of['input','change'])d.addEventListener(t,ev=>{if(isF(ev.target))rel(ev.target)},true);
 d.addEventListener('click',ev=>{const x=ev.target&&ev.target.closest?ev.target.closest('button,input[type=submit]'):null;if(x&&x.form&&x.type==='submit')for(const f of x.form.elements)if(isF(f))rel(f)},true)})()</script>`
 

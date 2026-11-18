@@ -67,6 +67,8 @@ async function shell(env: Env, c: Ctx, tab: Shell["tab"], title: string, descrip
   }
 }
 
+const DIMS_MSG = "Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya."
+
 const field = (name: string, label: string, opts: { value?: string; type?: string; hint?: string; error?: string; attrs?: string } = {}) =>
   `<label for="${name}">${label}</label><input id="${name}" name="${name}" type="${opts.type ?? "text"}" value="${e(opts.value ?? "")}"${opts.attrs ?? ""}${opts.error ? ` aria-invalid="true" aria-describedby="${name}-err"` : ""}>${opts.error ? `<p class="err" id="${name}-err">${e(opts.error)}</p>` : opts.hint ? `<p class="hint">${e(opts.hint)}</p>` : ""}`
 
@@ -111,8 +113,10 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
           try {
             const unit = v.unit === "kg" ? 1000 : 1
             const svc = v.svc === "cargo" ? "cargo" : "regular"
-            const cm = (k: string) => (v[k] ?? "").replace(/\D/g, "")
-            const input = parseQuoteInput({ destinationAreaId: v.destId, weightGram: Math.round(Number((v.weight ?? "").replace(",", ".")) * unit) || 0, mode: "none", lengthCm: cm("lengthCm"), widthCm: cm("widthCm"), heightCm: cm("heightCm") }, origin)
+            // P×L×T exactly as submitted: none, or all three whole numbers 1..300 (never rewrite `-20` or `1.5`).
+            const dims = (["lengthCm", "widthCm", "heightCm"] as const).map((k) => (v[k] ?? "").trim())
+            if (dims.some(Boolean) && !dims.every((x) => /^[1-9][0-9]{0,2}$/.test(x) && Number(x) <= 300)) throw new AppError(422, "INVALID_QUOTE", DIMS_MSG, { dims: DIMS_MSG })
+            const input = parseQuoteInput({ destinationAreaId: v.destId, weightGram: Math.round(Number((v.weight ?? "").replace(",", ".")) * unit) || 0, mode: "none", lengthCm: dims[0], widthCm: dims[1], heightCm: dims[2] }, origin)
             const q = await runQuote(env, c.tenantId, input, Date.now(), { rateKey: `ms-quote:${c.tenantId}`, perMinute: 60 })
             const ofClass = q.cards.filter((x) => x.serviceClass === svc)
             const cards = ofClass.filter((x) => x.available).sort((a, b) => a.flow.counterDueIdr - b.flow.counterDueIdr)
@@ -252,8 +256,16 @@ ${
 <p class="hint" style="margin-top:16px">Untuk keamanan, nama ditampilkan sebagai inisial dan nomor HP, alamat, serta nilai COD tidak pernah ditampilkan. Tautan: https://${e(host)}/lacak?q=${e(t.inv.toUpperCase())}</p></div>`
 }
 
-/** The header's one WhatsApp CTA asks about this INV when the gerai may be contacted for it (not for dropship labels). */
-const trackWa = (s: Shell, t: PublicTrack | null | undefined): Shell => (t?.outletContact?.whatsapp ? { ...s, wa: { text: `Halo ${t.outletContact.name}, saya ingin menanyakan kiriman INV ${t.inv.toUpperCase()}.` } } : s)
+/**
+ * The shell for a tracking result. ADR-0005: a dropship (masked) shipment shows no outlet mark, name, place or chat
+ * (the label printed the reseller's store, not this gerai). Otherwise the WhatsApp action asks about this INV.
+ */
+const trackWa = (s: Shell, t: PublicTrack | null | undefined): Shell =>
+  t?.maskedOutlet
+    ? { ...s, masked: true, wa: false, title: "Lacak Paket" }
+    : t?.outletContact?.whatsapp
+      ? { ...s, wa: { text: `Halo ${t.outletContact.name}, saya ingin menanyakan kiriman INV ${t.inv.toUpperCase()}.` } }
+      : s
 
 const trackPage = (q: string, result: string) =>
   `<div class="stage"><div class="card"><form method="get" action="/lacak" role="search"><h2>Lacak paket</h2>${field("q", "Nomor INV atau resi", { value: q, hint: "Contoh: INV 8K4M2P7 atau nomor resi ekspedisi.", attrs: ' required maxlength="40" autocomplete="off"' })}<div class="row"><button class="btn pri" type="submit">Lacak</button></div></form>${result}</div></div>`

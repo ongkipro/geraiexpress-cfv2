@@ -1736,7 +1736,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
   async minisiteShell(tenantId: string): Promise<VaultResult<PublicShell | null>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
-    return { ok: true, value: publicShell(this.ctx.storage.sql) }
+    return { ok: true, value: publicShell(this.ctx.storage.sql, tenantId) }
   }
 
   /** R2 key of the outlet logo for the public `/logo` route (purpose `logo`, image types, this tenant only). Read only. */

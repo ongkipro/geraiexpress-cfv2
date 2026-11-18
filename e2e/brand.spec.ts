@@ -293,6 +293,21 @@ test("Brand DEC-247: validasi form berbahasa Indonesia di browser en-US", async 
     "Nilai maksimal 9.",
     "Format PIN belum sesuai (contoh: 1234).",
   ])
+  // Sol R1 P2: ownership follows the setter, not the text — a page error with the very same words survives editing.
+  const same = await page.evaluate(() => {
+    const f = document.createElement("form")
+    f.innerHTML = '<label for="v-same">Email</label><input id="v-same" type="email" required><button>Kirim</button>'
+    document.body.append(f)
+    const i = f.querySelector<HTMLInputElement>("#v-same")!
+    f.reportValidity()
+    const ours = i.validationMessage
+    i.setCustomValidity(ours)
+    i.value = "nama@toko.id"
+    i.dispatchEvent(new Event("input", { bubbles: true }))
+    i.dispatchEvent(new Event("change", { bubbles: true }))
+    return [ours, i.validationMessage, String(i.validity.customError)]
+  })
+  expect(same).toEqual(["Kolom Email wajib diisi.", "Kolom Email wajib diisi.", "true"])
   await ctx.close()
 })
 
@@ -350,6 +365,12 @@ test("Brand DEC-247B: dropdown custom simulasi kasir (klik, keyboard, Escape, sa
   for (const id of ["kota", "cod", "pack", "bayar"]) {
     const box = (await page.locator(`#${id}-btn`).boundingBox())!
     expect(box.height, id).toBeGreaterThanOrEqual(44)
+  }
+  // Sol R1 P2: 16px primary option text on phones (trigger and list).
+  if ((page.viewportSize()?.width ?? 0) <= 640) {
+    const px = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).fontSize)
+    expect(await px("#kota-val .opt-main")).toBe("16px")
+    expect(await px("#kota-list .opt-main")).toBe("16px")
   }
   await kota.click()
   await expect(kota).toHaveAttribute("aria-expanded", "true")

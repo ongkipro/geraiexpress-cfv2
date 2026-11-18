@@ -138,7 +138,7 @@ export const SHELL_SCRIPT = `<script>
   if(mq.addEventListener)mq.addEventListener("change",function(e){if(e.matches&&isO())set(false)});
 })();
 (function(){
-  var d=document,ours=new WeakMap();
+  var d=document,ours=new WeakSet(),wrapped=new WeakSet(),self=false;
   function isF(t){return t&&typeof t.setCustomValidity==="function"&&"validity" in t}
   function name(el){var l=el.labels&&el.labels[0];return((el.getAttribute("data-validity-label")||(l?l.textContent:"")||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").replace(/[*:]+\\s*$/,"").trim()).slice(0,60)}
   function msg(el){
@@ -161,13 +161,15 @@ export const SHELL_SCRIPT = `<script>
     if(v.stepMismatch)return"Masukkan kelipatan "+(el.step||"1")+".";
     return"Isian belum valid.";
   }
-  function release(el){var o=ours.get(el);if(o===undefined)return;ours.delete(el);if(el.validity.customError&&el.validationMessage===o)el.setCustomValidity("")}
+  // Ownership follows who called setCustomValidity (never the text): another caller, even with the same words, owns it.
+  function put(el,s){if(!wrapped.has(el)){var n=el.setCustomValidity;el.setCustomValidity=function(m){if(!self)ours.delete(el);return n.call(el,m)};wrapped.add(el)}self=true;try{el.setCustomValidity(s)}finally{self=false}if(s)ours.add(el);else ours.delete(el)}
+  function release(el){if(ours.has(el))put(el,"")}
   d.addEventListener("invalid",function(e){
     var el=e.target;if(!isF(el))return;
-    if(el.validity.customError&&ours.get(el)!==el.validationMessage)return;
+    if(el.validity.customError&&!ours.has(el))return;
     release(el);
     if(el.validity.valid){e.preventDefault();return}
-    var s=msg(el);el.setCustomValidity(s);ours.set(el,s);
+    put(el,msg(el));
   },true);
   function edit(e){if(isF(e.target))release(e.target)}
   d.addEventListener("input",edit,true);d.addEventListener("change",edit,true);

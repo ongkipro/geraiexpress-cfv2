@@ -127,6 +127,24 @@ describe("installIndonesianValidation", () => {
     expect(el.validationMessage).toBe("Nomor HP harus diawali 08.")
   })
 
+  it("a page message with the very same words is the page's: ownership follows the setter, not the text (Sol R1)", () => {
+    const { root, fire } = fakeRoot()
+    installIndonesianValidation(root)
+    const el = fakeField({ valid: false, valueMissing: true })
+    fire("invalid", el)
+    expect(el.validationMessage).toBe("Email wajib diisi.")
+    el.setCustomValidity("Email wajib diisi.") // the page takes over with identical words
+    el.fix()
+    fire("input", el)
+    fire("change", el)
+    expect(el.validationMessage).toBe("Email wajib diisi.")
+    expect(fire("invalid", el)).toBe(false)
+    expect(el.validationMessage).toBe("Email wajib diisi.")
+    // Once the page clears it, the net may own the field again.
+    el.setCustomValidity("")
+    expect(el.validity.valid).toBe(true)
+  })
+
   it("a stale message of its own is dropped without a bubble", () => {
     const { root, fire } = fakeRoot()
     installIndonesianValidation(root)

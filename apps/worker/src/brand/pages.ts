@@ -511,10 +511,10 @@ const STEPS: Step[] = [
   {
     label: "Saldo &amp; Pelanggan",
     title: "Isi saldo kiriman &amp; terima pelanggan",
-    text: "Top-up saldo akun Mengantar untuk kiriman Non-COD. Pelanggan datang membawa paket (atau QR dari rumah), kasir menimbang, menerima tunai atau QRIS, lalu menempel label resi.",
+    text: "Top-up saldo akun Mengantar untuk kiriman Non-COD. Pelanggan datang membawa paket (atau QR dari rumah), kasir menimbang lalu menempel label resi. Kiriman Non-COD dibayar di loket, tunai atau QRIS; pada kiriman COD tagihannya dibayar penerima kepada kurir.",
     who: "Kasir",
-    mitra: "Menimbang paket, menerima tunai atau QRIS, lalu menempel label resi.",
-    sistem: "Menghitung berat volumetrik dan batas COD, menerbitkan resi, dan memotong saldo sebesar ongkir bersih mitra.",
+    mitra: "Menimbang paket, menerima ongkir Non-COD (tunai atau QRIS) atau hanya biaya packing dan layanan untuk COD, lalu menempel label resi.",
+    sistem: "Menghitung berat volumetrik dan batas COD lalu menerbitkan resi. Non-COD memotong saldo sebesar ongkir bersih mitra saat resi terbit; COD tidak memotong saldo saat itu.",
     card: `<div class="float"><div class="w-rcpt"><div><span>INV 8K4M2P7</span><span>LUNAS</span></div><div><span>J&amp;T · EZ 1.000 g</span><span>12.500</span></div><div><span>Bubble wrap</span><span>3.000</span></div><div class="tot"><span>Tunai</span><span>Rp 15.500</span></div></div></div>`,
   },
   {
@@ -523,7 +523,7 @@ const STEPS: Step[] = [
     text: "Pindai paket per kurir di menu Pickup &amp; Surat Jalan saat kurir tiba, lalu pantau pencairan COD dan laba harian di menu Keuangan pemilik.",
     who: "Kasir &amp; pemilik",
     mitra: "Memindai paket per kurir sebelum Surat Jalan ditandatangani.",
-    sistem: "Mencocokkan kas loket dengan mutasi Mengantar per resi dan mencatat COD saat dananya cair.",
+    sistem: "Mencocokkan kas loket dengan mutasi Mengantar per resi; untuk COD, ongkir dan biaya COD dipotong dari dana COD saat cair.",
     card: `<div class="float"><div class="w-head"><span>Pickup J&amp;T Express</span><span class="chip">Surat Jalan</span></div>
 <ul class="w-rows"><li><span class="mono">JT…5678</span><b>Terverifikasi</b></li><li><span class="mono">JT…5679</span><b>Terverifikasi</b></li><li><span>Rekonsiliasi</span><b>1:1 Cocok</b></li></ul></div>`,
   },
@@ -531,10 +531,10 @@ const STEPS: Step[] = [
 
 const PIPE: Array<[string, string]> = [
   ["Timbang &amp; Cek Tarif", "Berat aktual atau volumetrik, mana yang lebih besar, menentukan tarif tiap ekspedisi."],
-  ["Terima Tunai / QRIS", "Pelanggan membayar tarif publik di loket dan kasnya tercatat di buku kas loket."],
-  ["Cetak Resi Thermal", "Resi terbit lewat akun Mengantar gerai, lalu label 100 mm atau struk 58 mm tercetak."],
+  ["Terima Tunai / QRIS", "Non-COD: ongkir dibayar di loket. COD: tagihan dibayar penerima kepada kurir; loket hanya menerima packing atau biaya layanan bila ada."],
+  ["Cetak Resi Thermal", "Resi terbit lewat akun Mengantar gerai (Non-COD memotong saldo saat itu), lalu label 100 mm atau struk 58 mm tercetak."],
   ["Pindai Surat Jalan Kurir", "Paket dipindai per kurir saat pickup; resi ekspedisi lain ditolak."],
-  ["Rekonsiliasi 1:1 &amp; COD Cair", "Kas loket dicocokkan dengan mutasi Mengantar per resi; COD dihitung saat dana cair."],
+  ["Rekonsiliasi 1:1 &amp; COD Cair", "Kas loket dicocokkan dengan mutasi Mengantar per resi; untuk COD, ongkir dan biaya COD dipotong dari dana COD saat cair."],
 ]
 
 /** The pipeline pulse runs only while on screen; reduced motion (or no IntersectionObserver) keeps the finished state. */
@@ -565,7 +565,7 @@ ${STEPS.map((s, i) => `<article class="prow${i % 2 ? " flip" : ""}" id="langkah-
 </div></section>
 
 <section class="sec tight pipeline" aria-labelledby="alur-title" data-pipeline><div class="wrap">
-<div class="shead"><h2 id="alur-title">Alur satu paket dari meja loket sampai saldo cair</h2><p class="sub">Lima titik yang dilewati setiap kiriman, dicatat otomatis tanpa pembukuan manual.</p></div>
+<div class="shead"><h2 id="alur-title">Alur satu paket dari meja loket sampai saldo cair</h2><p class="sub">Lima titik yang sama untuk Non-COD dan COD; yang berbeda hanya siapa membayar ongkir dan kapan saldo terpotong.</p></div>
 <ol class="pipe">${PIPE.map(([t, d], i) => `<li class="stop" style="--n:${i}"><span class="node" aria-hidden="true">${i + 1}</span><div><p class="stop-t">${t}</p><p class="stop-d">${d}</p></div></li>`).join("")}<li class="pulse" aria-hidden="true"></li></ol>
 </div></section>
 

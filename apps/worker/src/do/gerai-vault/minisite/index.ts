@@ -30,12 +30,13 @@ const LOGO_TYPES = "('image/png','image/jpeg','image/webp')"
  */
 export type PublicShell = Omit<PublicProfile, "logoMediaId"> & { latitude: number | null; longitude: number | null; logoVersion: string | null }
 
-export function publicShell(sql: SqlStorage): PublicShell | null {
+export function publicShell(sql: SqlStorage, tenantId: string): PublicShell | null {
   const o = sql
     .exec<{ name: string; whatsapp: string | null; opening_hours: string | null; street_address: string | null; subdistrict_name: string | null; latitude: number | null; longitude: number | null; logo_id: string | null }>(
       `SELECT o.name, o.whatsapp, o.opening_hours, o.street_address, o.subdistrict_name, o.latitude, o.longitude, m.id AS logo_id
-       FROM tenant_outlets o LEFT JOIN media_objects m ON m.id = o.logo_media_id AND m.purpose = 'logo' AND m.content_type IN ${LOGO_TYPES}
+       FROM tenant_outlets o LEFT JOIN media_objects m ON m.id = o.logo_media_id AND m.tenant_id = ? AND m.purpose = 'logo' AND m.content_type IN ${LOGO_TYPES}
        WHERE o.is_default = 1 LIMIT 1`,
+      tenantId,
     )
     .toArray()[0]
   return o ? { name: o.name, whatsapp: o.whatsapp, openingHours: o.opening_hours, address: o.street_address, area: o.subdistrict_name, latitude: o.latitude, longitude: o.longitude, logoVersion: o.logo_id ? o.logo_id.slice(0, 8) : null } : null
@@ -161,6 +162,8 @@ export type PublicTrack = {
   timeline: Array<{ at: number; label: string }>
   delivered: boolean
   outletContact: { name: string; whatsapp: string | null } | null
+  /** ADR-0005: a dropship (or outlet-unbranded) label: the public page must not show the outlet's mark, name, place or chat. */
+  maskedOutlet: boolean
   unlocked?: { recipientName: string; note: string | null }
 }
 
@@ -181,7 +184,7 @@ export function publicTrack(sql: SqlStorage, code: string, now: number = Date.no
     const d = slug ? readDraft(sql, slug) : null
     // An unclaimed pre-booking past its 48 h is gone for the public (the QR card no longer works).
     if (!d || d.claimed_at || d.expires_at < now) return null
-    return { inv: d.slug, awb: null, courier: null, service: null, status: "draft", statusLabel: STATUS_LABEL.draft!, sender: initialsMask(d.sender_store ?? d.sender_name), recipient: initialsMask(d.recipient_name), originArea: null, destinationArea: areaCity(d.recipient_area_label), timeline: [], delivered: false, outletContact: null }
+    return { inv: d.slug, awb: null, courier: null, service: null, status: "draft", statusLabel: STATUS_LABEL.draft!, sender: initialsMask(d.sender_store ?? d.sender_name), recipient: initialsMask(d.recipient_name), originArea: null, destinationArea: areaCity(d.recipient_area_label), timeline: [], delivered: false, outletContact: null, maskedOutlet: Boolean(d.sender_store) }
   }
   const sender = s.true_sender_json ? (JSON.parse(s.true_sender_json) as { name?: string; brand?: string | null }) : null
   const recipient = s.true_recipient_json ? (JSON.parse(s.true_recipient_json) as { name?: string; area?: string | null }) : null
@@ -209,6 +212,7 @@ export function publicTrack(sql: SqlStorage, code: string, now: number = Date.no
     timeline,
     delivered: s.status === "delivered",
     outletContact: reseller || !outlet ? null : { name: outlet.name, whatsapp: outlet.whatsapp },
+    maskedOutlet: reseller,
   }
 }
 

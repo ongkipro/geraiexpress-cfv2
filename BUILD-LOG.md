@@ -1148,4 +1148,11 @@ Durable implementation changes, validation evidence and gotchas for the next mai
      button now stay on one line only from `lg`.
 - Not covered: there is no screenshot of a mini-site on a custom domain, because e2e cannot seed a custom hostname.
   The footer rule is proven by a worker test on `kirim.tokoberkah.id` for `/`, `/kirim` and `/lacak`.
+- Sol R1 (GPT-6.2, REQUEST_CHANGES: 3 P1 + 5 P2) fixed in run `RUN-20261118T182730Z-48cf174c`
+  (`docs/review/dec-247b/DISPOSITION.md`): dropship tracking masks the outlet (ADR-0005); initials by code point;
+  `/cara-kerja` separates the Non-COD and COD payment paths; tenant-bound logo join; validation ownership follows the
+  setter in all three nets (app, brand, mini-site); mini-site P×L×T validated as submitted; 16px simulator option text
+  on phones; Space on the mini-site menu trigger. Mutations R1-M1..M10 red.
+  Lesson: a message-text comparison cannot prove who owns a custom validity message. Track ownership where the setter
+  is called.
 

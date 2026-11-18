@@ -269,6 +269,15 @@ describe("brand site DEC-247", () => {
     expect(h).toContain('IntersectionObserver" in window)||matchMedia("(prefers-reduced-motion: reduce)").matches)return')
     expect(h).toContain("@media(prefers-reduced-motion:reduce){.pipeline .node,.pipeline .pulse{animation:none!important")
     expect(h).not.toContain('<ol class="steps">')
+    // Sol R1 P1: the two payment paths are told apart (spec 02 §3.3) — Non-COD pays at the counter and is debited at
+    // issue; COD is paid by the recipient to the courier and netted from the COD credit when it settles.
+    const pipe = h.slice(h.indexOf('<ol class="pipe">'), h.indexOf("</ol>", h.indexOf('<ol class="pipe">')))
+    expect(pipe).toContain("Non-COD: ongkir dibayar di loket. COD: tagihan dibayar penerima kepada kurir")
+    expect(pipe).toContain("(Non-COD memotong saldo saat itu)")
+    expect(pipe).toContain("untuk COD, ongkir dan biaya COD dipotong dari dana COD saat cair")
+    expect(h).toContain("Non-COD memotong saldo sebesar ongkir bersih mitra saat resi terbit; COD tidak memotong saldo saat itu.")
+    expect(h).not.toContain("Pelanggan membayar tarif publik di loket dan kasnya tercatat")
+    expect(h).not.toContain("dilewati setiap kiriman, dicatat otomatis")
   })
 
   it("DEC-247B /hubungi-kami: two borderless porcelain panels, partners vs senders and recipients", async () => {
@@ -292,6 +301,8 @@ describe("brand site DEC-247", () => {
     expect(h).toContain('<form class="sim-stage" id="sim"')
     expect(h).not.toMatch(/<form[^>]*style=|<div class="grid2" style=|<h2 style=/)
     expect(h).toContain("list.forEach(function(o){if(o!==me)o.close(false)})")
+    // Sol R1 P2: 16px option text on phones.
+    expect(h).toContain("@media(max-width:640px){.sim .opt-main{font-size:1rem}}")
   })
 
   it("DEC-247B footer: compact link rhythm and two link columns on phones", async () => {

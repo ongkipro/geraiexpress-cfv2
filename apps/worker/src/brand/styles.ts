@@ -416,6 +416,7 @@ input,select{width:100%;min-height:46px;font-size:1rem;padding:8px 12px;border:1
 .fld .qw{margin-top:4px}
 .sim-h{margin-top:8px!important}.sim-p{margin:0;color:var(--body)}
 .sim-rates{padding:4px 14px}
+@media(max-width:640px){.sim .opt-main{font-size:1rem}}
 .lbl-top{display:flex;justify-content:space-between;gap:8px;font-weight:700;color:var(--ink)}
 .lbl-dest{margin:0;color:var(--body);font-size:.875rem}
 #rates li{grid-template-columns:76px minmax(0,1fr) auto}

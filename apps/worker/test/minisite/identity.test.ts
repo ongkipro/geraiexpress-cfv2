@@ -68,6 +68,28 @@ describe("mini-site identity (DEC-247)", () => {
     expect((await get(`${a.base}/logo`)).status).toBe(404)
     expect(await (await get(`${a.base}/`)).text()).toContain('<span class="mark mono" aria-hidden="true">GB</span>')
     expect((await get(`${a.base}/logo`, "POST")).status).toBe(404)
+
+    // Sol R1 P2: a logo-purpose row owned by another tenant (present in this object) is never published by the shell.
+    const ownId = await upload(a.cookie, "logo")
+    await setOutlet(a, "UPDATE tenant_outlets SET logo_media_id = ? WHERE is_default = 1", ownId)
+    expect(await (await get(`${a.base}/`)).text()).toContain(`/logo?v=${ownId.slice(0, 8)}`)
+    await setOutlet(a, "UPDATE media_objects SET tenant_id = ? WHERE id = ?", b.tenantId, ownId)
+    const foreign = await (await get(`${a.base}/`)).text()
+    expect(foreign).not.toContain("/logo?v=")
+    expect(foreign).toContain('<span class="mark mono" aria-hidden="true">GB</span>')
+    expect((await get(`${a.base}/logo`)).status).toBe(404)
+  })
+
+  it("Sol R1 P1: a name starting with a supplementary-plane letter renders (initials by code point, valid favicon)", async () => {
+    const t = await site("msidkanji")
+    expect((await post("/settings/profile", t.cookie, { ...PROFILE, name: "𠮷野家 Berkah" })).status).toBe(200)
+    const r = await get(`${t.base}/`)
+    expect(r.status).toBe(200)
+    const h = await r.text()
+    expect(h).toContain('<span class="mark mono" aria-hidden="true">𠮷B</span>')
+    expect(h).toContain(`href="${favicon("𠮷野家 Berkah").replace(/&/g, "&amp;")}"`)
+    expect(decodeURIComponent(favicon("𠮷野家 Berkah"))).toContain(">𠮷</text>")
+    for (const p of ["/kirim", "/lacak"]) expect((await get(`${t.base}${p}`)).status, p).toBe(200)
   })
 
   it("favicon carries the outlet initial (white-label); Buka Peta uses the pin, else street + area, else nothing", async () => {
@@ -132,6 +154,14 @@ describe("mini-site identity (DEC-247)", () => {
     const bad = await q({ weight: "1", svc: "regular", lengthCm: "50" })
     expect(bad.status).toBe(422)
     expect(await bad.text()).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
+    // Sol R1 P2: dimensions are validated as submitted, never rewritten (`-20` → 20, `1.5` → 15) or dropped (three zeroes).
+    for (const dims of [["-20", "40", "30"], ["1.5", "40", "30"], ["0", "0", "0"], ["50", "40", "0"], ["301", "40", "30"], ["50", "", "30"], ["5O", "40", "30"]]) {
+      const r = await q({ weight: "1", svc: "regular", lengthCm: dims[0]!, widthCm: dims[1]!, heightCm: dims[2]! })
+      expect(r.status, dims.join("x")).toBe(422)
+      const h = await r.text()
+      expect(h, dims.join("x")).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
+      expect(h, dims.join("x")).not.toContain("Ongkir Reguler ke")
+    }
   })
 
   it("/kirim: COD price field is always in the HTML (no-JS) and toggled by the inline COD script", async () => {

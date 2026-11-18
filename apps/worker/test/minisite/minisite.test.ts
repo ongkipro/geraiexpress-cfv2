@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { hostCache } from "../../src/host/lookup"
 import { resetMock } from "../../src/mengantar/mock"
 import { recordProviderObservation } from "../../src/do/gerai-vault/status"
-import { checkoutGerai, post, DEST } from "../dispatch/helpers"
+import { checkoutGerai, post, DEST, ORIGIN } from "../dispatch/helpers"
 import { appGet } from "../webhooks/helpers"
 
 beforeEach(() => {
@@ -107,6 +107,40 @@ describe("mini-site", () => {
     for (let i = 0; i < 5; i++) last = (await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "1111", "cf-turnstile-response": "ok" })).status
     expect(last).toBe(429)
     expect((await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821", "cf-turnstile-response": "ok" })).status).toBe(429)
+  })
+
+  it("ADR-0005 (Sol R1 P1): a dropship shipment's tracking page and unlock show no outlet mark, name, place, map or chat", async () => {
+    const t = await site("msmasked")
+    const profile = { name: "Gerai Berkah Jaya", areaId: ORIGIN, areaLabel: "Dago, Coblong, Kota Bandung", street: "Jl. Merdeka No. 45", whatsapp: "081234560045", openingHours: "08.00–21.00" }
+    expect((await post("/settings/profile", t.cookie, profile)).status).toBe(200)
+    await runInDurableObject(t.vault, (_i, st) => void st.storage.sql.exec("UPDATE tenant_outlets SET latitude = -6.8915, longitude = 107.6107 WHERE is_default = 1"))
+    const r = await postForm(`${t.base}/kirim`, DRAFT)
+    const slug = /\/kirim\/([a-z0-9]{7})$/.exec(r.headers.get("location")!)![1]!
+    const claim = ((await (await post(`/minisite-drafts/${slug}/claim`, t.cookie, {})).json()) as { data: { senderId: string; recipientId: string } }).data
+    await post("/quotes/freeze", t.cookie, { slug, destinationAreaId: DEST, weightGram: 1000, mode: "none", serviceCode: "JT" })
+    await post(`/shipments/${slug}/parties`, t.cookie, { senderId: claim.senderId, recipientId: claim.recipientId, content: "Pakaian", prohibitedAck: true })
+    await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    await runInDurableObject(t.vault, (_i, st) => recordProviderObservation(st.storage.sql, { slug, eventKey: `dl-${slug}`, source: "webhook", rawCategory: "DELIVERED", mapped: "delivered", eventAt: Date.now() + 60_000, eventAtText: null }, Date.now()))
+    // The header's kecamatan line is outlet identity; the body's origin district (spec 05 §3) is not and stays.
+    const OUTLET = ["Gerai Berkah Jaya", "Jl. Merdeka", "google.com/maps", "wa.me/62812", "/logo?v=", 'id="lokasi"', "<small>Coblong, Kota Bandung</small>", "Chat WhatsApp Gerai"]
+    // Ordinary (outlet-branded) label: the outlet identity is part of the page.
+    const plain = await (await get(`${t.base}/lacak?q=${slug}`)).text()
+    for (const x of OUTLET.filter((x) => x !== "/logo?v=")) expect(plain, x).toContain(x)
+    expect(plain).toContain('<span class="mark mono" aria-hidden="true">GB</span>')
+    // Dropship label: nothing of the outlet, on the result and on the unlock response.
+    await runInDurableObject(t.vault, (_i, st) => void st.storage.sql.exec("UPDATE shipments SET mask_preset = 'dropship_toko' WHERE slug = ?", slug))
+    const masked = await get(`${t.base}/lacak?q=${slug}`)
+    expect(masked.status).toBe(200)
+    const unlock = await postForm(`${t.base}/lacak/${slug}/buka`, { last4: "8821", "cf-turnstile-response": "ok" })
+    expect(unlock.status).toBe(200)
+    for (const h of [await masked.text(), await unlock.text()]) {
+      expect(h).toContain(`INV ${slug.toUpperCase()}`)
+      expect(h).toContain("<h1>Lacak Paket</h1>")
+      expect(h).toContain('<span class="mark mono" aria-hidden="true">#</span>')
+      expect(h).toContain("<title>Lacak Paket</title>")
+      for (const x of OUTLET) expect(h, x).not.toContain(x)
+    }
+    expect(await (await get(`${t.base}/`)).text()).toContain("<h1>Gerai Berkah Jaya</h1>")
   })
 
   it("expired draft refused at the counter and purged by the sweep; draft from another gerai not found", async () => {

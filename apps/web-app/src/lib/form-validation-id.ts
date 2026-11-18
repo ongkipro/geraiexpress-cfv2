@@ -90,26 +90,42 @@ export function installIndonesianValidation(root: Document = document) {
   const r = root as Document & { __gxValidationId?: true }
   if (r.__gxValidationId) return
   r.__gxValidationId = true
-  // The message this net set on a field; anything else in `validationMessage` belongs to the page.
-  const ours = new WeakMap<Field, string>()
+  // Ownership is decided by who called `setCustomValidity`, never by the text: once this net has touched a field, the
+  // field's setter is wrapped so any other caller (even with the very same words) takes the message over.
+  const ours = new WeakSet<Field>()
+  const wrapped = new WeakSet<Field>()
+  let self = false
+  const put = (el: Field, message: string) => {
+    if (!wrapped.has(el)) {
+      const native = el.setCustomValidity
+      el.setCustomValidity = (m: string) => {
+        if (!self) ours.delete(el)
+        native.call(el, m)
+      }
+      wrapped.add(el)
+    }
+    self = true
+    try {
+      el.setCustomValidity(message)
+    } finally {
+      self = false
+    }
+    if (message) ours.add(el)
+    else ours.delete(el)
+  }
   const release = (el: Field) => {
-    const message = ours.get(el)
-    if (message === undefined) return
-    ours.delete(el)
-    if (el.validationMessage === message) el.setCustomValidity("")
+    if (ours.has(el)) put(el, "")
   }
   root.addEventListener(
     "invalid",
     (e) => {
       const el = e.target
       if (!isField(el)) return
-      if (el.validity.customError && ours.get(el) !== el.validationMessage) return
+      if (el.validity.customError && !ours.has(el)) return
       release(el)
       // Only our stale message made it invalid: no empty bubble, the next attempt passes.
       if (el.validity.valid) return e.preventDefault()
-      const message = indonesianValidityMessage(describe(el))
-      el.setCustomValidity(message)
-      ours.set(el, message)
+      put(el, indonesianValidityMessage(describe(el)))
     },
     true,
   )

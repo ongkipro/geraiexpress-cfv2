@@ -121,6 +121,16 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
     expect(await overflow()).toBe(0)
     await page.keyboard.press("Escape")
     await expect(menu).toBeHidden()
+    // Sol R1 P2: the trigger is exposed as a button, so Space opens and closes it too (no page scroll).
+    await expect(menuBtn).toBeFocused()
+    const y = await page.evaluate(() => scrollY)
+    await page.keyboard.press(" ")
+    await expect(menu).toBeVisible()
+    await expect(page.getByRole("button", { name: "Tutup menu" })).toHaveAttribute("aria-expanded", "true")
+    await page.getByRole("button", { name: "Tutup menu" }).focus()
+    await page.keyboard.press(" ")
+    await expect(menu).toBeHidden()
+    expect(await page.evaluate(() => scrollY)).toBe(y)
   }
   expect(await page.locator('link[rel="icon"]').getAttribute("href")).toMatch(/^data:image\/svg\+xml,.*%3EG%3C%2Ftext%3E/)
   const strip = page.locator("ul.strip img")
@@ -192,6 +202,20 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
   await expect(page).toHaveURL(`${site}/lacak`)
   await page.locator("#q").fill("X")
   expect(await page.locator("#q").evaluate((i: HTMLInputElement) => i.validationMessage)).toBe("")
+  // Sol R1 P2: ownership follows the setter — the page's own error with the net's exact words survives typing.
+  expect(
+    await page.locator("#q").evaluate((i: HTMLInputElement) => {
+      i.value = ""
+      i.form!.reportValidity()
+      const ours = i.validationMessage
+      i.setCustomValidity(ours)
+      i.value = "INV1234"
+      i.dispatchEvent(new Event("input", { bubbles: true }))
+      const kept = i.validationMessage
+      i.setCustomValidity("")
+      return [ours, kept]
+    }),
+  ).toEqual(["Kolom Nomor INV atau resi wajib diisi.", "Kolom Nomor INV atau resi wajib diisi."])
 
   // An issued J&T INV (QR draft → counter API): /lacak shows the courier logo beside the privacy-safe stepper.
   const draft = await request.post(`${site}/kirim`, { form: { cod: "0", senderName: "Ibu Siti Nisa", senderPhone: "081234567890", recipientName: "Rina Kartika", recipientPhone: "085799998821", recipientId: DEST_AREA, recipientLabel: "Tebet Barat, Tebet, Jakarta Selatan, DKI Jakarta", recipientStreet: "Jl. Tebet Barat No. 14", content: "Pakaian", weight: "1000", "cf-turnstile-response": "dev-token" }, maxRedirects: 0 })
