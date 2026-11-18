@@ -70,3 +70,16 @@ R4-F1 resolved with deterministic, mutation-backed coverage; no open findings, m
 finishes PASS before the merge commit. The fix runs before it closed BLOCKED (pending review), as the boundary contract
 requires a finished run before each commit.
 
+Release-run correction: `RUN-20261118T132524Z-b80efae9` executed every gate PASS, but its review step was refused (a
+non-ASCII dash in the reviewer-route reason), `finish PASS` failed, and the record was committed anyway because the
+commands were chained with `;` — HEAD moved, so that run closed BLOCKED. The next release run,
+`RUN-20261118T133332Z-d154b173`, closed **FAIL**: its e2e gate caught a real defect (see "Release gate finding" below).
+
+## Release gate finding — status race after pairing (found by the release e2e, not by review)
+
+The release e2e (JSON report) failed once on `customer-display` at phone-390: after `Pasangkan Layar` the button never
+became `Layar Pelanggan (terhubung)`. Cause: opening the dialog calls `refresh()` (`GET /customer-display/status`); when
+the cashier pairs before that answer returns, the older `paired: false` answer lands after the pair result and
+overwrites it, so the counter believes it is unpaired and stops publishing. Likely also the uncaptured 29/1 e2e failure
+recorded in the R2 run. TASK-701 was not merged or deployed; the fix and its regression follow and need review.
+

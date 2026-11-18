@@ -1057,4 +1057,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Sol R4: a `stale` answer must invalidate the publisher's acknowledgement just like a transient failure — it proves
   the stored content moved. One line (`acked = null` first in the stale branch) + unit regression + mutation.
 - Sol R5 APPROVE on `94588b5` (no open findings). Release run `RUN-20261118T132524Z-b80efae9` at the reviewed head.
+- Release-run slip: the first release run passed every gate, but the review step was refused for a non-ASCII dash
+  in its reason, `finish PASS` failed, and a `;`-chained commit went through anyway — the run closed BLOCKED and
+  `RUN-20261118T133332Z-d154b173` re-ran the gates — and its e2e caught a real status race after pairing (closed FAIL;
+  fix below). Lesson: chain ledger finish and commit with `&&`, and keep ledger
+  free-text fields ASCII.
 
