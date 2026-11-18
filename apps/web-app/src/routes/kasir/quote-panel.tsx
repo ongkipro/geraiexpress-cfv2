@@ -107,6 +107,7 @@ export function QuotePanel({
   autoQuote,
   onQuoted,
   onStale,
+  onForm,
 }: {
   onChoose?: (req: QuoteRequest, card: QuoteCard, form: { area: Area | null; packingName: string; serviceFee: boolean }) => Promise<void> | void
   chooseLabel?: string
@@ -117,6 +118,8 @@ export function QuotePanel({
   onQuoted?: (req: QuoteRequest, cards: QuoteCard[]) => void
   /** The form no longer matches the last quoted request (edited, re-quoting, or the quote failed). */
   onStale?: () => void
+  /** Customer-display labels (TASK-701): the destination area label and the packing item's name. */
+  onForm?: (f: { areaLabel: string | null; packingName: string }) => void
 }) {
   const w = useWorkspace()
   const owner = isOwner(w)
@@ -144,6 +147,10 @@ export function QuotePanel({
       .catch(() => setPos({ packingItems: [], serviceFeeIdr: null, showCommission: false }))
   }, [])
   const packingIdr = pos?.packingItems.find((i) => i.name === packing)?.priceIdr ?? 0
+  useEffect(() => {
+    onForm?.({ areaLabel: area?.label ?? null, packingName: packing })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [area?.label, packing])
   // Biaya Layanan Loket applies to Non-COD and COD Ongkir only (never COD Barang).
   const feeAllowed = kind !== "cod_goods"
   const serviceFeeIdr = feeAllowed && serviceFee && pos?.serviceFeeIdr ? pos.serviceFeeIdr : 0

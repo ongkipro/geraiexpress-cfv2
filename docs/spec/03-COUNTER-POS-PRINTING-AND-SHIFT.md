@@ -161,3 +161,83 @@ Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Ep
 1. **Open Shift:** cashier enters opening cash float (`Modal Awal Laci`, e.g., `Rp150.000`).
 2. **Live Drawer State:** tracks `Tunai Masuk`, `Void Tunai`, `Pencairan COD Tunai`, `QRIS Tercatat`, and `Transfer Tercatat` from `counter_receipts` whose `shift_id` is this shift (so an INV created unpaid in shift A and paid in shift B counts in B). `expected_cash_idr = opening_float + Σ tunai(direction=in) − Σ tunai(direction=out)` (voids of payments are `out`, sender payouts are `out`, voids of payouts are `in`).
 3. **Close Shift:** cashier counts physical bills in the drawer (`Uang Tunai Fisik Dihitung`). Any non-zero variance (`counted_cash_idr - expected_cash_idr != 0`) requires a structured reason code + note before closing and triggers an alert card on the Owner's Dashboard.
+
+---
+
+## 5. Layar Pelanggan — Customer-Facing Counter Display (`/kasir/layar-pelanggan`, PR-22, TASK-701)
+
+**Purpose.** A chromeless second screen the walk-in sender looks at while the counter works: a second window on a
+dual-monitor counter PC (`Buka di Jendela Baru`) or a counter tablet/phone paired by QR. It shows only the customer
+side of the sale — courier, billable weight, general destination, customer line items, the total and the outlet's
+static QRIS — never cost, discount, margin, balance, phone numbers or street addresses (visual 07 row
+`/kasir/layar-pelanggan`).
+
+### 5.1 Pairing and lifecycle
+
+1. A signed-in counter member (`gerai_admin` or `cashier`) pairs from `/kasir` (`POST /api/app/customer-display/pair`).
+   The Worker draws a 256-bit CSPRNG token (`base64url`, 43 characters); the tenant's `GeraiVaultDO` stores only
+   `token_hash = SHA-256(token)` in `customer_display_sessions`. The raw token is returned once, inside
+   `pairUrl = https://app.<apex>/kasir/layar-pelanggan?gerai=<tenant slug>&kode=<token>` and its QR SVG.
+2. **One live pairing per member.** Pairing again revokes every earlier unrevoked pairing of the same member, so a lost
+   or photographed QR dies as soon as a new one is made. `POST /customer-display/unpair` revokes on demand.
+3. **Shift coupling (PR-22).** If the member has an open `cashier_shifts` row when pairing, its id is stored as
+   `shift_id`; closing that shift (`POST /shift/close`) sets `revoked_at` on every pairing bound to it in the same
+   transaction, and `view` also refuses a pairing whose shift is no longer open. While the Shift Loket UI is deferred
+   (DEC-241), `shift_id` is `NULL` and the pairing ends after **12 hours** (`expires_at`) or on unpair.
+4. A pairing is valid only while `revoked_at IS NULL`, `expires_at > now`, its bound shift (if any) is open and its
+   creator is still an active member of the gerai; otherwise `410 DISPLAY_ENDED` (`Layar pelanggan tidak lagi
+   terhubung. Pasangkan ulang dari layar kasir.`). An unknown or non-`active` gerai slug, or an unknown token, answers
+   `401 DISPLAY_NOT_PAIRED`.
+
+### 5.2 Display state (server-built, zero-leak)
+
+`POST /customer-display/state` (counter member) replaces the state of every live pairing of that member. The server
+builds the stored `state_json` field by field from a closed schema — unknown keys are dropped, so cost or margin
+can never enter it:
+
+| `kind` | Input from `/kasir` | Built and stored |
+|---|---|---|
+| `idle` | — | `{ kind }` |
+| `checkout` | courier label, ETA, billable gram, destination area label (`Kecamatan, Kota`), customer lines, `totalIdr`, payment method, COD collection / sender payout (COD only) | lines from the closed set `ongkir` (`Ongkos kirim`), `asuransi`, `packing`, `layanan` (`Biaya layanan loket`), `promo` (`Potongan promo`, subtracted); every amount a safe integer IDR `0..100.000.000`; `totalIdr` must equal Σ lines − promo (else `422`). Text is trimmed and capped (courier 60, ETA 30, destination 120). |
+| `paid` | `slug` (+ courier label) | read from the tenant object, never from the request: `INV`, AWB (if issued), `counter_payment_status`, method, `counter_due_idr`, `Tunai diterima` / `Kembalian` of the latest `mark_paid` receipt, and the tracking link `https://<primary host>/lacak?q=<INV>`. An unknown slug is `404`. |
+
+`counter_due_idr` composition (spec 02 §3): non-COD `P + I + K + S − V`, COD `K + S − V`; the counter sends `ongkir`
+only for non-COD sales. A `paid` state turns back into `idle` 20 seconds after it was set, or as soon as the counter
+pushes the next state.
+
+### 5.3 Public read
+
+`GET /api/app/customer-display/view?gerai=<slug>&kode=<token>` (auth `public`, projection `none`):
+
+- Reads **no** session cookie and sets **no** cookie; `cache-control: no-store`.
+- Resolves the tenant by slug in D1 (`status = 'active'`), then looks the token hash up in that tenant's object only —
+  a token of gerai A presented with gerai B's slug is `401`.
+- Failed lookups are throttled per client IP hash (`auth_throttle`, 30 failures per 10 minutes → `429`, checked
+  before the lookup); successful reads never count, so a paired display polling every 2 s is not throttled.
+- Answers `{ state, updatedAt, outlet: { name, logoUrl, qrisUrl } }`. `logoUrl` / `qrisUrl` point at
+  `GET /customer-display/media/{logo|qris}?gerai&kode` (public), which re-checks the same pairing on every read and
+  streams the R2 object (`private, max-age=60`, `nosniff`) — revocation closes the images too, with no detached signed
+  link left behind. The response never contains an `OWNER_ONLY_KEYS` key, a phone number or a street address.
+- `paid` adds `trackingUrl` and `trackingQrSvg` (the same `uqr` encoder as labels).
+
+### 5.4 Outlet static QRIS image
+
+The owner uploads, replaces or removes the outlet's static QRIS in `Pengaturan › Printer & Struk` (`QRIS Loket`):
+`POST /media?purpose=qris` (owner only; magic bytes `image/png | image/jpeg | image/webp`, ≤ 2 MB), then
+`POST /settings/qris { mediaId | null }` (`app_owner`) stores `tenant_outlets.qris_media_id`. `GET /settings/qris`
+(member) returns `{ hasQris, url }` (signed media link) so the Kasir sees the same card read-only. Media gains the
+purpose `qris`; tenant migration `0024` rebuilds `media_objects` (same rows and ids) to widen its `purpose` check. On the display, the
+QRIS card appears in `checkout` when the method is `qris`; with no image uploaded it says `Tunjukkan kode QRIS gerai
+di meja kasir.`
+
+### 5.5 Counter and display behaviour
+
+- `/kasir` header: `Layar Pelanggan` (status dot green while paired) opens a dialog with the pairing QR, a copyable
+  link, `Buka di Jendela Baru`, `Putuskan Layar` and, without a QRIS image, a hint to `Pengaturan › Printer & Struk`.
+- While paired, `/kasir` pushes `idle` (empty or reset), `checkout` (a courier row is selected; re-sent on method or
+  amount change, debounced) and `paid` (after issue). It posts the server-built state on a same-origin
+  `BroadcastChannel` so a window on the same PC updates at once.
+- `/kasir/layar-pelanggan` is mounted outside the workspace shell (no sign-in, no navigation). It polls `view` every
+  2 s, pauses while `document.hidden` and refreshes on `visibilitychange`. States: `Menunggu paket` (idle),
+  `Rincian pembayaran` (checkout, total `40px` bold `tabular-nums`), `Terima kasih` (paid, INV, AWB, tracking QR),
+  `Layar belum terhubung` (no/ended pairing).

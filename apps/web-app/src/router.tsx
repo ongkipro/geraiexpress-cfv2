@@ -41,6 +41,7 @@ import { BantuanPage } from "./routes/bantuan/page"
 import { KirimanDetailPage } from "./routes/kiriman/detail"
 import { LabelPrivasiPage } from "./routes/pengaturan/label-privasi/page"
 import { CetakMassalPage } from "./routes/kiriman/cetak-massal/page"
+import { LayarPelangganPage } from "./routes/kasir/layar-pelanggan"
 
 // Route table for the app SPA. Feature tasks add their routes under src/routes/** and register them here.
 export interface Me {
@@ -145,6 +146,8 @@ const aturSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/at
 const daftarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar", component: DaftarPage })
 const daftarStatusRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar/status", component: DaftarStatusPage })
 const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/undangan/$token", component: UndanganPage })
+// TASK-701: the paired customer display needs no sign-in, so it lives outside the workspace shell (spec 03 §5.5).
+const layarPelangganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/kasir/layar-pelanggan", component: LayarPelangganPage })
 
 export const routeTree = rootRoute.addChildren([
   workspaceRoute.addChildren([indexRoute, notifikasiRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute, labelPrivasiRoute, ...comingSoonRoutes]),
@@ -155,6 +158,7 @@ export const routeTree = rootRoute.addChildren([
   undanganRoute,
   daftarRoute,
   daftarStatusRoute,
+  layarPelangganRoute,
 ])
 
 export const router = createRouter({ routeTree, defaultPreload: "intent" })

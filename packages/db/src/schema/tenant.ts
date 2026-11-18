@@ -56,6 +56,7 @@ export const tenantOutlets = sqliteTable("tenant_outlets", {
   whatsapp: text("whatsapp"),
   openingHours: text("opening_hours"),
   logoMediaId: text("logo_media_id"),
+  qrisMediaId: text("qris_media_id"),
   isDefault: integer("is_default").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -347,7 +348,7 @@ export const mediaObjects = sqliteTable("media_objects", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id").notNull(),
   r2Key: text("r2_key").notNull().unique(),
-  purpose: text("purpose", { enum: ["logo", "evidence", "return_photo", "claim", "signature"] }).notNull(),
+  purpose: text("purpose", { enum: ["logo", "qris", "evidence", "return_photo", "claim", "signature"] }).notNull(),
   contentType: text("content_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   uploadedBy: text("uploaded_by").notNull(),
@@ -771,3 +772,20 @@ export const trackingUnlocks = sqliteTable("tracking_unlocks", {
   lockedUntil: integer("locked_until"),
   updatedAt: integer("updated_at").notNull(),
 })
+
+// TASK-701 Layar Pelanggan (spec 03 §5): paired customer displays; the raw token is never stored.
+export const customerDisplaySessions = sqliteTable(
+  "customer_display_sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdByUserId: text("created_by_user_id").notNull(),
+    shiftId: text("shift_id"),
+    stateJson: text("state_json").notNull(),
+    stateUpdatedAt: integer("state_updated_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    revokedAt: integer("revoked_at"),
+  },
+  (t) => [index("customer_display_sessions_creator").on(t.createdByUserId).where(sql`revoked_at IS NULL`), index("customer_display_sessions_shift").on(t.shiftId).where(sql`shift_id IS NOT NULL`)],
+)

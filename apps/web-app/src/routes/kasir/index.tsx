@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { CheckCircle2Icon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
@@ -21,6 +21,7 @@ import { SenderForm } from "../kontak/pengirim"
 import { RiskChip, type RiskBadge } from "../kontak/shared"
 import { QuotePanel, StepTitle, rp, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
 import { LinkButton } from "../../components/admin/link-button"
+import { CustomerDisplayButton, useCustomerDisplay, type DisplayInput } from "./display-dialog"
 
 // `Buat Pengiriman › Kiriman Satuan` (DEC-237, visual 05, DESIGN.md C4): one counter screen. Left 60 %: destination &
 // weight → courier cards → sender, label, recipient and contents. Right 40 % (sticky): the live summary and payment.
@@ -215,6 +216,8 @@ export function KasirPage() {
   const [frozen, setFrozen] = useState<{ slug: string; sig: string; paid: boolean; payKey: string; card: QuoteCard } | null>(null)
   const [issued, setIssued] = useState<Issued | null>(null)
   const [prints, setPrints] = useState(0)
+  // Labels the customer display shows (TASK-701): destination area and packing name from the quote form.
+  const [form, setForm] = useState<{ areaLabel: string | null; packingName: string }>({ areaLabel: null, packingName: "" })
 
   // A QR pre-booking brings its parties and contents (the content is set where the claim is taken).
   useEffect(() => {
@@ -250,6 +253,29 @@ export function KasirPage() {
   const cashNum = Number(cash.replace(/\D/g, ""))
   const sig = sel ? JSON.stringify([sel.req, sel.card.serviceCode]) : ""
   const locked = !!frozen && (frozen.paid || !!claim) && frozen.sig !== sig
+
+  // Layar Pelanggan (spec 03 §5.5): only customer-side values; the server rebuilds the state (and `paid` from the INV).
+  const displayInput: DisplayInput = issued
+    ? { kind: "paid", slug: issued.slug, courier: issued.courier }
+    : card && sel
+      ? {
+          kind: "checkout",
+          courier: card.name,
+          eta: card.eta,
+          billableWeightGram: card.billableWeightGram,
+          destination: form.areaLabel,
+          method: due > 0 ? method : null,
+          lines: [
+            ...(cod ? [] : [{ kind: "ongkir", amountIdr: card.publishShippingIdr }]),
+            ...(sel.req.packingIdr ? [{ kind: "packing", amountIdr: sel.req.packingIdr, name: form.packingName }] : []),
+            ...(sel.req.serviceFeeIdr ? [{ kind: "layanan", amountIdr: sel.req.serviceFeeIdr }] : []),
+          ],
+          totalIdr: due,
+          codCollectionIdr: cod ? card.codCollectionTotalIdr : null,
+          senderPayoutIdr: cod && sel.req.mode !== "dfod" ? card.senderCodPayableIdr : null,
+        }
+      : { kind: "idle" }
+  const display = useCustomerDisplay(w.tenant.slug, displayInput)
 
   const priceChanged = (c: QuoteCard) =>
     new ApiError(409, {
@@ -315,7 +341,8 @@ export function KasirPage() {
     }
   }
 
-  if (issued) return <IssuedPanel issued={issued} prints={prints} onPrinted={() => setPrints((n) => n + 1)} onNew={reset} />
+  const displayButton = <CustomerDisplayButton display={display} owner={owner} />
+  if (issued) return <IssuedPanel issued={issued} prints={prints} onPrinted={() => setPrints((n) => n + 1)} onNew={reset} actions={displayButton} />
 
   const primary = payNow ? `Tandai Lunas & Cetak · ${rp(due)}` : due > 0 ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
   const disabled = pending || !sel || locked || (payNow && method === "tunai" && cashNum < due)
@@ -324,7 +351,10 @@ export function KasirPage() {
   return (
     <div className="flex flex-col gap-4 pb-28 lg:pb-0">
       <PageTitle title="Kiriman Satuan" description="Cek ongkir, pilih ekspedisi, isi pihak, bayar dan cetak — satu layar.">
-        <ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-start">
+          <ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} />
+          {displayButton}
+        </div>
       </PageTitle>
       {claim ? (
         <p role="status" className="rounded-lg border border-primary/20 bg-accent px-3 py-2 text-sm text-slate-700">Kiriman dari rumah <span className="font-semibold tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
@@ -337,6 +367,7 @@ export function KasirPage() {
             autoQuote={!claim && !!fromQuick}
             select={{ selected: card?.serviceCode ?? null, onSelect: (req, c) => setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c }) }}
             onStale={() => setSel(null)}
+            onForm={setForm}
             onQuoted={(req, cards) => {
               const keep = cards.find((c) => c.available && c.serviceCode === (sel?.card.serviceCode ?? (!claim ? q("layanan") : undefined)))
               setSel(keep ? { req, card: frozen && frozen.sig === JSON.stringify([req, keep.serviceCode]) ? frozen.card : keep } : null)
@@ -474,11 +505,11 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-function IssuedPanel({ issued, prints, onPrinted, onNew }: { issued: Issued; prints: number; onPrinted: () => void; onNew: () => void }) {
+function IssuedPanel({ issued, prints, onPrinted, onNew, actions }: { issued: Issued; prints: number; onPrinted: () => void; onNew: () => void; actions?: ReactNode }) {
   const ok = issued.state === "issued"
   return (
     <div>
-      <PageTitle title="Kiriman Satuan" description={`INV ${issued.slug.toUpperCase()}`} />
+      <PageTitle title="Kiriman Satuan" description={`INV ${issued.slug.toUpperCase()}`}>{actions}</PageTitle>
       <Panel className="flex max-w-2xl flex-col gap-3">
         {ok ? (
           <>

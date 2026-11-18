@@ -1,0 +1,12 @@
+# TASK-701 UI gates (2026-11-18, local wrangler dev :55186, synthetic gerai "Sinar Jaya Cell", synthetic QRIS image)
+# dotuiux check --surface admin (390/1366/1536 + reduced motion) · admin-geometry.mjs --contract design/admin-contract.json
+app:%2Fkasir :: dotuiux exit=0 summary: 0 fail · 1 warn · 2 allowed · 3 not checked · 34 pass :: geometry exit=0
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)   [baseline: same warn class on /kasir before TASK-701]
+app:%2Fpengaturan%2Fprinter :: dotuiux exit=0 summary: 0 fail · 2 warn · 2 allowed · 3 not checked · 33 pass :: geometry exit=0
+WARN        body-size            dominant paragraph text < 16px (admin: < 14px) (§16)   [baseline: DEC-244 printer 2 warn]
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)   [QRIS preview tile inside the SectionCard]
+app:%2Fkasir%2Flayar-pelanggan (paired, no cookie, idle) :: dotuiux exit=0 summary: 0 fail · 0 warn · 0 allowed · 5 not checked · 35 pass :: geometry exit=0
+app:%2Fkasir%2Flayar-pelanggan (paired, no cookie, checkout + QRIS) :: dotuiux exit=0 summary: 0 fail · 1 warn · 0 allowed · 5 not checked · 34 pass :: geometry exit=0
+WARN        card-in-card         bordered/shadowed/filled box inside another (dialog, table exempt) (§16)   [the QRIS card is a deliberate group on the stage]
+# First geometry run on the display failed header-height (48 px vs contract 64 px) → header set to h-16, re-run exit 0.
+# Screenshot script (Playwright, 1440x900 + 390x844 DPR 2): 0 page/console errors; horizontal overflow 0 px at both widths.

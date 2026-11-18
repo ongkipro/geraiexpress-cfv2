@@ -19,6 +19,7 @@ import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type PickupRef, type QuoteRow } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
 import { closeShift, openShift, openShiftOf, senderPayout, shiftTotals, voidSenderPayout, type ShiftError, type ShiftRow, type ShiftTotals } from "./shift"
+import { displayStatus, pairDisplay, paidState, parseCheckout, readDisplay, revokeForShift, setDisplayState, unpairDisplay, type DisplayError, type DisplayRead, type DisplayState } from "./customer-display"
 import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
 import type { ValidRow } from "@gx/domain/bulk"
 import { normalizePhone08 } from "@gx/domain/contacts"
@@ -520,6 +521,80 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (refused) return { ok: false, refused }
     const r = this.ctx.storage.sql.exec<{ r2_key: string; content_type: string }>("SELECT r2_key, content_type FROM media_objects WHERE id = ?", id).toArray()[0]
     return { ok: true, value: r ? { key: r.r2_key, contentType: r.content_type } : null }
+  }
+
+  // ---- Layar Pelanggan (TASK-701, spec 03 §5): paired customer displays and the outlet QRIS --------------------------
+
+  async customerDisplayOp(
+    tenantId: string,
+    userId: string,
+    op: { op: "pair"; tokenHash: string } | { op: "status" } | { op: "unpair" } | { op: "state"; input: Record<string, unknown>; trackingHost: string },
+    now: number = Date.now(),
+  ): Promise<{ ok: true; value: { paired: boolean; expiresAt: number | null; shiftBound: boolean; hasQris: boolean; state?: DisplayState } } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    return this.ctx.storage.transactionSync(() => {
+      const hasQris = !!sql.exec<{ q: string | null }>("SELECT qris_media_id AS q FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]?.q
+      if (op.op === "pair") {
+        if (!/^[0-9a-f]{64}$/.test(op.tokenHash)) return { ok: false as const, error: { status: 400, code: "DISPLAY_INVALID", message: "Permintaan tidak valid." } }
+        const p = pairDisplay(sql, userId, op.tokenHash, now)
+        this.audit(tenantId, now, "user", userId, "customer_display.pair", { shiftBound: p.shiftBound })
+        return { ok: true as const, value: { paired: true, ...p, hasQris } }
+      }
+      if (op.op === "unpair") {
+        if (unpairDisplay(sql, userId, now) > 0) this.audit(tenantId, now, "user", userId, "customer_display.unpair", {})
+        return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris } }
+      }
+      if (op.op === "state") {
+        const kind = op.input.kind
+        let state: DisplayState
+        if (kind === "idle") state = { kind: "idle" }
+        else if (kind === "checkout") {
+          const c = parseCheckout(op.input)
+          if (!c.ok) return c
+          state = c.value
+        } else if (kind === "paid") {
+          const p = typeof op.input.slug === "string" ? paidState(sql, op.input.slug.toLowerCase(), op.input.courier, op.trackingHost) : null
+          if (!p) return { ok: false as const, error: { status: 404, code: "SHIPMENT_NOT_FOUND", message: "Kiriman tidak ditemukan." } }
+          state = p
+        } else return { ok: false as const, error: { status: 422, code: "DISPLAY_INVALID", message: "Status layar tidak dikenal." } }
+        setDisplayState(sql, userId, state, now)
+        return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris, state } }
+      }
+      return { ok: true as const, value: { ...displayStatus(sql, userId, now), hasQris } }
+    })
+  }
+
+  /** The paired display's read (no session): state + outlet name and the R2 keys of its logo and QRIS (never returned). */
+  async customerDisplayView(tenantId: string, tokenHash: string, now: number = Date.now()): Promise<VaultResult<DisplayRead & { outlet?: { name: string; logo: { key: string; contentType: string } | null; qris: { key: string; contentType: string } | null } }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const read = readDisplay(sql, tokenHash, now)
+    if (read.kind !== "ok") return { ok: true, value: read }
+    const o = sql.exec<{ name: string; logo_media_id: string | null; qris_media_id: string | null }>("SELECT name, logo_media_id, qris_media_id FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
+    const media = (id: string | null | undefined, purpose: string) =>
+      id ? (sql.exec<{ key: string; contentType: string }>("SELECT r2_key AS key, content_type AS contentType FROM media_objects WHERE id = ? AND purpose = ?", id, purpose).toArray()[0] ?? null) : null
+    return { ok: true, value: { ...read, outlet: { name: o?.name ?? "", logo: media(o?.logo_media_id, "logo"), qris: media(o?.qris_media_id, "qris") } } }
+  }
+
+  /** Outlet static QRIS (`Pengaturan › Printer & Struk`): read, or set/clear with a media id of purpose `qris`. */
+  async outletQris(tenantId: string, set?: { mediaId: string | null; actorId: string }, now: number = Date.now()): Promise<{ ok: true; value: string | null } | { ok: false; refused?: VaultRefusal; error?: DisplayError }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    if (set) {
+      if (set.mediaId !== null && !sql.exec("SELECT 1 FROM media_objects WHERE id = ? AND purpose = 'qris'", set.mediaId).toArray().length) {
+        return { ok: false, error: { status: 422, code: "QRIS_NOT_FOUND", message: "Gambar QRIS tidak ditemukan. Unggah ulang gambarnya." } }
+      }
+      if (!sql.exec("SELECT 1 FROM tenant_outlets WHERE is_default = 1").toArray().length) return { ok: false, error: { status: 409, code: "OUTLET_REQUIRED", message: "Lengkapi Profil Gerai dulu." } }
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE tenant_outlets SET qris_media_id = ?, updated_at = ? WHERE is_default = 1", set.mediaId, now)
+        this.audit(tenantId, now, "user", set.actorId, set.mediaId ? "settings.qris.set" : "settings.qris.clear", {})
+      })
+    }
+    return { ok: true, value: sql.exec<{ q: string | null }>("SELECT qris_media_id AS q FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]?.q ?? null }
   }
 
   // ---- Notifications (TASK-301) -------------------------------------------------------------------------------------
@@ -1284,6 +1359,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
           ? { ok: true, value: { shift: r0.value, totals: r0.value.totals, shifts: [], variance_idr: r0.value.variance_idr, id: r0.value.id, variance_reason_code: r0.value.variance_reason_code, variance_note: r0.value.variance_note } }
           : r0
         if (r.ok) this.audit(tenantId, now, "user", actor.userId, "shift.close", { shiftId: r.value.id, variance: r.value.variance_idr, reason: r.value.variance_reason_code })
+        // PR-22: the customer displays paired inside this shift end with it (spec 03 §5.1).
+        if (r.ok) revokeForShift(sql, r.value.id, now)
         // A non-zero variance is surfaced to the owner (Dashboard alert card + notification).
         if (r.ok && r.value.variance_idr !== 0) {
           sql.exec(

@@ -3,10 +3,14 @@
 // on `app.` — a signature for one gerai never opens another gerai's object.
 import { hmacSha256Hex, timingSafeEqualStr } from "../crypto"
 
-export type MediaPurpose = "logo" | "evidence" | "return_photo" | "claim" | "signature"
-export const MEDIA_PURPOSES: readonly MediaPurpose[] = ["logo", "evidence", "return_photo", "claim", "signature"]
+export type MediaPurpose = "logo" | "qris" | "evidence" | "return_photo" | "claim" | "signature"
+export const MEDIA_PURPOSES: readonly MediaPurpose[] = ["logo", "qris", "evidence", "return_photo", "claim", "signature"]
+/** Owner-only purposes (the outlet's own logo and static QRIS, TASK-701). */
+export const OWNER_MEDIA: readonly MediaPurpose[] = ["logo", "qris"]
 export const MEDIA_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" }
 export const MEDIA_MAX_BYTES = 5 * 1024 * 1024
+/** The outlet QRIS shown on the customer display: an image of at most 2 MB (spec 03 §5.4). */
+export const QRIS_MAX_BYTES = 2 * 1024 * 1024
 export const SIGNED_URL_TTL_MS = 10 * 60_000
 
 export const mediaKeyFor = (tenantId: string, purpose: MediaPurpose, id: string, ext: string) => `t/${tenantId}/${purpose}/${id}.${ext}`

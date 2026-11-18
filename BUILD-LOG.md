@@ -992,3 +992,35 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   worker but served "Aplikasi belum dibangun" for owner pages because it rescanned assets mid-build — touching
   `dist/assets/owner/index.html` triggered a rescan, then `/masuk`, `/akun`, `/totp` 200 with the same bundle.
 
+## 2026-11-18 — TASK-701 Layar Pelanggan (PR-22)
+
+- Contract first: spec 03 §5 (pairing, shift coupling, server-built zero-leak state, public read, outlet QRIS), TASKS
+  block (R3), visual 07 row. Branch `task-701`; review by GPT-6.1 Sol pending before merge.
+- Pairing tokens: 256-bit `newToken(32)`; only `SHA-256(token)` reaches the tenant object (`token_hash` CHECK length
+  64). Re-pair revokes the member's earlier pairings; `shift/close` revokes pairings bound to the shift inside the same
+  `transactionSync`; `view` also refuses a closed shift, an expired/revoked row, a non-`active` gerai (401) and a
+  creator whose membership was revoked (410).
+- State is rebuilt server-side from a closed schema: `checkout` lines from `ongkir|asuransi|packing|layanan|promo`,
+  integer IDR, total must equal Σ lines − promo (`DISPLAY_TOTAL_MISMATCH`); `paid` reads INV, AWB, method, due and the
+  latest `mark_paid` cash/change from the object, and the tracking link from the gerai's primary host. A `paid` state
+  reads as idle 20 s after it was set (server-side, no device clock).
+- Public reads (`/customer-display/view`, `/customer-display/media/:kind`) go through the `public` guard (no session
+  read, so the rolling-cookie middleware never fires); images are streamed only while the same pairing is valid, so
+  revocation also closes them (no detached signed link). Only failed lookups count toward the per-IP throttle
+  (30 / 10 min, checked before the lookup), so a polling display is never limited. The CI route scan caught the two
+  new public routes; they are now on its allowlist with the reason.
+- Gotcha: `media_objects.purpose` had a CHECK list; SQLite cannot widen it in place, so `0024` rebuilds the table
+  (create `_v24`, copy, drop, rename; same rows/ids, superset check so the previous release still writes valid rows).
+  The migration test seeds a v23 object with a logo row and proves it survives and `qris` is accepted after.
+- QR codes (pairing link, tracking link) reuse `@gx/thermal-print` `qrSvg` (uqr) on the Worker and render as
+  `data:` image URLs — no new dependency in the SPA.
+- UI: the first admin-geometry run on the display failed `header-height` (48 vs 64 px contract) → header `h-16`; the
+  QRIS card first stretched to the stage height → `content-start items-start`. Evidence screenshots carry only synthetic
+  data and a local, already-deleted dev state.
+- Ledger: run `RUN-20261118T053457Z-2611ff53` started on a clean `ca49896` baseline (the work was stashed for the
+  start and restored at once). The first ledger-executed `pnpm check` exited 1 with only `ELIFECYCLE` in the captured
+  tail; the same command passed standalone and on re-record (output kept outside the tree) — treat as transient, cause
+  unknown. Boundary: 34 task files, all ALLOWED, 0 failures; diff-risk escalates the declared R3 to R4 (token hashing
+  in the tenant object) → REVIEW_REQUIRED. The run stays open for the reviewer; committing moves HEAD past the
+  baseline, so the post-review boundary needs a fresh run on the commit (or the merge gate).
+

@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
+import { ImageUpIcon, Trash2Icon } from "lucide-react"
+import { Button } from "../../../components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
-import { api } from "../../../lib/api"
+import { api, ApiError } from "../../../lib/api"
 import { deviceDensity, FORMAT_LABEL, PAPER_HINT, setDeviceDensity, type Format } from "../../../print/print"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
@@ -18,6 +21,7 @@ export function PrinterPage() {
   return (
     <SettingsLayout title="Printer & Struk" description="Atur printer di perangkat ini dan isi struk pelanggan.">
       <DeviceCard />
+      <QrisCard owner={isOwner(w)} />
       {isOwner(w) ? <ReceiptForm /> : <KasirFormatInfo />}
     </SettingsLayout>
   )
@@ -90,5 +94,91 @@ function ReceiptForm() {
       <Notice msg={s.msg} />
       <SaveBar dirty={s.dirty} pending={s.pending} onCancel={s.cancel} onSave={s.save} />
     </>
+  )
+}
+
+/**
+ * `QRIS Loket (Layar Pelanggan)` (TASK-701, spec 03 §5.4): the outlet's static QRIS shown on the paired customer
+ * display when the counter picks QRIS. Instant (no Save bar): upload replaces, delete asks first. Kasir: read-only.
+ */
+function QrisCard({ owner }: { owner: boolean }) {
+  const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const file = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    api<{ hasQris: boolean; url: string | null }>("/settings/qris").then(setQ).catch(() => setQ({ hasQris: false, url: null }))
+  }, [])
+  async function pick(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ""
+    if (!f || pending) return
+    setMsg(null)
+    if (f.size > 2 * 1024 * 1024) return setMsg("Ukuran gambar maksimal 2 MB.")
+    setPending(true)
+    try {
+      const up = await fetch("/api/app/media?purpose=qris", { method: "POST", credentials: "same-origin", headers: { "content-type": f.type || "application/octet-stream" }, body: f })
+      const j = (await up.json().catch(() => null)) as { ok: boolean; data?: { id: string }; error?: { message: string } } | null
+      if (!j?.ok) throw new Error(j?.error?.message ?? "Gagal mengunggah gambar. Coba lagi.")
+      setQ(await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: j.data!.id } }))
+    } catch (err) {
+      setMsg(err instanceof ApiError || err instanceof Error ? err.message : "Gagal mengunggah gambar. Coba lagi.")
+    } finally {
+      setPending(false)
+    }
+  }
+  async function remove() {
+    setPending(true)
+    setMsg(null)
+    try {
+      setQ(await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: null } }))
+      setConfirm(false)
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.body.message : "Gagal menghapus. Coba lagi.")
+    } finally {
+      setPending(false)
+    }
+  }
+  return (
+    <SectionCard title="QRIS Loket (Layar Pelanggan)" description={owner ? "Gambar QRIS statis gerai. Tampil di layar pelanggan saat kasir memilih QRIS." : "Diatur oleh pemilik gerai. Tampil di layar pelanggan saat Anda memilih QRIS."}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="grid size-40 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+          {q?.url ? <img src={q.url} alt="QRIS gerai" className="size-full object-contain p-1.5" /> : <span className="px-3 text-center text-xs text-muted-foreground">{q ? "Belum ada QRIS" : "Memuat…"}</span>}
+        </div>
+        <div className="flex min-w-0 flex-col gap-2.5">
+          <p className="text-sm text-slate-700">{q?.hasQris ? "QRIS sudah terpasang." : "Belum diunggah. Tanpa gambar, layar pelanggan meminta pelanggan memindai QRIS di meja kasir."}</p>
+          {owner ? (
+            <>
+              <p className="text-xs text-muted-foreground">PNG, JPG atau WEBP, maksimal 2 MB. Pakai QRIS statis dari bank/penyedia Anda.</p>
+              <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={pick} aria-label="Pilih gambar QRIS" tabIndex={-1} />
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => file.current?.click()} disabled={pending}>
+                  <ImageUpIcon aria-hidden /> {pending ? "Mengunggah…" : q?.hasQris ? "Ganti Gambar" : "Unggah QRIS"}
+                </Button>
+                {q?.hasQris ? (
+                  <Button type="button" variant="outline" className="text-danger" onClick={() => setConfirm(true)} disabled={pending}>
+                    <Trash2Icon aria-hidden /> Hapus
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          {msg ? <p role="alert" className="text-sm font-medium text-danger">{msg}</p> : null}
+        </div>
+      </div>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus QRIS gerai?</AlertDialogTitle>
+            <AlertDialogDescription>Layar pelanggan tidak lagi menampilkan QRIS; pelanggan diminta memindai QRIS di meja kasir.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove} disabled={pending}>Ya, Hapus</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SectionCard>
   )
 }

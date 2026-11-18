@@ -1,4 +1,5 @@
-// Route-table scan (spec 05 §4 gate 3). Public routes are an explicit allowlist (auth bootstrap only); every other
+// Route-table scan (spec 05 §4 gate 3). Public routes are an explicit allowlist (auth bootstrap, plus the paired
+// customer display's capability reads — TASK-701, spec 03 §5.3: `?gerai&kode`, no session, no cookie); every other
 // route needs a session level, a projection, and owner routes beyond /auth need aal2.
 export const PUBLIC_ALLOWLIST = {
   app: [
@@ -11,6 +12,8 @@ export const PUBLIC_ALLOWLIST = {
     "POST /auth/password/reset",
     "GET /auth/invitations/:token",
     "POST /auth/invitations/:token/accept",
+    "GET /customer-display/view",
+    "GET /customer-display/media/:kind",
   ],
   owner: ["POST /auth/login"],
 }

@@ -15,19 +15,21 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
-import { escposBytes, initials, labelsPdf, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
+import { escposBytes, initials, labelsPdf, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
 import { partnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
+import type { DisplayState } from "../do/gerai-vault/customer-display"
 import { TABS, type ListQuery, type Tab } from "../do/gerai-vault/listing"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
-import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
+import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, OWNER_MEDIA, QRIS_MAX_BYTES, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
 import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
 import { CNAME_TARGET, domainRows, primaryHost, purgeHost, refreshHost, remedyOf, requestDomain } from "../hostnames/service"
 import { CfError } from "../hostnames/cloudflare"
 import { hit } from "../auth/throttle"
+import { newToken } from "../auth/tokens"
 import { buildGeraiStatus } from "../status/gerai"
 import { platformHostOf } from "../host/lookup"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
@@ -1042,14 +1044,16 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const m = c.get("membership")!
     const purpose = c.req.query("purpose") as MediaPurpose
     if (!MEDIA_PURPOSES.includes(purpose)) throw new AppError(422, "INVALID_PURPOSE", "Jenis berkas tidak dikenal.")
-    if (purpose === "logo" && m.role !== "gerai_admin") throw new AppError(403, "FORBIDDEN", "Logo gerai hanya bisa diganti pemilik.")
-    const declared = Number(c.req.header("content-length") ?? "0")
-    if (declared > MEDIA_MAX_BYTES) throw new AppError(413, "FILE_TOO_LARGE", "Ukuran berkas maksimal 5 MB.")
+    if (OWNER_MEDIA.includes(purpose) && m.role !== "gerai_admin") throw new AppError(403, "FORBIDDEN", purpose === "qris" ? "QRIS gerai hanya bisa diganti pemilik." : "Logo gerai hanya bisa diganti pemilik.")
+    const max = purpose === "qris" ? QRIS_MAX_BYTES : MEDIA_MAX_BYTES
+    const tooLarge = () => new AppError(413, "FILE_TOO_LARGE", `Ukuran berkas maksimal ${max / 1024 / 1024} MB.`)
+    if (Number(c.req.header("content-length") ?? "0") > max) throw tooLarge()
     const bytes = new Uint8Array(await c.req.arrayBuffer())
     if (bytes.byteLength === 0) throw new AppError(422, "EMPTY_FILE", "Berkas kosong.")
-    if (bytes.byteLength > MEDIA_MAX_BYTES) throw new AppError(413, "FILE_TOO_LARGE", "Ukuran berkas maksimal 5 MB.")
+    if (bytes.byteLength > max) throw tooLarge()
     const type = sniffType(bytes)
     if (!type) throw new AppError(415, "UNSUPPORTED_FILE", "Hanya foto JPG, PNG, WEBP atau PDF.")
+    if (purpose === "qris" && !type.startsWith("image/")) throw new AppError(415, "UNSUPPORTED_FILE", "QRIS harus berupa gambar JPG, PNG atau WEBP.")
     const id = crypto.randomUUID()
     const key = mediaKeyFor(m.tenantId, purpose, id, MEDIA_TYPES[type]!)
     await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { tenant: m.tenantId } })
@@ -1070,6 +1074,91 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const obj = await c.env.BUCKET.get(k.value.key)
     if (!obj) throw new AppError(404, "NOT_FOUND", "Berkas tidak ditemukan.")
     return new Response(obj.body, { headers: { "content-type": k.value.contentType, "cache-control": "private, max-age=300", "x-content-type-options": "nosniff", "content-disposition": "inline" } })
+  })
+
+  // Layar Pelanggan (TASK-701, PR-22, spec 03 §5). The counter pairs, pushes state and unpairs with its session; the
+  // paired display reads `view` and the outlet images with `?gerai&kode` only — no session is read, no cookie is set.
+  const displayOp = async (c: AppCtx, op: Parameters<GeraiVaultDO["customerDisplayOp"]>[2]) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).customerDisplayOp(m.tenantId, c.get("session").user.id, op)
+    if (!r.ok) return vaultErr(r)
+    return r.value
+  }
+  /** The `paid` state carries its tracking QR so the customer can scan it off the screen. */
+  const publicState = (s: DisplayState) => (s.kind === "paid" ? { ...s, trackingQrSvg: qrSvg(s.trackingUrl, { title: "QR Lacak Paket" }) } : s)
+  r("POST", "/customer-display/pair", "app_member", "role", async (c) => {
+    const token = newToken(32)
+    const v = await displayOp(c, { op: "pair", tokenHash: await sha256Hex(token) })
+    const pairUrl = `${hostOrigin(c.req.raw)}/kasir/layar-pelanggan?gerai=${encodeURIComponent(c.get("membership")!.tenantSlug)}&kode=${token}`
+    return ok({ pairUrl, token, expiresAt: v.expiresAt, shiftBound: v.shiftBound, hasQris: v.hasQris, qrSvg: qrSvg(pairUrl, { title: "QR Layar Pelanggan" }) }, 201)
+  })
+  r("GET", "/customer-display/status", "app_member", "role", async (c) => ok(await displayOp(c, { op: "status" })))
+  r("POST", "/customer-display/unpair", "app_member", "role", async (c) => ok(await displayOp(c, { op: "unpair" })))
+  r("POST", "/customer-display/state", "app_member", "role", async (c) => {
+    const v = await displayOp(c, { op: "state", input: await body(c), trackingHost: await trackingHost(c) })
+    return ok({ ...v, state: v.state ? publicState(v.state) : null })
+  })
+  const DISPLAY_FAIL_LIMIT = 30
+  const DISPLAY_FAIL_WINDOW_MS = 10 * 60_000
+  const pairing = async (c: AppCtx) => {
+    const gerai = c.req.query("gerai") ?? ""
+    const kode = c.req.query("kode") ?? ""
+    const t = now()
+    // Only failed lookups count (a paired display polls every 2 s); 30 failures per IP per 10 min → 429.
+    const ipKey = `cd-view-fail:${await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw)}`
+    const fails = await c.env.DB.prepare("SELECT count, window_started_at FROM auth_throttle WHERE key = ?").bind(ipKey).first<{ count: number; window_started_at: number }>()
+    if (fails && fails.window_started_at > t - DISPLAY_FAIL_WINDOW_MS && fails.count >= DISPLAY_FAIL_LIMIT) throw new AppError(429, "DISPLAY_RATE_LIMITED", "Terlalu banyak percobaan. Tunggu beberapa menit, lalu pindai ulang QR dari layar kasir.")
+    const notPaired = async () => {
+      await hit(c.env.DB, ipKey, DISPLAY_FAIL_LIMIT, DISPLAY_FAIL_WINDOW_MS, t)
+      return new AppError(401, "DISPLAY_NOT_PAIRED", "Layar ini belum terhubung. Pindai QR dari layar kasir.")
+    }
+    const ended = () => new AppError(410, "DISPLAY_ENDED", "Layar pelanggan tidak lagi terhubung. Pasangkan ulang dari layar kasir.")
+    if (!/^[A-Za-z0-9_-]{43}$/.test(kode) || !/^[a-z0-9-]{1,63}$/.test(gerai)) throw await notPaired()
+    // Tenant only from the slug (active gerai), token hash looked up in that gerai's object only.
+    const tenant = await c.env.DB.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").bind(gerai).first<{ id: string }>()
+    if (!tenant) throw await notPaired()
+    const v = await vaultFor(c.env, tenant.id).customerDisplayView(tenant.id, await sha256Hex(kode), t)
+    if (!v.ok || v.value.kind === "none") throw await notPaired()
+    if (v.value.kind === "ended") throw ended()
+    // A member whose access was revoked no longer drives a display.
+    const member = await c.env.DB.prepare("SELECT 1 AS x FROM tenant_members WHERE tenant_id = ? AND user_id = ? AND status = 'active'").bind(tenant.id, v.value.createdBy).first()
+    if (!member) throw ended()
+    return { tenantId: tenant.id, query: `gerai=${encodeURIComponent(gerai)}&kode=${kode}`, value: v.value }
+  }
+  r("GET", "/customer-display/view", "public", "none", async (c) => {
+    const p = await pairing(c)
+    const o = p.value.outlet!
+    return ok(
+      {
+        state: publicState(p.value.state),
+        updatedAt: p.value.updatedAt,
+        outlet: { name: o.name, logoUrl: o.logo ? `/api/app/customer-display/media/logo?${p.query}` : null, qrisUrl: o.qris ? `/api/app/customer-display/media/qris?${p.query}` : null },
+      },
+      200,
+      { "cache-control": "no-store" },
+    )
+  })
+  r("GET", "/customer-display/media/:kind", "public", "none", async (c) => {
+    const kind = c.req.param("kind")
+    if (kind !== "logo" && kind !== "qris") throw new AppError(404, "NOT_FOUND", "Berkas tidak ditemukan.")
+    const p = await pairing(c)
+    const m = p.value.outlet?.[kind]
+    const obj = m && m.key.startsWith(`t/${p.tenantId}/`) ? await c.env.BUCKET.get(m.key) : null
+    if (!m || !obj) throw new AppError(404, "NOT_FOUND", "Berkas tidak ditemukan.")
+    return new Response(obj.body, { headers: { "content-type": m.contentType, "cache-control": "private, max-age=60", "x-content-type-options": "nosniff", "content-disposition": "inline" } })
+  })
+  // Outlet static QRIS (spec 03 §5.4): every member reads it (read-only card for the Kasir); only the owner sets it.
+  const qrisView = async (c: AppCtx, set?: { mediaId: string | null; actorId: string }) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).outletQris(m.tenantId, set)
+    if (!r.ok) return vaultErr(r)
+    return { hasQris: !!r.value, url: r.value ? await signMediaUrl(c.env.KEK_SECRET, m.tenantId, r.value, now()) : null }
+  }
+  r("GET", "/settings/qris", "app_member", "role", async (c) => ok(await qrisView(c)))
+  r("POST", "/settings/qris", "app_owner", "role", async (c) => {
+    const b = await body(c)
+    if (b.mediaId !== null && (typeof b.mediaId !== "string" || !/^[0-9a-f-]{36}$/.test(b.mediaId))) throw new AppError(422, "QRIS_NOT_FOUND", "Gambar QRIS tidak ditemukan. Unggah ulang gambarnya.")
+    return ok(await qrisView(c, { mediaId: b.mediaId as string | null, actorId: c.get("session").user.id }))
   })
 
   // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223): instant-save toggles and pickup mode.

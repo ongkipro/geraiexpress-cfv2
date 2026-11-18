@@ -708,8 +708,37 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 
 ### Post-launch (P1/P2)
 
-- **TASK-701** Layar Pelanggan (PR-22, P1) · **TASK-702** Sender stamp card (PR-23, P2, counsel first) ·
-  **TASK-703** Multi-outlet owner (PR-24, P2). Contracts written when prioritised.
+- **TASK-702** Sender stamp card (PR-23, P2, counsel first) · **TASK-703** Multi-outlet owner (PR-24, P2). Contracts
+  written when prioritised.
+
+### TASK-701: Layar Pelanggan — customer-facing counter display
+- **Requirement:** PR-22; visual 07 (`/kasir/layar-pelanggan`); spec 03 §5
+- **Risk Level:** R3 declared (auth-free paired read surface, server-built zero-leak DTO, tenant SQLite migration
+  `0024`); the ledger boundary escalates it to **R4** (diff-risk: token hashing in the tenant object) — review as R4.
+- **Job:** implementation
+- **Capability:** `durable-objects`, `application-security`, `shadcn-ui`, `ui-validation`
+- **Allowed Paths:** `packages/db/migrations/tenant/0024_customer_display.sql`, `packages/db/src/{tenant.ts,schema/tenant.ts}`,
+  `apps/worker/src/do/gerai-vault/{index.ts,customer-display/**}`, `apps/worker/src/api/app.ts`,
+  `apps/worker/src/media/index.ts`, `apps/worker/test/{customer-display,migrations}/**`, `scripts/ci/route-scan-lib.mjs`
+  (public allowlist),
+  `apps/web-app/src/router.tsx`, `apps/web-app/src/routes/kasir/{index.tsx,quote-panel.tsx,layar-pelanggan.tsx,display-dialog.tsx}`,
+  `apps/web-app/src/routes/pengaturan/printer/page.tsx`, `e2e/customer-display.spec.ts`, `docs/spec/03`, `docs/visual/{07,08}`,
+  `docs/SYSTEM-MAP.md`, `docs/evidence/TASK-701/**`, `STATUS.md`, `BUILD-LOG.md`, `TASKS.md`
+- **Depends On:** TASK-303, TASK-307, TASK-310
+- **Accepted Invariants:** only `SHA-256(token)` is stored; one live pairing per member (re-pair revokes); closing the
+  bound shift revokes in the same transaction; 12 h expiry; `view` and display media are `public`, read no session and
+  set no cookie; tenant from the slug + that tenant's object only (cross-tenant token `401`); state built server-side
+  from a closed schema (`paid` from the tenant object); no `OWNER_ONLY_KEYS`, phone or street in any display response;
+  QRIS image owner-only write (`png|jpeg|webp`, ≤ 2 MB); no new dependency (QR via the existing `uqr`).
+- **Visual Contract:** visual 07 row `/kasir/layar-pelanggan` (40 px total, outlet QRIS, `Terima kasih`); admin desk
+  scale on `/kasir` and `/pengaturan/printer`.
+- **Done when:** `test/customer-display/customer-display.test.ts` proves pair → cookie-less `view` → checkout lines and
+  total → QRIS media → paid (INV, change, tracking QR) → idle after 20 s, shift-close revoke, unpair, expiry,
+  re-pair revoke, cross-tenant and suspended-tenant refusal, failure throttle, Kasir QRIS upload `403`, zero
+  owner-only keys/PII; `test/migrations` upgrades v23 → v24 with no drift; `e2e/customer-display.spec.ts` pairs a
+  cookie-less context and follows checkout → paid → unpair at 390/768/1280; ≥ 2 red mutations recorded in
+  `docs/evidence/TASK-701/mutations.md`; UI evidence (1440×900, 390×844, 0 overflow, 0 console errors); `pnpm check`
+  green.
 - **TASK-705** Pengaturan rail as a secondary sidebar (P1 polish, DEC-242) — **DONE 2026-11-17**. The settings rail and
   the `/kasir` summary are sticky, viewport-bounded (`calc(100dvh − 6.5rem)`) and scroll independently with a thin
   scrollbar. Done when: `e2e/settings.spec.ts` "rail tetap diam…" passes at 1280×720 (rail y constant while the form

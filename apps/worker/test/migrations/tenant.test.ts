@@ -69,6 +69,28 @@ describe("GeraiVaultDO storage foundation (TASK-103, ADR-0006)", () => {
     })
   })
 
+  it("an object at v23 (shipped 0023) upgrades to v24 with the QRIS column and paired-display sessions, outlet kept (TASK-701)", async () => {
+    const stub = vault("tenant-v23")
+    expect(await stub.migrate("tenant-v23", 23)).toMatchObject({ ok: true, to: 23 })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      s.storage.sql.exec("INSERT INTO tenant_outlets (id, tenant_id, name, is_default, created_at, updated_at) VALUES ('o1', 'tenant-v23', 'Gerai Lama', 1, 1, 1)")
+      s.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES ('m1', 'tenant-v23', 't/tenant-v23/logo/m1.png', 'logo', 'image/png', 8, 'u', 1)")
+      expect(() => s.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES ('m2', 'tenant-v23', 't/tenant-v23/qris/m2.png', 'qris', 'image/png', 8, 'u', 1)")).toThrow()
+      expect(tables(s)).not.toContain("customer_display_sessions")
+    })
+    expect(await stub.migrate("tenant-v23")).toMatchObject({ ok: true, to: TENANT_SCHEMA_VERSION })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      expect(tables(s)).toContain("customer_display_sessions")
+      expect(s.storage.sql.exec<{ name: string; qris_media_id: string | null }>("SELECT name, qris_media_id FROM tenant_outlets").toArray()).toEqual([{ name: "Gerai Lama", qris_media_id: null }])
+      // media_objects was rebuilt for the 'qris' purpose: existing rows kept, the new purpose accepted, others still refused.
+      expect(s.storage.sql.exec<{ id: string; r2_key: string }>("SELECT id, r2_key FROM media_objects").toArray()).toEqual([{ id: "m1", r2_key: "t/tenant-v23/logo/m1.png" }])
+      s.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES ('m2', 'tenant-v23', 't/tenant-v23/qris/m2.png', 'qris', 'image/png', 8, 'u', 1)")
+      expect(() => s.storage.sql.exec("INSERT INTO media_objects (id, tenant_id, r2_key, purpose, content_type, size_bytes, uploaded_by, created_at) VALUES ('m3', 'tenant-v23', 't/tenant-v23/x/m3.png', 'lain', 'image/png', 8, 'u', 1)")).toThrow()
+      // Only a 64-hex SHA-256 fits the token column (a raw 43-char token is refused by the CHECK).
+      expect(() => s.storage.sql.exec("INSERT INTO customer_display_sessions (id, token_hash, created_by_user_id, state_json, state_updated_at, created_at, expires_at) VALUES ('d1', 'raw-token-not-a-hash', 'u', '{}', 1, 1, 2)")).toThrow()
+    })
+  })
+
   it("N−1 → N upgrade keeps data", async () => {
     const stub = vault("tenant-upgrade")
     await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
