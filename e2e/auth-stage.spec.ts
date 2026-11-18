@@ -145,6 +145,38 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await area.press("ArrowDown")
   await expect(list).toBeHidden()
   await expect(area).not.toHaveAttribute("aria-activedescendant", /.+/)
+  // Sol R2: results belong to the exact query. While `tebet` is still pending, the `coblong` options are gone and
+  // ArrowDown + Enter picks nothing; the `tebet` results show once the request completes.
+  let release!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/onboarding/areas?q=tebet*", async (route) => {
+    await gate
+    await route.continue()
+  })
+  await area.fill("coblong")
+  await expect(list).toBeVisible()
+  await area.fill("tebet")
+  await expect(list).toBeHidden()
+  await area.press("ArrowDown")
+  await area.press("Enter")
+  await expect(page.getByText(/^Dipilih:/)).toHaveCount(0)
+  release()
+  await expect(list.getByRole("option", { name: /Tebet/ }).first()).toBeVisible()
+  await page.unroute("**/api/app/onboarding/areas?q=tebet*")
+  // Sol R2: the active option scrolls into view after the list re-renders (10 results overflow the 13rem list).
+  await page.route("**/api/app/onboarding/areas?q=zona*", (route) =>
+    route.fulfill({ json: { ok: true, data: { items: Array.from({ length: 10 }, (_, i) => ({ id: `zona-${i}`, label: `Zona Contoh ${i + 1}, Kota Contoh`, postalCode: null })) } } }),
+  )
+  await area.fill("zona")
+  await expect(list.getByRole("option")).toHaveCount(10)
+  await area.press("Escape")
+  await expect(list).toBeHidden()
+  await area.press("ArrowUp")
+  await expect(area).toHaveAttribute("aria-activedescendant", "area-opt-9")
+  await expect.poll(() => page.locator("#area-results").evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  await expect(page.locator("#area-opt-9")).toBeInViewport()
+  await area.press("Escape")
+  await page.unroute("**/api/app/onboarding/areas?q=zona*")
   // Sol R1 (supervisor pre-review): a short viewport with the coordinates open scrolls inside the centre only;
   // Latitude, Longitude and `Ajukan Gerai` stay reachable, and the page itself never scrolls.
   await page.setViewportSize({ width: 1280, height: 560 })

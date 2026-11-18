@@ -32,7 +32,10 @@ export function DaftarPage() {
   const [lat, setLat] = useState("")
   const [lng, setLng] = useState("")
   const [query, setQuery] = useState("")
-  const [areas, setAreas] = useState<Area[]>([])
+  // Results belong to the exact trimmed query that produced them (Sol R2): while a new query is pending (debounce or
+  // request in flight) the old options are gone, so ArrowDown + Enter can never pick a stale area.
+  const [results, setResults] = useState<{ q: string; items: Area[] }>({ q: "", items: [] })
+  const areas = results.q === query.trim() ? results.items : []
   const [area, setArea] = useState<Area | null>(null)
   const [consent, setConsent] = useState(false)
   const [pending, setPending] = useState(false)
@@ -53,17 +56,18 @@ export function DaftarPage() {
   }
 
   useEffect(() => {
-    if (query.trim().length < 3) return
+    const q = query.trim()
+    if (q.length < 3) return
     let alive = true
     const t = setTimeout(() => {
-      api<{ items: Area[] }>(`/onboarding/areas?q=${encodeURIComponent(query.trim())}`)
+      api<{ items: Area[] }>(`/onboarding/areas?q=${encodeURIComponent(q)}`)
         .then((r) => {
           if (!alive) return
           // A new result set never keeps an index from the old one (`areas[hl]` is always defined).
-          setAreas(r.items)
+          setResults({ q, items: r.items })
           setHl(-1)
         })
-        .catch(() => alive && setAreas([]))
+        .catch(() => alive && setResults({ q, items: [] }))
     }, 300)
     return () => {
       alive = false
@@ -102,6 +106,10 @@ export function DaftarPage() {
   }
 
   const showList = listOpen && !area && areas.length > 0
+  // Keep the active option in view once React has rendered the (re)opened list (Sol R2; like the shell's ⌘K list).
+  useEffect(() => {
+    if (showList && hl >= 0) document.getElementById(`area-opt-${hl}`)?.scrollIntoView({ block: "nearest" })
+  }, [showList, hl])
   const toPickup = (e: FormEvent) => {
     e.preventDefault()
     // Smart default: the pickup contact usually answers the gerai WhatsApp, until the applicant edits HP PIC.
@@ -146,8 +154,6 @@ export function DaftarPage() {
                   setArea(null)
                   setListOpen(true)
                   setHl(-1)
-                  // Below 3 characters there is no search: stale results must not reopen on an arrow key.
-                  if (e.target.value.trim().length < 3) setAreas([])
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -157,7 +163,6 @@ export function DaftarPage() {
                     const n = areas.length
                     const next = e.key === "ArrowDown" ? (hl + 1) % n : hl <= 0 ? n - 1 : hl - 1
                     setHl(next)
-                    document.getElementById(`area-opt-${next}`)?.scrollIntoView({ block: "nearest" })
                   } else if (e.key === "Enter" && showList && hl >= 0) {
                     e.preventDefault()
                     pickArea(areas[hl]!)

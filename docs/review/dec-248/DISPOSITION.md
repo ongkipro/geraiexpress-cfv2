@@ -27,3 +27,16 @@ These three details were applied with focused checks only, as the fast protocol 
 | S1 | Old area results could reopen on an arrow key, or leave `hl` past a shrunk result set | Typing below 3 characters clears the results; every new result set resets `hl` to -1; arrow navigation computes the next index and scrolls that option into view (`block: "nearest"`) | Results exist (`coblong`), then `co` + `ArrowDown`: no list and no `aria-activedescendant` | D248P-M1 (results kept below 3 characters) → red. Its first run survived because the precondition (results present) was implicit; the test now makes it explicit. |
 | S2 | Widget-enabled retry | — (behaviour already in `useTurnstile().reset`) | Stubbed widget on `/masuk`: a failed sign-in calls `turnstile.reset` once, `Masuk` is disabled until the fresh token arrives, then enabled; the page still fits | — |
 | S3 | Short viewport with the coordinates open | — (the centre's `overflow-y-auto` fallback) | 1280×560, Tahap 3, `+ Titik koordinat peta` opened: Latitude, Longitude and `Ajukan Gerai` scroll into view inside the centre; the page itself does not scroll (`scrollHeight == innerHeight`), and no footer | — |
+
+# Round 2 — GPT-6.2 Sol R2 (`R2-sol.md`, REQUEST_CHANGES on `a022727`)
+
+Consent, HP PIC, Turnstile and the 560px short viewport were verified resolved. The two combobox items were fixed in
+run `RUN-20261118T205311Z-daa108ce` with focused checks (fast protocol): `pnpm typecheck`, eslint on the two files,
+e2e `auth-stage` + `onboarding` `--project desktop-1280` 3/3.
+
+| # | Finding | Fix | Regression | Mutation (red) |
+|---|---|---|---|---|
+| R2-1 | Old options stayed selectable while a new query was pending | Results are stored with the exact trimmed query that produced them (`results: { q, items }`), and the visible `areas` are `[]` unless `results.q === query.trim()`. This also covers the below-3-characters case, so the R1 pre-review `setAreas([])` in `onChange` is gone. | `/onboarding/areas?q=tebet*` is held on a barrier: after `coblong` → `tebet` the list is hidden at once, and `ArrowDown` + `Enter` picks nothing; releasing the barrier shows the `tebet` options | D248R2-M1 (results not bound to their query) |
+| R2-2 | The active option was scrolled before React rendered a reopened list | The `scrollIntoView({ block: "nearest" })` moved into `useEffect(…, [showList, hl])` | 10 stubbed overflowing results, `Escape`, then `ArrowUp`: `area-opt-9` is active, `#area-results` has `scrollTop > 0`, and the option is in view | D248R2-M2 (effect removed) |
+
+The single full ledger gate (seo, unit, Workers, e2e, `pnpm check`) runs once, in the release run after Sol approves.
