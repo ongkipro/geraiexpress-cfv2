@@ -35,7 +35,7 @@ test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) �
   await page.getByLabel("Email untuk akun Mengantar").fill(`seller-${slug}@contoh.test`)
   await page.getByRole("button", { name: "Lanjut" }).click()
   await page.getByLabel("Cari kelurahan / kecamatan / kode pos").fill("coblong")
-  await page.getByRole("button", { name: /Dago, Coblong/ }).click()
+  await page.getByRole("option", { name: /Dago, Coblong/ }).click()
   await page.getByLabel("Alamat lengkap titik jemput").fill("Jl. Uji No. 1")
   await page.getByLabel("PIC penjemputan").fill("Bu Rina")
   await expect(page.getByLabel("HP PIC")).toHaveValue("081234560000") // pre-filled from WhatsApp gerai

@@ -1,0 +1,22 @@
+## Review
+
+DEC-248 Round 1 · `dec-248` · `9fe447e..e09f998`
+
+### Findings
+
+- **P1 — The consent screen no longer shows which email will receive the Mengantar seller account.** The diff removes the final summary that displayed `sellerEmail`, but Tahap 3 still asks the applicant to consent to using “email di atas” (`apps/web-app/src/routes/daftar/page.tsx:150`). The request sends the email from Tahap 2 with the consent flag (`apps/web-app/src/routes/daftar/page.tsx:70`), and approval uses that saved address to provision the seller (`apps/worker/src/onboarding/service.ts:219`). Show the exact email immediately above the checkbox and clear consent when that email changes. Add a regression that goes back, changes the address, and verifies that the new address is visible and must be confirmed.
+- **P1 — The floating area picker is not a keyboard-operable combobox.** The input sets `aria-expanded` and `aria-controls`, but remains a textbox; the results are a plain list of buttons without arrow-key navigation, Escape dismissal, or focus restoration (`apps/web-app/src/routes/daftar/page.tsx:119`). Tab and Enter can select a result, but the overlay stays open when focus leaves the picker without a selection and can cover the next fields. Implement combobox/listbox semantics with Up/Down, Enter, and Escape; close on focus leaving the picker. The new test only clicks an option (`e2e/auth-stage.spec.ts:95`); add a keyboard-only path.
+- **P2 — The auto-filled pickup phone can retain a number the applicant already corrected.** Advancing from Tahap 2 copies WhatsApp only if `picPhone` is empty (`apps/web-app/src/routes/daftar/page.tsx:91`). Go forward, go back, correct WhatsApp, and go forward again: the original number remains in `outlet.picPhone` even if the applicant never edited `HP PIC` (`apps/web-app/src/routes/daftar/page.tsx:72`). Keep the default linked to WhatsApp until the applicant explicitly edits the pickup phone.
+- **P2 — The Turnstile slot still shifts the form when the real widget loads.** `empty:hidden` removes the slot from layout until Turnstile injects its contents, at which point both the widget and its flex gap enter the layout (`apps/web-app/src/routes/masuk/page.tsx:54`; `apps/web-app/src/routes/daftar-akun/page.tsx:103`). The render options also leave Turnstile at its default size (`apps/web-app/src/lib/turnstile.tsx:55`). Reserve a compact slot when a real challenge is configured, size it for narrow screens, and verify loading and reset with a widget-enabled test. The local test configuration publishes no site key (`apps/worker/test/auth/turnstile-config.test.ts:23`), so the current viewport checks do not exercise this state.
+
+### Verified
+
+- The shared password toggle is a non-submit `type="button"` with `aria-pressed`; it changes the input type without changing its value (`apps/web-app/src/components/auth/text-field.tsx:28`; `apps/web-app/src/components/auth/text-field.tsx:50`). Login resets Turnstile on failure, and signup resets it after each code request (`apps/web-app/src/routes/masuk/page.tsx:28`; `apps/web-app/src/routes/daftar-akun/page.tsx:50`).
+- The application payload keys are unchanged. Identity errors, including `sellerEmail`, return to Tahap 2; pickup errors remain on Tahap 3, and coordinate errors open the disclosure (`apps/web-app/src/routes/daftar/page.tsx:66`; `apps/web-app/src/routes/daftar/page.tsx:81`). The auth main panel provides an `overflow-y-auto` fallback for tall content despite the fixed outer stage (`apps/web-app/src/components/auth/auth-card.tsx:45`; `apps/web-app/src/components/auth/auth-card.tsx:57`).
+- The new brand escape maps the deployed HTTPS app host to the brand apex without using query input; the owner mark remains static (`apps/web-app/src/components/auth/auth-card.tsx:7`). The closing pills and their CSS are removed; the title, sentence, and two actions remain, with coverage across all brand pages (`apps/worker/src/brand/pages.ts:43`; `apps/worker/test/brand/brand.test.ts:369`).
+
+Read-only source review; no tests or browser checks were rerun. After fixes, rerun `pnpm e2e e2e/auth-stage.spec.ts e2e/auth.spec.ts e2e/onboarding.spec.ts e2e/brand.spec.ts`, including a short-viewport case with coordinates expanded and a widget-enabled retry.
+
+**Merge verdict: BLOCK**
+
+Verdict: REQUEST_CHANGES

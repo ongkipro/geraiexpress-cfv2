@@ -100,7 +100,7 @@ export function DaftarAkunPage() {
           </div>
         </form>
       ) : null}
-      {step === "email" || step === "otp" ? <div ref={turnstileBox} className="empty:hidden" /> : null}
+      {step === "email" || step === "otp" ? <div ref={turnstileBox} data-turnstile-slot className={ts.hasWidget ? "min-h-[65px]" : "hidden"} /> : null}
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
         <form className="flex flex-col gap-4" onSubmit={complete} noValidate>

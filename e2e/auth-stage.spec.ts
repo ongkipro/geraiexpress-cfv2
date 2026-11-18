@@ -83,7 +83,8 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   }
   await page.getByLabel("Nama gerai").fill("Toko Uji Satu")
   await page.getByLabel("WhatsApp gerai").fill("081234560000")
-  await page.getByLabel("Email untuk akun Mengantar").fill(`seller-${Date.now().toString(36)}@contoh.test`)
+  const seller1 = `seller-${Date.now().toString(36)}@contoh.test`
+  await page.getByLabel("Email untuk akun Mengantar").fill(seller1)
   await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
   await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("3 · Titik Jemput")
   await expect(page.getByLabel("HP PIC")).toHaveValue("081234560000")
@@ -91,13 +92,82 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
     await page.setViewportSize(size)
     await fits(page, `tahap 3 ${size.width}x${size.height}`)
   }
-  // The area results float over the form: they never grow the page.
-  await page.getByLabel("Cari kelurahan / kecamatan / kode pos").fill("coblong")
-  await expect(page.getByRole("list", { name: "Hasil pencarian wilayah" })).toBeVisible()
+  // The area results float over the form: they never grow the page. Sol R1: a keyboard-operable combobox.
+  const area = page.getByRole("combobox", { name: "Cari kelurahan / kecamatan / kode pos" })
+  const list = page.getByRole("listbox", { name: "Hasil pencarian wilayah" })
+  await area.fill("coblong")
+  await expect(list).toBeVisible()
   await fits(page, "tahap 3 with area results 390x844")
-  await page.getByRole("button", { name: /Dago, Coblong/ }).click()
-  await expect(page.getByRole("button", { name: "Ajukan Gerai" })).toBeDisabled()
+  await area.press("Escape")
+  await expect(list).toBeHidden()
+  await expect(area).toBeFocused()
+  await area.press("ArrowDown")
+  await expect(list).toBeVisible()
+  await expect(area).toHaveAttribute("aria-activedescendant", "area-opt-0")
+  await expect(list.getByRole("option").first()).toHaveAttribute("aria-selected", "true")
+  await area.press("Enter")
+  await expect(list).toBeHidden()
+  await expect(page.getByText(/^Dipilih: Dago, Coblong/)).toBeVisible()
+  // Focus leaving the picker without a choice closes the overlay.
+  await area.fill("coblong")
+  await expect(list).toBeVisible()
+  await page.keyboard.press("Tab")
+  await expect(list).toBeHidden()
+  await area.focus()
+  await area.press("ArrowDown")
+  await area.press("Enter")
+  await expect(page.getByText(/^Dipilih: Dago, Coblong/)).toBeVisible()
+  // Sol R1: the consent names the exact Mengantar email, and changing that email clears the consent.
+  await expect(page.locator("[data-seller-email]")).toHaveText(seller1)
+  await page.getByRole("checkbox").check()
+  await expect(page.getByRole("button", { name: "Ajukan Gerai" })).toBeEnabled()
   await page.getByRole("button", { name: "← Kembali" }).click()
   await expect(page.getByLabel("Nama gerai")).toHaveValue("Toko Uji Satu")
+  const seller2 = `seller2-${Date.now().toString(36)}@contoh.test`
+  await page.getByLabel("Email untuk akun Mengantar").fill(seller2)
+  // Sol R1: HP PIC follows a corrected WhatsApp gerai while untouched …
+  await page.getByLabel("WhatsApp gerai").fill("081234569999")
+  await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
+  await expect(page.locator("[data-seller-email]")).toHaveText(seller2)
+  await expect(page.getByRole("checkbox")).not.toBeChecked()
+  await expect(page.getByRole("button", { name: "Ajukan Gerai" })).toBeDisabled()
+  await expect(page.getByLabel("HP PIC")).toHaveValue("081234569999")
+  // … and keeps the applicant's own number once edited.
+  await page.getByLabel("HP PIC").fill("081200000001")
+  await page.getByRole("button", { name: "← Kembali" }).click()
+  await page.getByLabel("WhatsApp gerai").fill("081234567777")
+  await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
+  await expect(page.getByLabel("HP PIC")).toHaveValue("081200000001")
   expect(errors).toEqual([])
+})
+
+// Sol R1 (P2): with a real challenge configured the slot is reserved (65px, `size: "flexible"`), so the widget never
+// shifts the form, and the pages still fit every viewport. Config and widget are stubbed (no third-party call).
+test("DEC-248: slot Turnstile 65px dipesan saat widget nyata dikonfigurasi, tetap tanpa scroll", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "the three viewports are set inside this test")
+  await page.route("**/api/app/auth/config", (r) => r.fulfill({ json: { ok: true, data: { turnstileSiteKey: "0x4AAAAAAA-e2e-stub" } } }))
+  await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js*", (r) =>
+    r.fulfill({
+      contentType: "text/javascript",
+      body: 'window.turnstile={render:function(el,o){var d=document.createElement("div");d.style.height="65px";d.setAttribute("data-size",o.size);setTimeout(function(){el.appendChild(d);o.callback("stub-token")},300);return "w1"},reset:function(){},remove:function(){}}',
+    }),
+  )
+  for (const path of ["/masuk", "/daftar-akun"]) {
+    for (const size of SIZES) {
+      await page.setViewportSize(size)
+      await page.goto(`${APP}${path}`)
+      const slot = page.locator("[data-turnstile-slot]")
+      const submit = page.getByRole("button", { name: path === "/masuk" ? "Masuk" : "Kirim Kode", exact: true })
+      // Reserved while the widget is still loading (the stub renders after 300 ms) …
+      await expect(slot).toBeVisible()
+      await expect(slot.locator("[data-size]")).toHaveCount(0)
+      expect(Math.round((await slot.boundingBox())!.height), `${path} slot`).toBeGreaterThanOrEqual(65)
+      const before = (await submit.boundingBox())!.y
+      // … so the widget arriving moves nothing.
+      await expect(slot.locator("[data-size]")).toHaveAttribute("data-size", "flexible")
+      await expect(submit).toBeEnabled()
+      expect((await submit.boundingBox())!.y, `${path} shift`).toBe(before)
+      await fits(page, `${path} with widget ${size.width}x${size.height}`)
+    }
+  }
 })

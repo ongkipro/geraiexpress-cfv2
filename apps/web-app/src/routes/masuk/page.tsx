@@ -53,7 +53,7 @@ export function MasukPage() {
             Lupa kata sandi?
           </Link>
         </div>
-        <div ref={turnstileBox} className="empty:hidden" />
+        <div ref={turnstileBox} data-turnstile-slot className={ts.hasWidget ? "min-h-[65px]" : "hidden"} />
         {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
         <Button type="submit" size="lg" disabled={pending || !ts.ready}>
           {pending ? "Memproses…" : "Masuk"}

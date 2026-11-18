@@ -40,6 +40,17 @@ export function DaftarPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const consentId = useId()
   const [coords, setCoords] = useState(false)
+  // HP PIC follows WhatsApp gerai until the applicant edits it (Sol R1).
+  const [picPhoneEdited, setPicPhoneEdited] = useState(false)
+  // Area combobox: the list is open while typing, `hl` is the keyboard-highlighted option.
+  const [listOpen, setListOpen] = useState(false)
+  const [hl, setHl] = useState(-1)
+  const pickArea = (a: Area) => {
+    setArea(a)
+    setQuery(a.label)
+    setListOpen(false)
+    setHl(-1)
+  }
 
   useEffect(() => {
     if (query.trim().length < 3) return
@@ -85,10 +96,11 @@ export function DaftarPage() {
     }
   }
 
+  const showList = listOpen && !area && areas.length > 0
   const toPickup = (e: FormEvent) => {
     e.preventDefault()
-    // Smart default: the pickup contact usually answers the gerai WhatsApp; still editable.
-    if (!picPhone) setPicPhone(whatsapp)
+    // Smart default: the pickup contact usually answers the gerai WhatsApp, until the applicant edits HP PIC.
+    if (!picPhoneEdited) setPicPhone(whatsapp)
     setStep(3)
   }
   return (
@@ -106,7 +118,7 @@ export function DaftarPage() {
           <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => setSlug(v.toLowerCase())} error={fieldErrors.slug} suffix=".geraimitra.com" required maxLength={30} />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
-            <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" value={sellerEmail} onChange={setSellerEmail} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
+            <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
           </div>
           <Button type="submit" size="lg">Lanjut ke Titik Jemput →</Button>
         </form>
@@ -115,15 +127,49 @@ export function DaftarPage() {
         <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
           <Field data-invalid={fieldErrors.areaId ? true : undefined}>
             <FieldLabel htmlFor="area-search">Cari kelurahan / kecamatan / kode pos</FieldLabel>
-            <div className="relative">
-              <Input id="area-search" value={query} onChange={(e) => { setQuery(e.target.value); setArea(null) }} autoComplete="off" aria-describedby="area-help" aria-expanded={!area && areas.length > 0} aria-controls="area-results" />
-              {!area && areas.length ? (
-                <ul id="area-results" className="absolute inset-x-0 top-full z-20 mt-1 flex max-h-52 flex-col divide-y overflow-y-auto rounded-lg border bg-white shadow-lg" aria-label="Hasil pencarian wilayah">
-                  {areas.map((a) => (
-                    <li key={a.id}>
-                      <button type="button" className="flex min-h-11 w-full items-center px-3 text-left text-base hover:bg-muted md:text-sm" onClick={() => { setArea(a); setQuery(a.label) }}>
-                        {a.label}{a.postalCode ? ` · ${a.postalCode}` : ""}
-                      </button>
+            <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setListOpen(false) }}>
+              <Input
+                id="area-search"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showList}
+                aria-controls="area-results"
+                aria-activedescendant={showList && hl >= 0 ? `area-opt-${hl}` : undefined}
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setArea(null); setListOpen(true); setHl(-1) }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    if (!areas.length || area) return
+                    e.preventDefault()
+                    setListOpen(true)
+                    const n = areas.length
+                    setHl((i) => (e.key === "ArrowDown" ? (i + 1) % n : (i <= 0 ? n - 1 : i - 1)))
+                  } else if (e.key === "Enter" && showList && hl >= 0) {
+                    e.preventDefault()
+                    pickArea(areas[hl]!)
+                  } else if (e.key === "Escape" && showList) {
+                    e.preventDefault()
+                    setListOpen(false)
+                    setHl(-1)
+                  }
+                }}
+                autoComplete="off"
+                aria-describedby="area-help"
+              />
+              {showList ? (
+                <ul id="area-results" role="listbox" aria-label="Hasil pencarian wilayah" className="absolute inset-x-0 top-full z-20 mt-1 flex max-h-52 flex-col divide-y overflow-y-auto rounded-lg border bg-white shadow-lg">
+                  {areas.map((a, i) => (
+                    <li
+                      key={a.id}
+                      id={`area-opt-${i}`}
+                      role="option"
+                      aria-selected={i === hl}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseMove={() => setHl(i)}
+                      onClick={() => pickArea(a)}
+                      className={`flex min-h-11 cursor-pointer items-center px-3 text-left text-base md:text-sm ${i === hl ? "bg-muted" : ""}`}
+                    >
+                      {a.label}{a.postalCode ? ` · ${a.postalCode}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -134,7 +180,7 @@ export function DaftarPage() {
           <TextField label="Alamat lengkap titik jemput" name="street" value={street} onChange={setStreet} required maxLength={300} />
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <TextField label="PIC penjemputan" name="picName" value={picName} onChange={setPicName} required maxLength={80} />
-            <TextField label="HP PIC" name="picPhone" inputMode="numeric" value={picPhone} onChange={setPicPhone} error={fieldErrors.picPhone} required />
+            <TextField label="HP PIC" name="picPhone" inputMode="numeric" value={picPhone} onChange={(v) => { setPicPhone(v); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
           </div>
           <details open={coords} onToggle={(e) => setCoords((e.target as HTMLDetailsElement).open)} className="group">
             <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-medium text-[#64748B] hover:text-[#0F172A] md:min-h-9 [&::-webkit-details-marker]:hidden">
@@ -147,7 +193,7 @@ export function DaftarPage() {
             <p className="mt-2 text-sm text-muted-foreground">Dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           </details>
           <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
-            <span className="text-sm leading-snug">Saya setuju GeraiExpress membuat akun seller Mengantar atas nama gerai saya dengan email di atas, dan saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun Mengantar tersebut.</span>
+            <span className="text-sm leading-snug">Saya setuju GeraiExpress membuat akun seller Mengantar atas nama gerai saya dengan email <strong className="font-semibold [overflow-wrap:anywhere] text-[#0F172A]" data-seller-email>{sellerEmail}</strong>, dan saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun Mengantar tersebut.</span>
           </CheckboxField>
           <div className="flex gap-3">
             <Button type="button" variant="outline" size="lg" onClick={() => setStep(2)} disabled={pending}>← Kembali</Button>

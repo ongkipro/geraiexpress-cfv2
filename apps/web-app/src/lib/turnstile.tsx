@@ -55,6 +55,8 @@ export function useTurnstile() {
         const id = window.turnstile.render(el, {
           sitekey: siteKey,
           language: "id",
+          // DEC-248: fills the 380/440px form column (narrow screens included) inside a reserved 65px slot.
+          size: "flexible",
           callback: (t: string) => setToken(t),
           "expired-callback": () => setToken(null),
           "error-callback": () => setToken(null),
@@ -76,5 +78,6 @@ export function useTurnstile() {
     if (siteKey) setToken(null)
   }, [widget, siteKey])
   const current = siteKey === null ? DEV_TOKEN : token
-  return { setContainer, token: current, ready: current !== null && siteKey !== undefined, failed, reset }
+  // `hasWidget`: a real challenge is configured, so forms reserve its slot (none locally with the test keys).
+  return { setContainer, token: current, ready: current !== null && siteKey !== undefined, failed, reset, hasWidget: Boolean(siteKey) }
 }

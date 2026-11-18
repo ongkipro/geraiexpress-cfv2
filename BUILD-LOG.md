@@ -1188,4 +1188,9 @@ Durable implementation changes, validation evidence and gotchas for the next mai
      labels (`PIC penjemputan`, `HP PIC`).
   3. An empty Turnstile container still took a flex gap (`empty:hidden`).
   4. The indicator's `#94A3B8` failed contrast; it is now `#64748B`.
+- Sol R1 (GPT-6.2, REQUEST_CHANGES: 2 P1 + 2 P2) fixed in run `RUN-20261118T201033Z-f0ad5e98`
+  (`docs/review/dec-248/DISPOSITION.md`). The consent names the exact Mengantar email and resets when it changes. The
+  area picker is a keyboard combobox. HP PIC follows WhatsApp gerai until edited. The Turnstile slot is reserved
+  (65px, `size: "flexible"`) when a real site key is configured. Mutations D248R1-M1..M7 red. Lesson: a stub that
+  renders at once cannot prove a reserved slot; delay it and assert that nothing moves.
 
