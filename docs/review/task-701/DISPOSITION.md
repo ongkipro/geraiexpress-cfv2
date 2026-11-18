@@ -93,6 +93,7 @@ causes were captured this time: `pnpm check` — five unrelated Workers tests (p
 15 s test timeout at 22–37 s each while another repository's test suite and Postgres loaded the host (load ≈ 6 on 8
 cores; the `worker` record minutes earlier passed 445/445); e2e — at phone-390 `Resi terbit` was not visible within
 5 s because issuing was still running (`Memproses…`, INV in draft, no error) under the same load. Both re-recorded
-PASS once the load eased. This also explains the earlier `ELIFECYCLE`-only failures. Boundary: REVIEW_REQUIRED (R4);
-the run closes BLOCKED pending Sol R6.
+PASS once the load eased. This also explains the earlier `ELIFECYCLE`-only failures. Boundary: **FAIL** — `TASKS.md`
+(reverting the TASK-701 `DONE` marker to "awaiting R6") was edited without being in the run's declared surface — plus
+REVIEW_REQUIRED (R4). The run closed BLOCKED pending Sol R6; the release run after R6 declares `TASKS.md`.
 
