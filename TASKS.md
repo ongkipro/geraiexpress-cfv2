@@ -711,7 +711,9 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 - **TASK-702** Sender stamp card (PR-23, P2, counsel first) · **TASK-703** Multi-outlet owner (PR-24, P2). Contracts
   written when prioritised.
 
-### TASK-701: Layar Pelanggan — customer-facing counter display
+### TASK-701: Layar Pelanggan — customer-facing counter display — **DONE 2026-11-18**
+- **Closed:** GPT-6.1 Sol R1–R4 REQUEST_CHANGES all fixed (`docs/review/task-701/DISPOSITION.md`), R5 APPROVE on `94588b5`;
+  release run `RUN-20261118T132524Z-b80efae9`.
 - **Requirement:** PR-22; visual 07 (`/kasir/layar-pelanggan`); spec 03 §5
 - **Risk Level:** R3 declared (auth-free paired read surface, server-built zero-leak DTO, tenant SQLite migration
   `0024`); the ledger boundary escalates it to **R4** (diff-risk: token hashing in the tenant object) — review as R4.

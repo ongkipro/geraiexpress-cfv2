@@ -1056,4 +1056,5 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   checks now tee their output so the next such failure is diagnosable.
 - Sol R4: a `stale` answer must invalidate the publisher's acknowledgement just like a transient failure — it proves
   the stored content moved. One line (`acked = null` first in the stale branch) + unit regression + mutation.
+- Sol R5 APPROVE on `94588b5` (no open findings). Release run `RUN-20261118T132524Z-b80efae9` at the reviewed head.
 

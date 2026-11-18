@@ -63,3 +63,10 @@ Verification (run `RUN-20261118T131308Z-6159ef9a`, outputs teed): unit 195, Work
 PASS) and e2e (30 expected, 0 unexpected, 0 flaky) all executed PASS on the first attempt. Boundary: REVIEW_REQUIRED
 (R4); the run closes BLOCKED pending Sol R5.
 
+## Sol R5 (`R5-sol.md`) — APPROVE on `94588b5`
+
+R4-F1 resolved with deterministic, mutation-backed coverage; no open findings, merge verdict OK. Release run
+`RUN-20261118T132524Z-b80efae9` starts at the reviewed head, re-executes the required checks, carries the review and
+finishes PASS before the merge commit. The fix runs before it closed BLOCKED (pending review), as the boundary contract
+requires a finished run before each commit.
+
