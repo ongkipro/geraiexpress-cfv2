@@ -92,3 +92,11 @@ Not done here: GitHub `staging`/`production` protected environments and deploy-w
 Admin bootstrap per environment (TASK-106), alert drill (§3.3), relay rollout (TASK-601), Email Sending inbox tests
 (TASK-112). Rollback: `wrangler rollback <previous version> --env <env>` (§4); the first deploy has no previous version,
 so a rollback means `wrangler delete` of the env Worker after owner approval.
+
+### 5.1 Rollout log
+
+| Date | Change | Control migrations | Staging Worker | Production Worker |
+|---|---|---|---|---|
+| 2026-11-18 | First go-live (`c6ed6b0`) | `0000`–`0018` | `c51a2428-6b43-4a80-afa9-1419cdd72ddb` | `d3794756-571a-40ce-8d69-d736ffb24586` |
+| 2026-11-18 | DEC-246 Super Admin `/akun` + recovery codes (`5901a9d`, Sol R2 APPROVE) | `0019_super_admin_recovery_codes` | `6bfb94c4-3300-4575-8d19-8eeee5677604` | `c8285eb3-be44-4939-8c1b-285686540e04` |
+

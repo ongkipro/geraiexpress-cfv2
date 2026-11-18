@@ -980,4 +980,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   because the work was committed mid-run (the boundary contract fixes HEAD for a run's life — commit after `finish`);
   release run `RUN-20261118T105137Z-06b21b87` starts at the reviewed head, re-executes `pnpm check`, migrations and
   owner e2e, carries the Sol review, then finishes before the merge commit.
+- Live 2026-11-18 (owner-authorized): `main` fast-forwarded to `5901a9d` and pushed; control `0019` applied remotely
+  (staging + production; table and index confirmed); `pnpm build` + bundle-audit PASS; Workers deployed — staging
+  `6bfb94c4-3300-4575-8d19-8eeee5677604`, production `c8285eb3-be44-4939-8c1b-285686540e04`. Checks:
+  `owner.geraiexpress.com/{masuk,akun,totp}`, `geraiexpress.com/{,healthz}`, `app.…/masuk`, `hooks.…/healthz`,
+  `probe.geraimitra.com/healthz` 200; `/api/owner/account` 401 ×5 without a session; live owner bundle
+  `index-BDg0E9Yf.js` = local build and contains the `/akun` UI; probes staging 5/5, production 5/6 (relay 526, TASK-601).
+  Gotcha: the very first staging `GET /api/owner/account` right after deploy answered 404 (old version still serving
+  that request); six re-checks seconds later were 401. Local preview `:55190` (dev worktree, `pi`-owned process left
+  running): `dev` fast-forwarded, `pnpm db:migrate:local` (0019), `pnpm build`; the running `wrangler dev` picked up the
+  worker but served "Aplikasi belum dibangun" for owner pages because it rescanned assets mid-build — touching
+  `dist/assets/owner/index.html` triggered a rescan, then `/masuk`, `/akun`, `/totp` 200 with the same bundle.
 
