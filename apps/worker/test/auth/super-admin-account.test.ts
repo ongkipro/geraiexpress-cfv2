@@ -208,7 +208,42 @@ describe("authenticator rotation (DEC-246 §2.3)", () => {
     const later = Date.now() + 10 * 60_000 + 1
     const { openRotation } = await import("../../src/auth/recovery")
     await expect(openRotation(env, start.rotateTicket, a.userId, later)).rejects.toMatchObject({ code: "ROTATE_TICKET_INVALID" })
-    await expect(openRotation(env, start.rotateTicket, a.userId, Date.now())).resolves.toBe(start.secret)
+    await expect(openRotation(env, start.rotateTicket, a.userId, Date.now())).resolves.toMatchObject({ secret: start.secret })
+  })
+
+  const rotate = async (cookie: string) => data<{ rotateTicket: string; secret: string }>(await post("/account/totp/rotate-start", { password: PASSWORD }, cookie))
+  const confirm = async (cookie: string, t: { rotateTicket: string; secret: string }, offset = 0) =>
+    post("/account/totp/rotate-confirm", { rotateTicket: t.rotateTicket, code: await hotp(t.secret, stepAt(Date.now()) + offset) }, cookie)
+
+  it("Sol R1 #1: A→B→A replay and an outstanding ticket from before another rotation are refused", async () => {
+    const a = await enrolled("rot4@contoh.test")
+    const A = await rotate(a.cookie)
+    const stale = await rotate(a.cookie) // issued against the same generation as A, never confirmed
+    expect((await confirm(a.cookie, A)).status).toBe(200)
+    const B = await rotate(a.cookie)
+    expect((await confirm(a.cookie, B)).status).toBe(200)
+    // Back to A with a valid A code: the ticket's generation is gone.
+    const replay = await confirm(a.cookie, A, 1)
+    expect(replay.status).toBe(400)
+    expect(await errCode(replay)).toBe("ROTATE_TICKET_INVALID")
+    const outstanding = await confirm(a.cookie, stale)
+    expect(outstanding.status).toBe(400)
+    expect(await errCode(outstanding)).toBe("ROTATE_TICKET_INVALID")
+    // B is still the active authenticator.
+    const next = await login("rot4@contoh.test")
+    expect((await post("/auth/totp/verify", { code: await hotp(B.secret, stepAt(Date.now()) + 1) }, next)).status).toBe(200)
+    expect((await audits(a.userId, "super_admin.totp_rotated")).length).toBe(2)
+  })
+
+  it("Sol R1 #1: a recovery-issued ticket dies once another rotation completes", async () => {
+    const a = await enrolled("rot5@contoh.test")
+    const s = await login("rot5@contoh.test")
+    const { rotation } = await data<{ rotation: { rotateTicket: string; secret: string } }>(await post("/auth/totp/recovery", { code: a.codes[0], resetTotp: true }, s))
+    const B = await rotate(s)
+    expect((await confirm(s, B)).status).toBe(200)
+    const late = await confirm(s, rotation, 1)
+    expect(late.status).toBe(400)
+    expect(await errCode(late)).toBe("ROTATE_TICKET_INVALID")
   })
 })
 
@@ -267,6 +302,18 @@ describe("Profil & Keamanan Akun (DEC-246 §2.3)", () => {
     expect((await audits(a.userId, "super_admin.email_changed")).length).toBe(1)
   })
 
+  it("Sol R1 #2: password guesses through the email change are bounded per user, whatever address is proposed", async () => {
+    const a = await enrolled("akun6@contoh.test")
+    for (let i = 0; i < 5; i++) {
+      const r = await post("/account/email/request", { email: `tebak-${i}@contoh.test`, password: `salah-sandi-${i}00` }, a.cookie)
+      expect(r.status, `attempt ${i + 1}`).toBe(400)
+    }
+    const locked = await post("/account/email/request", { email: "lain-lagi@contoh.test", password: PASSWORD }, a.cookie)
+    expect(locked.status).toBe(429)
+    expect(Number(locked.headers.get("retry-after"))).toBeGreaterThan(0)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM email_otps WHERE user_id = ? AND purpose = 'email_change'").bind(a.userId).first<{ n: number }>()).toEqual({ n: 0 })
+  })
+
   it("sessions: revoke one by handle, then all others; the current session stays", async () => {
     const a = await enrolled("akun5@contoh.test")
     const s2 = await login("akun5@contoh.test")
@@ -278,6 +325,10 @@ describe("Profil & Keamanan Akun (DEC-246 §2.3)", () => {
     expect((await data<Account>(await get("/account", a.cookie))).sessions).toHaveLength(2)
     expect(await data(await post("/account/sessions/revoke", { allOthers: true }, a.cookie))).toEqual({ revoked: 1 })
     expect((await get("/auth/me", a.cookie)).status).toBe(200)
+    // Sol R1 #4: both revocations are audited with scope + count only.
+    const rows = await audits(a.userId, "super_admin.session_revoked")
+    expect(rows.map((r) => JSON.parse(r.metadata_json!))).toEqual([{ scope: "one", revoked: 1 }, { scope: "all_others", revoked: 1 }])
+    expect(rows.map((r) => r.metadata_json).join()).not.toContain(target.id)
     for (const c of [s2, s3]) expect((await post("/auth/totp/verify", { code: "123456" }, c)).status).toBe(401)
   })
 

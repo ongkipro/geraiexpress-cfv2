@@ -19,8 +19,24 @@ const fileText = (codes: string[], email?: string) =>
     .filter((l) => l !== null)
     .join("\n")
 
+export const COPY_FAILED = "Gagal menyalin otomatis. Gunakan Unduh .txt atau catat kode secara manual sebelum menutup layar ini."
+
 export function RecoveryCodesBox({ codes, email }: { codes: string[]; email?: string }) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
+  // Sol R1 #5: "Tersalin" only after the clipboard really accepted the codes; otherwise point to the download.
+  async function copyAll() {
+    setCopied(false)
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable")
+      await navigator.clipboard.writeText(codes.join("\n"))
+      setCopyError(false)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopyError(true)
+    }
+  }
   function download() {
     const url = URL.createObjectURL(new Blob([fileText(codes, email)], { type: "text/plain;charset=utf-8" }))
     const a = document.createElement("a")
@@ -40,15 +56,7 @@ export function RecoveryCodesBox({ codes, email }: { codes: string[]; email?: st
         ))}
       </ol>
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            void navigator.clipboard?.writeText(codes.join("\n")).catch(() => undefined)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-          }}
-        >
+        <Button type="button" variant="outline" onClick={() => void copyAll()}>
           {copied ? <CheckIcon aria-hidden /> : <CopyIcon aria-hidden />}
           {copied ? "Tersalin" : "Salin Semua"}
         </Button>
@@ -56,6 +64,11 @@ export function RecoveryCodesBox({ codes, email }: { codes: string[]; email?: st
           <DownloadIcon aria-hidden /> Unduh .txt
         </Button>
       </div>
+      {copyError ? (
+        <p role="alert" className="border-l-4 border-warn py-1 pl-3 text-sm font-medium text-warn">
+          {COPY_FAILED}
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">Setiap kode hanya berlaku sekali. Kode ini tidak akan ditampilkan lagi.</p>
     </div>
   )

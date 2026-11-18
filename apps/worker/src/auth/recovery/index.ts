@@ -1,6 +1,7 @@
 // DEC-246 backup second factor for Super Admin (spec 05 §2): single-use recovery codes and the sealed ticket that
 // carries a new authenticator secret until a code from it verifies. Codes are shown once and stored only as peppered
 // hashes; secrets travel only inside the AES-GCM ticket. Nothing here logs a code, secret or ticket.
+import { sha256Hex } from "../../crypto"
 import { decryptString, encryptString } from "../../crypto/aead"
 import { AppError } from "../../http/envelope"
 import { tokenHash } from "../tokens"
@@ -66,21 +67,29 @@ export async function consumeRecoveryCode(env: RecoveryEnv, userId: string, cano
 
 const ticketInvalid = () => new AppError(400, "ROTATE_TICKET_INVALID", "Sesi penggantian autentikator sudah berakhir. Mulai lagi dari awal.")
 
-/** Seals a pending authenticator secret for this user for 10 minutes; the active secret is not touched. */
-export async function sealRotation(env: RecoveryEnv, userId: string, secret: string, now: number): Promise<{ rotateTicket: string; expiresAt: number }> {
+/** The authenticator generation a ticket is bound to: the hash of the active secret's ciphertext (a fresh random IV per
+ *  enrolment or rotation, so every swap — even back to an earlier secret — is a new generation). Sol R1 #1. */
+export const authenticatorGeneration = (activeCiphertext: string) => sha256Hex(`totp-generation:${activeCiphertext}`)
+
+/** Seals a pending authenticator secret for this user for 10 minutes, bound to the generation it replaces; the active
+ *  secret is not touched. */
+export async function sealRotation(env: RecoveryEnv, userId: string, secret: string, activeCiphertext: string, now: number): Promise<{ rotateTicket: string; expiresAt: number }> {
   const expiresAt = now + ROTATE_TTL_MS
-  return { rotateTicket: await encryptString(env.KEK_SECRET, JSON.stringify({ userId, secret, exp: expiresAt }), "totp_rotate"), expiresAt }
+  const gen = await authenticatorGeneration(activeCiphertext)
+  return { rotateTicket: await encryptString(env.KEK_SECRET, JSON.stringify({ userId, secret, gen, exp: expiresAt }), "totp_rotate"), expiresAt }
 }
 
-/** The secret inside a ticket issued to this user and not yet expired; otherwise ROTATE_TICKET_INVALID. */
-export async function openRotation(env: RecoveryEnv, ticket: unknown, userId: string, now: number): Promise<string> {
+/** The secret and bound generation inside a ticket issued to this user and not yet expired; else ROTATE_TICKET_INVALID. */
+export async function openRotation(env: RecoveryEnv, ticket: unknown, userId: string, now: number): Promise<{ secret: string; gen: string }> {
   if (typeof ticket !== "string" || ticket.length > 1000) throw ticketInvalid()
-  let parsed: { userId?: unknown; secret?: unknown; exp?: unknown }
+  let parsed: { userId?: unknown; secret?: unknown; gen?: unknown; exp?: unknown }
   try {
     parsed = JSON.parse(await decryptString(env.KEK_SECRET, ticket, "totp_rotate")) as typeof parsed
   } catch {
     throw ticketInvalid()
   }
-  if (parsed.userId !== userId || typeof parsed.secret !== "string" || typeof parsed.exp !== "number" || now > parsed.exp) throw ticketInvalid()
-  return parsed.secret
+  if (parsed.userId !== userId || typeof parsed.secret !== "string" || typeof parsed.gen !== "string" || typeof parsed.exp !== "number" || now > parsed.exp) throw ticketInvalid()
+  return { secret: parsed.secret, gen: parsed.gen }
 }
+
+export { ticketInvalid as rotateTicketInvalid }

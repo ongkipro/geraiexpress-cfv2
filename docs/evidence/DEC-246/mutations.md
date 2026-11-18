@@ -13,3 +13,13 @@ was run, and the file was restored from its in-memory copy (script-driven, 2026-
 | D246-M6 | `apps/worker/src/api/owner.ts` | another admin's TOTP reset keeps the target's recovery codes | exit 1, 1 failed / 13 passed | another admin's TOTP reset deletes the target's recovery codes |
 
 After the run every file matched its pre-mutation content (worker suite green again, see `pnpm check`).
+
+## Sol R1 fixes (2026-11-18)
+
+| Id | File | Mutation | Command | Result |
+|---|---|---|---|---|
+| R1-M1 | `apps/worker/src/api/owner.ts` | `rotate-confirm` ignores the ticket generation | worker `super-admin-account.test.ts` | exit 1, 3 failed / 14 passed: A→B→A + outstanding ticket; recovery-issued ticket after another rotation; immediate replay |
+| R1-M2 | `apps/worker/src/auth/account/index.ts` | email-change password guesses not throttled | worker `super-admin-account.test.ts` | exit 1, 1 failed / 16 passed: password guesses through the email change are bounded per user |
+| R1-M3 | `apps/web-owner/src/lib/return-path.ts` | back to the old check (`/` prefix, no `//`, no backslash) | unit `return-path.test.ts` | exit 1, 1 failed / 2 passed: control or whitespace characters |
+| R1-M4 | `apps/worker/src/api/owner.ts` | session revocation not audited | worker `super-admin-account.test.ts` | exit 1, 1 failed / 16 passed: sessions revoke test |
+| R1-M5 | `apps/web-owner/src/components/recovery-codes.tsx` | clipboard failure sets `Tersalin` | e2e `super-admin.spec.ts -g DEC-246` (desktop-1280) | exit 1, 1 failed |

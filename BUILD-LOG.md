@@ -967,4 +967,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   site link. Re-run: owner e2e 11 passed, UI gates `/akun` `/totp` `/` 0 fail 0 warn, `pnpm check` exit 0 (unit 180,
   Workers 428, bundle-audit PASS). Not recorded in `RUN-20261118T100235Z-2224a130`: its baseline is `932b5c2` and HEAD
   has moved, so the post-review boundary needs a fresh run.
+- Sol R1 (REQUEST_CHANGES, 2 P1 + 3 P2) fixed — disposition `docs/review/dec-246/DISPOSITION.md`: rotation tickets bound
+  to the active authenticator generation (hash of the secret's ciphertext; A→B→A and outstanding tickets refused);
+  `requestEmailChange` throttles password guesses per user before verifying (shared with `app.`); `safeReturnPath`
+  refuses control/whitespace characters and foreign origins for `kembali`; session revocations audited; the codes box
+  awaits the clipboard and points to `Unduh .txt` on failure. Lesson: a "replay" guard that compares against the
+  current state (ticket secret ≠ active secret) misses A→B→A; bind the token to the state it was issued against.
+  Gotcha: browsers drop tab/CR/LF while resolving a URL, so `/\t/evil.example` passes a `//` prefix check and lands
+  on `//evil.example` — validate characters first, then the parsed origin. One owner e2e run failed once in the
+  unrelated DEC-243 topbar test (passed alone and in the full re-run; cause not captured).
 

@@ -7,6 +7,7 @@ import { Button } from "@shared/components/ui/button"
 import { AuthenticatorQr } from "../../components/authenticator-qr"
 import { RecoveryCodesBox } from "../../components/recovery-codes"
 import { api, ApiError } from "../../lib/api"
+import { safeReturnPath } from "../../lib/return-path"
 
 interface Enrolment {
   secret: string
@@ -45,9 +46,10 @@ export function TotpPage() {
     }
   }, [mode])
 
-  // Back to where the step-up started (validated relative path), else the console home.
+  // Back to where the step-up started (same-origin console path, re-checked here), else the console home.
   async function proceed() {
-    if (kembali) window.location.assign(kembali)
+    const back = safeReturnPath(kembali, window.location.origin)
+    if (back) window.location.assign(back)
     else await navigate({ to: "/" })
   }
 

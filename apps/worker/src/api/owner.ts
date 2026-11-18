@@ -8,7 +8,7 @@ import { sameOriginOk } from "../auth/csrf"
 import { login } from "../auth/flows"
 import { changePassword, confirmEmailChange, listSessions, requestEmailChange, revokeSessions, updateProfile } from "../auth/account"
 import { verifyPassword } from "../auth/password"
-import { canonicalRecoveryCode, consumeRecoveryCode, issueRecoveryCodes, openRotation, recoveryStatus, sealRotation } from "../auth/recovery"
+import { authenticatorGeneration, canonicalRecoveryCode, consumeRecoveryCode, issueRecoveryCodes, openRotation, recoveryStatus, rotateTicketInvalid, sealRotation } from "../auth/recovery"
 import { dispatchDue } from "../email/mailer"
 import { readSession, revokeSession, type Session } from "../auth/session"
 import * as throttle from "../auth/throttle"
@@ -225,7 +225,7 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     emit("auth.otp", { outcome: "recovery_code_used" }, {}, { env: c.env.GX_ENV })
     if (!resetTotp) return ok({ aal: "aal2", remaining })
     const secret = newTotpSecret()
-    return ok({ aal: "aal2", remaining, rotation: { ...(await sealRotation(c.env, s.user.id, secret, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) } })
+    return ok({ aal: "aal2", remaining, rotation: { ...(await sealRotation(c.env, s.user.id, secret, admin.totp_secret_encrypted, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) } })
   })
 
   r("POST", "/auth/logout", "owner_aal1", "none", async (c) => {
@@ -347,25 +347,26 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const admin = await adminOf(c.env, s.user.id)
     if (!admin?.totp_secret_encrypted || admin.totp_state !== "active") throw notEnrolled()
     const secret = newTotpSecret()
-    return ok({ ...(await sealRotation(c.env, s.user.id, secret, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) })
+    return ok({ ...(await sealRotation(c.env, s.user.id, secret, admin.totp_secret_encrypted, t)), secret, otpauthUri: otpauthUri(secret, s.user.email) })
   })
 
   r("POST", "/account/totp/rotate-confirm", "owner_recent", "self", async (c) => {
     const b = await body(c)
     const s = c.get("session")
     const t = now()
-    const secret = await openRotation(c.env, b.rotateTicket, s.user.id, t)
+    const { secret, gen } = await openRotation(c.env, b.rotateTicket, s.user.id, t)
     const admin = await adminOf(c.env, s.user.id)
     if (!admin?.totp_secret_encrypted || admin.totp_state !== "active") throw notEnrolled()
-    // A ticket that was already confirmed carries the active secret: refuse the replay.
-    if ((await decryptString(c.env.KEK_SECRET, admin.totp_secret_encrypted, "totp")) === secret) throw new AppError(400, "ROTATE_TICKET_INVALID", "Sesi penggantian autentikator sudah berakhir. Mulai lagi dari awal.")
+    // Sol R1 #1: a ticket only replaces the generation it was issued against. Any swap since then (this ticket confirmed,
+    // another rotation, a reset + re-enrolment) changes the ciphertext, so A→B→A and outstanding-ticket replays fail.
+    if ((await authenticatorGeneration(admin.totp_secret_encrypted)) !== gen) throw rotateTicketInvalid()
     const step = await verifyTotp(secret, typeof b.code === "string" ? b.code.trim() : "", t, null)
     if (step === null) throw new AppError(400, "TOTP_INVALID", "Kode dari autentikator baru salah. Pastikan Anda memindai kode QR yang baru.", { code: "Periksa kode di autentikator baru." })
-    // Swap only if nobody changed the secret meanwhile (optimistic check on the ciphertext we read).
+    // Swap only if the bound generation is still active (conditional on the exact ciphertext whose hash matched `gen`).
     const swapped = await c.env.DB.prepare("UPDATE super_admins SET totp_secret_encrypted = ?1, totp_state = 'active', totp_last_step = ?2, updated_at = ?3 WHERE user_id = ?4 AND totp_secret_encrypted = ?5 RETURNING user_id")
       .bind(await encryptString(c.env.KEK_SECRET, secret, "totp"), step, t, s.user.id, admin.totp_secret_encrypted)
       .first()
-    if (!swapped) throw new AppError(409, "TOTP_CHANGED", "Autentikator baru saja diganti dari sesi lain. Muat ulang halaman.")
+    if (!swapped) throw rotateTicketInvalid()
     await c.env.DB.batch([
       c.env.DB.prepare("UPDATE sessions SET totp_verified_at = ? WHERE token_hash = ?").bind(t, s.row.token_hash),
       revokeOtherOwnerSessions(c.env, s, t),
@@ -374,10 +375,15 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok({ rotated: true })
   })
 
+  // Sol R1 #4: every revocation is audited (scope + count only; never a handle, token or hash).
   r("POST", "/account/sessions/revoke", "owner_aal2", "self", async (c) => {
     const b = await body(c)
     const s = c.get("session")
-    return ok(await revokeSessions(c.env, s.user.id, s.row.token_hash, { id: b.id, all: b.all === true || b.allOthers === true }, now(), ["owner", "app"]))
+    const t = now()
+    const all = b.all === true || b.allOthers === true
+    const res = await revokeSessions(c.env, s.user.id, s.row.token_hash, { id: b.id, all }, t, ["owner", "app"])
+    await audit(c, "super_admin.session_revoked", t, { scope: all ? "all_others" : "one", revoked: res.revoked }).run()
+    return ok(res)
   })
 
   registerGeraiAdmin(app)

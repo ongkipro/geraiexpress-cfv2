@@ -42,12 +42,18 @@ export async function changePassword(env: AuthEnv, userId: string, keepHash: str
   ])
 }
 
+export const EMAIL_CHANGE_PW_LIMIT = 5
+
 /** Sends a 6-digit code to the NEW address (needs the current password). Same answer when the address is taken. */
 export async function requestEmailChange(env: AuthEnv, userId: string, b: { email?: unknown; password?: unknown }, ip: string, now: number): Promise<{ otpId: string }> {
   const email = validEmail(b.email)
   const u = await env.DB.prepare("SELECT email, password_hash FROM users WHERE id = ?").bind(userId).first<{ email: string; password_hash: string }>()
   if (!u) throw new AppError(401, "UNAUTHENTICATED", "Sesi Anda berakhir. Silakan masuk lagi.")
   if (email === u.email) throw new AppError(422, "SAME_EMAIL", "Email baru sama dengan email sekarang.", { email: "Masukkan alamat lain." })
+  // DEC-246 Sol R1 #2: bound password guesses per user BEFORE verifying (the key ignores the proposed address, so
+  // changing it never resets the count). 5 attempts per 15 minutes, right or wrong.
+  const guess = await throttle.hit(env.DB, `email-change-pw:${userId}`, EMAIL_CHANGE_PW_LIMIT, 15 * 60_000, now)
+  if (!guess.allowed) throw tooMany(guess.retryAfterMs)
   if (typeof b.password !== "string" || !(await verifyPassword(b.password, env.AUTH_SESSION_PEPPER, u.password_hash))) throw new AppError(400, "WRONG_PASSWORD", "Kata sandi saat ini salah.", { password: "Kata sandi saat ini salah." })
   // A locked confirmation also blocks new codes (a code sent now would expire before the lock lifts).
   const locked = await throttle.lockedUntil(env.DB, `email-change-lock:${userId}`, now)

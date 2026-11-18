@@ -12,6 +12,7 @@ import { SistemPage } from "./routes/sistem/page"
 import { TarifPage } from "./routes/tarif/index"
 import { TarifGeraiPage } from "./routes/tarif/gerai"
 import { OwnerAkunPage } from "./routes/akun/page"
+import { safeReturnPath } from "./lib/return-path"
 
 export interface OwnerMe {
   user: { id: string; name: string; email: string }
@@ -81,7 +82,7 @@ const totpRoute = createRoute({
   // `kembali` = where a step-up came from; only same-site relative paths are kept (no open redirect).
   validateSearch: (s: Record<string, unknown>): { mode: "required" | "enrol"; kembali?: string } => ({
     mode: s.mode === "enrol" ? "enrol" : "required",
-    kembali: typeof s.kembali === "string" && s.kembali.startsWith("/") && !s.kembali.startsWith("//") && !s.kembali.includes("\\") ? s.kembali : undefined,
+    kembali: safeReturnPath(s.kembali, location.origin),
   }),
   component: TotpPage,
 })

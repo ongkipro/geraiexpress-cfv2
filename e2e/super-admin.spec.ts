@@ -84,6 +84,16 @@ test("DEC-246 Super Admin: kode pemulihan saat aktivasi → Profil Saya → set 
   const first = await readCodes()
   expect(first).toHaveLength(8)
   for (const c of first) expect(c).toMatch(/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/)
+  // Sol R1 #5: a refused or missing clipboard never shows `Tersalin`; it points to the download instead.
+  const copyFailed = "Gagal menyalin otomatis. Gunakan Unduh .txt atau catat kode secara manual sebelum menutup layar ini."
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("denied")) } }))
+  await page.getByRole("button", { name: "Salin Semua" }).click()
+  await expect(page.getByRole("alert")).toHaveText(copyFailed)
+  await expect(page.getByRole("button", { name: "Tersalin" })).toHaveCount(0)
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }))
+  await page.getByRole("button", { name: "Salin Semua" }).click()
+  await expect(page.getByRole("alert")).toHaveText(copyFailed)
+  await expect(page.getByRole("button", { name: "Tersalin" })).toHaveCount(0)
   await page.getByRole("button", { name: "Saya Sudah Menyimpan, Lanjut ke Konsol" }).click()
   await expect(page.getByRole("heading", { name: "Ringkasan" }).first()).toBeVisible()
 
