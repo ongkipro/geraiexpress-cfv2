@@ -30,3 +30,17 @@ Sol verified that six of the eight R1 findings are resolved. The two remaining i
 |---|---|---|---|---|---|
 | R2-1 | P1 | `/cara-kerja` still blurred COD Barang and COD Ongkir, and said COD debits later | Step 4 and pipeline stops 2, 3 and 5 now follow spec 02 §3.3 and `computeFlow`. Non-COD pays shipping, plus packing and the counter service fee if any, at the counter; the net tariff is debited at issue. In COD Barang and COD Ongkir (DFOD) the recipient pays the courier's bill on delivery. The counter service fee applies only to Non-COD and DFOD; COD Barang takes packing only, if chosen. For COD, Mengantar deducts shipping and COD fees from the proceeds and credits the rest, so the seller balance is never debited. | `brand.test.ts` `/cara-kerja`: exact COD Barang / DFOD / service-fee / net-credit sentences; the R1 wording absent | R2-M1: R1 stop-2 wording → red |
 | R2-2 | P2 | Dimension guard rejected `020` and validated the 200-char display copy | The guard reads the original `formData` strings (trimmed, not truncated). Any dimension supplied means all three must be `^\d{1,3}$` and 1..300; the values are passed on as numbers. | `identity.test.ts`: `"20" + 198 spaces + "cm"` → 422; `020 × " 40 " × 30` → 200 and `(20×40×30 cm)` | R2-M2: read from the display copy → red; R2-M3: leading zero refused again → red |
+
+# Round 3 — disposition of GPT-6.2 Sol R3 (`R3-sol.md`, REQUEST_CHANGES on `cb7a553`)
+
+R2-1 (`/cara-kerja`) was verified resolved. The two P2 items on the mini-site dimension guard were fixed in run
+`RUN-20261118T190535Z-ceaa4c6e`.
+
+| # | Sev | Finding | Fix | Regression | Mutation (red) |
+|---|---|---|---|---|---|
+| R3-1 | P2 | The guard trimmed the submitted strings | Each dimension is validated untrimmed against `^\d{1,3}$` (the browser's `[0-9]{1,3}`) plus 1..300; `020` still quotes as 20 | `identity.test.ts`: `020 × 40 × 30` → 200 `(20×40×30 cm)`; `20 × " 40 " × 30` → 422; the R2 case (suffix past the display cap) → 422 | R3-M1: `.trim()` restored → red |
+| R3-2 | P2 | Validation read the first value of a repeated field, the display the last | The form data is turned once into an uncapped `raw` record (last value wins). Validation reads `raw`; the redisplayed copy is `raw` capped at 200 characters, so both always see the same value. A repeated `lengthCm`/`widthCm`/`heightCm` is also refused with 422. | `identity.test.ts`: `lengthCm` `20` then `bad` → 422 and no quote; `bad` then `20` → 422 and no quote | R3-M2: repeated-field check removed → red; R3-M3: validation reads the first value (`FormData.get`) without the repeat check → red |
+
+Ledger note (R3 run): the first `pnpm check` record FAILed on vitest-pool infrastructure only ("Failed to start
+cloudflare-pool worker" for the untouched `test/telemetry/alerts.test.ts`, `bad port`, host load ~8); the standalone
+Workers check in the same run passed 64/64 files, and the re-recorded `pnpm check` passed (unit 211, Workers 469).

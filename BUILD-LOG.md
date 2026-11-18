@@ -1159,4 +1159,7 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   COD Barang from COD Ongkir (service fee Non-COD/DFOD only; COD credits net proceeds, never debits the balance); the
   P×L×T guard reads the original form strings (accepts `020`, refuses a suffix past the 200-char display cap).
   Mutations R2-M1..M3 red. Lesson: validate the submitted value, not a display copy derived from it.
+- Sol R3 (R2-1 resolved) two P2 items fixed in run `RUN-20261118T190535Z-ceaa4c6e`: P×L×T validated untrimmed like
+  the browser pattern; one uncapped last-wins lookup feeds both validation and the redisplay, and repeated dimension
+  fields are refused. Mutations R3-M1..M3 red.
 

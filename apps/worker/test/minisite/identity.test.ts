@@ -167,9 +167,29 @@ describe("mini-site identity (DEC-247)", () => {
     expect(long.status).toBe(422)
     expect(await long.text()).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
     // … and a zero-padded value the browser accepts (`020`) quotes as 20 cm.
-    const padded = await q({ weight: "1", svc: "regular", lengthCm: "020", widthCm: " 40 ", heightCm: "30" })
+    const padded = await q({ weight: "1", svc: "regular", lengthCm: "020", widthCm: "40", heightCm: "30" })
     expect(padded.status).toBe(200)
     expect(await padded.text()).toContain("(20×40×30 cm)")
+    // Sol R3: untrimmed like the browser pattern (` 40 ` is refused), and a repeated field can never split what is
+    // validated from what is redisplayed.
+    const spaced = await q({ weight: "1", svc: "regular", lengthCm: "20", widthCm: " 40 ", heightCm: "30" })
+    expect(spaced.status).toBe(422)
+    expect(await spaced.text()).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
+    const twice = new URLSearchParams({ destId: DEST, destLabel: "Tebet", unit: "kg", "cf-turnstile-response": "ok", weight: "1", svc: "regular", lengthCm: "20", widthCm: "40", heightCm: "30" })
+    twice.append("lengthCm", "bad")
+    const dup = await exports.default.fetch(`${t.base}/`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "cf-connecting-ip": ip() }, body: twice, redirect: "manual" })
+    expect(dup.status).toBe(422)
+    const dupHtml = await dup.text()
+    expect(dupHtml).toContain("Isi panjang, lebar dan tinggi (1–300 cm) atau kosongkan semuanya.")
+    expect(dupHtml).not.toContain("Ongkir Reguler ke")
+    // The reverse order (a malformed value first, a valid one last) is refused too: a repeated field never quotes.
+    const twice2 = new URLSearchParams(twice)
+    twice2.delete("lengthCm")
+    twice2.append("lengthCm", "bad")
+    twice2.append("lengthCm", "20")
+    const dup2 = await exports.default.fetch(`${t.base}/`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "cf-connecting-ip": ip() }, body: twice2, redirect: "manual" })
+    expect(dup2.status).toBe(422)
+    expect(await dup2.text()).not.toContain("Ongkir Reguler ke")
   })
 
   it("/kirim: COD price field is always in the HTML (no-JS) and toggled by the inline COD script", async () => {

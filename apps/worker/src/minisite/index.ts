@@ -99,7 +99,9 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
   let errors: Record<string, string> = {}
   if (request.method === "POST") {
     const f = await request.formData()
-    v = Object.fromEntries([...f.entries()].map(([k, x]) => [k, String(x).slice(0, 200)]))
+    // One lookup for everything (last value wins); only the redisplayed copy is capped at 200 characters.
+    const raw: Record<string, string> = Object.fromEntries([...f.entries()].map(([k, x]) => [k, String(x)]))
+    v = Object.fromEntries(Object.entries(raw).map(([k, x]) => [k, x.slice(0, 200)]))
     if (!(await humanOk(env, request, f.get("cf-turnstile-response")))) errors.form = "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi."
     else {
       const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
@@ -113,10 +115,12 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
           try {
             const unit = v.unit === "kg" ? 1000 : 1
             const svc = v.svc === "cargo" ? "cargo" : "regular"
-            // P×L×T from the ORIGINAL form strings (not the 200-char display copy), trimmed: none, or all three up to
-            // three digits and 1..300 (`020` is 20; `-20`, `1.5`, `0` and a suffix past the display cap are refused).
-            const dims = (["lengthCm", "widthCm", "heightCm"] as const).map((k) => String(f.get(k) ?? "").trim())
-            if (dims.some(Boolean) && !dims.every((x) => /^\d{1,3}$/.test(x) && Number(x) >= 1 && Number(x) <= 300)) throw new AppError(422, "INVALID_QUOTE", DIMS_MSG, { dims: DIMS_MSG })
+            // P×L×T exactly as submitted (untrimmed, uncapped, the browser's `[0-9]{1,3}`): none, or all three 1..300.
+            // `020` is 20; ` 40 `, `-20`, `1.5`, `0`, a suffix past the display cap and a repeated field are refused.
+            const keys = ["lengthCm", "widthCm", "heightCm"] as const
+            const dims = keys.map((k) => raw[k] ?? "")
+            const repeated = keys.some((k) => f.getAll(k).length > 1)
+            if (repeated || (dims.some(Boolean) && !dims.every((x) => /^\d{1,3}$/.test(x) && Number(x) >= 1 && Number(x) <= 300))) throw new AppError(422, "INVALID_QUOTE", DIMS_MSG, { dims: DIMS_MSG })
             const input = parseQuoteInput({ destinationAreaId: v.destId, weightGram: Math.round(Number((v.weight ?? "").replace(",", ".")) * unit) || 0, mode: "none", lengthCm: dims[0] ? Number(dims[0]) : "", widthCm: dims[1] ? Number(dims[1]) : "", heightCm: dims[2] ? Number(dims[2]) : "" }, origin)
             const q = await runQuote(env, c.tenantId, input, Date.now(), { rateKey: `ms-quote:${c.tenantId}`, perMinute: 60 })
             const ofClass = q.cards.filter((x) => x.serviceClass === svc)
