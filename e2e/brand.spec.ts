@@ -93,11 +93,12 @@ async function scenePixels(page: import("@playwright/test").Page): Promise<numbe
   }, png)
 }
 
-// One test per mode: software WebGL on CI draws a few frames per second, so each mode gets its own 120 s budget.
+// One test per mode: software WebGL on CI draws ~3 frames per second, so the 60-frame reduced-motion settle alone
+// takes ~20 s; each mode gets a 180 s budget and up to 90 s for drawing to stop.
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`Brand hero: ukuran layar berubah saat dijeda tetap menampilkan adegan (${reducedMotion})`, async ({ browser }, info) => {
     test.skip(info.project.name !== "desktop-1280", "one viewport is enough for the resize path")
-    test.setTimeout(120_000)
+    test.setTimeout(180_000)
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion })
     const page = await ctx.newPage()
     await page.goto(`${APP.replace("app.", "")}/`)
@@ -107,7 +108,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(stage).toHaveAttribute("data-playing", "0")
     // Wait until the settle frames are spent and drawing has stopped.
     let frames = ""
-    await expect.poll(async () => { const f = await stage.getAttribute("data-frames"); const same = f === frames; frames = f ?? ""; return same }, { intervals: [500], timeout: 20_000 }).toBe(true)
+    await expect.poll(async () => { const f = await stage.getAttribute("data-frames"); const same = f === frames; frames = f ?? ""; return same }, { intervals: [1000], timeout: 90_000 }).toBe(true)
     const clock = await stage.getAttribute("data-clock")
     await page.setViewportSize({ width: 900, height: 700 })
     await page.waitForTimeout(800)

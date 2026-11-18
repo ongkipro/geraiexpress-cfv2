@@ -919,3 +919,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   Chrome but hit the 60 s test timeout on CI's Playwright headless shell with software WebGL. Split into one test per
   mode with `test.setTimeout(120_000)`; reproduced CI's browser locally (`CI=1`, chromium-headless-shell v1255):
   16 s and 27 s. Assertions unchanged (follow-up ledger run `RUN-20261117T225517Z-a794f7bc`).
+- CI on `eae92f6` failed again on the reduced-motion resize test: CI's software WebGL draws ~3 fps, so the 60-frame
+  settle took > 20 s (the poll limit for "drawing stopped"). Poll every 1 s for up to 90 s, test budget 180 s; product
+  code unchanged. Local CI-browser probe: ~6.5 fps, settle done after 62 frames.
