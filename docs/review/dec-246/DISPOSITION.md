@@ -15,3 +15,11 @@ Verification on the fixed tree: worker `test/auth`, `test/account`, `test/migrat
 `return-path` 3/3; owner e2e (`super-admin`, `admin-shell`, `onboarding`) 11 passed / 22 desktop-only skips — one
 earlier run of the same trio had a single failure in the unrelated DEC-243 topbar test that passed alone and in the
 full re-run (cause not captured; no R1 change touches the topbar); `pnpm check` exit 0 (unit 183, Workers 431, bundle-audit PASS). Fixed tree = the commit that adds this file.
+
+## Sol R2 (`R2-sol.md`) — APPROVE on `e9ea15e`
+
+Read-only delta review of the R1 fixes: all five resolved on disk with focused regressions, no new P0–P2, merge
+verdict OK. Sol inspected (did not re-run) the suites; the integrating session re-executed them in the release run
+`RUN-20261118T105137Z-06b21b87` (`pnpm check`, migrations, owner e2e) before merge. The first run
+`RUN-20261118T100235Z-2224a130` closed BLOCKED because HEAD moved (work committed before finish).
+

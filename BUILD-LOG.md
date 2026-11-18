@@ -976,4 +976,8 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   Gotcha: browsers drop tab/CR/LF while resolving a URL, so `/\t/evil.example` passes a `//` prefix check and lands
   on `//evil.example` — validate characters first, then the parsed origin. One owner e2e run failed once in the
   unrelated DEC-243 topbar test (passed alone and in the full re-run; cause not captured).
+- Sol R2 APPROVE on `e9ea15e` (no open findings, `docs/review/dec-246/R2-sol.md`). Ledger: the first run closed BLOCKED
+  because the work was committed mid-run (the boundary contract fixes HEAD for a run's life — commit after `finish`);
+  release run `RUN-20261118T105137Z-06b21b87` starts at the reviewed head, re-executes `pnpm check`, migrations and
+  owner e2e, carries the Sol review, then finishes before the merge commit.
 
