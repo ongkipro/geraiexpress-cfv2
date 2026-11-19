@@ -168,16 +168,29 @@ function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initi
     setAdding(false)
     if (item && !lockedRef.current) onPick(item)
   }
+  // Supervisor pre-review: each opening or closing of the sheet is a new generation; a save from a sheet that was
+  // closed (Escape / X) and maybe reopened answers to an old generation and neither closes the new sheet nor picks.
+  const sheetGen = useRef(0)
+  const [sheetId, setSheetId] = useState(0)
+  function setSheet(open: boolean) {
+    sheetGen.current++
+    setSheetId(sheetGen.current)
+    setAdding(open)
+  }
+  function savedIf(id: number, item?: Contact) {
+    if (id !== sheetGen.current) return
+    saved(item)
+  }
   return (
     <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
-      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
+      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setSheet(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
       {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onUpdate ?? onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
-      <Sheet open={adding} onOpenChange={setAdding}>
+      <Sheet open={adding} onOpenChange={setSheet}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader><SheetTitle>{label} baru</SheetTitle></SheetHeader>
-          {adding ? (kind === "senders" ? <SenderForm sender={null} owner={isOwner(w)} onSaved={saved} /> : <RecipientForm recipient={null} canArchive={false} onSaved={saved} initialArea={initialArea ?? null} />) : null}
+          {adding ? (kind === "senders" ? <SenderForm key={sheetId} sender={null} owner={isOwner(w)} onSaved={(item) => savedIf(sheetId, item)} /> : <RecipientForm key={sheetId} recipient={null} canArchive={false} onSaved={(item) => savedIf(sheetId, item)} initialArea={initialArea ?? null} />) : null}
         </SheetContent>
       </Sheet>
     </Panel>

@@ -1374,4 +1374,6 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 
   Mutations R3-get, R3-single-save and R3-verify are red. R3-single-save first survived, because the disabled button
   already blocks clicks and Enter; the e2e now also calls `form.requestSubmit()`.
+- Supervisor pre-review before Sol R4: a sheet generation in `PartyStep` ignores saves from a closed sheet. The e2e
+  covers hold → Escape → reopen → release; `check:fast` + `-g "Sol R3"` 2 passed.
 

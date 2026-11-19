@@ -272,6 +272,32 @@ test("Sol R3: a new sender is saved once and picked from the POST answer (no sec
   expect(posts).toBe(1)
   expect(gets).toBe(0)
   await page.unroute("**/api/app/contacts/senders")
+
+  // Supervisor pre-review: a save from a sheet that was closed (Escape) answers to an old sheet — it neither closes the
+  // reopened sheet nor picks its contact.
+  await page.locator('[aria-labelledby="pihak-senders"]').getByRole("button", { name: "Ganti" }).click()
+  let release2!: () => void
+  const held2 = new Promise<void>((r) => (release2 = r))
+  await page.route("**/api/app/contacts/senders", async (route) => {
+    if (route.request().method() === "POST") await held2
+    await route.continue()
+  })
+  await page.getByRole("button", { name: "Pengirim baru" }).click()
+  await sheet.getByLabel("Nama pengirim asli").fill("Bu Ratna Dewi")
+  await sheet.getByLabel("Nomor WhatsApp (untuk retur & COD)").fill("081322223333")
+  const posted = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/app/contacts/senders" && r.request().method() === "POST")
+  await sheet.getByRole("button", { name: "Simpan" }).click()
+  await page.keyboard.press("Escape")
+  await expect(sheet).toBeHidden()
+  await page.getByRole("button", { name: "Pengirim baru" }).click()
+  await expect(sheet).toBeVisible()
+  release2()
+  await posted
+  await page.waitForTimeout(500)
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByLabel("Nama pengirim asli")).toHaveValue("")
+  await expect(page.locator('[aria-labelledby="pihak-senders"]')).not.toContainText("Bu Ratna Dewi")
+  await page.unroute("**/api/app/contacts/senders")
 })
 
 // Sol R3: verifying the SAME sender's WhatsApp while a Non-COD checkout is pending updates the card and does not

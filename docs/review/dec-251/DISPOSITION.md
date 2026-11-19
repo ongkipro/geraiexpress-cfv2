@@ -54,3 +54,13 @@ Test hardening in this round (host load 10 from other projects' I/O):
 Focused checks:
 - `check:fast`.
 - e2e `pos-guards` + `contacts` on desktop-1280 (`--timeout=120000`).
+
+Supervisor pre-review before Sol R4:
+- **Gap:** a save still in flight from a sheet the operator closed (Escape / X) could close a reopened sheet and pick
+  the old contact.
+- **Fix:** `PartyStep` keeps a sheet generation. Every open or close bumps it, the form is keyed by it, and `onSaved`
+  only acts for the generation it was rendered with.
+- **Proof:** the e2e `Sol R3: a new sender` holds POST #1, closes the sheet with Escape, reopens `+ Baru`, then
+  releases. The new sheet stays open with an empty form and `Bu Ratna Dewi` is not picked.
+- **Checks:** `check:fast` + `-g "Sol R3"` (2 passed), as instructed; no mutation run this round.
+
