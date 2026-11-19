@@ -4,7 +4,7 @@ import { AuthCard, FormAlert } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { SecurityStatus, useTurnstile } from "../../lib/turnstile"
+import { SecurityStatus, TurnstileAction, useTurnstile } from "../../lib/turnstile"
 
 export function MasukPage() {
   const navigate = useNavigate()
@@ -45,11 +45,12 @@ export function MasukPage() {
             Lupa kata sandi?
           </Link>
         </div>
-        <div ref={turnstileBox} data-turnstile-slot className="w-full empty:hidden" />
         {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
-        <Button type="submit" size="lg" disabled={pending || !ts.ready}>
-          {pending ? "Memproses…" : "Masuk"}
-        </Button>
+        <TurnstileAction slot={turnstileBox} visible={ts.visible}>
+          <Button type="submit" size="lg" disabled={pending || !ts.ready}>
+            {pending ? "Memproses…" : "Masuk"}
+          </Button>
+        </TurnstileAction>
         <SecurityStatus ts={ts} />
       </form>
     </AuthCard>

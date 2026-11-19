@@ -140,7 +140,17 @@ const statusRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/
 const comingSoonRoutes = [miniSiteRoute, apiMcpRoute, manifestRoute, profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kasirSubRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
-const daftarAkunRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar-akun", component: DaftarAkunPage })
+// DEC-250 Sol R1: an applicant who already has an app session but no gerai continues on `/daftar` — from the auth
+// switcher, the brand `Daftar Gerai` CTA or a typed URL — instead of being sent back to account creation.
+const daftarAkunRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/daftar-akun",
+  beforeLoad: async () => {
+    const me = await api<Me>("/auth/me").catch(() => null)
+    if (me && !me.membership) throw redirect({ to: "/daftar" })
+  },
+  component: DaftarAkunPage,
+})
 const lupaSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/lupa-sandi", component: LupaSandiPage })
 const aturSandiRoute = createRoute({ getParentRoute: () => rootRoute, path: "/atur-sandi/$token", component: AturSandiPage })
 const daftarRoute = createRoute({ getParentRoute: () => rootRoute, path: "/daftar", component: DaftarPage })

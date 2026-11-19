@@ -129,7 +129,7 @@ card. The register card opens with the wizard bar: an optional quiet `← Kembal
 segments and `Langkah n / 3`. Turnstile renders with `appearance: "interaction-only"`, `size: "flexible"`, `theme: "light"`;
 there is no reserved box. A passing visitor sees only a one-line status under the submit (`○ Memverifikasi koneksi
 aman…` → `● Koneksi terverifikasi · Proteksi Cloudflare aktif`), and a challenged visitor gets the widget at full card
-width. Not allowed: an arrow on the brand mark, testimonials, card-in-card, and colored alert boxes for routine notices.
+width, 16px above the action. The slot and the submit form one gap-free block, so a silent widget moves nothing; DOM order equals screen order. A visitor with an app session but no gerai who opens `/daftar-akun` is sent to `/daftar`. Not allowed: an arrow on the brand mark, testimonials, card-in-card, and colored alert boxes for routine notices.
 
 | Route | Role | Title | Primary | Content blocks (order) | Notes |
 |---|---|---|---|---|---|

@@ -455,13 +455,20 @@ describe("brand site DEC-247", () => {
 
   it("DEC-250 mobile: stacked .tbl cards with data-col labels, Raka pills under the art, 2-column chips, one closing CTA on /simulasi-kasir", async () => {
     const eks = await html("/ekspedisi")
-    expect(eks).toContain('<table class="tbl stack">')
-    const row = eks.match(/<tr><td><span class="tcour">[\s\S]*?<\/tr>/)![0]
+    expect(eks).toContain('<table class="tbl stack" role="table">')
+    const row = eks.match(/<tr role="row"><td role="cell"><span class="tcour">[\s\S]*?<\/tr>/)![0]
     expect([...row.matchAll(/data-col="([^"]+)"/g)].map((m) => m[1])).toEqual(["Reguler &amp; Ekonomi", "Kargo", "Pembayaran &amp; catatan"])
     const cara = await html("/cara-kerja")
-    expect(cara).toContain('<table class="tbl stack">')
-    expect(cara.match(/<td data-col="Spesifikasi minimum">/g)?.length).toBe(4)
-    expect(cara.match(/<td data-col="Rekomendasi harian">/g)?.length).toBe(4)
+    expect(cara).toContain('<table class="tbl stack" role="table">')
+    expect(cara.match(/<td role="cell" data-col="Spesifikasi minimum">/g)?.length).toBe(4)
+    expect(cara.match(/<td role="cell" data-col="Rekomendasi harian">/g)?.length).toBe(4)
+    // Sol R1: explicit table roles survive the mobile grid/block restyle; the header row is only visually hidden.
+    for (const h of [eks, cara]) {
+      expect(h).toContain('<table class="tbl stack" role="table">\n<thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">')
+      expect(h).toContain('<tbody role="rowgroup">')
+    }
+    expect(eks).toContain(".tbl.stack thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}")
+    expect(eks).not.toContain(".tbl.stack thead{display:none}")
     const css = eks
     expect(css).toContain(".tbl.stack td[data-col]::before{content:attr(data-col)")
     expect(css).toContain("@media(max-width:519px){.raka-stage{display:flex;")

@@ -571,7 +571,10 @@ test("Brand DEC-250: tabel bertumpuk tanpa geser di 390, pill Raka di bawah gamb
     await expect(wrap).toHaveCount(1)
     expect(await wrap.evaluate((el) => el.scrollWidth - el.clientWidth), path).toBe(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), path).toBe(0)
-    await expect(page.locator(".tbl.stack thead")).toBeHidden()
+    // Sol R1: the stacked cards keep the table semantics (headers only visually hidden).
+    await expect(page.getByRole("table")).toHaveCount(1)
+    await expect(page.getByRole("columnheader")).toHaveCount(path === "/ekspedisi" ? 4 : 3)
+    expect(await page.getByRole("cell").count()).toBeGreaterThanOrEqual(path === "/ekspedisi" ? 36 : 12)
     const label = await page.locator(".tbl.stack td[data-col]").first().evaluate((el) => getComputedStyle(el, "::before").content)
     expect(label, path).toBe(path === "/ekspedisi" ? '"Reguler & Ekonomi"' : '"Spesifikasi minimum"')
   }

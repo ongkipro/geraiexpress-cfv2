@@ -4,7 +4,7 @@ import { AuthCard, FormAlert, WizardBar } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { SecurityStatus, useTurnstile } from "../../lib/turnstile"
+import { SecurityStatus, TurnstileAction, useTurnstile } from "../../lib/turnstile"
 
 type Step = "email" | "otp" | "profile"
 
@@ -80,35 +80,31 @@ export function DaftarAkunPage() {
       }
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
-      {/* One flex column for the email and OTP sub-states: the forms are `display: contents`, so the single Turnstile
-          slot (never unmounted between the two; `Kirim ulang` needs a fresh token) sits right above the action via
-          `order`, and the security status closes the column. 0px unless Cloudflare challenges the visitor. */}
+      {/* One form for the email and OTP sub-states (DEC-250 Sol R1): DOM order = screen order — field, the single
+          Turnstile slot (never re-rendered between the two; `Kirim ulang` needs a fresh token) right above the action,
+          the OTP links, then the security status. */}
       {step === "email" || step === "otp" ? (
-        <div className="flex flex-col gap-4">
+        <form className="flex flex-col gap-4" onSubmit={step === "email" ? sendCode : verify} noValidate>
           {step === "email" ? (
-            <form className="contents" onSubmit={sendCode} noValidate>
-              <div className="order-1">
-                <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
-              </div>
-              <Button type="submit" size="lg" className="order-3" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
-            </form>
+            <TextField key="email" label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
           ) : (
-            <form className="contents" onSubmit={verify} noValidate>
-              <div className="order-1">
-                <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
-              </div>
-              <Button type="submit" size="lg" className="order-3" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
-              <div className="order-4 -mt-1 flex items-center justify-between">
-                <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
-                <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
-              </div>
-            </form>
+            <TextField key="code" label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
           )}
-          <div ref={turnstileBox} data-turnstile-slot className="order-2 w-full empty:hidden" />
-          <div className="order-5 empty:hidden">
-            <SecurityStatus ts={ts} />
-          </div>
-        </div>
+          <TurnstileAction slot={turnstileBox} visible={ts.visible}>
+            {step === "email" ? (
+              <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
+            ) : (
+              <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
+            )}
+          </TurnstileAction>
+          {step === "otp" ? (
+            <div className="-mt-1 flex items-center justify-between">
+              <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
+              <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
+            </div>
+          ) : null}
+          <SecurityStatus ts={ts} />
+        </form>
       ) : null}
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (

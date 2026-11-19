@@ -372,8 +372,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9375rem;text-align:left
 .tbl tbody tr:last-child td{border-bottom:0}
 .tbl td strong{color:var(--ink)}
 .tcour{display:flex;align-items:center;gap:12px;white-space:nowrap}
-/* DEC-250: below 760px a .tbl.stack row becomes a hairline card: the first cell on top, then labelled pairs */
-@media(max-width:760px){.tbl.stack thead{display:none}.tbl.stack,.tbl.stack tbody{display:block}
+/* DEC-250: below 760px a .tbl.stack row becomes a hairline card: the first cell on top, then labelled pairs. The header
+   row is only visually hidden and the markup carries explicit table roles, so the restyle keeps the table semantics. */
+@media(max-width:760px){.tbl.stack thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}.tbl.stack,.tbl.stack tbody{display:block}
 .tbl.stack tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;padding:18px 0;border-bottom:var(--hairline)}
 .tbl.stack tbody tr:last-child{border-bottom:0}.tbl.stack tr:first-child{padding-top:4px}
 .tbl.stack td{display:block;padding:0;border:0;min-width:0;font-size:.9375rem}.tbl.stack td:first-child,.tbl.stack td.wide{grid-column:1/-1}

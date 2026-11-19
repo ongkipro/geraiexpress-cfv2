@@ -5,7 +5,7 @@ export const PORT = Number(process.env.GX_E2E_PORT ?? 8787)
 export const APP = `http://app.geraiexpress.localhost:${PORT}`
 export const OWNER = `http://owner.geraiexpress.localhost:${PORT}`
 
-function opsToken(): string {
+export function opsToken(): string {
   const m = readFileSync(".dev.vars", "utf8").match(/^OPS_TOKEN=(.*)$/m)
   return (m?.[1] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2")
 }

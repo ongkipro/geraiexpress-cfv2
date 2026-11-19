@@ -143,6 +143,13 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
   // DEC-250: no raw <select> left on the public mini-site; `Satuan` is a gram | kg pill toggle (gram by default).
   await expect(page.locator("select")).toHaveCount(0)
   await expect(page.getByRole("group", { name: "Satuan" }).getByRole("radio", { name: "gram", exact: true })).toBeChecked()
+  // Sol R1: forced colors keep a persistent selected indicator (system colors), not just author colors.
+  await page.emulateMedia({ forcedColors: "active" })
+  const picked = await page.locator(".seg.unit label:has(input:checked)").evaluate((el) => { const c = getComputedStyle(el); return [c.outlineStyle, c.outlineWidth] })
+  expect(picked).toEqual(["solid", "3px"])
+  const other = await page.locator(".seg.unit label:not(:has(input:checked))").evaluate((el) => getComputedStyle(el).outlineWidth)
+  expect(other).toBe("1px")
+  await page.emulateMedia({ forcedColors: "none" })
   // Cek Ongkir: Kargo with P×L×T (≥ 5 kg), then Reguler billed by volume — courier logos on every row.
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("button", { name: /Tebet Barat/ }).click()

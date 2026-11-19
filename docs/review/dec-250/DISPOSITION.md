@@ -1,0 +1,17 @@
+# DEC-250 review disposition
+
+## GPT-6.2 Sol R1 (`R1-sol.md`, on `33d4fa7`): REQUEST_CHANGES, 1 P1 + 4 P2 + 1 verification gap. All fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P1 | The switcher sends an applicant with a session back to `/daftar-akun` (`/daftar` → `Masuk ke Loket` → `Daftar Gerai Baru`). | **Fixed.** `/daftar-akun` has a route `beforeLoad` guard: `GET /auth/me`, and a session without a gerai (`membership: null`) redirects to `/daftar`. One guard covers every entry: the switcher, the brand `Daftar Gerai` CTA and a typed URL. `/masuk` does not need a second `/auth/me` call per view (the supervisor's in-card variant). On `/daftar` itself the active tab still links to `/daftar`. | e2e `auth-stage` click-through `/daftar` → `/masuk` → `/daftar` plus typed `/daftar-akun` → `/daftar`; mutation M1 (guard removed) red. |
+| P2 | Challenged signup: Tab order differs from the screen (CSS `order`). | **Fixed.** One `<form>` for the email and OTP sub-states, with DOM order equal to screen order: field, Turnstile slot + action, OTP links, status. The single slot is never re-rendered between the sub-states (`__tsRenders` = 1). No CSS `order`. | e2e focusable challenge stub: Email → Tab → challenge; OTP code → challenge → `Verifikasi` → `Ganti email`; mutation M2 (slot after the action) red. |
+| P2 | A silent Turnstile adds an extra 16px gap. | **Fixed.** `TurnstileAction` wraps slot + submit in a gap-free column. `useTurnstile` exposes `visible` from a `ResizeObserver` on the slot, and the slot gets `mb-4` only while it is taller than 0. The status line is a fixed 16px so the `○`/`●` glyph swap never re-centres the card. | e2e: action Y identical before/after the silent 0px render on `/masuk` and `/daftar-akun` at three viewports, silent gap 0, challenged gap exactly 16px (`/masuk`, `/daftar-akun`, OTP); mutation M3 (`mb-4` always) red. |
+| P2 | Mobile stacked tables drop their column headers from the accessibility tree. | **Fixed.** The `thead` is only visually hidden below 760px (`position:absolute; 1px; clip-path:inset(50%)`), and both `.tbl.stack` tables carry explicit `table` / `rowgroup` / `row` / `columnheader` / `cell` roles through the grid/block restyle. | Vitest markup + CSS; e2e at 390: `getByRole("table")` 1, `columnheader` 4 / 3, `cell` ≥ 36 / 12; mutation M4 (`display:none`) red. |
+| P2 | The mini-site unit toggle has no selected indicator in forced-colors mode. | **Fixed.** `@media(forced-colors:active)` adds a `ButtonBorder` outline to each pill and a 3px `SelectedItem` outline + `SelectedItem` fill (`forced-color-adjust:none`) on the checked one. | Vitest CSS; e2e `emulateMedia({ forcedColors: "active" })`: checked 3px solid, other 1px; mutation M5 red. |
+| Gap | Owner `/totp` had no three-viewport evidence. | **Covered.** New e2e: bootstrap an admin, password step, `/totp` enrol checked with `fits` + `studio` at 1440×900, 1366×768 and 390×844, then the recovery-code step keeps the studio. | e2e `auth-stage` owner `/totp` test. |
+
+Focused checks per the fast protocol: `check:fast`, Vitest `test/brand` + `test/minisite`, `check-page.mjs` 10/10,
+e2e `auth-stage` + `auth` + `onboarding` + `brand` + `minisite` (all projects). Mutations M1–M5 red, restored with
+SHA-256 verification. A `/auth/me` 401 for an anonymous visitor of `/daftar-akun` is expected (the guard) and is the only
+console error the auth-stage test ignores.
