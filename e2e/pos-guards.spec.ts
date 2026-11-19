@@ -21,15 +21,13 @@ async function seeded(page: Page, prefix: string) {
 async function quoteJt(page: Page, cod = false) {
   await page.goto(`${APP}/kasir`)
   if (cod) await page.getByRole("button", { name: "COD Barang" }).click()
-  await page.getByLabel("Kecamatan tujuan").fill("tebet")
-  await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
+  // DEC-251A: the recipient's district is the destination; the quote runs by itself.
+  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   if (cod) await page.getByLabel("Harga barang (COD)").fill("150000")
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
 }
 async function parties(page: Page) {
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
-  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
   await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
 }
@@ -45,7 +43,7 @@ test("an answer to a superseded quote never restores the selection (R2-A)", asyn
     await held
     await route.continue()
   })
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.getByRole("main").getByRole("button", { name: "Hitung Ulang" }).click()
   await page.getByRole("button", { name: "2 kg" }).click()
   release()
   await page.waitForTimeout(1500)

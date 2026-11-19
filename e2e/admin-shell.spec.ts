@@ -55,11 +55,15 @@ test("courier rows: one tab stop per category, arrows move from the focused row"
   test.skip(info.project.name !== "desktop-1280", "keyboard flow checked once on desktop")
   await seeded(page, "e2e-rapi-a")
   await page.goto(`${APP}/kasir`)
+  // DEC-251A: a walk-in price check picks the district in card 2 (`Cek kecamatan tujuan saja dulu`); the quote runs itself.
+  await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByRole("button", { name: "5 kg" }).click()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   const group = page.getByRole("radiogroup", { name: "Pilih ekspedisi" })
+  // The auto-quote for 5 kg has landed (no stale notice) and opened the Cargo tab by itself.
+  await expect(page.getByRole("button", { name: /^Cargo ≥ 5 kg/ })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByText(/Data paket berubah/)).toHaveCount(0)
   // 5 kg Non-COD opens on Cargo: pick the first cargo row, then switch to Reguler — a row there must be tabbable.
   await group.getByRole("radio").first().click()
   await page.getByRole("button", { name: /^Reguler/ }).click()
@@ -279,6 +283,8 @@ test("DEC-244: Halaman Publik Gerai, status operasional, packing select", async 
   const papi = page.context().request
   expect((await papi.post(`${APP}/api/app/settings/packing`, { headers: { origin: APP, "content-type": "application/json" }, data: { items: [{ id: null, name: "Bubble wrap", priceIdr: 3000, active: true }], serviceFeeEnabled: false, serviceFeeIdr: null } })).status()).toBe(200)
   await page.goto(`${APP}/kasir`)
+  // DEC-251A: packing sits in card 3's `Ukuran P×L×T, Packing & Opsi Lain` disclosure.
+  await page.getByText("Ukuran P×L×T, Packing & Opsi Lain").click()
   const trigger = page.locator("#packing")
   await trigger.evaluate((e) => window.scrollBy(0, e.getBoundingClientRect().top - 200))
   // Sol R1 #3: the idle trigger keeps the ≥ 3:1 input border token (not a pale slate-200).

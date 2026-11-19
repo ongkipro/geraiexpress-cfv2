@@ -48,6 +48,18 @@ describe("mini-site", () => {
     expect(q.status).toBe(200)
     expect(body).toContain('<input type="radio" name="unit" value="kg" checked> kg')
     expect(body).toMatch(/J&amp;T Express[\s\S]*Rp 12\.500/)
+    // DEC-251D: the result hands the destination and weight to Kirim dari Rumah, which prefills only valid values.
+    expect(body).toContain(`<a class="btn pri" href="/kirim?destId=${DEST}&amp;destLabel=Tebet&amp;weight=1000">Isi Alamat dari Rumah</a>`)
+    const pre = await (await get(`${t.base}/kirim?destId=${DEST}&destLabel=Tebet%20Barat&weight=2500`)).text()
+    expect(pre).toContain('value="Tebet Barat"')
+    expect(pre).toContain(`name="recipientId" value="${DEST}"`)
+    expect(pre).toContain('name="weight" type="text" value="2500"')
+    for (const bad of [`destId=${DEST.toUpperCase()}&destLabel=X&weight=9`, `destId=x"onmouseover=1&destLabel=Tebet&weight=100001`, `destId=${DEST}&destLabel=&weight=1e3`]) {
+      const h = await (await get(`${t.base}/kirim?${bad}`)).text()
+      expect(h).toContain('name="recipientId" value=""')
+      expect(h).toContain('name="weight" type="text" value="1000"')
+      expect(h).not.toContain("onmouseover")
+    }
     // Never cost or margin on a public page: provider net (Rp 10.000 for J&T 1 kg at 20 %) must not appear.
     expect(body).not.toContain("Rp 10.000")
     expect(body.replace(/<style>[\s\S]*?<\/style>/, "")).not.toMatch(/laba|margin|biaya gerai/i)

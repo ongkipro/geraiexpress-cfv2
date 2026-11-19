@@ -93,17 +93,18 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
   )
 }
 
-export function PartyPicker({ kind, value, onPick }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void }) {
+/** `limit`: how many recent/matching contacts to list (the POS cards show 4, DEC-251A). */
+export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void; limit?: number }) {
   const [q, setQ] = useState("")
   const [items, setItems] = useState<Contact[]>([])
   useEffect(() => {
     let alive = true
-    const t = setTimeout(() => api<{ items: Contact[] }>(`/contacts/${kind}?q=${encodeURIComponent(q)}`).then((r) => alive && setItems(r.items.slice(0, 6))).catch(() => undefined), 200)
+    const t = setTimeout(() => api<{ items: Contact[] }>(`/contacts/${kind}?q=${encodeURIComponent(q)}`).then((r) => alive && setItems(r.items.slice(0, limit))).catch(() => undefined), 200)
     return () => {
       alive = false
       clearTimeout(t)
     }
-  }, [q, kind])
+  }, [q, kind, limit])
   const label = kind === "senders" ? "Pengirim" : "Penerima"
   return (
     <div className="flex flex-col gap-2">

@@ -1,0 +1,30 @@
+DEC-251 UI gates (local wrangler dev, Chromium, 2026-11-19)
+
+admin-geometry (design/admin-contract.json, DEC-239) at 390 / 1366 / 1536 with a synthetic local session (scratch
+copy of the skill script that only adds a session cookie before navigation; contract and measurements unchanged):
+  /kasir (empty)                         0 fail, 0 warn
+  /kasir?tujuan=… (auto-quoted table)    0 fail, 0 warn
+  /kasir/cek-cepat                       0 fail, 0 warn
+  /kasir/multi                           0 fail, 0 warn
+  /kiriman                               0 fail, 0 warn
+  (table-head/table-cell checks NOT-CHECKED on /kasir: the courier table is a radio grid, not a <table>)
+
+Auto-quote: the quote runs 500 ms after the last edit; e2e `quote.spec` counts exactly 1 POST /quotes for the
+first result, and still 1 after switching Reguler ↔ Cargo and toggling the owner margin view.
+Cheapest first: e2e asserts ascending tarif publik among available rows; unavailable rows sit last with their reason.
+
+Mutations (all red, restored with SHA-256 verification):
+  M1 auto-quote disabled               → e2e quote (no result without a press)
+  M2 sorting removed                   → e2e quote (price order)
+  M3 recipient area not applied        → e2e checkout (no quote after picking the recipient)
+  M4 stuck filter ignores courier scan → Vitest listing
+  M5 handoff accepts any destId        → Vitest minisite
+  M6 xlsx phone 0-prefix removed       → unit xlsx-reader (2 cases)
+  M7 cargo no longer locks Non-COD     → e2e bulk
+
+geometry report excerpt:
+out-empty.md:URL: http://app.geraiexpress.localhost:8798/kasir
+out-empty.md:URL: http://app.geraiexpress.localhost:8798/kasir/cek-cepat
+out-empty.md:URL: http://app.geraiexpress.localhost:8798/kasir/multi
+out-empty.md:URL: http://app.geraiexpress.localhost:8798/kiriman
+out-filled.md:URL: http://app.geraiexpress.localhost:8798/kasir?tujuan=5fc64714f8f44b34aa4cdd60&wilayah=Tebet%20Barat&berat=1000&mode=none&layanan=JT

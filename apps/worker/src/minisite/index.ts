@@ -137,7 +137,7 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
                       if (best.tercepat === x.serviceCode) tags.push('<span class="best">Tercepat</span>')
                       return `<li><span class="clogo">${courierImg(x.courierCode, true)}</span><span class="rn">${e(x.name.startsWith(x.courierName.split(" ")[0]!) ? x.name : `${x.courierName} · ${x.name}`)}<span class="tag">${tags.join(" · ")}</span></span><span class="num">${rp(x.P)}</span></li>`
                     })
-                    .join("")}</ul><p class="hint">Harga publik ekspedisi untuk ${kg(input.actualWeightGram)}${input.dims ? ` (${input.dims.lengthCm}×${input.dims.widthCm}×${input.dims.heightCm} cm)` : ""}. Harga akhir dihitung ulang di kasir saat paket ditimbang.</p><div class="row"><a class="btn pri" href="/kirim?dest=${encodeURIComponent(v.destId ?? "")}&destLabel=${encodeURIComponent(v.destLabel ?? "")}&weight=${input.actualWeightGram}">Isi Alamat dari Rumah</a></div>`
+                    .join("")}</ul><p class="hint">Harga publik ekspedisi untuk ${kg(input.actualWeightGram)}${input.dims ? ` (${input.dims.lengthCm}×${input.dims.widthCm}×${input.dims.heightCm} cm)` : ""}. Harga akhir dihitung ulang di kasir saat paket ditimbang.</p><div class="row"><a class="btn pri" href="/kirim?destId=${encodeURIComponent(v.destId ?? "")}&amp;destLabel=${encodeURIComponent(v.destLabel ?? "")}&amp;weight=${input.actualWeightGram}">Isi Alamat dari Rumah</a></div>`
                 : `<p class="err">${tooLight ? "Kargo untuk paket mulai 5 kg (berat asli atau berat volume). Pilih Reguler untuk paket lebih ringan." : "Belum ada ekspedisi yang melayani rute ini dari gerai."}</p>`
             }</div>`
           } catch (err) {
@@ -174,10 +174,23 @@ ${result}</div></div>`
 
 // ---- Kirim dari Rumah -----------------------------------------------------------------------------------------
 
+/**
+ * DEC-251D: `Isi Alamat dari Rumah` from a Cek Ongkir result carries the destination and weight. Only well-formed values
+ * prefill the form (a 24-hex Mengantar area id with its label, ≤ 120 chars; 10..100000 g); anything else is ignored.
+ */
+export function handoff(q: URLSearchParams): { weight: string; recipientId: string; recipientLabel: string } {
+  const id = q.get("destId") ?? ""
+  const label = (q.get("destLabel") ?? "").trim().slice(0, 120)
+  const okArea = /^[0-9a-f]{24}$/.test(id) && label !== ""
+  const w = q.get("weight") ?? ""
+  const okWeight = /^[1-9][0-9]{1,5}$/.test(w) && Number(w) >= 10 && Number(w) <= 100_000
+  return { weight: okWeight ? w : "1000", recipientId: okArea ? id : "", recipientLabel: okArea ? label : "" }
+}
+
 async function kirimForm(env: Env, c: Ctx, request: Request, url: URL): Promise<Response> {
   const s = await shell(env, c, "kirim", "Kirim dari Rumah", "Isi data paket dari rumah, dapatkan kode QR, lalu tunjukkan ke kasir. Tidak perlu antre mengetik alamat.", "/kirim")
   if (!s) return notFoundHtml()
-  let v: Record<string, string> = { weight: url.searchParams.get("weight") ?? "1000", recipientId: url.searchParams.get("dest") ?? "", recipientLabel: url.searchParams.get("destLabel") ?? "", cod: "0" }
+  let v: Record<string, string> = { ...handoff(url.searchParams), cod: "0" }
   let errors: Record<string, string> = {}
   if (request.method === "POST") {
     const f = await request.formData()

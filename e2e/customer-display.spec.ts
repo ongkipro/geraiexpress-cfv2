@@ -89,9 +89,10 @@ test("Layar Pelanggan: pasangkan HP tanpa login → rincian & QRIS → terima ka
   expect(await device.cookies()).toEqual([])
 
   // Counter selects a courier (QRIS is the default method): the display shows lines, the 40 px total and the QRIS.
+  // DEC-251A: a walk-in price check picks the district in card 2 (`Cek kecamatan tujuan saja dulu`); the quote runs itself.
+  await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   // Sol R1 F6: the first state write after choosing the courier fails at the network; the counter retries by itself
   // (1.5 s) and the display reaches checkout with no further input.
   let stateCalls = 0

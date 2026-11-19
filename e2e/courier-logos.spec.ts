@@ -39,9 +39,10 @@ test("kasir: courier rows carry their official logos; radio names unchanged", as
   const errors = watchErrors(page)
   await seeded(page, "e2e-logo-k")
   await page.goto(`${APP}/kasir`)
+  // DEC-251A: a walk-in price check picks the district in card 2 (`Cek kecamatan tujuan saja dulu`); the quote runs itself.
+  await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   const group = page.getByRole("radiogroup", { name: "Pilih ekspedisi" })
   // The logo is decorative: accessible names still start with the service name.
   await expect(group.getByRole("radio", { name: /^J&T Express/ })).toBeVisible({ timeout: 20_000 })
@@ -64,9 +65,8 @@ test("kasir: courier rows carry their official logos; radio names unchanged", as
   await page.goto(`${APP}/kasir/cek-cepat`)
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   const list = page.getByRole("list", { name: "Daftar ekspedisi" })
-  await expect(list.getByText("J&T Express")).toBeVisible({ timeout: 20_000 })
+  await expect(list.locator("#kurir-JT")).toContainText("J&T Express", { timeout: 20_000 })
   await expect(list.locator("[data-courier-logo]")).toHaveCount(await list.getByRole("listitem").count())
   await expect(list.locator('[data-courier-logo="fallback"]')).toHaveCount(0)
   await expectLoadedLogos(list, { "J&T Express": "jt", "Pos Indonesia": "pos" })

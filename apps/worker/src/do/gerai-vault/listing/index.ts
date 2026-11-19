@@ -30,7 +30,13 @@ export interface ListQuery {
   printed: "semua" | "belum" | "sudah"
   cursor: string | null
   limit: number
+  /** DEC-251C `Paket Macet`: issued, still moving, no courier scan (or issue/creation) for at least N days; 0 = all. */
+  stuckDays?: 0 | 2 | 3 | 5 | 7
 }
+
+export const STUCK_DAYS = [2, 3, 5, 7] as const
+/** A shipment the courier still holds (issued, not delivered, returned or cancelled). */
+const MOVING = "s.dispatch_state = 'issued' AND s.status IN ('ready_for_pickup','handed_to_courier','in_transit','undelivery_hold')"
 
 export type ListRow = {
   slug: string
@@ -67,6 +73,10 @@ function filters(q: ListQuery): { where: string; params: SqlStorageValue[] } {
     params.push(q.courier)
   }
   if (q.printed !== "semua") parts.push(q.printed === "sudah" ? "s.print_count > 0" : "s.print_count = 0")
+  if (q.stuckDays) {
+    parts.push(`${MOVING} AND COALESCE(s.last_provider_event_at, s.issued_at, s.created_at) <= ?`)
+    params.push(Date.now() - q.stuckDays * 86_400_000)
+  }
   const term = q.q.trim()
   if (term) {
     const slug = normalizeSlug(term)

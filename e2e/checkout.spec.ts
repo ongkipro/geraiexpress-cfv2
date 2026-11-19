@@ -18,13 +18,11 @@ test("Checkout: kasir → INV → lunas tunai → resi terbit (< 45 s)", async (
 
   const started = Date.now()
   await page.goto(`${APP}/kasir`)
-  await page.getByLabel("Kecamatan tujuan").fill("tebet")
-  await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
-  await page.getByRole("radio", { name: /^J&T Express/ }).click()
-  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
+  // DEC-251A: 1 · 2 · 3 first — the recipient's district becomes the destination and the quote runs by itself.
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
   await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
   await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
   await page.getByRole("button", { name: "Tunai" }).click()
@@ -57,10 +55,8 @@ test("Checkout COD: pengirim baru diverifikasi di layar kasir → resi terbit", 
 
   await page.goto(`${APP}/kasir`)
   await page.getByRole("button", { name: "COD Barang" }).click()
-  await page.getByLabel("Kecamatan tujuan").fill("tebet")
-  await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
+  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   await page.getByLabel("Harga barang (COD)").fill("150000")
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
 
   await page.getByRole("button", { name: "Pengirim baru" }).click()
@@ -72,7 +68,6 @@ test("Checkout COD: pengirim baru diverifikasi di layar kasir → resi terbit", 
   await page.getByRole("button", { name: "Pengirim sudah menerima" }).click()
   await expect(page.getByText("WhatsApp terverifikasi di loket")).toBeVisible()
 
-  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
   await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
   await page.getByRole("button", { name: /Simpan & Cetak/ }).last().click()

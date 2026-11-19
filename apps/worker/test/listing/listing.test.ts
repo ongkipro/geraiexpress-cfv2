@@ -104,4 +104,36 @@ describe("Kiriman list", () => {
     expect(cells.slice(-5, -2)).toEqual(["paid", "qris", "ready_for_pickup"])
     expect(Number(cells.at(-1))).toBeGreaterThan(0)
   })
+
+  it("DEC-251C Paket Macet: ?macet=N keeps issued, still-moving INVs without a courier scan for N days (tenant-bound)", async () => {
+    const t = await checkoutGerai("listmacet")
+    const other = await checkoutGerai("listmacet2")
+    const fresh = await issued(t, true)
+    const stuck3 = await issued(t, true)
+    const stuck8 = await issued(t, true)
+    const delivered = await issued(t, true)
+    const otherStuck = await issued(other, true)
+    const day = 86_400_000
+    await runInDurableObject(t.vault, (_i, s) => {
+      const at = Date.now()
+      s.storage.sql.exec("UPDATE shipments SET last_provider_event_at = ? WHERE slug = ?", at - 1 * day, fresh)
+      // No courier scan yet: the issue time counts.
+      s.storage.sql.exec("UPDATE shipments SET last_provider_event_at = NULL, issued_at = ? WHERE slug = ?", at - 3 * day - 60_000, stuck3)
+      s.storage.sql.exec("UPDATE shipments SET last_provider_event_at = ?, status = 'in_transit' WHERE slug = ?", at - 8 * day, stuck8)
+      s.storage.sql.exec("UPDATE shipments SET last_provider_event_at = ?, status = 'delivered' WHERE slug = ?", at - 9 * day, delivered)
+    })
+    await runInDurableObject(other.vault, (_i, s) => {
+      s.storage.sql.exec("UPDATE shipments SET last_provider_event_at = ? WHERE slug = ?", Date.now() - 9 * day, otherStuck)
+    })
+    const slugs = async (qs: string) => (await list(t.cookie, qs)).items.map((r) => r.slug).sort()
+    expect(await slugs("")).toEqual([fresh, stuck3, stuck8, delivered].sort())
+    expect(await slugs("?macet=2")).toEqual([stuck3, stuck8].sort())
+    expect(await slugs("?macet=3")).toEqual([stuck3, stuck8].sort())
+    expect(await slugs("?macet=5")).toEqual([stuck8])
+    expect(await slugs("?macet=7")).toEqual([stuck8])
+    // Unknown values mean no filter; the other gerai's stuck INV never shows.
+    expect(await slugs("?macet=4")).toEqual([fresh, stuck3, stuck8, delivered].sort())
+    expect((await list(t.cookie, "?macet=7")).counts.semua).toBe(1)
+    expect((await list(other.cookie, "?macet=7")).items.map((r) => r.slug)).toEqual([otherStuck])
+  })
 })

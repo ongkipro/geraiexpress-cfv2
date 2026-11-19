@@ -32,4 +32,15 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   await expect(page.getByText("Tidak ada yang cocok")).toBeVisible()
   await page.getByRole("button", { name: "Hapus Filter" }).click()
   await expect(page.getByRole("link", { name: `INV ${slug.toUpperCase()}` }).first()).toBeVisible()
+
+  // DEC-251C: `Pergerakan` → `Macet ≥ 3 hari` lands in the URL and the request; a just-issued INV is not stuck.
+  const listed = page.waitForRequest((r) => r.url().includes("/api/app/shipments?") && r.url().includes("macet=3"))
+  await page.getByRole("combobox", { name: "Pergerakan paket" }).click()
+  await page.getByRole("option", { name: "Macet ≥ 3 hari" }).click()
+  await listed
+  await expect(page).toHaveURL(/macet=3/)
+  await expect(page.getByText("Tidak ada yang cocok")).toBeVisible()
+  await page.getByRole("button", { name: "Hapus Filter" }).click()
+  await expect(page).not.toHaveURL(/macet=/)
+  await expect(page.getByRole("link", { name: `INV ${slug.toUpperCase()}` }).first()).toBeVisible()
 })

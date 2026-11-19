@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react"
+import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -8,10 +8,18 @@ import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-grou
 import { api, ApiError } from "../../../lib/api"
 import { PageTitle } from "../../../shell/states"
 import { PartyPicker, type Contact } from "../../kiriman/detail"
-import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
+import { SectionCard } from "../../../components/admin/page"
+import { CourierLogo } from "../../../components/admin/courier-logo"
+import { PickupChip } from "../pickup-chip"
+import { usePosConfig } from "../../../lib/pos-config"
+import { readXlsxToCsv, XLSX_MIME } from "../../../lib/xlsx-reader"
+import { isOwner, useWorkspace } from "../../../shell/workspace"
+import { cn } from "cn"
 
 // `/kasir/multi` Paket Massal setup (visual 07, spec 03 §1.3): sender → courier + COD mode → rows by hand or CSV
 // upload (≤ 200 rows, 1 MB). The server parses and validates every row; checking continues on the batch page.
+// DEC-251: pickup chip in the header, courier cards (Reguler / Cargo tabs; cargo is Non-COD only, `service_class` from
+// `GET /bulk/services`), and `.xlsx` read in the browser into the same CSV the endpoint already accepts.
 interface Service { code: string; name: string; cargo: boolean; cod: boolean }
 type Cells = { name: string; phone: string; street: string; areaText: string; weightGram: string; codIdr: string; content: string }
 const EMPTY: Cells = { name: "", phone: "", street: "", areaText: "", weightGram: "1000", codIdr: "", content: "" }
@@ -23,9 +31,12 @@ const MODES = [
 
 export function PaketMassalPage() {
   const navigate = useNavigate()
+  const w = useWorkspace()
+  const cfg = usePosConfig()
   const [sender, setSender] = useState<Contact | null>(null)
-  const [services, setServices] = useState<Service[]>([])
+  const [services, setServices] = useState<Service[] | null>(null)
   const [service, setService] = useState("")
+  const [tab, setTab] = useState<"regular" | "cargo">("regular")
   const [mode, setMode] = useState("none")
   const [rows, setRows] = useState<Cells[]>([{ ...EMPTY }])
   const [file, setFile] = useState<{ name: string; text: string } | null>(null)
@@ -34,19 +45,50 @@ export function PaketMassalPage() {
   const [pending, setPending] = useState(false)
   useEffect(() => {
     api<{ items: Service[] }>("/bulk/services").then((r) => {
-      const regular = r.items.filter((s) => !s.cargo)
-      setServices(regular)
-      setService((cur) => cur || regular[0]?.code || "")
+      setServices(r.items)
+      setService((cur) => cur || r.items.find((s) => !s.cargo)?.code || "")
     }).catch(() => setMsg("Daftar ekspedisi tidak dapat dimuat."))
   }, [])
+  const chosen = services?.find((s) => s.code === service)
+  // Cargo (and any service without COD) ships Non-COD only: the COD choice is locked to `none`.
+  const codLock = chosen?.cargo ? "Kargo hanya Non-COD." : chosen && !chosen.cod ? "Layanan ini tidak mendukung COD." : null
+  const cards = (services ?? []).filter((s) => s.cargo === (tab === "cargo"))
+  function choose(s: Service) {
+    setService(s.code)
+    if (s.cargo || !s.cod) setMode("none")
+  }
+  function switchTab(t: "regular" | "cargo") {
+    setTab(t)
+    // Keep the chosen service visible: a tab switch picks the first service of that tab unless one is already there.
+    const first = (services ?? []).find((s) => s.cargo === (t === "cargo"))
+    if (first && chosen?.cargo !== (t === "cargo")) choose(first)
+  }
+  function onCardKey(e: KeyboardEvent<HTMLDivElement>) {
+    // WAI-ARIA radio group: arrows move from the focused card (wrapping) and select it.
+    if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key) || !cards.length) return
+    e.preventDefault()
+    const at = cards.findIndex((s) => `layanan-${s.code}` === (document.activeElement as HTMLElement | null)?.id)
+    const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1
+    const next = cards[at < 0 ? 0 : (at + step + cards.length) % cards.length]!
+    choose(next)
+    document.getElementById(`layanan-${next.code}`)?.focus()
+  }
   const set = (i: number, k: keyof Cells, v: string) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
   async function pick(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
+    e.target.value = "" // picking the same file again (after fixing it) fires `change` again
     if (!f) return
     if (f.size > 1024 * 1024) return setErrors({ file: "Berkas lebih dari 1 MB." })
-    if (!/\.csv$/i.test(f.name)) return setErrors({ file: "Untuk saat ini hanya berkas .csv. Simpan Excel sebagai CSV dulu." })
-    setErrors({})
-    setFile({ name: f.name, text: await f.text() })
+    const xlsx = /\.xlsx$/i.test(f.name) || f.type === XLSX_MIME
+    if (!xlsx && !/\.csv$/i.test(f.name) && f.type !== "text/csv") return setErrors({ file: "Pilih berkas Excel .xlsx atau .csv." })
+    try {
+      const text = xlsx ? await readXlsxToCsv(await f.arrayBuffer()) : await f.text()
+      setErrors({})
+      setFile({ name: f.name, text })
+    } catch (err) {
+      setFile(null)
+      setErrors({ file: err instanceof Error ? err.message : "Berkas tidak dapat dibaca." })
+    }
   }
   async function submit() {
     setPending(true)
@@ -67,7 +109,9 @@ export function PaketMassalPage() {
   }
   return (
     <div className="pb-24 md:pb-0">
-      <PageTitle title="Paket Massal" description="Satu pengirim, banyak paket, satu kali bayar di loket. Maksimal 200 baris." />
+      <PageTitle title="Paket Massal" description="Satu pengirim, banyak paket, satu kali bayar di loket. Maksimal 200 baris.">
+        <PickupChip outlet={cfg?.outlet} owner={isOwner(w)} loaded={cfg !== null} />
+      </PageTitle>
       <div className="flex flex-col gap-4 md:gap-5">
         <SectionCard id="pengirim" title="1. Pengirim">
           {sender ? (
@@ -83,24 +127,66 @@ export function PaketMassalPage() {
 
         <SectionCard id="layanan" title="2. Ekspedisi & COD untuk semua baris">
           <div className="flex flex-col gap-4">
-          <ChoiceGroup label="Ekspedisi" value={service || null} onValueChange={setService} choices={services.map((s) => ({ value: s.code, label: s.name }))} />
-          <ToggleGroup value={[mode]} onValueChange={(v) => v[0] && setMode(v[0])} variant="outline" aria-label="Mode COD" className="flex-wrap">
-            {MODES.map((m) => <ToggleGroupItem key={m.id} value={m.id}>{m.label}</ToggleGroupItem>)}
+          <ToggleGroup value={[tab]} onValueChange={(v) => v[0] && switchTab(v[0] as typeof tab)} variant="outline" spacing={0} aria-label="Kategori layanan">
+            <ToggleGroupItem value="regular">Reguler</ToggleGroupItem>
+            <ToggleGroupItem value="cargo">Cargo ≥ 5 kg (Non-COD)</ToggleGroupItem>
           </ToggleGroup>
-          <p className="text-base md:text-sm text-muted-foreground">Baris dengan nominal COD memakai mode COD di atas; baris tanpa COD dikirim biasa.</p>
+          {services === null ? (
+            msg ? null : <p className="text-base md:text-sm text-muted-foreground">Memuat ekspedisi…</p>
+          ) : cards.length === 0 ? (
+            <p className="text-base md:text-sm text-muted-foreground">Tidak ada layanan pada kategori ini.</p>
+          ) : (
+            <div role="radiogroup" aria-label="Ekspedisi untuk semua baris" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4" onKeyDown={onCardKey}>
+              {cards.map((s) => {
+                const checked = s.code === service
+                // One tab stop: the chosen card when it is in this tab, else the first card.
+                const tabStop = cards.some((x) => x.code === service) ? checked : s === cards[0]
+                return (
+                  <div
+                    key={s.code}
+                    id={`layanan-${s.code}`}
+                    role="radio"
+                    aria-checked={checked}
+                    tabIndex={tabStop ? 0 : -1}
+                    onClick={() => choose(s)}
+                    onKeyDown={(e) => (e.key === " " || e.key === "Enter") && (e.preventDefault(), choose(s))}
+                    className={cn(
+                      "flex min-h-11 cursor-pointer flex-col items-start gap-2 rounded-lg border p-3 transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      checked ? "border-primary bg-accent/60" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70",
+                    )}
+                  >
+                    <span className="flex w-full items-center justify-between gap-2">
+                      <CourierLogo code={s.code} name={s.name} decorative />
+                      <span aria-hidden className={cn("grid size-4 shrink-0 place-items-center rounded-full border", checked ? "border-primary" : "border-slate-300")}>
+                        {checked ? <span className="size-2 rounded-full bg-primary" /> : null}
+                      </span>
+                    </span>
+                    <span className="text-base font-medium text-slate-900 md:text-sm">{s.name}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {errors.serviceCode ? <p role="alert" className="text-base md:text-sm text-danger">{errors.serviceCode}</p> : null}
+          <ToggleGroup value={[mode]} onValueChange={(v) => v[0] && setMode(v[0])} variant="outline" aria-label="Mode COD" aria-describedby="mode-cod-info" className="flex-wrap">
+            {MODES.map((m) => <ToggleGroupItem key={m.id} value={m.id} disabled={!!codLock && m.id !== "none"}>{m.label}</ToggleGroupItem>)}
+          </ToggleGroup>
+          <p id="mode-cod-info" className={cn("text-base md:text-sm", codLock ? "font-medium text-slate-900" : "text-muted-foreground")}>
+            {codLock ?? "Baris dengan nominal COD memakai mode COD di atas; baris tanpa COD dikirim biasa."}
+          </p>
         </div>
         </SectionCard>
 
         <SectionCard id="baris" title="3. Daftar paket">
           <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium focus-within:ring-2 focus-within:ring-ring">
-              <UploadIcon aria-hidden className="size-4" /> Unggah CSV
-              <input type="file" accept=".csv,text/csv" className="sr-only" onChange={pick} />
+            <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-base font-medium focus-within:ring-2 focus-within:ring-ring md:h-9 md:text-sm">
+              <UploadIcon aria-hidden className="size-4" /> Unggah Excel/CSV
+              <input type="file" accept={`.csv,.xlsx,text/csv,${XLSX_MIME}`} className="sr-only" onChange={pick} />
             </label>
             <a href="/api/app/bulk/template.csv" className="inline-flex h-11 items-center gap-2 px-2 text-base md:text-sm text-primary underline-offset-4 hover:underline"><DownloadIcon aria-hidden className="size-4" /> Unduh Template</a>
           </div>
-          {errors.file ? <p role="alert" className="text-base md:text-sm text-danger">{errors.file}</p> : null}
+          {errors.file ? <p role="alert" className="text-base md:text-sm text-danger">{errors.file}</p> : <p className="text-base md:text-sm text-muted-foreground">Berkas Excel .xlsx atau .csv, maksimal 1 MB dan 200 baris. Excel dibaca dari sheet pertama.</p>}
           {file ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-l-4 border-primary py-1 pl-3">
               <p className="text-base md:text-sm">Berkas <span className="font-medium">{file.name}</span> siap diperiksa.</p>

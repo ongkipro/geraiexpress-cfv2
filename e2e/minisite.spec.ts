@@ -33,7 +33,7 @@ test("Mini-site: QR dari rumah → kasir buka INV yang sama → lacak tanpa data
   await page.getByLabel("Pindai QR pelanggan atau ketik INV").fill(`${site}/kirim/${slug}`)
   await page.getByRole("button", { name: "Buka Draf", exact: true }).click()
   await expect(page.getByText(`INV ${slug.toUpperCase()}`).first()).toBeVisible()
-  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
+  // DEC-251A: the claimed destination and weight quote by themselves.
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
   // The QR's sender and recipient are already on the POS (DEC-237): the counter only confirms and pays.
   await expect(page.getByText("Rina Kartika").first()).toBeVisible()
@@ -187,6 +187,14 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
   await expect(page.getByText(/dihitung \d+ kg/).first()).toBeVisible()
   // J&T Express and J&T ECO both carry the J&T logo.
   await expect(page.locator('.rates img[src="/couriers/jt.svg"]').first()).toBeVisible()
+  expect(await overflow()).toBe(0)
+  // DEC-251D: `Isi Alamat dari Rumah` carries the district and the weight into the pre-booking form.
+  const actual = await page.locator("#weight").inputValue()
+  await page.getByRole("link", { name: "Isi Alamat dari Rumah" }).click()
+  await expect(page).toHaveURL(/\/kirim\?destId=[0-9a-f]{24}&destLabel=.+&weight=\d+$/)
+  await expect(page.locator("#recipientText")).toHaveValue(/Tebet Barat/)
+  await expect(page.locator("#recipientId")).toHaveValue(/^[0-9a-f]{24}$/)
+  expect(await page.locator("#weight").inputValue()).toBe(String(Math.round(Number(actual.replace(",", ".")) * 1000)))
   expect(await overflow()).toBe(0)
 
   // Indonesian constraint validation on Cek Ongkir: an empty Kecamatan never shows the browser's English bubble.

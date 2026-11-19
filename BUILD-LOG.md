@@ -1294,3 +1294,34 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `/`, `/ekspedisi`, `/cara-kerja` 200 (apex without `Set-Cookie`; the bento track and the table roles are served),
   app `/masuk` + `/daftar-akun` and owner `/masuk` 200 (both SPA bundles carry the split-studio, not the old arrow
   label), owner `/loket-mitra-3d.webp` 200 `image/webp` 32,916 B, `probe.geraimitra.com` 200; probes 6/6. No migration.
+
+## 2026-11-19 — DEC-251 Next-gen shipment flow, Paket Massal `.xlsx`, stuck filter, mini-site handoff (branch `dec-251`, awaiting supervisor review)
+
+- DEC-251A (`/kasir`, `/kasir/cek-cepat`): the quote request moved into `useQuoteForm` (quote-panel.tsx).
+  - It is rendered as `PackageFields` (card 3) and `CourierResults` (section 4). `QuotePanel` remains for Cek Ongkir
+    Cepat.
+  - Auto-quote fires 500 ms after the last edit once the area id, weight ≥ 10 g and (COD Barang) a goods price
+    ≥ Rp10.000 are set. Attempted and quoted keys are never re-sent by the timer.
+  - Auto-Cargo applies to Non-COD ≥ 5 kg, actual or volumetric. The courier table is sorted cheapest first.
+  - On `/kasir`, the recipient's Mengantar area sets the destination; `Cek kecamatan tujuan saja dulu` keeps the
+    walk-in price check, and `+ Baru` pre-fills that area.
+  - The customer display hook stays in the outer `KasirPage`, so `Kiriman Baru` remounts only the screen and keeps the
+    TASK-701 pairing.
+  - The `submit()` money path (freeze, `PRICE_CHANGED`, idempotent payment, dispatch) is unchanged.
+  - The `Titik Jemput` chip reads the new `outlet` field of `GET /pos-config` through a shared `usePosConfig` loader.
+- DEC-251B (sub-agent, disjoint files; integrated and verified here): `lib/xlsx-reader.ts` is a zero-dependency ZIP
+  + XML reader built on `DecompressionStream`, with 12 unit cases. Paket Massal gets a logo card grid with a Cargo tab
+  that locks Non-COD, and accepts `.xlsx` as well as `.csv`.
+- DEC-251C: `stuckDays` in the vault list query covers issued, still-moving shipments whose last courier scan (or
+  issue/creation time) is ≥ N days old. The API reads `?macet=`; `/kiriman` adds a `Pergerakan` select. The URL
+  carries a number, because the router JSON-quotes numeric strings.
+- DEC-251D: the mini-site CTA carries `destId`/`destLabel`/`weight`. `GET /kirim` prefills validated values only;
+  the old unvalidated `?dest=` read is gone.
+- Gotchas:
+  1. `components/` is also type-checked by `web-owner`, so a router `Link` to an app-only route fails there. The pickup
+     chip lives under `routes/kasir/`.
+  2. After a SPA rebuild, wrangler served 503 until the assets were touched; the wait must poll the route under test.
+  3. Full-page screenshots stitch the fixed shell mid-page; the evidence uses tall viewports.
+- Verification: `check:fast`, unit (incl. `xlsx-reader`), worker `listing`/`minisite`/`dispatch`/`bulk`, e2e
+  `quote`/`checkout`/`pos-guards`/`customer-display`/`courier-logos`/`bulk`/`kiriman`/`minisite`/`admin-shell`/
+  `masking`, admin-geometry 0 fail on five screens, mutations M1–M7 red (`docs/evidence/DEC-251/ui-gates.txt`).

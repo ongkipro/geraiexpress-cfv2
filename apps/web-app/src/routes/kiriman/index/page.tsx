@@ -9,6 +9,7 @@ import { SectionCard, StatusBadge } from "../../../components/admin/page"
 import { Button } from "../../../components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
 import { Input } from "../../../components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
 import { api, ApiError } from "../../../lib/api"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
@@ -62,7 +63,16 @@ const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer:
 const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
 const newKey = () => crypto.randomUUID().replace(/-/g, "")
 
-type Search = { tab?: Tab; q?: string; periode?: string; dari?: string; sampai?: string; cetak?: string }
+type Search = { tab?: Tab; q?: string; periode?: string; dari?: string; sampai?: string; cetak?: string; macet?: number | string }
+// DEC-251C `Pergerakan`: issued INVs the courier has not scanned for N days (from the last courier event or issue time).
+// The URL carries a plain number (`?macet=3`); a string would be JSON-quoted by the router.
+const STUCK = [
+  { value: "", label: "Semua pergerakan" },
+  { value: "2", label: "Macet ≥ 2 hari" },
+  { value: "3", label: "Macet ≥ 3 hari" },
+  { value: "5", label: "Macet ≥ 5 hari" },
+  { value: "7", label: "Macet ≥ 7 hari" },
+]
 
 export function KirimanPage() {
   const w = useWorkspace()
@@ -78,7 +88,8 @@ export function KirimanPage() {
   const [cursor, setCursor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
-  const qs = useMemo(() => new URLSearchParams({ tab, ...(search.q ? { q: search.q } : {}), ...(search.cetak ? { cetak: search.cetak } : {}), ...paramsOf(period) }).toString(), [tab, search.q, search.cetak, period])
+  const macet = STUCK.some((o) => o.value && o.value === String(search.macet ?? "")) ? String(search.macet) : ""
+  const qs = useMemo(() => new URLSearchParams({ tab, ...(search.q ? { q: search.q } : {}), ...(search.cetak ? { cetak: search.cetak } : {}), ...(macet ? { macet } : {}), ...paramsOf(period) }).toString(), [tab, search.q, search.cetak, macet, period])
   // Only the latest request may paint: an earlier (e.g. unfiltered) response that resolves after a search must not
   // overwrite the filtered list.
   const gen = useRef(0)
@@ -111,7 +122,7 @@ export function KirimanPage() {
   }
   const rows = [...(data?.items ?? []), ...more]
   const exportHref = `/api/app/shipments-export.csv?${qs}`
-  const filtered = !!(search.q || search.cetak)
+  const filtered = !!(search.q || search.cetak || macet)
   const station = STATION[tab]
   if (station) {
     return (
@@ -156,11 +167,23 @@ export function KirimanPage() {
             <ToggleGroupItem key={c} value={c}>{c === "semua" ? "Semua" : c === "belum" ? "Belum Cetak" : "Sudah Cetak"}</ToggleGroupItem>
           ))}
         </ToggleGroup>
+        <Select items={STUCK} value={macet} onValueChange={(v) => go({ macet: v ? Number(v) : undefined })}>
+          <SelectTrigger aria-label="Pergerakan paket" data-stuck-filter className={`w-full sm:w-44 ${macet ? "border-warn/60 text-warn" : ""}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {STUCK.map((o) => (
+                <SelectItem key={o.value || "semua"} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`mb-4 text-base md:text-sm font-medium ${msg.tone === "danger" ? "text-danger" : "text-safe"}`}>{msg.text}</p> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat kiriman" rows={5} /> : rows.length === 0 ? (
         filtered ? (
-          <EmptyState title="Tidak ada yang cocok" body="Tidak ada kiriman dengan pencarian atau filter ini." action={<Button variant="outline" onClick={() => { setQ(""); go({ q: undefined, cetak: undefined }) }}>Hapus Filter</Button>} />
+          <EmptyState title="Tidak ada yang cocok" body="Tidak ada kiriman dengan pencarian atau filter ini." action={<Button variant="outline" onClick={() => { setQ(""); go({ q: undefined, cetak: undefined, macet: undefined }) }}>Hapus Filter</Button>} />
         ) : (
           <EmptyState title="Belum ada kiriman di sini" body="Kiriman yang resinya terbit akan muncul di daftar ini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />
         )

@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CheckCircle2Icon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
+import { CheckCircle2Icon, MapPinnedIcon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../components/ui/field"
@@ -19,14 +19,19 @@ import { PartyPicker, type Contact } from "../kiriman/detail"
 import { RecipientForm } from "../kontak/penerima"
 import { SenderForm } from "../kontak/pengirim"
 import { RiskChip, type RiskBadge } from "../kontak/shared"
-import { QuotePanel, StepTitle, rp, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
+import { CourierResults, PackageFields, StepTitle, rp, useQuoteForm, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
+import { AreaPicker, type Area } from "../../components/area-picker"
+import { PickupChip } from "./pickup-chip"
+import { usePosConfig } from "../../lib/pos-config"
 import { LinkButton } from "../../components/admin/link-button"
 import { CustomerDisplayButton, useCustomerDisplay, type DisplayInput } from "./display-dialog"
 
-// `Buat Pengiriman › Kiriman Satuan` (DEC-237, visual 05, DESIGN.md C4): one counter screen. Left 60 %: destination &
-// weight → courier cards → sender, label, recipient and contents. Right 40 % (sticky): the live summary and payment.
-// One primary freezes the quote (INV), attaches the parties, records the payment, issues at Mengantar and opens
-// printing — no page change. `/kiriman/:slug` keeps serving drafts, QR pre-bookings and issued shipments.
+// `Buat Pengiriman › Kiriman Satuan` (DEC-251A, supersedes the DEC-237 layout; visual 05): the counter's mental order on
+// one screen. Three top cards — `1. Pengirim`, `2. Penerima` (its Mengantar area IS the quote destination; or `Cek
+// kecamatan saja dulu` for a walk-in price check), `3. Detail Paket` — then the full-width auto-quoted `4. Pilihan
+// Ekspedisi`, then `5. Ringkasan, Pembayaran & Cetak`. One primary freezes the quote (INV), attaches the parties,
+// records the payment, issues at Mengantar and opens printing — no page change (TASK-304 guards unchanged).
+// `/kiriman/:slug` keeps serving drafts, QR pre-bookings and issued shipments.
 
 interface Claim { slug: string; senderId: string; recipientId: string; destination: { id: string; label: string }; weightGram: number; cod: boolean; codGoodsIdr: number; content: string }
 type Method = "qris" | "tunai" | "transfer" | "later"
@@ -149,7 +154,7 @@ function VerifySender({ c, onVerified }: { c: Contact; onVerified: (c: Contact) 
   )
 }
 
-function PartyStep({ kind, value, onPick, error, destination }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null }) {
+function PartyStep({ kind, value, onPick, error, destination, n, initialArea, children }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null; n: number; initialArea?: Area | null; children?: ReactNode }) {
   const w = useWorkspace()
   const [adding, setAdding] = useState(false)
   const label = kind === "senders" ? "Pengirim" : "Penerima"
@@ -160,28 +165,55 @@ function PartyStep({ kind, value, onPick, error, destination }: { kind: "senders
     if (r?.item) onPick(r.item)
   }
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{label}</h3>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>
-      </div>
-      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} /> : <PartyPicker kind={kind} value={value} onPick={onPick} />}
+    <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
+      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
+      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} /> : <PartyPicker kind={kind} value={value} onPick={onPick} limit={4} />}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
+      {children}
       <Sheet open={adding} onOpenChange={setAdding}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader><SheetTitle>{label} baru</SheetTitle></SheetHeader>
-          {adding ? (kind === "senders" ? <SenderForm sender={null} owner={isOwner(w)} onSaved={saved} /> : <RecipientForm recipient={null} canArchive={false} onSaved={saved} />) : null}
+          {adding ? (kind === "senders" ? <SenderForm sender={null} owner={isOwner(w)} onSaved={saved} /> : <RecipientForm recipient={null} canArchive={false} onSaved={saved} initialArea={initialArea ?? null} />) : null}
         </SheetContent>
       </Sheet>
-    </div>
+    </Panel>
   )
 }
 
 export function KasirPage() {
   const w = useWorkspace()
   const owner = isOwner(w)
+  // The claim and the round live outside the screen: `Kiriman Baru` / a scanned QR remount a fresh screen while the
+  // customer display (TASK-701) keeps its pairing and channel here.
+  const [claim, setClaim] = useState<Claim | null>(null)
+  const [round, setRound] = useState(0)
+  const [displayInput, setDisplayInput] = useState<DisplayInput>({ kind: "idle" })
+  const display = useCustomerDisplay(w.tenant.slug, displayInput)
+  const displayButton = <CustomerDisplayButton display={display} owner={owner} />
+  return (
+    <KasirScreen
+      key={`${claim?.slug ?? "baru"}-${round}`}
+      claim={claim}
+      displayButton={displayButton}
+      onDisplay={setDisplayInput}
+      onClaim={(c) => {
+        setClaim(c)
+        setRound((n) => n + 1)
+      }}
+      onReset={() => {
+        setClaim(null)
+        setRound((n) => n + 1)
+      }}
+    />
+  )
+}
+
+function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { claim: Claim | null; displayButton: ReactNode; onDisplay: (d: DisplayInput) => void; onClaim: (c: Claim) => void; onReset: () => void }) {
+  const w = useWorkspace()
+  const owner = isOwner(w)
+  const pos = usePosConfig()
   const search = useSearch({ strict: false }) as Record<string, unknown>
-  // `Buat Kiriman dari Tarif Ini` (Cek Ongkir Cepat) prefills the form and preselects the service.
+  // `Buat Kiriman dari Tarif Ini` (Cek Ongkir Cepat) prefills the form and preselects the service (once).
   const q = (k: string) => (search[k] === undefined ? undefined : String(search[k]))
   const fromQuick: QuoteInitial | undefined = q("tujuan")
     ? {
@@ -196,12 +228,11 @@ export function KasirPage() {
         serviceFee: q("biaya") !== "0",
       }
     : undefined
-  const [claim, setClaim] = useState<Claim | null>(null)
-  const [round, setRound] = useState(0)
+  const preselect = useRef<string | undefined>(!claim ? q("layanan") : undefined)
   const [sel, setSel] = useState<{ req: QuoteRequest; card: QuoteCard } | null>(null)
   const [sender, setSender] = useState<Contact | null>(null)
   const [recipient, setRecipient] = useState<Contact | null>(null)
-  const [content, setContent] = useState("")
+  const [content, setContent] = useState(claim?.content ?? "")
   const [qty, setQty] = useState("1")
   const [note, setNote] = useState("")
   const [ack, setAck] = useState(false)
@@ -218,33 +249,33 @@ export function KasirPage() {
   const [prints, setPrints] = useState(0)
   // Labels the customer display shows (TASK-701): destination area and packing name from the quote form.
   const [form, setForm] = useState<{ areaLabel: string | null; packingName: string }>({ areaLabel: null, packingName: "" })
+  const initial = claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : fromQuick
+  const f = useQuoteForm(initial, {
+    auto: true,
+    onStale: () => setSel(null),
+    onForm: setForm,
+    onQuoted: (req, cards) => {
+      const want = sel?.card.serviceCode ?? preselect.current
+      preselect.current = undefined
+      const keep = cards.find((c) => c.available && c.serviceCode === want)
+      setSel(keep ? { req, card: frozen && frozen.sig === JSON.stringify([req, keep.serviceCode]) ? frozen.card : keep } : null)
+    },
+  })
+  // `Cek kecamatan saja dulu`: a walk-in price check before any recipient (pre-opened from Cek Ongkir Cepat).
+  const [areaOnly, setAreaOnly] = useState(!!fromQuick && !claim)
 
-  // A QR pre-booking brings its parties and contents (the content is set where the claim is taken).
+  // A QR pre-booking brings its parties (the content is set where the claim is taken).
   useEffect(() => {
     if (!claim) return
     api<{ item: Contact }>(`/contacts/senders/${claim.senderId}`).then((r) => setSender(r.item)).catch(() => undefined)
     api<{ item: Contact }>(`/contacts/recipients/${claim.recipientId}`).then((r) => setRecipient(r.item)).catch(() => undefined)
   }, [claim])
-
-  function reset() {
-    setClaim(null)
-    setSel(null)
-    setSender(null)
-    setRecipient(null)
-    setContent("")
-    setQty("1")
-    setNote("")
-    setAck(false)
-    setPreset("standar_gerai")
-    setMethod("qris")
-    setCash("")
-    setErrors({})
-    setMsg(null)
-    setFrozen(null)
-    setIssued(null)
-    setPrints(0)
-    setRound((n) => n + 1)
-  }
+  // The chosen recipient's Mengantar area is the quote destination: no second district entry, no area mismatch.
+  const recipientArea = (recipient as Recipient | null)?.mengantar_area_id ?? null
+  const setArea = f.setArea
+  useEffect(() => {
+    if (recipient && recipientArea) setArea({ id: recipientArea, label: recipient.subdistrict_name ?? "", postalCode: (recipient as Recipient & { postal_code?: string | null }).postal_code ?? null })
+  }, [recipient, recipientArea, setArea])
 
   const card = sel?.card ?? null
   const due = card?.counterDueIdr ?? 0
@@ -277,7 +308,10 @@ export function KasirPage() {
           senderPayoutIdr: cod && sel.req.mode !== "dfod" ? card.senderCodPayableIdr : null,
         }
       : { kind: "idle" }
-  const display = useCustomerDisplay(w.tenant.slug, displayInput)
+  const displayKey = JSON.stringify(displayInput)
+  useEffect(() => {
+    onDisplay(JSON.parse(displayKey) as DisplayInput)
+  }, [displayKey, onDisplay])
 
   const priceChanged = (c: QuoteCard) =>
     new ApiError(409, {
@@ -343,149 +377,158 @@ export function KasirPage() {
     }
   }
 
-  const displayButton = <CustomerDisplayButton display={display} owner={owner} />
-  if (issued) return <IssuedPanel issued={issued} prints={prints} onPrinted={() => setPrints((n) => n + 1)} onNew={reset} actions={displayButton} />
+  if (issued) return <IssuedPanel issued={issued} prints={prints} onPrinted={() => setPrints((n) => n + 1)} onNew={onReset} actions={displayButton} />
 
   const primary = payNow ? `Tandai Lunas & Cetak · ${rp(due)}` : due > 0 ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
   const disabled = pending || !sel || locked || (payNow && method === "tunai" && cashNum < due)
-  const initial = claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : fromQuick
+  const pickedArea = recipient && recipientArea ? null : areaOnly || (recipient && !recipientArea)
 
   return (
     <div className="flex flex-col gap-4 pb-28 lg:pb-0">
-      <PageTitle title="Kiriman Satuan" description="Cek ongkir, pilih ekspedisi, isi pihak, bayar dan cetak — satu layar.">
+      <PageTitle title="Kiriman Satuan" description={<span className="flex flex-col items-start gap-2"><span>Buat resi dari meja kasir dalam satu layar.</span><PickupChip outlet={pos?.outlet} owner={owner} loaded={pos !== null} /></span>}>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start">
-          <ScanBox onClaim={(c) => { reset(); setClaim(c); setContent(c.content) }} />
+          <ScanBox onClaim={onClaim} />
           {displayButton}
         </div>
       </PageTitle>
       {claim ? (
         <p role="status" className="rounded-lg border border-primary/20 bg-accent px-3 py-2 text-sm text-slate-700">Kiriman dari rumah <span className="font-semibold tabular-nums">INV {claim.slug.toUpperCase()}</span>: tujuan, berat, pengirim dan penerima sudah terisi. Timbang ulang paket, lalu pilih ekspedisi.</p>
       ) : null}
-      <div className="grid items-start gap-4 lg:-mb-8 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)] xl:gap-5">
-        <div className="flex min-w-0 flex-col gap-4 lg:pb-8">
-          <QuotePanel
-            key={`${claim?.slug ?? "baru"}-${round}`}
-            initial={initial}
-            autoQuote={!claim && !!fromQuick}
-            select={{ selected: card?.serviceCode ?? null, onSelect: (req, c) => setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c }) }}
-            onStale={() => setSel(null)}
-            onForm={setForm}
-            onQuoted={(req, cards) => {
-              const keep = cards.find((c) => c.available && c.serviceCode === (sel?.card.serviceCode ?? (!claim ? q("layanan") : undefined)))
-              setSel(keep ? { req, card: frozen && frozen.sig === JSON.stringify([req, keep.serviceCode]) ? frozen.card : keep } : null)
-            }}
-          />
-          <Panel className="flex flex-col gap-4" aria-labelledby="pihak-judul">
-            <StepTitle n={3} id="pihak-judul" title="Pengirim, penerima & isi paket" />
-            <div className="grid gap-4 md:grid-cols-2">
-              <PartyStep kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null} />
-              <PartyStep kind="recipients" value={recipient} onPick={setRecipient} error={errors.recipientId} destination={sel?.req ?? null} />
+
+      <div className="grid items-start gap-4 xl:grid-cols-3">
+        <PartyStep n={1} kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null}>
+          {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
+          <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+          {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
+        </PartyStep>
+        <PartyStep n={2} kind="recipients" value={recipient} onPick={setRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area}>
+          {pickedArea ? (
+            <div data-area-only className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+              {recipient && !recipientArea ? <p className="text-xs text-warn">Penerima ini belum punya kecamatan Mengantar. Pilih kecamatan tujuan.</p> : null}
+              <AreaPicker label="Kecamatan tujuan" value={f.area} onChange={f.setArea} error={f.errors.destinationAreaId} />
+              {!recipient ? <p className="text-xs text-muted-foreground">Tarif muncul di bagian 4. Setelah pelanggan setuju, pilih atau tambah penerima di kecamatan ini.</p> : null}
             </div>
-            <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
-            {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
-            <div className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
-                <Field data-invalid={errors.content ? true : undefined}>
-                  <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
-                  <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
-                  {errors.content ? <FieldError>{errors.content}</FieldError> : null}
-                </Field>
-                <Field data-invalid={errors.quantity ? true : undefined}>
-                  <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
-                  <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
-                  {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
-                </Field>
-              </div>
+          ) : !recipient ? (
+            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setAreaOnly(true)}>
+              <MapPinnedIcon aria-hidden /> Cek kecamatan tujuan saja dulu
+            </Button>
+          ) : null}
+        </PartyStep>
+        <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby="paket-judul">
+          <StepTitle n={3} id="paket-judul" title="Detail Paket" />
+          <PackageFields
+            f={f}
+            disclosure
+            extraFilled={!!note}
+            extra={
               <Field data-invalid={errors.deliveryInstruction ? true : undefined}>
                 <FieldLabel htmlFor="instruksi">Instruksi kurir / patokan (opsional)</FieldLabel>
                 <Textarea id="instruksi" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} placeholder="Contoh: Titip ke satpam, rumah pagar hijau" />
                 {errors.deliveryInstruction ? <FieldError>{errors.deliveryInstruction}</FieldError> : null}
               </Field>
+            }
+          >
+            <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
+              <Field data-invalid={errors.content ? true : undefined}>
+                <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
+                <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
+                {errors.content ? <FieldError>{errors.content}</FieldError> : null}
+              </Field>
+              <Field data-invalid={errors.quantity ? true : undefined}>
+                <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
+                <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
+                {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
+              </Field>
+            </div>
+          </PackageFields>
+        </Panel>
+      </div>
+
+      <CourierResults
+        f={f}
+        n={4}
+        empty="Pilih penerima (atau cek kecamatan saja) dan isi berat — ongkir semua ekspedisi muncul otomatis di sini."
+        select={{ selected: card?.serviceCode ?? null, onSelect: (req, c) => setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c }) }}
+      />
+
+      <Panel className="flex flex-col gap-4" aria-labelledby="ringkasan-judul">
+        <StepTitle n={5} id="ringkasan-judul" title="Ringkasan, Pembayaran & Cetak" action={frozen ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">INV {frozen.slug.toUpperCase()}</span> : null} />
+        {card && sel ? (
+          <div className="grid gap-5 lg:grid-cols-2 lg:gap-8">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2.5">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-900">{card.name}{form.areaLabel ? <span className="font-normal text-muted-foreground"> · ke {form.areaLabel}</span> : null}</span>
+                  <span className="block text-xs text-muted-foreground tabular-nums">Berat ditagih {(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg{card.eta ? ` · ${card.eta}` : ""}</span>
+                </span>
+              </div>
+              <dl className="flex flex-col gap-1.5 text-sm tabular-nums">
+                <Row label="Ongkir publish" value={rp(card.publishShippingIdr)} />
+                {sel.req.packingIdr ? <Row label="Packing" value={rp(sel.req.packingIdr)} /> : null}
+                {sel.req.serviceFeeIdr ? <Row label="Biaya layanan loket" value={rp(sel.req.serviceFeeIdr)} /> : null}
+                {cod ? (
+                  <>
+                    <Row label="Ditagih kurir ke penerima" value={rp(card.codCollectionTotalIdr)} />
+                    {sel.req.mode !== "dfod" ? <Row label="Estimasi cair ke pengirim" value={rp(card.senderCodPayableIdr)} /> : null}
+                  </>
+                ) : null}
+                <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-slate-300 pt-2.5">
+                  <dt className="text-sm font-semibold text-slate-900">Bayar di loket</dt>
+                  <dd className="text-2xl font-bold text-slate-950">{rp(due)}</dd>
+                </div>
+              </dl>
+              {owner && card.providerNetShippingIdr !== undefined ? (
+                <dl className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs tabular-nums">
+                  <div><dt className="text-muted-foreground">Modal Mengantar</dt><dd className="text-sm font-medium text-slate-800">{rp(card.providerNetShippingIdr)}</dd></div>
+                  <div><dt className="text-muted-foreground">Estimasi laba</dt><dd className="text-sm font-semibold text-safe">{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
+                </dl>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-4">
+              {due > 0 ? (
+                <div className="flex flex-col gap-2.5">
+                  <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="grid w-full grid-cols-2 gap-1.5 sm:grid-cols-4">
+                    <ToggleGroupItem value="qris" className="w-full">QRIS gerai</ToggleGroupItem>
+                    <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
+                    <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
+                    <ToggleGroupItem value="later" className="w-full">Bayar nanti</ToggleGroupItem>
+                  </ToggleGroup>
+                  {method === "tunai" ? (
+                    <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
+                      <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
+                      <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
+                      <div className="flex flex-wrap gap-1">
+                        {[due, Math.ceil(due / 10000) * 10000, Math.ceil(due / 50000) * 50000, 100000].filter((v, i, a) => v >= due && a.indexOf(v) === i).slice(0, 3).map((v) => (
+                          <button key={v} type="button" onClick={() => setCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-7 md:text-xs">
+                            {v === due ? "Uang pas" : rp(v)}
+                          </button>
+                        ))}
+                      </div>
+                      {cashNum >= due ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
+                      {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
+                    </Field>
+                  ) : null}
+                  {method === "qris" || method === "transfer" ? <p className="text-xs text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
+              )}
               <CheckboxField checked={ack} onCheckedChange={setAck}>
                 Isi paket bukan barang terlarang atau berbahaya
               </CheckboxField>
               {errors.prohibitedAck ? <p role="alert" className="text-xs text-danger">{errors.prohibitedAck}</p> : null}
+              {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
+              {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
+              {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
+              <Button className="hidden w-full lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
+                <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
+              </Button>
             </div>
-          </Panel>
-        </div>
-
-        {/* DEC-242: the summary stays put while the left steps scroll, and scrolls on its own when taller than a laptop screen. */}
-        <div data-pos-summary className="thin-scrollbar flex flex-col gap-4 lg:sticky lg:top-[5.25rem] lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
-          <Panel className="flex flex-col gap-4 p-0 md:p-0" aria-labelledby="ringkasan-judul">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5 md:px-5">
-              <h2 id="ringkasan-judul" className="text-sm font-semibold text-slate-950 md:text-base">Ringkasan & Pembayaran</h2>
-              {frozen ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">INV {frozen.slug.toUpperCase()}</span> : null}
-            </div>
-            {card && sel ? (
-              <div className="flex flex-col gap-4 px-4 pb-4 md:px-5 md:pb-5">
-                <div className="flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-900">{card.name}</span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">Berat ditagih {(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg{card.eta ? ` · ${card.eta}` : ""}</span>
-                  </span>
-                </div>
-                <dl className="flex flex-col gap-1.5 text-sm tabular-nums">
-                  <Row label="Ongkir publish" value={rp(card.publishShippingIdr)} />
-                  {sel.req.packingIdr ? <Row label="Packing" value={rp(sel.req.packingIdr)} /> : null}
-                  {sel.req.serviceFeeIdr ? <Row label="Biaya layanan loket" value={rp(sel.req.serviceFeeIdr)} /> : null}
-                  {cod ? (
-                    <>
-                      <Row label="Ditagih kurir ke penerima" value={rp(card.codCollectionTotalIdr)} />
-                      {sel.req.mode !== "dfod" ? <Row label="Estimasi cair ke pengirim" value={rp(card.senderCodPayableIdr)} /> : null}
-                    </>
-                  ) : null}
-                  <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-slate-300 pt-2.5">
-                    <dt className="text-sm font-semibold text-slate-900">Bayar di loket</dt>
-                    <dd className="text-lg font-bold text-slate-950">{rp(due)}</dd>
-                  </div>
-                </dl>
-                {owner && card.providerNetShippingIdr !== undefined ? (
-                  <dl className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs tabular-nums">
-                    <div><dt className="text-muted-foreground">Modal Mengantar</dt><dd className="text-sm font-medium text-slate-800">{rp(card.providerNetShippingIdr)}</dd></div>
-                    <div><dt className="text-muted-foreground">Estimasi laba</dt><dd className="text-sm font-semibold text-safe">{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
-                  </dl>
-                ) : null}
-                {due > 0 ? (
-                  <div className="flex flex-col gap-2.5">
-                    <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="grid w-full grid-cols-2 gap-1.5">
-                      <ToggleGroupItem value="qris" className="w-full">QRIS gerai</ToggleGroupItem>
-                      <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
-                      <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
-                      <ToggleGroupItem value="later" className="w-full">Bayar nanti</ToggleGroupItem>
-                    </ToggleGroup>
-                    {method === "tunai" ? (
-                      <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
-                        <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
-                        <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
-                        <div className="flex flex-wrap gap-1">
-                          {[due, Math.ceil(due / 10000) * 10000, Math.ceil(due / 50000) * 50000, 100000].filter((v, i, a) => v >= due && a.indexOf(v) === i).slice(0, 3).map((v) => (
-                            <button key={v} type="button" onClick={() => setCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-7 md:text-xs">
-                              {v === due ? "Uang pas" : rp(v)}
-                            </button>
-                          ))}
-                        </div>
-                        {cashNum >= due ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
-                        {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
-                      </Field>
-                    ) : null}
-                    {method === "qris" || method === "transfer" ? <p className="text-xs text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
-                )}
-                {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
-                {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
-                {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
-                <Button className="hidden w-full lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
-                  <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
-                </Button>
-              </div>
-            ) : (
-              <p className="px-4 pb-5 text-sm text-muted-foreground md:px-5">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
-            )}
-          </Panel>
-        </div>
-      </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
+        )}
+      </Panel>
       {card ? (
         <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur lg:hidden">
           <span className="flex flex-col text-sm tabular-nums"><span className="text-xs text-muted-foreground">Bayar di loket</span><strong className="text-base md:text-sm">{rp(due)}</strong></span>
