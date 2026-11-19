@@ -63,7 +63,7 @@ export type ListRow = {
   estimated_margin_idr: number | null
 }
 
-function filters(q: ListQuery): { where: string; params: SqlStorageValue[] } {
+function filters(q: ListQuery, now: number): { where: string; params: SqlStorageValue[] } {
   const parts: string[] = []
   const params: SqlStorageValue[] = []
   parts.push(`s.created_at >= ? AND s.created_at < ?`)
@@ -75,7 +75,7 @@ function filters(q: ListQuery): { where: string; params: SqlStorageValue[] } {
   if (q.printed !== "semua") parts.push(q.printed === "sudah" ? "s.print_count > 0" : "s.print_count = 0")
   if (q.stuckDays) {
     parts.push(`${MOVING} AND COALESCE(s.last_provider_event_at, s.issued_at, s.created_at) <= ?`)
-    params.push(Date.now() - q.stuckDays * 86_400_000)
+    params.push(now - q.stuckDays * 86_400_000)
   }
   const term = q.q.trim()
   if (term) {
@@ -92,10 +92,12 @@ function filters(q: ListQuery): { where: string; params: SqlStorageValue[] } {
 
 const FROM = "FROM shipments s LEFT JOIN recipient_contacts r ON r.id = s.recipient_contact_id LEFT JOIN sender_contacts c ON c.id = s.sender_contact_id LEFT JOIN quote_snapshots q ON q.id = s.quote_snapshot_id"
 
-/** Counts per tab under the same search/period/courier/print filters (badges stay honest while filtering). */
+/** Counts per tab under the same search/period/courier/print filters (badges stay honest while filtering). One `now`
+ * per call: the `kendala` deadlines and the `Paket Macet` cut-off use the same millisecond. */
 export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
-  const f = filters(q)
-  const where = tabWhere(Date.now())
+  const now = Date.now()
+  const f = filters(q, now)
+  const where = tabWhere(now)
   const cols = TABS.map((t) => `SUM(CASE WHEN ${where[t]} THEN 1 ELSE 0 END) AS "${t}"`).join(", ")
   const row = sql.exec<Record<Tab, number | null>>(`SELECT ${cols} ${FROM} WHERE ${f.where}`, ...f.params).one()
   return Object.fromEntries(TABS.map((t) => [t, row[t] ?? 0])) as Record<Tab, number>
@@ -103,8 +105,9 @@ export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
 
 /** One page, newest first. Cursor = `<created_at>:<slug>` of the last row (keyset, stable under inserts). */
 export function listShipments(sql: SqlStorage, q: ListQuery): { items: ListRow[]; nextCursor: string | null } {
-  const f = filters(q)
-  const parts = [`(${tabWhere(Date.now())[q.tab]})`, f.where]
+  const now = Date.now()
+  const f = filters(q, now)
+  const parts = [`(${tabWhere(now)[q.tab]})`, f.where]
   const params = [...f.params]
   if (q.cursor) {
     const m = /^(\d{1,16}):([0-9a-z]{7})$/.exec(q.cursor)

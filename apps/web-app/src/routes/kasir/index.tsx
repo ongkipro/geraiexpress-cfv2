@@ -272,6 +272,13 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
   }, [claim])
   // The chosen recipient's Mengantar area is the quote destination: no second district entry, no area mismatch.
   const recipientArea = (recipient as Recipient | null)?.mengantar_area_id ?? null
+  // Choosing another recipient (or `Ganti`) never keeps the previous recipient's district and rates: a recipient without
+  // a Mengantar area, or none at all outside the walk-in district mode, empties sections 4 and 5.
+  function pickRecipient(c: Contact | null) {
+    if (c) setAreaOnly(false)
+    if ((c && !(c as Recipient).mengantar_area_id) || (!c && !areaOnly)) f.clearQuoteDestination()
+    setRecipient(c)
+  }
   const setArea = f.setArea
   useEffect(() => {
     if (recipient && recipientArea) setArea({ id: recipientArea, label: recipient.subdistrict_name ?? "", postalCode: (recipient as Recipient & { postal_code?: string | null }).postal_code ?? null })
@@ -401,7 +408,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
           <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
         </PartyStep>
-        <PartyStep n={2} kind="recipients" value={recipient} onPick={setRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area}>
+        <PartyStep n={2} kind="recipients" value={recipient} onPick={pickRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area}>
           {pickedArea ? (
             <div data-area-only className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
               {recipient && !recipientArea ? <p className="text-xs text-warn">Penerima ini belum punya kecamatan Mengantar. Pilih kecamatan tujuan.</p> : null}

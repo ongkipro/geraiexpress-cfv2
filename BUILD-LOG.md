@@ -1325,3 +1325,17 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Verification: `check:fast`, unit (incl. `xlsx-reader`), worker `listing`/`minisite`/`dispatch`/`bulk`, e2e
   `quote`/`checkout`/`pos-guards`/`customer-display`/`courier-logos`/`bulk`/`kiriman`/`minisite`/`admin-shell`/
   `masking`, admin-geometry 0 fail on five screens, mutations M1–M7 red (`docs/evidence/DEC-251/ui-gates.txt`).
+- Supervisor pre-review (run after `90c51b2`), four gaps closed:
+  1. `useQuoteForm.clearQuoteDestination()`: `Ganti` on the recipient (outside the walk-in mode) or a recipient without
+     a Mengantar area empties sections 4 and 5. e2e `checkout`: pick → rates → `Ganti` → `Belum dipilih`; mutation P1
+     red.
+  2. A new request forgets the attempted key, so A → B → back to A while A is in flight re-quotes A. There is no
+     dedicated regression: it needs a held in-flight request in a sub-500 ms edit window.
+  3. `xlsx-reader`:
+     - the full central-directory record is bounds-checked before its name is read;
+     - one inflate budget covers the whole file;
+     - Excel's `628…` phone numbers become `08…`.
+
+     Unit tests now number 14. Mutations P3 (total cap, CD bounds) red.
+  4. Listing uses one `now` per call for the `kendala` deadlines and the stuck cut-off.
+

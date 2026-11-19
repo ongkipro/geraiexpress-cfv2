@@ -21,6 +21,9 @@ Mutations (all red, restored with SHA-256 verification):
   M5 handoff accepts any destId        → Vitest minisite
   M6 xlsx phone 0-prefix removed       → unit xlsx-reader (2 cases)
   M7 cargo no longer locks Non-COD     → e2e bulk
+  P1 Ganti keeps the old district      → e2e checkout (supervisor pre-review)
+  P3 per-entry inflate cap only        → unit xlsx-reader
+  P3 no central-directory bounds check → unit xlsx-reader
 
 geometry report excerpt:
 out-empty.md:URL: http://app.geraiexpress.localhost:8798/kasir

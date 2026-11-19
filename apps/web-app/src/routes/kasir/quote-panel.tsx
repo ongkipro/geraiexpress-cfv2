@@ -189,9 +189,11 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
   const generation = useRef(0)
   const lastSubmit = useRef(0)
   const attempted = useRef<string | null>(null)
-  // Editing the form supersedes any quote still in flight.
+  // Editing the form supersedes any quote still in flight; a different request also forgets the attempted key, so
+  // going A → B → back to A while A was in flight re-quotes A (its answer was discarded as superseded).
   useEffect(() => {
     generation.current++
+    if (attempted.current && attempted.current !== currentKey) attempted.current = null
   }, [currentKey])
   const volumetricGram = dims.l && dims.w && dims.h ? (Number(dims.l) * Number(dims.w) * Number(dims.h)) / 6 : 0
   async function submit(e?: FormEvent) {
@@ -227,6 +229,18 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
     }
   }
 
+  /** Forget the destination and every result of it (another recipient, `Ganti`): section 4 and 5 go back to empty. */
+  function clearQuoteDestination() {
+    generation.current++
+    attempted.current = null
+    setArea(null)
+    setData(null)
+    setReq(null)
+    setErrors({})
+    setError(null)
+    hooksRef.current.onStale?.()
+  }
+
   const ready = /^[0-9a-f]{24}$/.test(current.destinationAreaId) && gram >= 10 && (kind !== "cod_goods" || (current.codGoodsIdr ?? 0) >= 10_000)
   useEffect(() => {
     if (!hooks.auto || !pos || !ready || currentKey === quotedKey || currentKey === attempted.current) return
@@ -243,7 +257,7 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
   return {
     owner, pos, kind, setKind, feeMode, setFeeMode, area, setArea, gram, setGram, dims, setDims, goods, setGoods, declared, setDeclared, dg, setDg,
     tab, setTab, showMargin, toggleMargin, packing, setPacking, serviceFee, setServiceFee, feeAllowed, mode,
-    data, req, errors, error, loading, stale, ready, submit, cards, counts,
+    data, req, errors, error, loading, stale, ready, submit, cards, counts, clearQuoteDestination,
   }
 }
 export type QuoteForm = ReturnType<typeof useQuoteForm>

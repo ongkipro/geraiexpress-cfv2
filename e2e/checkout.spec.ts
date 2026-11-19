@@ -22,6 +22,13 @@ test("Checkout: kasir → INV → lunas tunai → resi terbit (< 45 s)", async (
   await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
   await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
   await page.getByRole("radio", { name: /^J&T Express/ }).click()
+  // Supervisor pre-review: `Ganti` on the recipient drops its district, the rates and the chosen courier at once.
+  await page.locator('[aria-labelledby="pihak-recipients"]').getByRole("button", { name: "Ganti" }).click()
+  await expect(page.getByRole("radiogroup", { name: "Pilih ekspedisi" })).toHaveCount(0)
+  await expect(page.locator('[aria-labelledby="pilih-ekspedisi"]')).toContainText("Belum dipilih")
+  await expect(page.getByText("Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.")).toBeVisible()
+  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "true")
   await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
   await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()

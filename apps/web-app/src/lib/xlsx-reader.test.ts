@@ -119,7 +119,8 @@ describe("readXlsxToCsv", () => {
         `<row r="3"><c r="A3"${n("6285712348821")}<c r="B3"${n("1.5E+20")}<c r="C3"${n("2.5")}<c r="D3"${n("1000.0")}</row>`,
     )
     const csv = await readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml }])))
-    expect(csv.split("\r\n").slice(1)).toEqual(["08123456789,8123456789,0812345678901,8123456789", "6285712348821,150000000000000000000,2.5,1000"])
+    // `628…` (country code, as Excel keeps it) is a phone too: `6285712348821` → `085712348821` (supervisor pre-review).
+    expect(csv.split("\r\n").slice(1)).toEqual(["08123456789,8123456789,0812345678901,8123456789", "085712348821,150000000000000000000,2.5,1000"])
   })
 
   it("quotes commas, quotes and newlines (RFC 4180) and the server CSV parser reads them back", async () => {
@@ -147,6 +148,31 @@ describe("readXlsxToCsv", () => {
     const ok = await readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(rows(201)) }])))
     expect(ok.split("\r\n")).toHaveLength(201)
     await expect(readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(rows(202)) }])))).rejects.toThrow("Maksimal 200 baris data per unggahan.")
+  })
+
+  it("rejects a central-directory record that runs past the end of the file", async () => {
+    const buf = new Uint8Array(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(`<row r="1"><c r="A1"${inline("a")}</row>`) }])))
+    const dv = new DataView(buf.buffer)
+    const eocd = buf.length - 22
+    const cd = dv.getUint32(eocd + 16, true)
+    // The last record's extra-field length points far beyond the buffer.
+    let p = cd
+    for (let i = 0; i < dv.getUint16(eocd + 10, true) - 1; i++) p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true)
+    dv.setUint16(p + 30, 0xffff, true)
+    await expect(readXlsxToCsv(buf.buffer)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
+  })
+
+  it("caps the inflated size of the whole file, not only each entry", async () => {
+    // Two entries of ~17 MB each (well under the per-entry cap, highly compressible) exceed the shared budget together.
+    const pad = `<!--${" ".repeat(17 * 1024 * 1024)}-->`
+    const xml = sheetXml(`<row r="1"><c r="A1"${inline("a")}</row>${pad}`)
+    const files = workbook([{ name: "S", target: "worksheets/sheet1.xml", xml }])
+    files.push({ name: "xl/sharedStrings.xml", text: `<?xml version="1.0"?><sst ${NS}><si><t>x</t></si></sst>${pad}` })
+    const buf = await zip(files)
+    expect(buf.byteLength).toBeLessThan(1_048_576)
+    await expect(readXlsxToCsv(buf)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
+    // Either half alone still reads.
+    expect(await readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml }])))).toBe("a")
   })
 
   it("rejects a buffer that is not an xlsx ZIP", async () => {

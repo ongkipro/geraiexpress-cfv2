@@ -60,6 +60,8 @@ export function readZip(bytes: Uint8Array): Map<string, Entry> {
   const count = u16(eocd + 10)
   let p = u32(eocd + 16)
   const entries = new Map<string, Entry>()
+  // One inflate budget for the whole file: workbook + rels + shared strings + sheet together stay ≤ MAX_INFLATED.
+  const spent = { bytes: 0 }
   for (let n = 0; n < count; n++) {
     if (p + 46 > bytes.length || u32(p) !== 0x02014b50) fail(XLSX_INVALID)
     const flags = u16(p + 8)
@@ -67,23 +69,30 @@ export function readZip(bytes: Uint8Array): Map<string, Entry> {
     const size = u32(p + 20)
     const nameLen = u16(p + 28)
     const local = u32(p + 42)
+    // The whole central-directory record (name + extra + comment) must lie inside the file before it is read.
+    const next = p + 46 + nameLen + u16(p + 30) + u16(p + 32)
+    if (next > bytes.length) fail(XLSX_INVALID)
     const name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen))
-    p += 46 + nameLen + u16(p + 30) + u16(p + 32)
+    p = next
     if (local + 30 > bytes.length || u32(local) !== 0x04034b50) fail(XLSX_INVALID)
     const start = local + 30 + u16(local + 26) + u16(local + 28)
     if (start + size > bytes.length) fail(XLSX_INVALID)
     const data = bytes.subarray(start, start + size)
     entries.set(name.replace(/^\/+/, "").toLowerCase(), async () => {
       if (flags & 1) fail(XLSX_INVALID) // encrypted entry
-      if (method === 0) return data
+      if (method === 0) {
+        spent.bytes += data.byteLength
+        if (spent.bytes > MAX_INFLATED) fail(XLSX_INVALID)
+        return data
+      }
       if (method !== 8) fail(XLSX_INVALID)
-      return inflateRaw(data)
+      return inflateRaw(data, spent)
     })
   }
   return entries
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+async function inflateRaw(data: Uint8Array, spent: { bytes: number }): Promise<Uint8Array> {
   const reader = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -91,12 +100,13 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
     const { done, value } = await reader.read()
     if (done) break
     total += value.byteLength
-    if (total > MAX_INFLATED) {
+    if (spent.bytes + total > MAX_INFLATED) {
       await reader.cancel()
       fail(XLSX_INVALID)
     }
     chunks.push(value)
   }
+  spent.bytes += total
   const out = new Uint8Array(total)
   let at = 0
   for (const c of chunks) {
@@ -200,6 +210,9 @@ function cellValue(attrs: string, inner: string, shared: string[]): Cell {
 /** Header names that mark a phone column (No HP, Telepon, Phone, WA, WhatsApp). */
 const PHONE_HEADER = /telepon|phone|whatsapp|(?<![a-z])(?:hp|wa|telp)(?![a-z])/i
 
+/** Excel drops a phone's leading 0: `8123456789` → `08123456789`, and `628123456789` (country code) → `08123456789`. */
+export const phoneOf = (t: string) => (/^8\d{8,11}$/.test(t) ? `0${t}` : /^628\d{8,11}$/.test(t) ? `0${t.slice(2)}` : t)
+
 function sheetRows(xml: string, shared: string[]): string[][] {
   const rows: Cell[][] = []
   // Rows come in ascending order (the schema requires it); blank rows are dropped, so their `r` index is not needed.
@@ -220,7 +233,7 @@ function sheetRows(xml: string, shared: string[]): string[][] {
   }
   const phoneCols = new Set((rows[0] ?? []).flatMap((c, i) => (PHONE_HEADER.test(c.text) ? [i] : [])))
   return rows.map((row, ri) =>
-    row.map((c, ci) => (ri > 0 && c.numeric && phoneCols.has(ci) && /^8\d{8,11}$/.test(c.text) ? `0${c.text}` : c.text)),
+    row.map((c, ci) => (ri > 0 && c.numeric && phoneCols.has(ci) ? phoneOf(c.text) : c.text)),
   )
 }
 
