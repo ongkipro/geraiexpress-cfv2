@@ -157,3 +157,56 @@ test("Paket Massal: kargo hanya Non-COD; unggah .xlsx mengembalikan 0 di No HP",
   await expect(page.getByText("Kecamatan lebih dari satu, pilih yang benar")).toBeVisible({ timeout: 20_000 })
   await expect(page.getByLabel("No HP")).toHaveValue("085712348821")
 })
+
+// Sol R1-4 / R1-7: a replacement upload wins over a slower earlier one, a rejected replacement drops the old file,
+// and an empty Cargo tab keeps no hidden Reguler choice (Non-COD forced, `Periksa Baris` off).
+test("Paket Massal: berkas pengganti selalu menang; tab Cargo kosong tanpa pilihan tersembunyi", async ({ page, context, request }) => {
+  await seedMassal(context, request)
+  // `lambat.xlsx` takes 1.5 s to read, so it is still in flight when the next file is picked.
+  await page.addInitScript(() => {
+    const orig = File.prototype.arrayBuffer
+    File.prototype.arrayBuffer = function (this: File) {
+      const p = orig.call(this)
+      return this.name === "lambat.xlsx" ? p.then((b) => new Promise<ArrayBuffer>((r) => setTimeout(() => r(b), 1500))) : p
+    }
+  })
+  // Every cargo courier switched off for this gerai: the Cargo tab is empty.
+  await page.route("**/api/app/bulk/services", async (route) => {
+    const res = await route.fetch()
+    const j = (await res.json()) as { data: { items: Array<{ cargo: boolean }> } }
+    j.data.items = j.data.items.filter((i) => !i.cargo)
+    await route.fulfill({ response: res, json: j })
+  })
+  await page.goto(`${APP}/kasir/multi`)
+  await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
+  const group = page.getByRole("radiogroup", { name: "Ekspedisi untuk semua baris" })
+  await group.getByRole("radio", { name: "J&T Express" }).click()
+  await page.getByRole("button", { name: "COD, fee ditanggung pembeli" }).click()
+  await page.getByRole("button", { name: "Cargo ≥ 5 kg (Non-COD)" }).click()
+  await expect(group.getByRole("radio")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Tanpa COD" })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("button", { name: "COD, fee ditanggung pembeli" })).toBeDisabled()
+  await expect(page.getByText("Kargo hanya Non-COD.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Periksa Baris" })).toBeDisabled()
+  await page.getByRole("button", { name: "Reguler", exact: true }).click()
+  await group.getByRole("radio", { name: "J&T Express" }).click()
+  await expect(page.getByRole("button", { name: "Periksa Baris" })).toBeEnabled()
+
+  const input = page.locator('input[type="file"]')
+  await input.setInputFiles({ name: "lambat.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: XLSX })
+  await expect(page.getByRole("button", { name: "Membaca berkas…" })).toBeDisabled()
+  const csv = "Nama Penerima,No HP,Alamat,Kecamatan/Kota,Berat (gram)\r\nDewi Lestari,081311112222,Jl. Dago No. 9,Coblong,500"
+  await input.setInputFiles({ name: "cepat.csv", mimeType: "text/csv", buffer: Buffer.from(csv) })
+  await expect(page.getByText("cepat.csv")).toBeVisible()
+  await page.waitForTimeout(1800)
+  await expect(page.getByText("cepat.csv")).toBeVisible()
+  await expect(page.getByText("lambat.xlsx")).toHaveCount(0)
+
+  // A rejected replacement drops the previous file: nothing of `cepat.csv` is sent anymore.
+  await input.setInputFiles({ name: "catatan.txt", mimeType: "text/plain", buffer: Buffer.from("halo") })
+  await expect(page.getByText("Pilih berkas Excel .xlsx atau .csv.")).toBeVisible()
+  await expect(page.getByText("cepat.csv")).toHaveCount(0)
+  const sent = page.waitForRequest((r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/app/bulk")
+  await page.getByRole("button", { name: "Periksa Baris" }).click()
+  expect(((await sent).postDataJSON() as { csv?: string }).csv).toBeUndefined()
+})

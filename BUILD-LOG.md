@@ -1338,4 +1338,21 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 
      Unit tests now number 14. Mutations P3 (total cap, CD bounds) red.
   4. Listing uses one `now` per call for the `kendala` deadlines and the stuck cut-off.
+- GPT-6.2 Sol R1 (4 P1 + 5 P2) fixed (`docs/review/dec-251/DISPOSITION.md`):
+  - checkout: parties lock while pending; sender, recipient and a matching area are required before freeze or
+    payment; a `checkoutGen` stops superseded presses;
+  - invalid weights become 0 g within the Worker bounds;
+  - the CSV byte cap is applied field by field;
+  - upload replacement is latest-wins with a reading lock;
+  - the auto-quote timer re-checks its key, and rows are inert while loading;
+  - the EOCD directory span is enforced and flags/methods are checked at scan;
+  - an empty Cargo tab is Non-COD with no hidden service;
+  - one `now` per list RPC and export;
+  - `loadMore` has a generation guard.
+
+  Gotchas:
+  1. Re-quoting after an edit clears `sel`, which hid a missing freeze guard. The test now checks the section 5 INV
+     badge (shown whenever an INV is frozen).
+  2. The R1-6 span check and the end-of-walk check overlap; a self-consistent CD overlapping the EOCD separates them.
+  3. The R1-7 guards are redundant by design (a double mutation is red).
 

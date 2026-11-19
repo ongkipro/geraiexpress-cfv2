@@ -43,4 +43,31 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   await page.getByRole("button", { name: "Hapus Filter" }).click()
   await expect(page).not.toHaveURL(/macet=/)
   await expect(page.getByRole("link", { name: `INV ${slug.toUpperCase()}` }).first()).toBeVisible()
+
+  // Sol R1-9: a `Muat Lebih Banyak` page that answers after the `macet` filter changed is dropped, never appended.
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  let sample: Record<string, unknown> | null = null
+  await page.route("**/api/app/shipments?*", async (route) => {
+    const url = route.request().url()
+    if (url.includes("cursor=")) {
+      await held
+      return route.fulfill({ json: { ok: true, data: { items: [{ ...sample, slug: "zzzzzzz", awb_number: null }], nextCursor: null, counts: {} } } })
+    }
+    const res = await route.fetch()
+    const j = (await res.json()) as { data: { items: Array<Record<string, unknown>>; nextCursor: string | null } }
+    sample ??= j.data.items[0] ?? null
+    if (!url.includes("macet=")) j.data.nextCursor = "1:abcdefg"
+    return route.fulfill({ response: res, json: j })
+  })
+  await page.goto(`${APP}/kiriman`)
+  await page.getByRole("button", { name: "Muat Lebih Banyak" }).click()
+  await page.getByRole("combobox", { name: "Pergerakan paket" }).click()
+  await page.getByRole("option", { name: "Macet ≥ 3 hari" }).click()
+  await expect(page.getByText("Tidak ada yang cocok")).toBeVisible()
+  release()
+  await page.waitForTimeout(800)
+  await expect(page.getByRole("link", { name: "INV ZZZZZZZ" })).toHaveCount(0)
+  await expect(page.getByText("Tidak ada yang cocok")).toBeVisible()
+  await page.unroute("**/api/app/shipments?*")
 })

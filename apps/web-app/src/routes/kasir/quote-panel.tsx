@@ -9,6 +9,7 @@ import { Input } from "../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
 import { usePosConfig, type PosConfig } from "../../lib/pos-config"
+import { isWeightInBounds } from "@gx/domain/weight"
 import { ErrorState, LoadingState } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { CheckboxField, Panel } from "../../components/admin/page"
@@ -189,6 +190,9 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
   const generation = useRef(0)
   const lastSubmit = useRef(0)
   const attempted = useRef<string | null>(null)
+  // The auto-quote timer re-reads these when it fires (Sol R1-5), and a manual submit cancels it.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const keys = useRef({ current: "", quoted: null as string | null })
   // Editing the form supersedes any quote still in flight; a different request also forgets the attempted key, so
   // going A → B → back to A while A was in flight re-quotes A (its answer was discarded as superseded).
   useEffect(() => {
@@ -198,6 +202,8 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
   const volumetricGram = dims.l && dims.w && dims.h ? (Number(dims.l) * Number(dims.w) * Number(dims.h)) / 6 : 0
   async function submit(e?: FormEvent) {
     e?.preventDefault()
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
     const mine = ++generation.current
     lastSubmit.current = mine
     setLoading(true)
@@ -241,11 +247,24 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
     hooksRef.current.onStale?.()
   }
 
-  const ready = /^[0-9a-f]{24}$/.test(current.destinationAreaId) && gram >= 10 && (kind !== "cod_goods" || (current.codGoodsIdr ?? 0) >= 10_000)
+  // Same 10–100,000 g bounds as the Worker (Sol R1-2): a cleared or out-of-range weight is never quoted.
+  const ready = /^[0-9a-f]{24}$/.test(current.destinationAreaId) && isWeightInBounds(gram) && (kind !== "cod_goods" || (current.codGoodsIdr ?? 0) >= 10_000)
+  useLayoutEffect(() => {
+    keys.current = { current: currentKey, quoted: quotedKey }
+  })
   useEffect(() => {
     if (!hooks.auto || !pos || !ready || currentKey === quotedKey || currentKey === attempted.current) return
-    const t = setTimeout(() => void submit(), AUTO_QUOTE_MS)
-    return () => clearTimeout(t)
+    const key = currentKey
+    timer.current = setTimeout(() => {
+      timer.current = null
+      // Re-check when it fires: a manual `Cek Ongkir` (or an edit) in the meantime already covers this request.
+      if (keys.current.current !== key || keys.current.quoted === key || attempted.current === key) return
+      void submit()
+    }, AUTO_QUOTE_MS)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hooks.auto, pos, ready, currentKey, quotedKey])
 
@@ -460,7 +479,7 @@ export function CourierResults({
                     aria-label={select ? "Pilih ekspedisi" : "Daftar ekspedisi"}
                     className={cn("flex flex-col gap-1.5", f.loading && "opacity-60")}
                     onKeyDown={(e) => {
-                      if (!select || !req || stale || !["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key)) return
+                      if (!select || !req || stale || f.loading || !["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key)) return
                       e.preventDefault()
                       // WAI-ARIA radio group: arrows move from the FOCUSED row (wrapping) and select it.
                       const ok = cards.filter((x) => x.available)
@@ -475,7 +494,8 @@ export function CourierResults({
                     }}
                   >
                     {cards.map((c) => {
-                      const selectable = !!select && c.available && !!req && !stale
+                      // Sol R1-5: rows act only on a settled, current quote (never while a refresh is loading).
+                      const selectable = !!select && c.available && !!req && !stale && !f.loading
                       const checked = select?.selected === c.serviceCode
                       // One tab stop per group: the selected row when it is in THIS category, else the first available.
                       const tabStop = cards.find((x) => x.available && x.serviceCode === select?.selected)?.serviceCode ?? cards.find((x) => x.available)?.serviceCode
@@ -549,7 +569,7 @@ export function CourierResults({
                               </span>
                             ) : null
                           ) : onChoose && c.available && req && !stale ? (
-                            <Button type="button" size="sm" variant="outline" className="col-span-2 w-full md:col-span-1 md:w-auto md:justify-self-end" disabled={choosing !== null} onClick={async () => { setChoosing(c.serviceCode); try { await onChoose(req, c, { area: f.area, packingName: f.packing, serviceFee: f.serviceFee }) } finally { setChoosing(null) } }}>
+                            <Button type="button" size="sm" variant="outline" className="col-span-2 w-full md:col-span-1 md:w-auto md:justify-self-end" disabled={choosing !== null || f.loading} onClick={async () => { setChoosing(c.serviceCode); try { await onChoose(req, c, { area: f.area, packingName: f.packing, serviceFee: f.serviceFee }) } finally { setChoosing(null) } }}>
                               {choosing === c.serviceCode ? "Memproses…" : (chooseLabel ?? "Pilih")}
                             </Button>
                           ) : null}

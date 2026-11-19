@@ -107,7 +107,7 @@ function RecipientRisk({ phone }: { phone: string }) {
 }
 
 /** The chosen contact as a provenance card (name, phone, WA / area check), with `Ganti`. */
-function ChosenParty({ c, kind, destinationId, onClear, onChange }: { c: Contact; kind: "senders" | "recipients"; destinationId: string | null; onClear: () => void; onChange: (c: Contact) => void }) {
+function ChosenParty({ c, kind, destinationId, onClear, onChange, locked = false }: { c: Contact; kind: "senders" | "recipients"; destinationId: string | null; onClear: () => void; onChange: (c: Contact) => void; locked?: boolean }) {
   const r = c as Recipient
   const areaMismatch = kind === "recipients" && destinationId && r.mengantar_area_id && r.mengantar_area_id !== destinationId
   const phone = c.true_phone ?? c.phone ?? ""
@@ -119,7 +119,7 @@ function ChosenParty({ c, kind, destinationId, onClear, onChange }: { c: Contact
           <span className="truncate text-xs text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}</span>
           {kind === "recipients" && c.street_address ? <span className="line-clamp-2 text-xs text-muted-foreground">{c.street_address}</span> : null}
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={onClear}>Ganti</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClear} disabled={locked}>Ganti</Button>
       </div>
       {kind === "senders" ? (c.wa_verified_at ? <span className="flex items-center gap-1.5 text-xs font-medium text-safe"><CheckCircle2Icon aria-hidden className="size-3.5" />WhatsApp terverifikasi di loket</span> : <VerifySender c={c} onVerified={onChange} />) : null}
       {areaMismatch ? <p role="alert" className="text-xs font-medium text-danger">Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.</p> : null}
@@ -154,7 +154,7 @@ function VerifySender({ c, onVerified }: { c: Contact; onVerified: (c: Contact) 
   )
 }
 
-function PartyStep({ kind, value, onPick, error, destination, n, initialArea, children }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null; n: number; initialArea?: Area | null; children?: ReactNode }) {
+function PartyStep({ kind, value, onPick, error, destination, n, initialArea, locked = false, children }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null; n: number; initialArea?: Area | null; locked?: boolean; children?: ReactNode }) {
   const w = useWorkspace()
   const [adding, setAdding] = useState(false)
   const label = kind === "senders" ? "Pengirim" : "Penerima"
@@ -166,8 +166,8 @@ function PartyStep({ kind, value, onPick, error, destination, n, initialArea, ch
   }
   return (
     <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
-      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
-      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} /> : <PartyPicker kind={kind} value={value} onPick={onPick} limit={4} />}
+      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
+      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} locked={locked} /> : <PartyPicker kind={kind} value={value} onPick={onPick} limit={4} />}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
       <Sheet open={adding} onOpenChange={setAdding}>
@@ -249,10 +249,17 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
   const [prints, setPrints] = useState(0)
   // Labels the customer display shows (TASK-701): destination area and packing name from the quote form.
   const [form, setForm] = useState<{ areaLabel: string | null; packingName: string }>({ areaLabel: null, packingName: "" })
+  // Sol R1-1: every invalidation (an edit that stales the quote, another recipient, `Ganti`) bumps this; a freeze
+  // answer that arrives after it never republishes the checkout (no `setFrozen` / `setSel` from a superseded press).
+  const checkoutGen = useRef(0)
+  const invalidate = () => {
+    checkoutGen.current++
+    setSel(null)
+  }
   const initial = claim ? { area: { id: claim.destination.id, label: claim.destination.label, postalCode: null }, gram: claim.weightGram, codGoodsIdr: claim.codGoodsIdr } : fromQuick
   const f = useQuoteForm(initial, {
     auto: true,
-    onStale: () => setSel(null),
+    onStale: invalidate,
     onForm: setForm,
     onQuoted: (req, cards) => {
       const want = sel?.card.serviceCode ?? preselect.current
@@ -275,6 +282,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
   // Choosing another recipient (or `Ganti`) never keeps the previous recipient's district and rates: a recipient without
   // a Mengantar area, or none at all outside the walk-in district mode, empties sections 4 and 5.
   function pickRecipient(c: Contact | null) {
+    checkoutGen.current++
     if (c) setAreaOnly(false)
     if ((c && !(c as Recipient).mengantar_area_id) || (!c && !areaOnly)) f.clearQuoteDestination()
     setRecipient(c)
@@ -333,7 +341,19 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
     setErrors({})
     setMsg(null)
     let inv = frozen
+    const gen = checkoutGen.current
+    // A press superseded while it waited (the quote went stale, the recipient changed) stops without touching state.
+    const superseded = () => {
+      if (gen === checkoutGen.current) return false
+      setMsg("Data kiriman berubah saat diproses. Periksa ringkasan lalu tekan lagi.")
+      return true
+    }
     try {
+      // Sol R1-1: both parties, and a recipient in the quoted district, before any INV, payment or dispatch.
+      if (!sender) throw new ApiError(422, { code: "NOT_READY", message: "Pilih pengirim dulu.", field_errors: { senderId: "Pilih pengirim." } })
+      if (!recipient) throw new ApiError(422, { code: "NOT_READY", message: "Pilih penerima dulu.", field_errors: { recipientId: "Pilih penerima." } })
+      const toArea = (recipient as Recipient).mengantar_area_id
+      if (toArea && toArea !== sel.req.destinationAreaId) throw new ApiError(422, { code: "NOT_READY", message: "Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.", field_errors: { recipientId: "Kecamatan penerima berbeda dengan tujuan ongkir." } })
       // COD and label masking need a counter-verified WhatsApp: say so before any money is recorded.
       if (sender && !sender.wa_verified_at && (cod || preset !== "standar_gerai")) {
         throw new ApiError(422, { code: "NOT_READY", message: "Verifikasi WhatsApp pengirim dulu (tombol di kartu pengirim).", field_errors: { senderId: "Kiriman COD atau label masking butuh WhatsApp pengirim yang sudah diverifikasi." } })
@@ -341,6 +361,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       if (!inv || inv.sig !== sig) {
         if (inv && (inv.paid || claim)) throw new ApiError(409, { code: "LOCKED", message: `Pembayaran atau kode QR sudah tercatat di INV ${inv.slug.toUpperCase()}. Lanjutkan di halaman kiriman.`, field_errors: {} })
         const r = await api<{ slug: string; card: QuoteCard }>("/quotes/freeze", { body: { ...sel.req, serviceCode: sel.card.serviceCode, ...(claim ? { slug: claim.slug } : {}) } })
+        if (superseded()) return
         const nextSig = JSON.stringify([sel.req, r.card.serviceCode])
         inv = { slug: r.slug, sig: nextSig, paid: false, payKey: newKey(), card: r.card }
         setFrozen(inv)
@@ -357,6 +378,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
         }
         // A retry after a lost response: the INV may already be issued or held — show it, never re-send parties.
         const cur = await api<{ shipment: { dispatch_state: string; awb_number: string | null; counter_payment_status: string } }>(`/shipments/${inv.slug}`)
+        if (superseded()) return
         if (["issued", "provider_unpaid_hold", "issuing_in_flight", "reconciliation_needed"].includes(cur.shipment.dispatch_state)) {
           const d = await api<{ state: string; awb: string | null }>(`/shipments/${inv.slug}/dispatch`, { body: {} })
           setIssued({ slug: inv.slug, state: d.state, awb: d.awb, courier: sel.card.name, paid: cur.shipment.counter_payment_status === "paid" })
@@ -365,6 +387,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
         if (cur.shipment.counter_payment_status === "paid") inv = { ...inv, paid: true }
       }
       await api(`/shipments/${inv.slug}/parties`, { body: { senderId: sender?.id, recipientId: recipient?.id, content, prohibitedAck: ack, maskPreset: preset, quantity: Number(qty) || 1, deliveryInstruction: note } })
+      if (superseded()) return
       if (payNow && !inv.paid) {
         const res = await fetch(`/api/app/shipments/${inv.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": inv.payKey }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? cashNum : undefined }) })
         const j = (await res.json()) as { ok: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } }
@@ -403,12 +426,12 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       ) : null}
 
       <div className="grid items-start gap-4 xl:grid-cols-3">
-        <PartyStep n={1} kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null}>
+        <PartyStep n={1} kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
           {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
           <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
         </PartyStep>
-        <PartyStep n={2} kind="recipients" value={recipient} onPick={pickRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area}>
+        <PartyStep n={2} kind="recipients" value={recipient} onPick={pickRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area} locked={pending}>
           {pickedArea ? (
             <div data-area-only className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
               {recipient && !recipientArea ? <p className="text-xs text-warn">Penerima ini belum punya kecamatan Mengantar. Pilih kecamatan tujuan.</p> : null}

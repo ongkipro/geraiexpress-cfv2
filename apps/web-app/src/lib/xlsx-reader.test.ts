@@ -175,6 +175,54 @@ describe("readXlsxToCsv", () => {
     expect(await readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml }])))).toBe("a")
   })
 
+  it("Sol R1-3: a short shared string referenced by many cells cannot build a CSV over 1 MB", async () => {
+    // One 6 KB shared string × 190 rows ≈ 1.1 MB of CSV from a tiny ZIP and a tiny inflated size.
+    const big = "x".repeat(6 * 1024)
+    const rows = [`<row r="1"><c r="A1"${inline("Catatan")}</row>`, ...Array.from({ length: 190 }, (_, i) => `<row r="${i + 2}"><c r="A${i + 2}"${s(0)}</row>`)].join("")
+    const buf = await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(rows) }], [`<t>${big}</t>`]))
+    expect(buf.byteLength).toBeLessThan(1_048_576)
+    await expect(readXlsxToCsv(buf)).rejects.toThrow("Berkas lebih dari 1 MB.")
+    // Just under the limit still reads (150 rows ≈ 0.9 MB).
+    const fewer = [`<row r="1"><c r="A1"${inline("Catatan")}</row>`, ...Array.from({ length: 150 }, (_, i) => `<row r="${i + 2}"><c r="A${i + 2}"${s(0)}</row>`)].join("")
+    expect((await readXlsxToCsv(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(fewer) }], [`<t>${big}</t>`])))).length).toBeLessThan(1_048_576)
+  })
+
+  it("Sol R1-6: a self-consistent Central Directory that runs into the EOCD is refused", async () => {
+    // The last record's comment grows by 8 bytes and the declared size with it: records end exactly at the declared
+    // end, which now overlaps the EOCD record.
+    const buf = new Uint8Array(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(`<row r="1"><c r="A1"${inline("a")}</row>`) }])))
+    const dv = new DataView(buf.buffer)
+    const eocd = buf.length - 22
+    let p = dv.getUint32(eocd + 16, true)
+    for (let i = 0; i < dv.getUint16(eocd + 10, true) - 1; i++) p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true)
+    dv.setUint16(p + 32, 8, true)
+    dv.setUint32(eocd + 12, dv.getUint32(eocd + 12, true) + 8, true)
+    await expect(readXlsxToCsv(buf.buffer)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
+  })
+
+  it("Sol R1-6: the declared Central Directory must end before the EOCD", async () => {
+    const buf = new Uint8Array(await zip(workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(`<row r="1"><c r="A1"${inline("a")}</row>`) }])))
+    const dv = new DataView(buf.buffer)
+    const eocd = buf.length - 22
+    dv.setUint32(eocd + 12, dv.getUint32(eocd + 12, true) + 64, true)
+    await expect(readXlsxToCsv(buf.buffer)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
+  })
+
+  it("Sol R1-6: an encrypted or unsupported entry is refused at directory scan, even when never opened", async () => {
+    for (const patch of [(dv: DataView, p: number) => dv.setUint16(p + 8, 1, true), (dv: DataView, p: number) => dv.setUint16(p + 10, 12, true)]) {
+      const files = workbook([{ name: "S", target: "worksheets/sheet1.xml", xml: sheetXml(`<row r="1"><c r="A1"${inline("a")}</row>`) }])
+      files.push({ name: "docProps/unused.xml", text: "<x/>", store: true })
+      const buf = new Uint8Array(await zip(files))
+      const dv = new DataView(buf.buffer)
+      const eocd = buf.length - 22
+      // Walk to the last central record (the unused entry) and break it.
+      let p = dv.getUint32(eocd + 16, true)
+      for (let i = 0; i < dv.getUint16(eocd + 10, true) - 1; i++) p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true)
+      patch(dv, p)
+      await expect(readXlsxToCsv(buf.buffer)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
+    }
+  })
+
   it("rejects a buffer that is not an xlsx ZIP", async () => {
     await expect(readXlsxToCsv(new TextEncoder().encode("Nama Penerima,No HP\r\nRina,0857").buffer)).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")
     await expect(readXlsxToCsv(await zip([{ name: "hello.txt", text: "hai", store: true }]))).rejects.toThrow("Berkas bukan Excel .xlsx yang valid.")

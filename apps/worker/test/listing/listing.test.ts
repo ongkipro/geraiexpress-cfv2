@@ -9,6 +9,7 @@ import { ownerOnlyKeysIn } from "../../src/dto/projection"
 import { appUser } from "../onboarding/helpers"
 import { appGet } from "../webhooks/helpers"
 import { checkoutGerai, post, readyInv } from "../dispatch/helpers"
+import { exportCsv, listShipments, tabCounts, type ListQuery } from "../../src/do/gerai-vault/listing"
 
 beforeEach(() => {
   resetMock()
@@ -135,5 +136,27 @@ describe("Kiriman list", () => {
     expect(await slugs("?macet=4")).toEqual([fresh, stuck3, stuck8, delivered].sort())
     expect((await list(t.cookie, "?macet=7")).counts.semua).toBe(1)
     expect((await list(other.cookie, "?macet=7")).items.map((r) => r.slug)).toEqual([otherStuck])
+  })
+
+  it("Sol R1-8: one timestamp per request — the cut-off is inclusive to the millisecond, counts match rows, CSV matches the list", async () => {
+    const t = await checkoutGerai("listnow")
+    const edge = await issued(t, true)
+    const day = 86_400_000
+    const T = Date.UTC(2026, 10, 19, 5, 0, 0)
+    const q: ListQuery = { tab: "semua", q: "", fromMs: 0, toMs: T + day, courier: null, printed: "semua", cursor: null, limit: 50, stuckDays: 3 }
+    await runInDurableObject(t.vault, (_i, s) => {
+      s.storage.sql.exec("UPDATE shipments SET created_at = ?, issued_at = ?, last_provider_event_at = ? WHERE slug = ?", T - 10 * day, T - 10 * day, T - 3 * day, edge)
+      const sql = s.storage.sql
+      // Exactly 3 days old at T: stuck. One millisecond earlier: not yet.
+      expect(listShipments(sql, q, T).items.map((r) => r.slug)).toEqual([edge])
+      expect(tabCounts(sql, q, T).semua).toBe(1)
+      expect(listShipments(sql, q, T - 1).items).toHaveLength(0)
+      expect(tabCounts(sql, q, T - 1).semua).toBe(0)
+      // The export uses the same cut-off on every page.
+      const csv = exportCsv(sql, q, T)
+      expect(csv.rows).toBe(1)
+      expect(csv.csv).toContain(`INV ${edge.toUpperCase()}`)
+      expect(exportCsv(sql, q, T - 1).rows).toBe(0)
+    })
   })
 })

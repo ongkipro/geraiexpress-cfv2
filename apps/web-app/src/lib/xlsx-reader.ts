@@ -58,12 +58,17 @@ export function readZip(bytes: Uint8Array): Map<string, Entry> {
   }
   if (eocd < 0) fail(XLSX_INVALID)
   const count = u16(eocd + 10)
-  let p = u32(eocd + 16)
+  // The declared Central Directory must sit before the EOCD; every record is read strictly inside that span.
+  const cdSize = u32(eocd + 12)
+  const cdOffset = u32(eocd + 16)
+  const cdEnd = cdOffset + cdSize
+  if (cdEnd > eocd) fail(XLSX_INVALID)
+  let p = cdOffset
   const entries = new Map<string, Entry>()
   // One inflate budget for the whole file: workbook + rels + shared strings + sheet together stay ≤ MAX_INFLATED.
   const spent = { bytes: 0 }
   for (let n = 0; n < count; n++) {
-    if (p + 46 > bytes.length || u32(p) !== 0x02014b50) fail(XLSX_INVALID)
+    if (p + 46 > cdEnd || u32(p) !== 0x02014b50) fail(XLSX_INVALID)
     const flags = u16(p + 8)
     const method = u16(p + 10)
     const size = u32(p + 20)
@@ -71,7 +76,9 @@ export function readZip(bytes: Uint8Array): Map<string, Entry> {
     const local = u32(p + 42)
     // The whole central-directory record (name + extra + comment) must lie inside the file before it is read.
     const next = p + 46 + nameLen + u16(p + 30) + u16(p + 32)
-    if (next > bytes.length) fail(XLSX_INVALID)
+    if (next > cdEnd) fail(XLSX_INVALID)
+    // Encrypted entries and methods other than stored/deflate are refused at scan time, even if never opened.
+    if (flags & 1 || (method !== 0 && method !== 8)) fail(XLSX_INVALID)
     const name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen))
     p = next
     if (local + 30 > bytes.length || u32(local) !== 0x04034b50) fail(XLSX_INVALID)
@@ -79,16 +86,15 @@ export function readZip(bytes: Uint8Array): Map<string, Entry> {
     if (start + size > bytes.length) fail(XLSX_INVALID)
     const data = bytes.subarray(start, start + size)
     entries.set(name.replace(/^\/+/, "").toLowerCase(), async () => {
-      if (flags & 1) fail(XLSX_INVALID) // encrypted entry
       if (method === 0) {
         spent.bytes += data.byteLength
         if (spent.bytes > MAX_INFLATED) fail(XLSX_INVALID)
         return data
       }
-      if (method !== 8) fail(XLSX_INVALID)
       return inflateRaw(data, spent)
     })
   }
+  if (p !== cdEnd) fail(XLSX_INVALID)
   return entries
 }
 
@@ -239,9 +245,30 @@ function sheetRows(xml: string, shared: string[]): string[][] {
 
 // ── CSV ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** RFC 4180: comma separator, CRLF line ends, fields with `,` `"` CR or LF quoted (inner quotes doubled). */
+/**
+ * RFC 4180: comma separator, CRLF line ends, fields with `,` `"` CR or LF quoted (inner quotes doubled). The output
+ * may not exceed the server's 1 MB CSV limit: the UTF-8 size is counted field by field BEFORE escaping or joining, so a
+ * short shared string referenced by thousands of cells never materializes an oversized string in the browser.
+ */
 export function toCsv(rows: string[][]): string {
   const width = Math.max(0, ...rows.map((r) => r.length))
   const esc = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
-  return rows.map((r) => Array.from({ length: width }, (_, i) => esc(r[i] ?? "")).join(",")).join("\r\n")
+  const enc = new TextEncoder()
+  let bytes = 0
+  const lines: string[] = []
+  for (const r of rows) {
+    const fields: string[] = []
+    for (let i = 0; i < width; i++) {
+      const v = r[i] ?? ""
+      // UTF-8 never takes fewer bytes than UTF-16 code units: a field longer than what is left fails without encoding.
+      if (v.length > BULK_MAX_BYTES - bytes) fail(XLSX_TOO_BIG)
+      bytes += enc.encode(v).byteLength + (/[",\r\n]/.test(v) ? 2 + (v.match(/"/g)?.length ?? 0) : 0) + (i ? 1 : 0)
+      if (bytes > BULK_MAX_BYTES) fail(XLSX_TOO_BIG)
+      fields.push(esc(v))
+    }
+    bytes += lines.length ? 2 : 0
+    if (bytes > BULK_MAX_BYTES) fail(XLSX_TOO_BIG)
+    lines.push(fields.join(","))
+  }
+  return lines.join("\r\n")
 }

@@ -1999,13 +1999,15 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
-    return { ok: true, value: { ...listShipments(sql, q), counts: tabCounts(sql, q) } }
+    // One timestamp for the rows and the counts (Sol R1-8): an INV at the exact cut-off is in both or in neither.
+    const t = Date.now()
+    return { ok: true, value: { ...listShipments(sql, q, t), counts: tabCounts(sql, q, t) } }
   }
 
   async shipmentCsv(tenantId: string, q: ListQuery): Promise<VaultResult<{ csv: string; rows: number; truncated: boolean }>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
-    return { ok: true, value: exportCsv(this.ctx.storage.sql, q) }
+    return { ok: true, value: exportCsv(this.ctx.storage.sql, q, Date.now()) }
   }
 
   // ---- Settings pages (TASK-310) ---------------------------------------------------------------------------------

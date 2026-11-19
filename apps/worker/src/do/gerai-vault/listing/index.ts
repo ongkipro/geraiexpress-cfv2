@@ -92,10 +92,12 @@ function filters(q: ListQuery, now: number): { where: string; params: SqlStorage
 
 const FROM = "FROM shipments s LEFT JOIN recipient_contacts r ON r.id = s.recipient_contact_id LEFT JOIN sender_contacts c ON c.id = s.sender_contact_id LEFT JOIN quote_snapshots q ON q.id = s.quote_snapshot_id"
 
-/** Counts per tab under the same search/period/courier/print filters (badges stay honest while filtering). One `now`
- * per call: the `kendala` deadlines and the `Paket Macet` cut-off use the same millisecond. */
-export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
-  const now = Date.now()
+/**
+ * Counts per tab under the same search/period/courier/print filters (badges stay honest while filtering). `now` is
+ * the caller's single timestamp (Sol R1-8): the rows, the counts, the `kendala` deadlines and the `Paket Macet`
+ * cut-off of one request all use the same millisecond.
+ */
+export function tabCounts(sql: SqlStorage, q: ListQuery, now: number = Date.now()): Record<Tab, number> {
   const f = filters(q, now)
   const where = tabWhere(now)
   const cols = TABS.map((t) => `SUM(CASE WHEN ${where[t]} THEN 1 ELSE 0 END) AS "${t}"`).join(", ")
@@ -104,8 +106,7 @@ export function tabCounts(sql: SqlStorage, q: ListQuery): Record<Tab, number> {
 }
 
 /** One page, newest first. Cursor = `<created_at>:<slug>` of the last row (keyset, stable under inserts). */
-export function listShipments(sql: SqlStorage, q: ListQuery): { items: ListRow[]; nextCursor: string | null } {
-  const now = Date.now()
+export function listShipments(sql: SqlStorage, q: ListQuery, now: number = Date.now()): { items: ListRow[]; nextCursor: string | null } {
   const f = filters(q, now)
   const parts = [`(${tabWhere(now)[q.tab]})`, f.where]
   const params = [...f.params]
@@ -163,12 +164,13 @@ const cell = (v: unknown) => {
   return /[",\r\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** Owner CSV of the filtered set (max 5.000 rows, newest first) with cost and margin columns. */
-export function exportCsv(sql: SqlStorage, q: ListQuery): { csv: string; rows: number; truncated: boolean } {
+/** Owner CSV of the filtered set (max 5.000 rows, newest first) with cost and margin columns, at one `now`. */
+export function exportCsv(sql: SqlStorage, q: ListQuery, now: number = Date.now()): { csv: string; rows: number; truncated: boolean } {
   const out: ListRow[] = []
   let cursor: string | null = null
+  // One cut-off for every page of the export (Sol R1-8).
   do {
-    const page = listShipments(sql, { ...q, cursor, limit: 200 })
+    const page = listShipments(sql, { ...q, cursor, limit: 200 }, now)
     out.push(...page.items)
     cursor = page.nextCursor
   } while (cursor && out.length < 5000)

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -51,7 +51,9 @@ export function PaketMassalPage() {
   }, [])
   const chosen = services?.find((s) => s.code === service)
   // Cargo (and any service without COD) ships Non-COD only: the COD choice is locked to `none`.
-  const codLock = chosen?.cargo ? "Kargo hanya Non-COD." : chosen && !chosen.cod ? "Layanan ini tidak mendukung COD." : null
+  // Sol R1-7: the Cargo tab is Non-COD even before (or without) a card; the chosen service must belong to the open tab.
+  const codLock = tab === "cargo" || chosen?.cargo ? "Kargo hanya Non-COD." : chosen && !chosen.cod ? "Layanan ini tidak mendukung COD." : null
+  const serviceOk = !!chosen && chosen.cargo === (tab === "cargo")
   const cards = (services ?? []).filter((s) => s.cargo === (tab === "cargo"))
   function choose(s: Service) {
     setService(s.code)
@@ -59,9 +61,12 @@ export function PaketMassalPage() {
   }
   function switchTab(t: "regular" | "cargo") {
     setTab(t)
-    // Keep the chosen service visible: a tab switch picks the first service of that tab unless one is already there.
+    if (t === "cargo") setMode("none")
+    // Keep the chosen service visible: a tab switch picks the first service of that tab unless one is already there;
+    // an empty tab (every cargo courier switched off) keeps NO hidden selection from the other tab (Sol R1-7).
     const first = (services ?? []).find((s) => s.cargo === (t === "cargo"))
-    if (first && chosen?.cargo !== (t === "cargo")) choose(first)
+    if (!first) setService("")
+    else if (chosen?.cargo !== (t === "cargo")) choose(first)
   }
   function onCardKey(e: KeyboardEvent<HTMLDivElement>) {
     // WAI-ARIA radio group: arrows move from the focused card (wrapping) and select it.
@@ -74,20 +79,30 @@ export function PaketMassalPage() {
     document.getElementById(`layanan-${next.code}`)?.focus()
   }
   const set = (i: number, k: keyof Cells, v: string) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  // Sol R1-4: a new pick replaces the previous file at once (even when it is then rejected), only the latest pick
+  // may publish its result, and `Periksa Baris` waits while a file is being read.
+  const pickGen = useRef(0)
+  const [reading, setReading] = useState(false)
   async function pick(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     e.target.value = "" // picking the same file again (after fixing it) fires `change` again
     if (!f) return
+    const mine = ++pickGen.current
+    setFile(null)
+    setErrors({})
     if (f.size > 1024 * 1024) return setErrors({ file: "Berkas lebih dari 1 MB." })
     const xlsx = /\.xlsx$/i.test(f.name) || f.type === XLSX_MIME
     if (!xlsx && !/\.csv$/i.test(f.name) && f.type !== "text/csv") return setErrors({ file: "Pilih berkas Excel .xlsx atau .csv." })
+    setReading(true)
     try {
       const text = xlsx ? await readXlsxToCsv(await f.arrayBuffer()) : await f.text()
-      setErrors({})
+      if (mine !== pickGen.current) return
       setFile({ name: f.name, text })
     } catch (err) {
-      setFile(null)
+      if (mine !== pickGen.current) return
       setErrors({ file: err instanceof Error ? err.message : "Berkas tidak dapat dibaca." })
+    } finally {
+      if (mine === pickGen.current) setReading(false)
     }
   }
   async function submit() {
@@ -217,7 +232,7 @@ export function PaketMassalPage() {
 
         {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button size="lg" disabled={pending || !sender || !service} onClick={submit}>{pending ? "Memeriksa…" : "Periksa Baris"}</Button>
+          <Button size="lg" disabled={pending || reading || !sender || !serviceOk} onClick={submit}>{pending ? "Memeriksa…" : reading ? "Membaca berkas…" : "Periksa Baris"}</Button>
           <Link to="/kiriman/massal" className="inline-flex h-11 items-center px-2 text-base md:text-sm text-primary underline-offset-4 hover:underline">Riwayat Massal</Link>
         </div>
       </div>

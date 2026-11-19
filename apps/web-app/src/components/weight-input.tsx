@@ -15,7 +15,9 @@ export function WeightInput({ gram, onChange, error }: { gram: number; onChange:
   function set(v: string, u = unit) {
     setText(v)
     const n = Number(v.replace(",", "."))
-    if (Number.isFinite(n) && n > 0) onChange(u === "gram" ? Math.round(n) : Math.round(n * 1000))
+    // Sol R1-2: an empty, non-numeric or zero entry is reported as 0 g, so the form drops its quote and selection
+    // instead of keeping the last valid weight behind a field the operator has cleared.
+    onChange(v.trim() !== "" && Number.isFinite(n) && n > 0 ? (u === "gram" ? Math.round(n) : Math.round(n * 1000)) : 0)
   }
   return (
     <Field data-invalid={error ? true : undefined}>

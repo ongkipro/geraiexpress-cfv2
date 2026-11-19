@@ -109,7 +109,10 @@ export function KirimanPage() {
   const go = (p: Partial<Search>) => void navigate({ to: "/kiriman", search: { ...search, ...p } as never })
   async function loadMore() {
     if (!cursor) return
+    // Sol R1-9: a page that answers after the filters changed (e.g. `macet`) belongs to the old list — drop it.
+    const mine = gen.current
     const d = await api<ListResp>(`/shipments?${qs}&cursor=${encodeURIComponent(cursor)}`)
+    if (mine !== gen.current) return
     setMore((m) => [...m, ...d.items])
     setCursor(d.nextCursor)
   }

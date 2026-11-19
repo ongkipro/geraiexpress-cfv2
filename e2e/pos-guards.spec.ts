@@ -90,3 +90,104 @@ test("a changed sender COD payout also stops for confirmation (R2-C)", async ({ 
   const d = ((await (await api.get(`${APP}/api/app/shipments/${slug}`)).json()) as { data: { shipment: { dispatch_state: string } } }).data
   expect(d.shipment.dispatch_state).toBe("draft")
 })
+
+// Sol R1-1: while a press waits, the parties are locked; an edit that stales the quote supersedes the held freeze —
+// its answer (even a re-priced one) never republishes the checkout; and no party, no freeze.
+test("Sol R1-1: a superseded held freeze never republishes checkout; parties lock while pending; no recipient, no freeze", async ({ page }) => {
+  await seeded(page, "e2e-jaga-d")
+  await quoteJt(page)
+  await parties(page)
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/quotes/freeze", async (route) => {
+    await held
+    const res = await route.fetch()
+    const j = (await res.json()) as { data: { card: { counterDueIdr: number } } }
+    j.data.card.counterDueIdr += 2500
+    await route.fulfill({ response: res, json: j })
+  })
+  await primary(page).click()
+  await expect(page.locator('[aria-labelledby="pihak-recipients"]').getByRole("button", { name: "Ganti" })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Penerima baru" })).toBeDisabled()
+  await page.getByRole("button", { name: "2 kg" }).click()
+  release()
+  await page.waitForTimeout(1500)
+  await expect(page.getByText(/Ongkir yang terkunci berbeda/)).toHaveCount(0)
+  await expect(page.getByText(/INV [0-9A-Z]{7} · draf/)).toHaveCount(0)
+  // The superseded INV is never adopted: no INV badge on section 5 (it shows whenever an INV is frozen on screen).
+  await expect(page.locator('[aria-labelledby="ringkasan-judul"]').getByText(/^INV [0-9A-Z]{7}$/)).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "false")
+  await page.unroute("**/api/app/quotes/freeze")
+
+  // No recipient (walk-in district check only): the primary asks for one and freezes nothing.
+  await page.goto(`${APP}/kasir`)
+  await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
+  await page.getByLabel("Kecamatan tujuan").fill("tebet")
+  await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
+  await page.getByRole("radio", { name: /^J&T Express/ }).click()
+  let freezes = 0
+  page.on("request", (r) => r.url().endsWith("/api/app/quotes/freeze") && freezes++)
+  await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
+  await primary(page).click()
+  await expect(page.getByText("Pilih penerima dulu.")).toBeVisible()
+  expect(freezes).toBe(0)
+})
+
+// Sol R1-2: a cleared or zero weight drops the selection and cancels a pending auto-quote (10–100,000 g bounds).
+test("Sol R1-2: clearing the weight drops the courier and never sends the stale grams", async ({ page }) => {
+  await seeded(page, "e2e-jaga-w")
+  await quoteJt(page)
+  let quotes = 0
+  page.on("request", (r) => r.url().endsWith("/api/app/quotes") && r.method() === "POST" && quotes++)
+  const weight = page.getByLabel("Berat paket")
+  await weight.fill("")
+  await expect(page.getByText("Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.")).toBeVisible()
+  await page.waitForTimeout(900)
+  expect(quotes).toBe(0)
+  // Inside the 500 ms debounce: 1500 g then cleared to 0 — nothing is sent.
+  await weight.fill("1500")
+  await page.waitForTimeout(150)
+  await weight.fill("0")
+  await page.waitForTimeout(900)
+  expect(quotes).toBe(0)
+  // Back to the quoted 1000 g: the cached result is current again (no request), but the dropped courier stays dropped.
+  await weight.fill("1000")
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).not.toHaveAttribute("aria-disabled", "true")
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "false")
+  expect(quotes).toBe(0)
+  // A new valid weight quotes once.
+  await weight.fill("1200")
+  await expect.poll(() => quotes).toBe(1)
+})
+
+// Sol R1-5: a manual `Cek Ongkir` inside the debounce sends ONE request (the timer re-checks when it fires), and rows
+// are not actionable while a refresh loads.
+test("Sol R1-5: one request for a manual quote during the debounce; rows locked while loading", async ({ page }) => {
+  await seeded(page, "e2e-jaga-t")
+  let quotes = 0
+  page.on("request", (r) => r.url().endsWith("/api/app/quotes") && r.method() === "POST" && quotes++)
+  let release!: () => void
+  let held = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/quotes", async (route) => {
+    await held
+    await route.continue()
+  })
+  await page.goto(`${APP}/kasir`)
+  await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
+  await page.getByLabel("Kecamatan tujuan").fill("tebet")
+  await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
+  await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
+  await page.waitForTimeout(900)
+  expect(quotes).toBe(1)
+  release()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toBeVisible()
+  held = new Promise<void>((r) => (release = r))
+  await page.getByRole("main").getByRole("button", { name: "Hitung Ulang" }).click()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-disabled", "true")
+  await page.getByRole("radio", { name: /^J&T Express/ }).click({ force: true })
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "false")
+  expect(quotes).toBe(2)
+  release()
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).not.toHaveAttribute("aria-disabled", "true")
+  await page.unroute("**/api/app/quotes")
+})
