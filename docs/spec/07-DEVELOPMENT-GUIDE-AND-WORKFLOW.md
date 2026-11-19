@@ -101,7 +101,10 @@ are manual, labelled, and never part of CI.
 
 - `ci.yml` on every push/PR: `pnpm install --frozen-lockfile` → `pnpm check` → Playwright (Chromium, 390/1366) →
   upload evidence; actions pinned by SHA, `permissions: contents: read`, no secrets on PR from forks.
-- `deploy-staging.yml` on `main`: waits for an approval on the protected `staging` GitHub environment (each run), then
+- `deploy-staging.yml` (DEC-253): owner-dispatched only (`workflow_dispatch` with a full `sha`; the dispatch is the
+  owner's approval, not GitHub Required reviewers). A secret-less `verify` job checks ref `refs/heads/main`, owner as
+  actor and re-run actor, the SHA on main and a green `ci.yml` push run on main for it; then the `deploy` job (GitHub
+  environment `staging-deploy`, `main` only, current-attempt gate) deploys that exact SHA with
   `wrangler deploy --env staging` with a scoped `CLOUDFLARE_API_TOKEN` (environment secret) and a `/healthz` smoke on
   every host. Production deploy is a separate manual workflow requiring the owner's
   approval in the GitHub environment (AGENTS approval gate), never automatic.

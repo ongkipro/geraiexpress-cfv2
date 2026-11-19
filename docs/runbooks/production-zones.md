@@ -88,7 +88,8 @@ Live HTTPS checks after deploy:
 | `pnpm probes --env staging` | PASS 5/5 |
 | `pnpm probes --env production` | 5/6 — `relay-health` 526 (Cloudflare cannot validate the relay origin certificate: TASK-601 Origin CA on the `99ribu-prod` Traefik is still an owner step) |
 
-Not done here: GitHub `staging`/`production` protected environments and deploy-workflow secrets (TASK-109), first Super
+Not done here: GitHub deploy environments and deploy-workflow secrets (TASK-109: the DEC-253 staging cutover to
+GitHub `staging-deploy`, `main` only, with no deploy credentials left in legacy GitHub `staging`; protected `production`), first Super
 Admin bootstrap per environment (TASK-106), alert drill (§3.3), relay rollout (TASK-601), Email Sending inbox tests
 (TASK-112). Rollback: `wrangler rollback <previous version> --env <env>` (§4); the first deploy has no previous version,
 so a rollback means `wrangler delete` of the env Worker after owner approval.

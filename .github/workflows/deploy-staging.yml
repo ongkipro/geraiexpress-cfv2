@@ -1,28 +1,75 @@
-# Staging deploy (spec 07 §6, WORKFLOW §8). Runs only after a green CI on main, waits for the protected `staging`
-# environment approval on EVERY run, deploys the exact commit CI verified, then runs the staging probes.
+# Staging deploy (spec 07 §6, WORKFLOW §8, DEC-253): owner-dispatched only. The owner's own `workflow_dispatch` of a
+# commit is the per-run approval; this is NOT GitHub "Required reviewers" (unavailable for this private personal
+# repository). The secret-less `verify` job must pass before the `deploy` job can reach the GitHub environment
+# `staging-deploy` and its secrets: dispatch ref is refs/heads/main, the dispatching and any re-running actor is the
+# repository owner, the input is a full SHA on main, and a ci.yml push run on main succeeded for that SHA
+# (scripts/ci/deploy-dispatch-gate.mjs). The Wrangler target stays `--env staging`.
+# The `deploy` job condition, evaluated before the environment is reached, repeats the owner/ref checks and requires
+# that `verify` succeeded IN THIS RUN ATTEMPT. A retry deploys only when the rerun includes `verify`: "Re-run all jobs",
+# or re-running `verify` (GitHub re-runs its dependent `deploy` with it). "Re-run failed jobs" after a deploy-only
+# failure re-runs only `deploy`, sees the previous attempt's `verify` outputs and is skipped.
+# The deployment concurrency slot belongs to the authorized `deploy` job, so a dispatch the gate denies never queues
+# against, or displaces, a pending owner deploy.
+# Cutover prerequisites (owner settings, not enforced here; DEC-253): `staging-deploy` allows deployments from branch
+# `main` only and holds the deploy secrets; the legacy `staging` environment holds no deploy credentials; and no
+# repository- or organization-level secret with those names exists, so a re-run of a pre-DEC-253 `workflow_run`
+# revision (which targets `staging`) cannot obtain credentials. A dispatch from another ref runs that ref's own copy of
+# this file and cannot enforce its own gate.
 name: deploy-staging
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-char commit SHA on main whose ci.yml push run succeeded
+        required: true
+        type: string
 permissions: {}
-concurrency:
-  group: deploy-staging
-  cancel-in-progress: false
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      attempt: ${{ steps.gate.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci/deploy-dispatch-gate.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Dispatch gate (ref, owner, SHA on main, green ci.yml push run)
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_OWNER: ongkipro
+          DISPATCH_SHA: ${{ inputs.sha }}
+        run: node scripts/ci/deploy-dispatch-gate.mjs
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    needs: verify
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository_owner == 'ongkipro' && github.actor == 'ongkipro' && github.triggering_actor == 'ongkipro' && needs.verify.result == 'success' && needs.verify.outputs.sha != '' && needs.verify.outputs.attempt == github.run_attempt }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: staging
+    environment: staging-deploy
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
+      - name: Checked-out commit is the verified SHA
+        env:
+          VERIFIED_SHA: ${{ needs.verify.outputs.sha }}
+        run: test "$(git rev-parse HEAD)" = "$VERIFIED_SHA"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

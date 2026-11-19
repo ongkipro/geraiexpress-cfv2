@@ -164,8 +164,9 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
 - **Depends On:** TASK-101, TASK-110
 - **Accepted Invariants:** actions pinned by SHA; `contents: read`; no secrets on fork PRs; fail closed on (1) any
   `*.map` in `dist/`, (2) secret/key-shaped literals in bundles, (3) any `/api/app/*` or `/api/owner/*` route without
-  auth + projection middleware (route-table scan); staging deploy waits for the protected `staging` environment
-  approval every run; production deploy manual only.
+  auth + projection middleware (route-table scan); staging deploy runs only on the owner's `workflow_dispatch` of a
+  verified SHA (DEC-253: dispatch gate on ref, owner/re-run actor, SHA on main, green `ci.yml` push run; not GitHub
+  Required reviewers); production deploy manual only.
 - **Done when:** hosted `ci.yml` run green (link in `STATUS.md`); four fixtures turn it red: a broken unit test, an
   emitted `.map`, an injected secret literal, an unprotected route; first staging deploy approved by the owner, immediately followed by `pnpm probes --env
   staging` green and one synthetic failing probe delivering an owner alert (evidence in `BUILD-LOG.md`).

@@ -1386,3 +1386,82 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - the automatic finish/commit chain of that retry was stopped before `review-boundary`;
   - the release uses a new run.
 
+## 2026-11-19 — DEC-253 Owner-dispatched staging deploy (branch `staging-dispatch`, awaiting review)
+
+- Why: `deploy-staging` runs `44469504142` (`b10c5b6`) and `44515377657` (`4e70879`) failed at `Apply D1 control
+  migrations (staging)` with no `CLOUDFLARE_API_TOKEN`; the GitHub `staging` environment has no secrets and no
+  protection rules, and Required reviewers is unavailable for this private personal repository. The owner approved a
+  manual dispatch instead.
+- Change: `deploy-staging.yml` is `workflow_dispatch` only. A secret-less `verify` job runs
+  `scripts/ci/deploy-dispatch-gate.mjs` (ref `refs/heads/main`, actor and triggering actor = pinned owner, full SHA,
+  SHA on main via compare + merge base, a green `ci.yml` push run on main for the SHA with every field re-checked). The
+  `deploy` job checks out only the verified SHA and keeps the environment, permissions, steps and concurrency.
+- Supervisor finding (applied):
+  - a re-run of only `deploy` could reuse a successful `verify` from an earlier attempt;
+  - `verify` now outputs its own `GITHUB_RUN_ATTEMPT` (validated, fail closed);
+  - the `deploy` job condition requires `needs.verify.outputs.attempt == github.run_attempt`;
+  - the condition also repeats `workflow_dispatch`, `refs/heads/main`, the pinned owner, `github.actor` and
+    `github.triggering_actor`, all evaluated before the deploy job's GitHub environment is reached.
+- Automated evidence:
+  - `actionlint` 1.7.12 exit 0 on all three workflows;
+  - `vitest --project unit scripts/ci/deploy-dispatch-gate.test.mjs` 54 passed:
+    - mocked positive and negative gate cases;
+    - CLI wiring through a local mock API (`GITHUB_OUTPUT` written only on success, attempt validated);
+    - the real `deploy` `if:` of the workflow evaluated per scenario. A first dispatch and "Re-run all jobs" deploy.
+      A deploy-only re-run (attempt 2 with attempt-1 outputs), a collaborator re-run, a collaborator dispatch
+      re-run by the owner, another branch, a tag named `main`, a non-dispatch event, a transferred repository, and a
+      failed or empty `verify` are all skipped;
+  - mutations:
+    - gate: 12 single mutations, 11 killed. M7 (accept `ahead`) survives because the merge-base check alone denies
+      it; the double mutation M6+M7 is killed;
+    - workflow condition and attempt output: 10 mutations, all killed after adding the "owner re-runs a
+      collaborator's dispatch" case.
+- Not proven here: a real dispatch on GitHub (needs owner approval to publish and dispatch).
+- Secrets: the legacy GitHub `staging` environment lists `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and
+  `GX_OPS_TOKEN` (Supervisor; values not read). `ALERT_WEBHOOK_URL` is not listed, so probe alerts stay log-only.
+- *Superseded by Sol R1 P0, below:* "Publish prerequisite: the GitHub `staging` environment must allow deployments
+  from `main` only." Do not protect or provision the legacy `staging` environment. The cutover targets GitHub
+  `staging-deploy`, and legacy `staging` must end up holding no deploy credentials.
+- GPT-6.2 Sol R1 REQUEST_CHANGES (`docs/review/dec-253/R1-sol.md`, disposition in `docs/review/dec-253/DISPOSITION.md`),
+  fixed locally:
+  - **P0, legacy runs could still obtain credentials.** `deploy` now targets a new GitHub environment `staging-deploy`
+    that no other workflow references, while Wrangler keeps `--env staging`.
+    - Cutover prerequisites (owner settings, not applied): `staging-deploy` allows branch `main` only and holds the
+      deploy secrets; legacy `staging` holds no deploy credentials; no repository- or organization-level fallback
+      secrets of those names.
+    - Pre-DEC-253 runs `44469504142` and `44515377657` were not re-run.
+  - **P2, retries.** The workflow comment, DEC-253 and `docs/WORKFLOW.md` §8 now describe retries by the jobs that
+    actually re-run. Tests model:
+    - "Re-run failed jobs" after a deploy-only failure: stale `verify` outputs, so deploy is skipped;
+    - re-running only `deploy` (attempts 2 and 3): skipped;
+    - re-running `verify` selectively, or "Re-run failed jobs" after `verify` failed (both re-run): deploys;
+    - "Re-run all jobs": deploys;
+    - a collaborator re-run: skipped.
+    The evaluator checks context values only; it does not prove GitHub's scheduling.
+  - **P2, concurrency.** The `deploy-staging` group moved from workflow level to the gated `deploy` job.
+  - Evidence:
+    - `vitest --project unit scripts/ci/deploy-dispatch-gate.test.mjs` 62 passed;
+    - `actionlint` exit 0; `eslint` clean;
+    - mutations S1-S8 (legacy environment, workflow-level concurrency, concurrency dropped, cancel-in-progress true,
+      Wrangler target renamed, environment on `verify`, attempt binding dropped or weakened) all killed. S5 survived
+      a substring assertion first and was killed after matching whole `run:` lines.
+- GPT-6.2 Sol R2 (`docs/review/dec-253/R2-sol.md`): **local patch APPROVE**, OK with notes; not an approval to publish
+  or dispatch.
+  - The P1 documentation correction is applied. The `STATUS.md` TASK-109 row and owner list now describe the DEC-253
+    cutover instead of a protected legacy `staging`. DEC-253 names GitHub `staging-deploy` in the gate summary and
+    separates GitHub environment names from the Cloudflare/Wrangler target `--env staging`. The earlier build-log
+    publish prerequisite is marked superseded.
+  - No workflow, gate or test changed in this round.
+  - Release remains blocked on the owner cutover (`staging-deploy` `main`-only with the deploy secrets, legacy
+    `staging` emptied of deploy credentials, no repository/organization fallback, trusted writers on `main`), then
+    green hosted CI, the owner's dispatch with hosted gate/SHA/probe evidence, and a synthetic alert receipt.
+- Credential cutover (owner, 2026-11-19; Supervisor-verified with setting and secret names only, no values read):
+  - GitHub environment `staging-deploy`: deployment branch policy exactly `main`; secrets `CLOUDFLARE_ACCOUNT_ID`,
+    `CLOUDFLARE_API_TOKEN`, `GX_OPS_TOKEN`;
+  - legacy GitHub environment `staging`: secret list empty. A re-run of pre-DEC-253 runs `44469504142` and
+    `44515377657` therefore obtains no deploy credentials; neither was re-run;
+  - repository Actions secret list: empty, so there is no fallback. Personal repository, so no organization secrets;
+  - collaborators: `ongkipro` (admin) only, so only the owner can change `main` and its workflows.
+- Still open for TASK-109: `ALERT_WEBHOOK_URL` in `staging-deploy` with a synthetic failing-probe alert receipt, and
+  the first owner dispatch (hosted gate attempt, deployed SHA, green staging probes).
+

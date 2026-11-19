@@ -103,9 +103,15 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
 
 - Push only when asked, fast-forward only, from a green head; check the range for secrets, AI trailers and a
   non-noreply author.
-- **Approval per action:** every `wrangler deploy` (staging through the protected GitHub `staging` environment, production
-  through the manual production workflow), D1/DO migrations on production, DNS, Cloudflare for SaaS settings,
+- **Approval per action:** every `wrangler deploy` (staging only by the owner's own `workflow_dispatch` of
+  `deploy-staging.yml` with the full SHA, which its secret-less gate verifies before the `staging-deploy` environment is
+  reached — DEC-253, not GitHub Required reviewers; production through the manual production workflow), D1/DO migrations on production, DNS, Cloudflare for SaaS settings,
   custom-hostname create/delete, Email Sending domain onboarding, Mengantar production calls, relay VPS changes.
+- **Staging deploy retries (DEC-253):** `deploy` runs only when `verify` succeeded in the same run attempt. After a
+  failed deploy, use "Re-run all jobs" (or re-run `verify`, which re-runs its dependent `deploy`); "Re-run failed jobs"
+  re-runs `deploy` alone with the previous attempt's gate result, so it is skipped by design. Cutover prerequisites:
+  GitHub environment `staging-deploy` is `main`-only and holds the deploy secrets, the legacy `staging` environment
+  holds none, and no repository- or organization-level secret of those names exists.
 - Release order per milestone: staging Worker (`env.staging`) → smoke (`/healthz` on every host, one synthetic tenant
   flow) → owner approval → production deploy → `OBSERVABILITY.md` checks → `RELEASE.md` snapshot
   (`delivery-ledger snapshot-release`) → `production-gate`.
