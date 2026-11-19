@@ -1367,4 +1367,11 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   Gotcha: under host I/O load (other projects), timing-based debounce assertions flaked. The debounce regressions now
   use `page.clock`, the held-freeze test awaits its answer, and the focused e2e is recorded with a 120 s per-test
   timeout (15/15 PASS).
+- GPT-6.2 Sol R3 fixed:
+  - the POS picks a new contact straight from the POST answer (no second GET);
+  - the contact forms save once (`pending` + ref guard, also against `requestSubmit`);
+  - WA verification updates the same sender only, without superseding a pending checkout.
+
+  Mutations R3-get, R3-single-save and R3-verify are red. R3-single-save first survived, because the disabled button
+  already blocks clicks and Enter; the e2e now also calls `form.requestSubmit()`.
 

@@ -154,26 +154,24 @@ function VerifySender({ c, onVerified }: { c: Contact; onVerified: (c: Contact) 
   )
 }
 
-function PartyStep({ kind, value, onPick, error, destination, n, initialArea, locked = false, children }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; error?: string; destination: QuoteRequest | null; n: number; initialArea?: Area | null; locked?: boolean; children?: ReactNode }) {
+function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initialArea, locked = false, children }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact | null) => void; onUpdate?: (c: Contact) => void; error?: string; destination: QuoteRequest | null; n: number; initialArea?: Area | null; locked?: boolean; children?: ReactNode }) {
   const w = useWorkspace()
   const [adding, setAdding] = useState(false)
   const label = kind === "senders" ? "Pengirim" : "Penerima"
-  // Sol R2-2: the sheet stays open (modal) until the saved contact is loaded, so no checkout can start in between, and
-  // a contact that arrives while a press is pending is never picked.
   const lockedRef = useRef(locked)
   useLayoutEffect(() => {
     lockedRef.current = locked
   })
-  async function saved(item?: { id: string }) {
-    if (!item) return setAdding(false)
-    const r = await api<{ item: Contact }>(`/contacts/${kind}/${item.id}`).catch(() => null)
+  // Sol R3: the form's POST already returns the full contact — picked at once, no second GET (so no window in which the
+  // sheet is closed but a pick is still coming). Never picked while a press is pending.
+  function saved(item?: Contact) {
     setAdding(false)
-    if (r?.item && !lockedRef.current) onPick(r.item)
+    if (item && !lockedRef.current) onPick(item)
   }
   return (
     <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
       <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
-      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
+      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onUpdate ?? onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
       <Sheet open={adding} onOpenChange={setAdding}>
@@ -439,7 +437,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       ) : null}
 
       <div className="grid items-start gap-4 xl:grid-cols-3">
-        <PartyStep n={1} kind="senders" value={sender} onPick={pickSender} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
+        <PartyStep n={1} kind="senders" value={sender} onPick={pickSender} onUpdate={(v) => setSender((cur) => (cur?.id === v.id ? v : cur))} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
           {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
           <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}

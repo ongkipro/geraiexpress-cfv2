@@ -43,3 +43,14 @@ Test hardening in this round (host load 10 from other projects' I/O):
 - `quote.spec` allows 20 s for a re-quote to settle.
 - The recorded focused run uses `--timeout=120000` and passed 15/15.
 
+
+## GPT-6.2 Sol R3 (`R3-sol.md`, on `8225354`): R2-1, R2-3, R2-4 resolved; R2-2 root cause + WA verification follow-up. Fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P1 R3-1 | `PartyStep.saved()` made a second `GET /contacts/…/:id`. The sheet could close while that GET was still running, and `Simpan` could be pressed twice while the GET was held. | **Fixed at the root.** `POST /contacts/senders` and `/recipients` already return the full contact (same `readSender` / `readRecipient` shape as GET). `SenderForm` / `RecipientForm` pass that `Sender` / `Recipient` to `onSaved`, and each guards a single save (`pending` + a `saving` ref, so even a programmatic submit before the disabled state renders sends nothing). `PartyStep.saved()` is synchronous: it closes the sheet and picks the contact unless a press is pending. | e2e `Sol R3: a new sender`: POST held → `Menyimpan…` disabled; a forced click, Enter and `form.requestSubmit()` add 0 POSTs; release → the sheet closes, `Pak Budi Santoso` is picked, 0 GET `/contacts/senders/:id`. Mutations R3-get (GET back) and R3-single-save (guard removed) red. |
+| P2 R3-2 | `VerifySender` went through `pickSender`, so verifying the same sender superseded a pending checkout. | **Fixed.** WA verification uses its own `onUpdate`. It replaces the sender only when `cur?.id === v.id` (a late answer for a sender already changed is ignored) and does not bump `checkoutGen`. | e2e `Sol R3: WA verification`: a held freeze, then the sender verified meanwhile, release → `Resi terbit` + AWB. Mutation R3-verify red. |
+
+Focused checks:
+- `check:fast`.
+- e2e `pos-guards` + `contacts` on desktop-1280 (`--timeout=120000`).

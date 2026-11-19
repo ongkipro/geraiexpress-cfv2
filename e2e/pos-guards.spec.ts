@@ -235,14 +235,22 @@ test("Sol R2-1: a recipient moved to another district during the freeze is refus
   await page.unroute("**/api/app/quotes/freeze")
 })
 
-// Sol R2-2: `+ Baru` keeps the sheet (modal) open until the saved contact has loaded, then picks it.
-test("Sol R2-2: a new sender is picked only after it has loaded; the sheet stays open meanwhile", async ({ page }) => {
+// Sol R2-2 / R3: the add form saves once (a second click while the POST is held sends nothing) and the POS picks the
+// contact straight from the POST answer — no second GET, the sheet closes as soon as the save lands.
+test("Sol R3: a new sender is saved once and picked from the POST answer (no second GET)", async ({ page }) => {
   await seeded(page, "e2e-jaga-s")
   await page.goto(`${APP}/kasir`)
   let release!: () => void
   const held = new Promise<void>((r) => (release = r))
-  await page.route(/\/api\/app\/contacts\/senders\/[0-9a-z-]+$/, async (route) => {
-    if (route.request().method() === "GET") await held
+  let posts = 0
+  let gets = 0
+  page.on("request", (r) => {
+    const u = new URL(r.url()).pathname
+    if (u === "/api/app/contacts/senders" && r.method() === "POST") posts++
+    if (/^\/api\/app\/contacts\/senders\/[^/]+$/.test(u) && r.method() === "GET") gets++
+  })
+  await page.route("**/api/app/contacts/senders", async (route) => {
+    if (route.request().method() === "POST") await held
     await route.continue()
   })
   await page.getByRole("button", { name: "Pengirim baru" }).click()
@@ -250,10 +258,43 @@ test("Sol R2-2: a new sender is picked only after it has loaded; the sheet stays
   await sheet.getByLabel("Nama pengirim asli").fill("Pak Budi Santoso")
   await sheet.getByLabel("Nomor WhatsApp (untuk retur & COD)").fill("081377776666")
   await sheet.getByRole("button", { name: "Simpan" }).click()
-  await page.waitForTimeout(600)
-  await expect(sheet).toBeVisible()
+  const saving = sheet.getByRole("button", { name: "Menyimpan…" })
+  await expect(saving).toBeDisabled()
+  await saving.click({ force: true })
+  await sheet.getByLabel("Nama pengirim asli").press("Enter")
+  // A programmatic submit bypasses the disabled button; the form's own single-save guard still sends nothing.
+  await sheet.locator("form").first().evaluate((f: HTMLFormElement) => f.requestSubmit())
+  await page.waitForTimeout(300)
+  expect(posts).toBe(1)
   release()
   await expect(sheet).toBeHidden()
   await expect(page.locator('[aria-labelledby="pihak-senders"]')).toContainText("Pak Budi Santoso")
-  await page.unroute(/\/api\/app\/contacts\/senders\/[0-9a-z-]+$/)
+  expect(posts).toBe(1)
+  expect(gets).toBe(0)
+  await page.unroute("**/api/app/contacts/senders")
 })
+
+// Sol R3: verifying the SAME sender's WhatsApp while a Non-COD checkout is pending updates the card and does not
+// supersede the press: the shipment is issued.
+test("Sol R3: WA verification of the same sender never cancels a pending Non-COD checkout", async ({ page }) => {
+  const api = await seeded(page, "e2e-jaga-v")
+  await api.post(`${APP}/api/app/contacts/senders`, { headers: { origin: APP, "content-type": "application/json" }, data: { name: "Ibu Wulan Sari", phone: "081355554444" } })
+  await quoteJt(page)
+  await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Wulan Sari/ }).click()
+  await page.getByLabel("Isi paket", { exact: true }).fill("Pakaian")
+  await page.getByRole("checkbox", { name: "Isi paket bukan barang terlarang atau berbahaya" }).check()
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/quotes/freeze", async (route) => {
+    await held
+    await route.continue()
+  })
+  await primary(page).click()
+  await page.getByRole("button", { name: "Pengirim sudah menerima" }).click()
+  await expect(page.getByText("WhatsApp terverifikasi di loket")).toBeVisible()
+  release()
+  await expect(page.getByText("Resi terbit").first()).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/AWB JT\d{10}/)).toBeVisible()
+  await page.unroute("**/api/app/quotes/freeze")
+})
+

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { CheckIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
 import { AreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
@@ -137,7 +137,7 @@ export function PengirimPage() {
   )
 }
 
-export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: boolean; onSaved: (saved?: { id: string }) => void }) {
+export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: boolean; onSaved: (saved?: Sender) => void }) {
   const [kind, setKind] = useState<Sender["sender_kind"]>(sender?.sender_kind ?? "walk_in")
   const [name, setName] = useState(sender?.true_name ?? "")
   const [phone, setPhone] = useState(sender?.true_phone ?? "")
@@ -150,15 +150,21 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
   const [msg, setMsg] = useState<string | null>(null)
   const [verified, setVerified] = useState<number | null>(sender?.wa_verified_at ?? null)
   const [pending, setPending] = useState(false)
+  const saving = useRef(false)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    // DEC-251 Sol R3: one save at a time (a second Enter or click while the POST is pending sends nothing; the ref
+    // also covers two clicks before the disabled state has rendered).
+    if (pending || saving.current) return
+    saving.current = true
     setPending(true)
     setErrors({})
     setMsg(null)
     try {
       const body = { senderKind: kind, name, phone, street: street || null, areaId: area?.id ?? null, areaLabel: area?.label ?? null, brandName: brand || null, brandPhone: brandPhone || null, hideGeraiBranding: hide }
-      const r = await api<{ item: { id: string } }>(sender ? `/contacts/senders/${sender.id}` : "/contacts/senders", { body })
+      // The POST answers with the full contact (same shape as GET): callers use it directly, no second request.
+      const r = await api<{ item: Sender }>(sender ? `/contacts/senders/${sender.id}` : "/contacts/senders", { body })
       onSaved(r.item)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -166,6 +172,7 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
         setMsg(err.body.message)
       } else setMsg("Gagal menyimpan. Coba lagi.")
     } finally {
+      saving.current = false
       setPending(false)
     }
   }

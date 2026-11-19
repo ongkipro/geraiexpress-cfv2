@@ -826,7 +826,7 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `/simulasi-kasir`; 0 `<select>` on the mini-site; `check:fast`, brand + mini-site Vitest, `check-page.mjs` 10/10,
   focused e2e; the 12 screenshots in `docs/evidence/DEC-250/`.
 - **DEC-251A** Kiriman Satuan 1·2·3 → 4 auto-quote + Cek Ongkir Cepat + pickup chip (R3; DEC-251; owner 2026-11-19) —
-  **IN REVIEW** on `dec-251` (supervisor pre-review + GPT-6.2 Sol R1–R2 fixed, `docs/review/dec-251/DISPOSITION.md`; Sol R3 next). Done when: `/kasir` shows `📍 Titik Jemput` (owner `Ubah`), the three top cards, the
+  **IN REVIEW** on `dec-251` (supervisor pre-review + GPT-6.2 Sol R1–R3 fixed, `docs/review/dec-251/DISPOSITION.md`; Sol R4 next). Done when: `/kasir` shows `📍 Titik Jemput` (owner `Ubah`), the three top cards, the
   recipient's area drives the quote destination (plus the `Cek kecamatan saja dulu` mode, pre-activated from
   `?tujuan=`), auto-quote after 500 ms with no request for tab or margin toggles, auto-Cargo ≥ 5 kg, cheapest-first
   table/rows with rules and owner-only cost; section 5 keeps the TASK-304 guards and the TASK-701 display; `/kasir/

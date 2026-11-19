@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { PlusIcon } from "lucide-react"
 import { AreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
@@ -110,7 +110,7 @@ export function PenerimaPage() {
   )
 }
 
-export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: { recipient: Recipient | null; canArchive: boolean; onSaved: (saved?: { id: string }) => void; initialArea?: Area | null }) {
+export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: { recipient: Recipient | null; canArchive: boolean; onSaved: (saved?: Recipient) => void; initialArea?: Area | null }) {
   const [name, setName] = useState(recipient?.name ?? "")
   const [phone, setPhone] = useState(recipient?.phone ?? "")
   const [street, setStreet] = useState(recipient?.street_address ?? "")
@@ -119,14 +119,20 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const saving = useRef(false)
   async function submit(e: FormEvent) {
     e.preventDefault()
+    // DEC-251 Sol R3: one save at a time (a second Enter or click while the POST is pending sends nothing; the ref
+    // also covers two clicks before the disabled state has rendered).
+    if (pending || saving.current) return
+    saving.current = true
     setPending(true)
     setErrors({})
     setMsg(null)
     try {
       const body = { name, phone, street, note: note || null, areaId: area?.id ?? "", areaLabel: area?.label ?? "", postalCode: area?.postalCode ?? null }
-      const r = await api<{ item: { id: string } }>(recipient ? `/contacts/recipients/${recipient.id}` : "/contacts/recipients", { body })
+      // The POST answers with the full contact (same shape as GET): callers use it directly, no second request.
+      const r = await api<{ item: Recipient }>(recipient ? `/contacts/recipients/${recipient.id}` : "/contacts/recipients", { body })
       onSaved(r.item)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -134,6 +140,7 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
         setMsg(err.body.message)
       } else setMsg("Gagal menyimpan. Coba lagi.")
     } finally {
+      saving.current = false
       setPending(false)
     }
   }
