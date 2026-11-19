@@ -64,3 +64,9 @@ Supervisor pre-review before Sol R4:
   releases. The new sheet stays open with an empty form and `Bu Ratna Dewi` is not picked.
 - **Checks:** `check:fast` + `-g "Sol R3"` (2 passed), as instructed; no mutation run this round.
 
+## GPT-6.2 Sol R4 (`R4-sol.md`, on `84c6099`): APPROVE
+
+Zero open findings. Release: one release ledger run (`pnpm check`, e2e `quote`, `checkout`, `pos-guards`,
+`customer-display`, `courier-logos`, `bulk`, `kiriman`, `minisite` with a 120 s per-test timeout, boundary reviewed),
+then `main` fast-forward and the staging + production deploy recorded in `BUILD-LOG.md` and `STATUS.md`.
+

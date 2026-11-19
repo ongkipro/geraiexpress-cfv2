@@ -826,20 +826,20 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   `/simulasi-kasir`; 0 `<select>` on the mini-site; `check:fast`, brand + mini-site Vitest, `check-page.mjs` 10/10,
   focused e2e; the 12 screenshots in `docs/evidence/DEC-250/`.
 - **DEC-251A** Kiriman Satuan 1·2·3 → 4 auto-quote + Cek Ongkir Cepat + pickup chip (R3; DEC-251; owner 2026-11-19) —
-  **IN REVIEW** on `dec-251` (supervisor pre-review + GPT-6.2 Sol R1–R3 fixed, `docs/review/dec-251/DISPOSITION.md`; Sol R4 next). Done when: `/kasir` shows `📍 Titik Jemput` (owner `Ubah`), the three top cards, the
+  **DONE 2026-11-19**, GPT-6.2 Sol R4 APPROVE (`docs/review/dec-251/`). Done when: `/kasir` shows `📍 Titik Jemput` (owner `Ubah`), the three top cards, the
   recipient's area drives the quote destination (plus the `Cek kecamatan saja dulu` mode, pre-activated from
   `?tujuan=`), auto-quote after 500 ms with no request for tab or margin toggles, auto-Cargo ≥ 5 kg, cheapest-first
   table/rows with rules and owner-only cost; section 5 keeps the TASK-304 guards and the TASK-701 display; `/kasir/
   cek-cepat` keeps `Buat Kiriman dari Tarif Ini`; quote/checkout/pos-guards/customer-display/courier-logos e2e pass;
   admin-geometry 0 fail.
-- **DEC-251B** Paket Massal courier logo grid + Cargo + `.xlsx` reader (R2; DEC-251) — **IN REVIEW**. Done when:
+- **DEC-251B** Paket Massal courier logo grid + Cargo + `.xlsx` reader (R2; DEC-251) — **DONE 2026-11-19** (Sol R4 APPROVE). Done when:
   `readXlsxToCsv` unit tests (shared/inline strings, numbers, gaps, `8…` phones, size/row limits in Indonesian) pass;
   `/kasir/multi` shows the pickup chip, `Reguler` / `Cargo ≥ 5 kg` logo grid (Cargo forces Non-COD) and accepts `.xlsx`
   and `.csv`; bulk e2e passes.
-- **DEC-251C** `/kiriman` stuck filter (R2; DEC-251) — **IN REVIEW**. Done when: `stuckDays` 2/3/5/7 filters issued,
+- **DEC-251C** `/kiriman` stuck filter (R2; DEC-251) — **DONE 2026-11-19** (Sol R4 APPROVE). Done when: `stuckDays` 2/3/5/7 filters issued,
   still-moving shipments whose last courier scan (or issue/creation time) is older than N days, tenant-bound; Worker test;
   `?macet=` pills on `/kiriman`.
-- **DEC-251D** Mini-site Cek Ongkir → Kirim dari Rumah prefill (R2; DEC-251) — **IN REVIEW**. Done when: the CTA carries
+- **DEC-251D** Mini-site Cek Ongkir → Kirim dari Rumah prefill (R2; DEC-251) — **DONE 2026-11-19** (Sol R4 APPROVE). Done when: the CTA carries
   `destId`/`destLabel`/`weight`, `GET /kirim` prefills only validated values (24-hex, ≤ 120 chars, 10..100000 g); Vitest +
   mini-site e2e.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,

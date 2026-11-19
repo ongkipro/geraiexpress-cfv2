@@ -1295,7 +1295,7 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   app `/masuk` + `/daftar-akun` and owner `/masuk` 200 (both SPA bundles carry the split-studio, not the old arrow
   label), owner `/loket-mitra-3d.webp` 200 `image/webp` 32,916 B, `probe.geraimitra.com` 200; probes 6/6. No migration.
 
-## 2026-11-19 — DEC-251 Next-gen shipment flow, Paket Massal `.xlsx`, stuck filter, mini-site handoff (branch `dec-251`, awaiting supervisor review)
+## 2026-11-19 — DEC-251 Next-gen shipment flow, Paket Massal `.xlsx`, stuck filter, mini-site handoff (branch `dec-251`)
 
 - DEC-251A (`/kasir`, `/kasir/cek-cepat`): the quote request moved into `useQuoteForm` (quote-panel.tsx).
   - It is rendered as `PackageFields` (card 3) and `CourierResults` (section 4). `QuotePanel` remains for Cek Ongkir
@@ -1376,4 +1376,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   already blocks clicks and Enter; the e2e now also calls `form.requestSubmit()`.
 - Supervisor pre-review before Sol R4: a sheet generation in `PartyStep` ignores saves from a closed sheet. The e2e
   covers hold → Escape → reopen → release; `check:fast` + `-g "Sol R3"` 2 passed.
+- GPT-6.2 Sol R4 APPROVE on `84c6099` (zero open findings) after the supervisor pre-reviews, R1 (4 P1 + 5 P2), R2 (3 P1
+  + 1 P2) and R3 (contact save root cause + WA verification).
+- Release attempt 1 (`RUN-20261119T102511Z-9c40e270`) closed FAIL:
+  - `pnpm check` PASS; the e2e gate FAILED at 10:47Z: 6 tests hit the 5 s `expect` timeout under host load ~10 from
+    other projects (66 passed);
+  - a retry in the same run passed (72 passed), but per `docs/WORKFLOW.md` §5.2/§5.5 a failed gate is not retried
+    inside its run, so the run was closed FAIL;
+  - the automatic finish/commit chain of that retry was stopped before `review-boundary`;
+  - the release uses a new run.
 
