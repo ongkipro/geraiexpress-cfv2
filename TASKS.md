@@ -816,8 +816,8 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   (before/after proof); `check:fast`, `GX_SKIP_BUILD`, `GX_REUSE_SERVER`, `GX_VITEST_WORKERS`, stale-state pruning;
   `check-page.mjs` 10/10, brand Vitest + e2e, mutations, screenshots in `docs/evidence/DEC-249/`; supervisor screenshot
   review before the single final gate.
-- **DEC-250** Split-studio auth + mobile 390 pass + mini-site unit toggle (R3; DEC-250; owner 2026-11-19) — **IN REVIEW**
-  (supervisor pre-review applied; GPT-6.2 Sol R1–R4 fixed, `docs/review/dec-250/DISPOSITION.md`; Sol R5 next). Contract: visual 07 §3.1, DECISIONS DEC-250. Done when: app
+- **DEC-250** Split-studio auth + mobile 390 pass + mini-site unit toggle (R3; DEC-250; owner 2026-11-19) — **DONE 2026-11-19**,
+  GPT-6.2 Sol R5 APPROVE (`docs/review/dec-250/`; supervisor pre-review + Sol R1–R4 fixed). Contract: visual 07 §3.1, DECISIONS DEC-250. Done when: app
   `/masuk`, `/daftar-akun`, both `/daftar` steps and owner `/masuk` have no arrow in the brand mark, the studio panel
   visible from 960px and hidden below, 0 `<footer>`, no page and no inner scroll at 1440×900, 1366×768 and 390×844; the
   pill switcher, wizard bar, live domain pill + panel badge; Turnstile `interaction-only` + `flexible` + `light` with the

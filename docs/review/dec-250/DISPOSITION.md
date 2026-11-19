@@ -42,3 +42,8 @@ Production code is unchanged in this round (test-only).
 | P2 | The `status of 401` filter was not anchored to Chromium's resource message. | **Fixed.** The exception uses the anchored pattern `/^Failed to load resource: the server responded with a status of 401(?: \(|$)/` and still requires the `/api/app/auth/me` URL. | `eslint e2e/auth-stage.spec.ts`; e2e `auth-stage` on desktop-1280. |
 
 Production code is unchanged in this round (test-only).
+
+## GPT-6.2 Sol R5 (`R5-sol.md`, on `b6f200b`): APPROVE
+
+Zero open findings. Release: one release ledger run (`seo`, `check`, e2e `auth-stage`, `auth`, `onboarding`, `brand`,
+`minisite`), then `main` fast-forward and the staging + production deploy recorded in `BUILD-LOG.md` and `STATUS.md`.

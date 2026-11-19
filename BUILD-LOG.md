@@ -1253,3 +1253,34 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   `image/webp` 32,916 B, `/logo.svg` 200 `image/svg+xml` 792 B, app and owner `/masuk` 200; probes staging 5/5,
   production 6/6 (twice). No migration.
 
+## 2026-11-19 — DEC-250 Split-studio auth + mobile 390 pass + mini-site unit toggle (branch `dec-250`)
+
+- Auth (run `RUN-20261119T032058Z-0b0d4598`): `AuthCard` became the `adsbook.id` `AuthSplit` studio for app and owner
+  auth. It is a `100dvh` `5.4fr / 4.6fr` grid from 960px with the `Masuk ke Loket` / `Daftar Gerai Baru` pill switcher
+  over one floating card, and a porcelain panel holding the arrow-free mark, a separate `← Beranda`, the 3D visual,
+  the pitch and one legal line. A compact bar replaces the panel below 960px. Register has a three-segment
+  `Langkah n / 3` wizard bar and a live domain pill mirrored on the panel badge. Turnstile is
+  `interaction-only` + `flexible` + `light` with a one-line status and no reserved box. The password toggle is a pill.
+  Step 3 first overflowed 26 px (1366) and 73 px (390). It now fits after tighter consent copy, a one-line lead, a
+  16px card gap and less padding on short screens.
+- Brand 390: `.tbl.stack` cards with `data-col` labels (`.tbl-wrap` overflow 325/191 → 0), Raka pills under the art,
+  2-column chips, mobile rhythm, no duplicate CTA row on `/simulasi-kasir`. Mini-site `Satuan` became a `gram | kg`
+  radio toggle.
+- Supervisor pre-review (run `RUN-20261119T041028Z-96986e85`): `<main>` landmark, `/daftar` tab, Turnstile slot
+  placement, eager product shot, and the home bento as a phone scroll-snap track (home 390: 10,499 → 7,794 px).
+  `code` uses `overflow-wrap:break-word`.
+- GPT-6.2 Sol R1 (1 P1 + 4 P2) fixed in run `RUN-20261119T044204Z-b64d7477`:
+  - a `/daftar-akun` session guard (`/auth/me` → `/daftar`);
+  - one email/OTP form in DOM order;
+  - a gap-free `TurnstileAction` with a `ResizeObserver`;
+  - semantic stacked tables;
+  - a forced-colors unit indicator;
+  - an owner `/totp` three-viewport e2e.
+
+  Mutations M1–M5 red. Gotcha: the `○`/`●` status glyph swap changed the line height and re-centred the card by
+  ~0.8 px. The status line now has a fixed height, and the test waits for the 220 ms entrance before measuring.
+- Sol R2 (3 P2) fixed in run `RUN-20261119T045954Z-0b8d42c8`: forced-colors focus ring, TOTP QR wait (fits with the
+  QR; no layout change), and a 401-only console filter. Mutations R2-M1/M2 red. The first e2e attempt failed to start
+  the Playwright webServer and passed on retry.
+- Sol R3 and R4 (test-only) anchored the `/auth/me` console exception to Chromium's exact `status of 401` line.
+- GPT-6.2 Sol R5 APPROVE on `b6f200b` (zero open findings) after R1 (5 + gap), R2 (3), R3 (1) and R4 (1) fixes.
