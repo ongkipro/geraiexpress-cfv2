@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -43,10 +43,17 @@ export function PaketMassalPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  // Sol R2-4: the services may arrive after the operator already opened the Cargo tab — the default comes from the tab
+  // open at that moment (none when that tab is empty), never a hidden Reguler service.
+  const tabRef = useRef(tab)
+  useLayoutEffect(() => {
+    tabRef.current = tab
+  })
   useEffect(() => {
     api<{ items: Service[] }>("/bulk/services").then((r) => {
       setServices(r.items)
-      setService((cur) => cur || r.items.find((s) => !s.cargo)?.code || "")
+      const cargo = tabRef.current === "cargo"
+      setService((cur) => cur || r.items.find((s) => s.cargo === cargo)?.code || "")
     }).catch(() => setMsg("Daftar ekspedisi tidak dapat dimuat."))
   }, [])
   const chosen = services?.find((s) => s.code === service)
@@ -88,6 +95,8 @@ export function PaketMassalPage() {
     e.target.value = "" // picking the same file again (after fixing it) fires `change` again
     if (!f) return
     const mine = ++pickGen.current
+    // Sol R2-3: a new pick ends any earlier read's `Membaca berkas…` state at once, even when this file is rejected.
+    setReading(false)
     setFile(null)
     setErrors({})
     if (f.size > 1024 * 1024) return setErrors({ file: "Berkas lebih dari 1 MB." })

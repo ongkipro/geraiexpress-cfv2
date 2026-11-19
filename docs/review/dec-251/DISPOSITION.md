@@ -21,3 +21,25 @@ Focused checks (fast protocol):
 - e2e `quote`, `checkout`, `bulk`, `kiriman`, `pos-guards` on desktop-1280.
 
 Mutations restore with SHA-256 verification.
+
+## GPT-6.2 Sol R2 (`R2-sol.md`, on `ce4c05f`): R1-2/3/5/6/8/9 resolved; 3 P1 + 1 P2 follow-ups. All fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P1 R2-1 | The area check skipped recipients without a district, and the server accepted parties whose district changed after the freeze. | **Fixed.** The client is strict: no Mengantar district → `Lengkapi kecamatan penerima di Kontak dulu.`, a different one → refused, both before freeze. Server `setParties()` compares the recipient's area with `latestQuote().destination_area_id` and returns 422 at `/parties`, so `/payment` is never reached. | Worker `dispatch` `Sol R2-1` (recipient moved to ORIGIN after freeze → 422, `unpaid`, no recipient stored); e2e `pos-guards` `Sol R2-1` (held freeze, recipient moved via API, release → the refusal on screen, 0 `/payment`, INV `unpaid` + `draft`). Mutations red on both. The client `!toArea` check is a second layer over the same server refusal (`null` ≠ destination), so it has no separate mutation. |
+| P1 R2-2 | `+ Baru` closed the sheet before the saved contact loaded; a late pick could change a party mid-checkout. | **Fixed.** The sheet (modal) stays open until `GET /contacts/…/:id` returns, then picks the contact only if no press is pending (`lockedRef`). Recent-contact pickers are inside `fieldset disabled` while pending. `pickSender` bumps `checkoutGen` like `pickRecipient`. | e2e `Sol R2-2`: held contact GET → sheet still open after `Simpan`; release → sheet closes, `Pak Budi Santoso` chosen. Mutation R2-2 red. |
+| P1 R2-3 | Rejecting a file while another was being read left `Membaca berkas…` on. | **Fixed.** Every pick sets `reading` false first, before the size/type checks. | e2e `bulk`: `lambat.xlsx` (slowed) then `catatan.txt` → error, no `Membaca berkas…`, `Periksa Baris` enabled, and the slow read publishes nothing. Mutation R2-3 red. |
+| P2 R2-4 | Services loading after the Cargo tab was opened defaulted to a hidden Reguler service. | **Fixed.** `tabRef` is read when `/bulk/services` resolves: the default is the first service of the open tab (none if it is empty). | e2e `bulk`: held `/bulk/services`, Cargo opened, release → the checked card is a Cargo one and `Tanpa COD` is pressed. Mutation R2-4 red. |
+
+Focused checks per Sol R2:
+- `check:fast`.
+- Worker `dispatch` + `listing`.
+- e2e `pos-guards`, `checkout`, `quote`, `bulk` on desktop-1280 (15 passed).
+
+Test hardening in this round (host load 10 from other projects' I/O):
+- The R1-1 regression now waits for the held freeze answer before navigating.
+- The R1-2 and R1-5 regressions run the 500 ms debounce on Playwright's fake clock (`page.clock`), and R1-2 asserts the
+  weights actually sent.
+- `quote.spec` allows 20 s for a re-quote to settle.
+- The recorded focused run uses `--timeout=120000` and passed 15/15.
+

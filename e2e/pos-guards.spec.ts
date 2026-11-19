@@ -106,12 +106,15 @@ test("Sol R1-1: a superseded held freeze never republishes checkout; parties loc
     j.data.card.counterDueIdr += 2500
     await route.fulfill({ response: res, json: j })
   })
+  const frozenAnswer = page.waitForResponse((r) => r.url().endsWith("/api/app/quotes/freeze"), { timeout: 30_000 })
   await primary(page).click()
   await expect(page.locator('[aria-labelledby="pihak-recipients"]').getByRole("button", { name: "Ganti" })).toBeDisabled()
   await expect(page.getByRole("button", { name: "Penerima baru" })).toBeDisabled()
   await page.getByRole("button", { name: "2 kg" }).click()
   release()
-  await page.waitForTimeout(1500)
+  // The held answer has fully arrived (and been ignored) before anything else is checked or the page changes.
+  await frozenAnswer
+  await expect(primary(page)).toHaveCount(0)
   await expect(page.getByText(/Ongkir yang terkunci berbeda/)).toHaveCount(0)
   await expect(page.getByText(/INV [0-9A-Z]{7} · draf/)).toHaveCount(0)
   // The superseded INV is never adopted: no INV badge on section 5 (it shows whenever an INV is frozen on screen).
@@ -136,28 +139,36 @@ test("Sol R1-1: a superseded held freeze never republishes checkout; parties loc
 // Sol R1-2: a cleared or zero weight drops the selection and cancels a pending auto-quote (10–100,000 g bounds).
 test("Sol R1-2: clearing the weight drops the courier and never sends the stale grams", async ({ page }) => {
   await seeded(page, "e2e-jaga-w")
-  await quoteJt(page)
-  let quotes = 0
-  page.on("request", (r) => r.url().endsWith("/api/app/quotes") && r.method() === "POST" && quotes++)
+  // A fake clock makes the 500 ms debounce deterministic under any host load.
+  await page.clock.install()
+  await page.goto(`${APP}/kasir`)
+  await page.clock.runFor(400)
+  await page.getByRole("list", { name: "Pilihan penerima" }).getByRole("button", { name: /Rina Kartika/ }).click()
+  await page.clock.runFor(600)
+  const radio = page.getByRole("radio", { name: /^J&T Express/ })
+  await radio.click()
+  const sent: number[] = []
+  page.on("request", (r) => r.url().endsWith("/api/app/quotes") && r.method() === "POST" && sent.push((r.postDataJSON() as { weightGram: number }).weightGram))
   const weight = page.getByLabel("Berat paket")
   await weight.fill("")
   await expect(page.getByText("Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.")).toBeVisible()
-  await page.waitForTimeout(900)
-  expect(quotes).toBe(0)
-  // Inside the 500 ms debounce: 1500 g then cleared to 0 — nothing is sent.
+  await page.clock.runFor(1000)
+  // Inside the debounce: 1500 g, 200 ms later 0 — nothing is sent, ever.
   await weight.fill("1500")
-  await page.waitForTimeout(150)
+  await page.clock.runFor(200)
   await weight.fill("0")
-  await page.waitForTimeout(900)
-  expect(quotes).toBe(0)
+  await page.clock.runFor(1000)
+  expect(sent).toEqual([])
   // Back to the quoted 1000 g: the cached result is current again (no request), but the dropped courier stays dropped.
   await weight.fill("1000")
-  await expect(page.getByRole("radio", { name: /^J&T Express/ })).not.toHaveAttribute("aria-disabled", "true")
-  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "false")
-  expect(quotes).toBe(0)
-  // A new valid weight quotes once.
+  await page.clock.runFor(1000)
+  await expect(radio).not.toHaveAttribute("aria-disabled", "true")
+  await expect(radio).toHaveAttribute("aria-checked", "false")
+  expect(sent).toEqual([])
+  // A new valid weight quotes once, with that weight.
   await weight.fill("1200")
-  await expect.poll(() => quotes).toBe(1)
+  await page.clock.runFor(600)
+  await expect.poll(() => sent).toEqual([1200])
 })
 
 // Sol R1-5: a manual `Cek Ongkir` inside the debounce sends ONE request (the timer re-checks when it fires), and rows
@@ -172,12 +183,17 @@ test("Sol R1-5: one request for a manual quote during the debounce; rows locked 
     await held
     await route.continue()
   })
+  await page.clock.install()
   await page.goto(`${APP}/kasir`)
   await page.getByRole("button", { name: "Cek kecamatan tujuan saja dulu" }).click()
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
+  await page.clock.runFor(500)
   await page.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByRole("main").getByRole("button", { name: "Cek Ongkir" }).click()
-  await page.waitForTimeout(900)
+  // The debounce timer would have fired by now: it re-checks and sends nothing more.
+  await page.clock.runFor(1000)
+  await expect.poll(() => quotes).toBe(1)
+  await page.waitForTimeout(300)
   expect(quotes).toBe(1)
   release()
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toBeVisible()
@@ -190,4 +206,54 @@ test("Sol R1-5: one request for a manual quote during the debounce; rows locked 
   release()
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).not.toHaveAttribute("aria-disabled", "true")
   await page.unroute("**/api/app/quotes")
+})
+
+// Sol R2-1: the recipient's district changes while the freeze is held — `/parties` refuses it before any payment.
+test("Sol R2-1: a recipient moved to another district during the freeze is refused at /parties, never paid", async ({ page }) => {
+  const api = await seeded(page, "e2e-jaga-p")
+  await quoteJt(page)
+  await parties(page)
+  const rid = ((await (await api.get(`${APP}/api/app/contacts/recipients?q=Rina`)).json()) as { data: { items: Array<{ id: string }> } }).data.items[0]!.id
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/quotes/freeze", async (route) => {
+    await held
+    await route.continue()
+  })
+  let payments = 0
+  page.on("request", (r) => /\/api\/app\/shipments\/[0-9a-z]{7}\/payment$/.test(r.url()) && payments++)
+  const frozen = page.waitForResponse((r) => r.url().endsWith("/api/app/quotes/freeze"))
+  await primary(page).click()
+  // Another counter moves the recipient to Dago, Coblong (ORIGIN area) while this press waits.
+  expect((await api.post(`${APP}/api/app/contacts/recipients/${rid}`, { headers: { origin: APP, "content-type": "application/json" }, data: { name: "Rina Kartika", phone: "085712348821", street: "Jl. Dago No. 1", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago" } })).status()).toBe(200)
+  release()
+  const slug = ((await (await frozen).json()) as { data: { slug: string } }).data.slug
+  await expect(page.getByText("Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir lagi.").first()).toBeVisible()
+  expect(payments).toBe(0)
+  const d = ((await (await api.get(`${APP}/api/app/shipments/${slug}`)).json()) as { data: { shipment: { counter_payment_status: string; dispatch_state: string } } }).data
+  expect(d.shipment).toMatchObject({ counter_payment_status: "unpaid", dispatch_state: "draft" })
+  await page.unroute("**/api/app/quotes/freeze")
+})
+
+// Sol R2-2: `+ Baru` keeps the sheet (modal) open until the saved contact has loaded, then picks it.
+test("Sol R2-2: a new sender is picked only after it has loaded; the sheet stays open meanwhile", async ({ page }) => {
+  await seeded(page, "e2e-jaga-s")
+  await page.goto(`${APP}/kasir`)
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  await page.route(/\/api\/app\/contacts\/senders\/[0-9a-z-]+$/, async (route) => {
+    if (route.request().method() === "GET") await held
+    await route.continue()
+  })
+  await page.getByRole("button", { name: "Pengirim baru" }).click()
+  const sheet = page.getByRole("dialog")
+  await sheet.getByLabel("Nama pengirim asli").fill("Pak Budi Santoso")
+  await sheet.getByLabel("Nomor WhatsApp (untuk retur & COD)").fill("081377776666")
+  await sheet.getByRole("button", { name: "Simpan" }).click()
+  await page.waitForTimeout(600)
+  await expect(sheet).toBeVisible()
+  release()
+  await expect(sheet).toBeHidden()
+  await expect(page.locator('[aria-labelledby="pihak-senders"]')).toContainText("Pak Budi Santoso")
+  await page.unroute(/\/api\/app\/contacts\/senders\/[0-9a-z-]+$/)
 })

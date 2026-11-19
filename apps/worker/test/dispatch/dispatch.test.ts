@@ -459,4 +459,18 @@ describe("rotation fence during checkout (TASK-205 ↔ TASK-304)", () => {
     expect(mockSeller.createCalls).toBe(0)
     expect((await detail(t.cookie, slug)).shipment).toMatchObject({ dispatch_state: "draft" })
   })
+
+  it("DEC-251 Sol R2-1: /parties refuses a recipient outside the quoted district (before any payment)", async () => {
+    const t = await checkoutGerai("partyarea")
+    const f = await post("/quotes/freeze", t.cookie, { destinationAreaId: DEST, weightGram: 1000, mode: "none", serviceCode: "JT" })
+    const slug = ((await f.json()) as { data: { slug: string } }).data.slug
+    // The recipient moves to another district while the quote is frozen.
+    await runInDurableObject(t.vault, (_i, s) => {
+      s.storage.sql.exec("UPDATE recipient_contacts SET mengantar_area_id = ? WHERE id = ?", ORIGIN, t.recipient)
+    })
+    const p = await post(`/shipments/${slug}/parties`, t.cookie, { senderId: t.sender, recipientId: t.recipient, content: "Pakaian", prohibitedAck: true })
+    expect(p.status).toBe(422)
+    expect(((await p.json()) as { error: { field_errors: Record<string, string> } }).error.field_errors.recipientId).toBe("Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir lagi.")
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ counter_payment_status: "unpaid", recipient_contact_id: null })
+  })
 })

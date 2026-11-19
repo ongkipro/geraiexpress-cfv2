@@ -53,7 +53,8 @@ test("Cek Ongkir Cepat: Non-COD, COD Barang, buat kiriman dari hasil", async ({ 
   await page.getByRole("button", { name: "2 kg" }).click()
   await expect(page.getByText("Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.")).toBeVisible()
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toHaveAttribute("aria-checked", "false")
-  await expect(page.getByText(/Data paket berubah/)).toHaveCount(0)
+  // The re-quote settles (generous under host load).
+  await expect(page.getByText(/Data paket berubah/)).toHaveCount(0, { timeout: 20_000 })
   await expect(page.getByText("Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.")).toBeVisible()
   await page.goto(`${APP}/kasir/cek-cepat`)
   await page.getByLabel("Kecamatan tujuan").fill("tebet")

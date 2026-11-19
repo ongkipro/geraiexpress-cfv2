@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { CheckCircle2Icon, MapPinnedIcon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
@@ -158,16 +158,22 @@ function PartyStep({ kind, value, onPick, error, destination, n, initialArea, lo
   const w = useWorkspace()
   const [adding, setAdding] = useState(false)
   const label = kind === "senders" ? "Pengirim" : "Penerima"
+  // Sol R2-2: the sheet stays open (modal) until the saved contact is loaded, so no checkout can start in between, and
+  // a contact that arrives while a press is pending is never picked.
+  const lockedRef = useRef(locked)
+  useLayoutEffect(() => {
+    lockedRef.current = locked
+  })
   async function saved(item?: { id: string }) {
-    setAdding(false)
-    if (!item) return
+    if (!item) return setAdding(false)
     const r = await api<{ item: Contact }>(`/contacts/${kind}/${item.id}`).catch(() => null)
-    if (r?.item) onPick(r.item)
+    setAdding(false)
+    if (r?.item && !lockedRef.current) onPick(r.item)
   }
   return (
     <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
       <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setAdding(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
-      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} locked={locked} /> : <PartyPicker kind={kind} value={value} onPick={onPick} limit={4} />}
+      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
       <Sheet open={adding} onOpenChange={setAdding}>
@@ -281,6 +287,11 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
   const recipientArea = (recipient as Recipient | null)?.mengantar_area_id ?? null
   // Choosing another recipient (or `Ganti`) never keeps the previous recipient's district and rates: a recipient without
   // a Mengantar area, or none at all outside the walk-in district mode, empties sections 4 and 5.
+  // Sol R2-2: a sender change (picked, added, `Ganti`) also supersedes a press in flight.
+  function pickSender(c: Contact | null) {
+    checkoutGen.current++
+    setSender(c)
+  }
   function pickRecipient(c: Contact | null) {
     checkoutGen.current++
     if (c) setAreaOnly(false)
@@ -353,7 +364,9 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       if (!sender) throw new ApiError(422, { code: "NOT_READY", message: "Pilih pengirim dulu.", field_errors: { senderId: "Pilih pengirim." } })
       if (!recipient) throw new ApiError(422, { code: "NOT_READY", message: "Pilih penerima dulu.", field_errors: { recipientId: "Pilih penerima." } })
       const toArea = (recipient as Recipient).mengantar_area_id
-      if (toArea && toArea !== sel.req.destinationAreaId) throw new ApiError(422, { code: "NOT_READY", message: "Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.", field_errors: { recipientId: "Kecamatan penerima berbeda dengan tujuan ongkir." } })
+      // Sol R2-1: strict — a recipient without a Mengantar district is completed first, never paid for.
+      if (!toArea) throw new ApiError(422, { code: "NOT_READY", message: "Lengkapi kecamatan penerima di Kontak dulu.", field_errors: { recipientId: "Penerima ini belum punya kecamatan Mengantar." } })
+      if (toArea !== sel.req.destinationAreaId) throw new ApiError(422, { code: "NOT_READY", message: "Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir ulang ke kecamatan penerima.", field_errors: { recipientId: "Kecamatan penerima berbeda dengan tujuan ongkir." } })
       // COD and label masking need a counter-verified WhatsApp: say so before any money is recorded.
       if (sender && !sender.wa_verified_at && (cod || preset !== "standar_gerai")) {
         throw new ApiError(422, { code: "NOT_READY", message: "Verifikasi WhatsApp pengirim dulu (tombol di kartu pengirim).", field_errors: { senderId: "Kiriman COD atau label masking butuh WhatsApp pengirim yang sudah diverifikasi." } })
@@ -426,7 +439,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       ) : null}
 
       <div className="grid items-start gap-4 xl:grid-cols-3">
-        <PartyStep n={1} kind="senders" value={sender} onPick={setSender} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
+        <PartyStep n={1} kind="senders" value={sender} onPick={pickSender} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
           {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
           <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
           {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}

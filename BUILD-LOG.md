@@ -1355,4 +1355,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
      badge (shown whenever an INV is frozen).
   2. The R1-6 span check and the end-of-walk check overlap; a self-consistent CD overlapping the EOCD separates them.
   3. The R1-7 guards are redundant by design (a double mutation is red).
+- GPT-6.2 Sol R2 (3 P1 + 1 P2) fixed:
+  - the client area check is strict, and the server `setParties()` refuses a recipient outside the frozen quote's
+    district before payment;
+  - the `+ Baru` sheet stays open until the contact loads, pickers lock while pending, and `pickSender` bumps the
+    checkout generation;
+  - every upload pick clears `reading` first;
+  - late `/bulk/services` follow the open tab.
+
+  Mutations R2-1 (worker + e2e), R2-2, R2-3 and R2-4 are red.
+  Gotcha: under host I/O load (other projects), timing-based debounce assertions flaked. The debounce regressions now
+  use `page.clock`, the held-freeze test awaits its answer, and the focused e2e is recorded with a 120 s per-test
+  timeout (15/15 PASS).
 

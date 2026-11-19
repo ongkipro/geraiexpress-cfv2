@@ -210,3 +210,41 @@ test("Paket Massal: berkas pengganti selalu menang; tab Cargo kosong tanpa pilih
   await page.getByRole("button", { name: "Periksa Baris" }).click()
   expect(((await sent).postDataJSON() as { csv?: string }).csv).toBeUndefined()
 })
+
+// Sol R2-3 / R2-4: a rejected file picked while another is still being read ends `Membaca berkas…`; services that
+// load after the Cargo tab was opened default to a cargo service (never a hidden Reguler one).
+test("Paket Massal: berkas ditolak saat yang lain masih dibaca; layanan terlambat mengikuti tab Cargo", async ({ page, context, request }) => {
+  await seedMassal(context, request)
+  await page.addInitScript(() => {
+    const orig = File.prototype.arrayBuffer
+    File.prototype.arrayBuffer = function (this: File) {
+      const p = orig.call(this)
+      return this.name === "lambat.xlsx" ? p.then((b) => new Promise<ArrayBuffer>((r) => setTimeout(() => r(b), 1500))) : p
+    }
+  })
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  await page.route("**/api/app/bulk/services", async (route) => {
+    await held
+    await route.continue()
+  })
+  await page.goto(`${APP}/kasir/multi`)
+  await page.getByRole("button", { name: "Cargo ≥ 5 kg (Non-COD)" }).click()
+  release()
+  const group = page.getByRole("radiogroup", { name: "Ekspedisi untuk semua baris" })
+  await expect(group.locator('[role=radio][aria-checked="true"]')).toContainText("Cargo")
+  await expect(page.getByRole("button", { name: "Tanpa COD" })).toHaveAttribute("aria-pressed", "true")
+
+  await page.getByRole("list", { name: "Pilihan pengirim" }).getByRole("button", { name: /Ibu Siti Nisa/ }).click()
+  const input = page.locator('input[type="file"]')
+  await input.setInputFiles({ name: "lambat.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: XLSX })
+  await expect(page.getByRole("button", { name: "Membaca berkas…" })).toBeVisible()
+  await input.setInputFiles({ name: "catatan.txt", mimeType: "text/plain", buffer: Buffer.from("halo") })
+  await expect(page.getByText("Pilih berkas Excel .xlsx atau .csv.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Membaca berkas…" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Periksa Baris" })).toBeEnabled()
+  // The slow read finishing later publishes nothing.
+  await page.waitForTimeout(1800)
+  await expect(page.getByText("lambat.xlsx")).toHaveCount(0)
+})
+

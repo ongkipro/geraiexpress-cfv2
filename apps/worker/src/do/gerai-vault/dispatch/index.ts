@@ -109,6 +109,12 @@ export function setParties(sql: SqlStorage, slug: string, p: { senderId?: unknow
   if (p.senderId !== undefined && !sender) fields.senderId = "Pilih pengirim dari Kontak."
   const recipient = typeof p.recipientId === "string" ? readRecipient(sql, p.recipientId) : null
   if (p.recipientId !== undefined && !recipient) fields.recipientId = "Pilih penerima dari Kontak."
+  // DEC-251 Sol R2-1: the recipient must live in the quoted district — checked here, before any counter payment, so a
+  // recipient whose area changed while the quote was being frozen is refused at `/parties`, not after the money.
+  if (recipient) {
+    const q = latestQuote(sql, slug)
+    if (q && recipient.mengantar_area_id !== q.destination_area_id) fields.recipientId = "Kecamatan penerima berbeda dengan tujuan ongkir. Cek ongkir lagi."
+  }
   const content = typeof p.content === "string" ? p.content.trim().replace(/\s+/g, " ") : undefined
   if (content !== undefined && (content.length < 3 || content.length > 100 || /<|>|https?:\/\//i.test(content))) fields.content = "Isi paket 3–100 huruf, tanpa tautan."
   const preset = p.maskPreset === undefined ? undefined : ["standar_gerai", "dropship_toko", "privasi_penerima_cod", "full_nama_gerai"].includes(String(p.maskPreset)) ? String(p.maskPreset) : null
