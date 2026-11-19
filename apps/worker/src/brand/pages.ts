@@ -232,7 +232,7 @@ export function renderHome(app: string): string {
 
 <section class="sec" aria-labelledby="enam-title"><div class="wrap">
 <div class="shead"><h2 id="enam-title">Enam masalah meja loket yang langsung beres</h2><p class="sub">Dirancang dari alur kerja harian agen pengiriman, bukan sekadar formulir pembuatan resi.</p></div>
-<div class="bento" data-bento>
+<div class="bento" data-bento tabindex="0" aria-label="Enam masalah meja loket; di ponsel geser ke samping untuk kartu berikutnya">
 <article class="tile s6"><div class="float w-split" aria-hidden="true">
 <div class="w-rcpt"><div><span>INV 8K4M2P7</span><span>LUNAS</span></div><div><span>J&amp;T · EZ 1.000 g</span><span>12.500</span></div><div><span>Bubble wrap</span><span>3.000</span></div><div class="tot"><span>Tunai</span><span>Rp 15.500</span></div></div>
 <div><div class="w-head"><span>Peran aktif</span><span class="chip on">Kasir</span></div><dl class="w-rows"><div><dt>Tarif publik</dt><dd>Tampil</dd></div><div><dt>Modal ongkir</dt><dd>${lockTxt("Terkunci")}</dd></div><div><dt>Diskon mitra</dt><dd>${lockTxt("Terkunci")}</dd></div></dl></div>
@@ -271,7 +271,7 @@ export function renderHome(app: string): string {
 
 <section class="sec tight" aria-labelledby="layar-title"><div class="wrap">
 <div class="shead"><h2 id="layar-title">Satu layar kasir dari cek ongkir sampai resi terbit</h2><p class="sub">Isi tujuan dan berat, pilih kurir, catat pembayaran, lalu cetak label tanpa berpindah halaman.</p></div>
-<figure class="shot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" loading="lazy" decoding="async"></div><figcaption>Tangkapan layar ruang kerja kasir dengan data contoh.</figcaption></figure>
+<figure class="shot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" decoding="async"></div><figcaption>Tangkapan layar ruang kerja kasir dengan data contoh.</figcaption></figure>
 </div></section>
 
 <section class="sec" aria-labelledby="paket-title"><div class="wrap">
@@ -354,7 +354,7 @@ const PILLARS: Pillar[] = [
       "Tarif semua ekspedisi aktif tampil berdampingan sehingga kasir tinggal memilih.",
       "Berat volumetrik dan batas nilai COD dihitung sebelum resi terbit.",
     ],
-    visual: `<figure class="shot pshot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" loading="lazy" decoding="async"></div></figure>`,
+    visual: `<figure class="shot pshot"><div class="shot-stage"><img src="${PRODUCT_SHOT.src}" alt="${e(PRODUCT_SHOT.alt)}" width="${PRODUCT_SHOT.width}" height="${PRODUCT_SHOT.height}" decoding="async"></div></figure>`,
   },
   {
     id: "kirim-dari-rumah",

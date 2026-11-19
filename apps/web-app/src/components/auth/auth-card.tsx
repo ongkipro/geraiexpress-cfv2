@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { Link } from "@tanstack/react-router"
 
 /**
  * The brand site for an `app.` host (`app.geraiexpress.com` → `geraiexpress.com`, `app-staging.` → `staging.`,
@@ -100,19 +101,20 @@ export function AuthCard({
   const home = variant === "owner" ? null : brandHome()
   const pitch = PITCH[variant === "owner" ? "owner" : switcher === "daftar" ? "daftar" : "masuk"]
   const year = new Date().getFullYear()
-  const tab = (to: string, on: boolean, label: string) => (
-    <a
-      href={to}
+  // SPA tabs. This file is shared with `owner.` (whose router has no register routes); the switcher only renders on `app.`.
+  const tab = (to: "/masuk" | "/daftar-akun" | "/daftar", on: boolean, label: string) => (
+    <Link
+      to={to as "/masuk"}
       aria-current={on ? "page" : undefined}
       className={`flex min-h-11 items-center justify-center rounded-full px-3 text-center text-sm font-bold transition-[color,background-color,box-shadow] duration-200 motion-reduce:transition-none ${on ? "bg-white text-[#0B4FE3] shadow-[0_1px_2px_rgb(15_23_42/0.06),0_4px_10px_-4px_rgb(15_23_42/0.12)]" : "text-[#475569] hover:text-[#0F172A]"}`}
     >
       {label}
-    </a>
+    </Link>
   )
   return (
     <div data-auth-stage className="grid h-dvh w-full overflow-hidden bg-white text-[#0F172A] min-[960px]:grid-cols-[minmax(0,5.4fr)_minmax(0,4.6fr)]">
       <style>{STAGE_CSS}</style>
-      <div data-auth-main className="flex min-h-0 flex-col overflow-y-auto px-4 py-2 min-[960px]:px-8 min-[960px]:py-6 [@media(min-width:960px)_and_(max-height:820px)]:py-3">
+      <main data-auth-main className="flex min-h-0 flex-col overflow-y-auto px-4 py-2 min-[960px]:px-8 min-[960px]:py-6 [@media(min-width:960px)_and_(max-height:820px)]:py-3">
         <div data-auth-bar className="flex shrink-0 items-center justify-between gap-4 min-[960px]:hidden">
           <Mark home={home} size="bar" />
           {home ? <HomeLink home={home} /> : null}
@@ -121,7 +123,8 @@ export function AuthCard({
           {switcher && variant === "app" ? (
             <nav aria-label="Masuk atau daftar gerai" data-auth-switch className="grid grid-cols-2 gap-1 rounded-full bg-[#F4F6FA] p-1">
               {tab("/masuk", switcher === "masuk", "Masuk ke Loket")}
-              {tab("/daftar-akun", switcher === "daftar", "Daftar Gerai Baru")}
+              {/* On `/daftar` (steps 2–3, the owner account already exists) the active tab stays on `/daftar`. */}
+              {tab(slug !== undefined ? "/daftar" : "/daftar-akun", switcher === "daftar", "Daftar Gerai Baru")}
             </nav>
           ) : null}
           <section
@@ -144,7 +147,7 @@ export function AuthCard({
             ) : null}
           </section>
         </div>
-      </div>
+      </main>
       <aside data-auth-panel aria-label="Tentang GeraiExpress" className="relative m-3 hidden min-h-0 grid-rows-[auto_1fr_auto] gap-4 overflow-hidden rounded-[28px] bg-[#F4F6FA] px-9 py-7 min-[960px]:grid">
         <div className="relative flex items-center justify-between gap-4">
           <Mark home={home} size="panel" />

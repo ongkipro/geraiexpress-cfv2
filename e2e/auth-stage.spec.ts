@@ -20,6 +20,7 @@ async function fits(page: Page, what: string) {
     return { page: d.scrollHeight - innerHeight, wide: d.scrollWidth - d.clientWidth, inner: main.scrollHeight - main.clientHeight }
   })
   expect(m, what).toEqual({ page: 0, wide: 0, inner: 0 })
+  await expect(page.locator("main[data-auth-main]"), what).toHaveCount(1)
 }
 
 // The studio contract on one page: a clean mark (no arrow in it), the panel only from 960px, `← Beranda` on app only.
@@ -115,6 +116,8 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
   await page.getByRole("button", { name: "Buat Akun" }).click()
   await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("2 · Gerai")
   await expect(page.locator("[data-wizard]")).toContainText("Langkah 2 / 3")
+  // On `/daftar` the active `Daftar Gerai Baru` tab stays on `/daftar` (the owner account already exists).
+  await expect(page.getByRole("navigation", { name: "Masuk atau daftar gerai" }).getByRole("link", { name: "Daftar Gerai Baru" })).toHaveAttribute("href", "/daftar")
   await expect(page.locator("[data-wizard]").getByRole("button")).toHaveCount(0)
   // Live domain pill: the address follows the name, the studio panel mirrors it, `Ubah` opens the editor.
   const pill = page.locator("[data-domain-pill]")
@@ -265,7 +268,7 @@ test("DEC-250: Turnstile interaction-only tanpa kotak kosong, status keamanan, t
       contentType: "text/javascript",
       // interaction-only: a passing visitor gets an invisible widget; `?challenge` makes the stub ask for interaction.
       body:
-        'window.__tsResets=0;window.turnstile={render:function(el,o){window.__tsOpts=o;window.__tsCb=o.callback;var d=document.createElement("div");d.setAttribute("data-size",o.size);var ask=location.search.indexOf("challenge")>=0;d.style.height=ask?"65px":"0px";d.style.width="100%";setTimeout(function(){el.appendChild(d);if(!ask)o.callback("stub-token")},1200);return "w1"},reset:function(){window.__tsResets++;setTimeout(function(){window.__tsCb("stub-token-2")},1200)},remove:function(){}}',
+        'window.__tsResets=0;window.__tsRenders=0;window.turnstile={render:function(el,o){window.__tsRenders++;window.__tsOpts=o;window.__tsCb=o.callback;var d=document.createElement("div");d.setAttribute("data-size",o.size);var ask=location.search.indexOf("challenge")>=0;d.style.height=ask?"65px":"0px";d.style.width="100%";setTimeout(function(){el.appendChild(d);if(!ask)o.callback("stub-token")},1200);return "w1"},reset:function(){window.__tsResets++;setTimeout(function(){window.__tsCb("stub-token-2")},1200)},remove:function(){}}',
     }),
   )
   for (const path of ["/masuk", "/daftar-akun"]) {
@@ -298,6 +301,28 @@ test("DEC-250: Turnstile interaction-only tanpa kotak kosong, status keamanan, t
   expect(Math.round(s.width)).toBe(Math.round(f.width))
   await expect(page.locator("[data-security-status]")).toHaveAttribute("data-state", "pending")
   await fits(page, "/masuk challenged 390x844")
+  // /daftar-akun challenged: the full-width check sits above `Kirim Kode`, the status line below it.
+  await page.goto(`${APP}/daftar-akun?challenge=1`)
+  await expect(page.locator("[data-turnstile-slot] [data-size]")).toHaveCount(1)
+  const slotBox = (await page.locator("[data-turnstile-slot]").boundingBox())!
+  const kirim = (await page.getByRole("button", { name: "Kirim Kode" }).boundingBox())!
+  expect(Math.round(slotBox.height)).toBe(65)
+  expect(slotBox.y + slotBox.height).toBeLessThanOrEqual(kirim.y)
+  expect((await page.locator("[data-security-status]").boundingBox())!.y).toBeGreaterThan(kirim.y)
+  await fits(page, "/daftar-akun challenged 390x844")
+  // Email → OTP keeps the one widget (never re-rendered) above `Verifikasi`, so `Kirim ulang` gets a fresh token.
+  await page.route("**/api/app/auth/signup/request", (r) => r.fulfill({ json: { ok: true, data: { otpId: "otp-e2e-stub" } } }))
+  await page.goto(`${APP}/daftar-akun`)
+  await page.getByLabel("Email").fill(uniqueEmail("e2e-250-otp"))
+  await page.getByRole("button", { name: "Kirim Kode" }).click()
+  await expect(page.getByLabel("Kode verifikasi")).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { __tsRenders: number }).__tsRenders)).toBe(1)
+  await expect(page.locator("[data-turnstile-slot] [data-size]")).toHaveCount(1)
+  const otpSlot = (await page.locator("[data-turnstile-slot]").boundingBox())!
+  expect(otpSlot.y).toBeLessThanOrEqual((await page.getByRole("button", { name: "Verifikasi" }).boundingBox())!.y)
+  expect(await page.evaluate(() => (window as unknown as { __tsResets: number }).__tsResets)).toBe(1)
+  await expect(page.getByRole("button", { name: "Kirim ulang" })).toBeEnabled()
+  await page.unroute("**/api/app/auth/signup/request")
   // Widget-enabled retry: a failed sign-in resets the widget; `Masuk` waits for the fresh token.
   await page.setViewportSize(SIZES[0]!)
   await page.goto(`${APP}/masuk`)

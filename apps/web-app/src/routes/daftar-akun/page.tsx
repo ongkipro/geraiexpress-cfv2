@@ -80,25 +80,36 @@ export function DaftarAkunPage() {
       }
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
-      {step === "email" ? (
-        <form className="flex flex-col gap-4" onSubmit={sendCode} noValidate>
-          <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
-          <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
-          <SecurityStatus ts={ts} />
-        </form>
-      ) : null}
-      {step === "otp" ? (
-        <form className="flex flex-col gap-4" onSubmit={verify} noValidate>
-          <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
-          <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
-          <div className="-mt-1 flex items-center justify-between">
-            <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
-            <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
+      {/* One flex column for the email and OTP sub-states: the forms are `display: contents`, so the single Turnstile
+          slot (never unmounted between the two; `Kirim ulang` needs a fresh token) sits right above the action via
+          `order`, and the security status closes the column. 0px unless Cloudflare challenges the visitor. */}
+      {step === "email" || step === "otp" ? (
+        <div className="flex flex-col gap-4">
+          {step === "email" ? (
+            <form className="contents" onSubmit={sendCode} noValidate>
+              <div className="order-1">
+                <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
+              </div>
+              <Button type="submit" size="lg" className="order-3" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
+            </form>
+          ) : (
+            <form className="contents" onSubmit={verify} noValidate>
+              <div className="order-1">
+                <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
+              </div>
+              <Button type="submit" size="lg" className="order-3" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
+              <div className="order-4 -mt-1 flex items-center justify-between">
+                <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
+                <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
+              </div>
+            </form>
+          )}
+          <div ref={turnstileBox} data-turnstile-slot className="order-2 w-full empty:hidden" />
+          <div className="order-5 empty:hidden">
+            <SecurityStatus ts={ts} />
           </div>
-        </form>
+        </div>
       ) : null}
-      {/* One widget for the email and OTP sub-states (`Kirim ulang` needs a fresh token); 0px unless challenged. */}
-      {step === "email" || step === "otp" ? <div ref={turnstileBox} data-turnstile-slot className="-mt-2 w-full empty:hidden" /> : null}
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
         <form className="flex flex-col gap-4" onSubmit={complete} noValidate>

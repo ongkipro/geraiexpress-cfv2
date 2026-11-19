@@ -12,7 +12,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Ro
 body:not([data-home]){padding-top:var(--hdr-h)}
 .hidden{display:none!important}
 a{color:var(--action);text-underline-offset:3px}a:hover{color:var(--action-h)}
-code{font-family:var(--mono);font-size:.92em}
+code{font-family:var(--mono);font-size:.92em;overflow-wrap:break-word}
 .wrap{max-width:1160px;margin:0 auto;padding-left:16px;padding-right:16px}@media(min-width:768px){.wrap{padding-left:32px;padding-right:32px}}
 .skip{position:absolute;left:-9999px;top:8px;z-index:70;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}.skip:focus{left:16px}
 input:focus-visible,select:focus-visible,a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #60A5FA;outline-offset:2px}
@@ -534,6 +534,11 @@ footer.ftr{background:var(--tile);border-top:var(--hairline);padding:56px 0 40px
 .fcol ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;align-content:start}
 .fcol a{color:var(--body);text-decoration:none;display:inline-flex;align-items:center;min-height:28px;line-height:1.45}.fcol a:hover{color:var(--action);text-decoration:underline}
 .flegal{margin-top:40px;padding-top:20px;border-top:var(--hairline);display:grid;gap:6px;font-size:.875rem}
+/* DEC-250 (supervisor): below 760px the six bento tiles become one horizontal scroll-snap track with the next card
+   peeking (86% columns); the track scrolls itself, never the page, and takes keyboard focus (tabindex on the markup). */
+@media(max-width:759px){.bento,main:has(>.hero-bleed) .bento{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:86%;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:4px;padding:2px 4px 10px;margin:0 -4px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.bento>.tile,.bento>.s6,.bento>.s4,.bento>.b5,.bento>.s12{grid-column:auto;scroll-snap-align:start}}
+.bento:focus-visible{outline:2px solid var(--action);outline-offset:4px;border-radius:12px}
 /* DEC-250: a crisper mobile rhythm on every page */
-@media(max-width:760px){section.sec{padding:48px 0}section.sec.tight{padding-top:24px;padding-bottom:32px}.bento .tile,main:has(>.hero-bleed) .bento .tile{padding:1.25rem}.bento,main:has(>.hero-bleed) .bento{gap:14px}.bento>.tile,main:has(>.hero-bleed) .bento>.tile{gap:16px}.bento .float{padding:.9rem 1rem}}
+@media(max-width:760px){section.sec{padding:48px 0}section.sec.tight{padding-top:24px;padding-bottom:32px}.bento .tile,main:has(>.hero-bleed) .bento .tile{padding:1.25rem}main:has(>.hero-bleed) .shead{margin-bottom:24px}.bento>.tile,main:has(>.hero-bleed) .bento>.tile{gap:16px}.bento .float{padding:.9rem 1rem}}
 `

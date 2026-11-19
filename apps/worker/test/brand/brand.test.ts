@@ -183,12 +183,14 @@ describe("brand site DEC-247", () => {
     // DEC-249: the nine couriers run in a marquee; the duplicate track is hidden from assistive tech.
     expect(h.match(/<ul class="mq-list" aria-label="Sembilan ekspedisi mitra Mengantar">(<li class="pbadge"><img src="\/couriers\/\w+\.svg" alt="[^"]+"[^>]*><\/li>){9}<\/ul>/)).not.toBeNull()
     expect(h.match(/<ul class="mq-list" aria-hidden="true">(<li class="pbadge"><img src="\/couriers\/\w+\.svg" alt=""[^>]*><\/li>){9}<\/ul>/)).not.toBeNull()
-    const bento = h.slice(h.indexOf("<div class=\"bento\" data-bento>"), h.indexOf("</div>\n<p class=\"note\">Ilustrasi fitur", h.indexOf("data-bento")))
+    const bento = h.slice(h.indexOf("<div class=\"bento\" data-bento"), h.indexOf("</div>\n<p class=\"note\">Ilustrasi fitur", h.indexOf("data-bento")))
     expect([...bento.matchAll(/<article class="tile ([^"]+)">/g)].map((m) => m[1])).toEqual(["s6", "s6", "s4", "s4", "s4 b5", "s12"])
     expect([...bento.matchAll(/<span class="idx">(\d\d)<\/span>/g)].map((m) => m[1])).toEqual(["01", "02", "03", "04", "05", "06"])
     expect(bento).not.toMatch(/<a /)
     const img = /<img src="\/produk-kasir-loket\.webp"[^>]*>/.exec(h)![0]
-    expect(img).toContain('width="1440" height="900" loading="lazy" decoding="async"')
+    // DEC-250 (supervisor): eager, so a fast scroll never shows an empty white pedestal.
+    expect(img).toContain('width="1440" height="900" decoding="async"')
+    expect(img).not.toContain("loading=")
     const alt = /alt="([^"]*)"/.exec(img)![1]!
     expect(alt.length).toBeGreaterThanOrEqual(10)
     expect(alt.length).toBeLessThanOrEqual(125)
@@ -422,7 +424,7 @@ describe("brand site DEC-247", () => {
     expect(h).toMatch(/<div class="layer-front float">[\s\S]*Ringkasan Ekspedisi Loket[\s\S]*Cocok 1:1/)
     expect(h).toContain("Data contoh untuk ilustrasi, bukan angka gerai sungguhan.")
     // Sol R1 (non-blocking P2): every synthetic visual says it is an illustration.
-    expect(home).toMatch(/<div class="bento" data-bento>[\s\S]*?<\/div>\n<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan\.<\/p>\n<\/div><\/section>/)
+    expect(home).toMatch(/<div class="bento" data-bento[^>]*>[\s\S]*?<\/div>\n<p class="note">Ilustrasi fitur dengan data contoh, bukan transaksi gerai sungguhan\.<\/p>\n<\/div><\/section>/)
     expect(h).toMatch(/<div class="float rb"[\s\S]*?<p class="rb-note">Ilustrasi alur, bukan angka pengukuran\.<\/p>\n<\/div>/)
     // 2. Two porcelain proof surfaces 01 and 02.
     expect(h).toMatch(/<div class="proof">[\s\S]*<span class="idx">01<\/span><h3>Dari catatan campur ke rekonsiliasi 1:1 per resi[\s\S]*<span class="idx">02<\/span><h3>Tiga lapis privasi/)
@@ -469,6 +471,11 @@ describe("brand site DEC-247", () => {
     const sim = await html("/simulasi-kasir")
     expect(sim.match(/>Daftar Gerai Sekarang</g)).toBeNull()
     expect(sim.match(/href="\/fitur">Lihat Semua Fitur</g)?.length).toBe(1)
+    // Supervisor pre-review: the bento is a focusable horizontal scroll-snap track below 760px.
+    const home = await html("/")
+    expect(home).toContain('<div class="bento" data-bento tabindex="0" aria-label="Enam masalah meja loket; di ponsel geser ke samping untuk kartu berikutnya">')
+    expect(home).toContain("@media(max-width:759px){.bento,main:has(>.hero-bleed) .bento{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:86%;")
+    expect(home).toContain("code{font-family:var(--mono);font-size:.92em;overflow-wrap:break-word}")
     // check-page needs a visible breadcrumb next to BreadcrumbList; it stays, quieter on phones.
     expect(eks).toContain('<nav class="wrap crumbs" aria-label="Breadcrumb">')
   })

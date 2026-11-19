@@ -312,7 +312,7 @@ test("Brand DEC-247: validasi form berbahasa Indonesia di browser en-US", async 
 })
 
 // DEC-247A (supervisor visual check): the product screenshot on the home pedestal must really load — served as
-// image/webp through BRAND_ASSETS and decoded once scrolled into view (it stays `loading="lazy"` below the fold).
+// image/webp through BRAND_ASSETS and decoded (eager since DEC-250, so a fast scroll never shows a blank pedestal).
 test("Brand DEC-247: screenshot kasir di pedestal termuat (WebP, naturalWidth > 0)", async ({ page }) => {
   const apex = APP.replace("app.", "")
   const res = await page.request.get(`${apex}/produk-kasir-loket.webp`)
@@ -582,6 +582,20 @@ test("Brand DEC-250: tabel bertumpuk tanpa geser di 390, pill Raka di bawah gamb
   expect(a.y).toBeGreaterThanOrEqual(img.y + img.height - 1)
   expect(b.y).toBeGreaterThanOrEqual(img.y + img.height - 1)
   expect(a.y + a.height <= b.y || b.y + b.height <= a.y || a.x + a.width <= b.x || b.x + b.width <= a.x).toBe(true)
+  // Supervisor pre-review: the bento is a horizontal scroll-snap track (next card peeking) that never scrolls the page,
+  // takes keyboard focus, and brings `/` to ~7,800 px at 390 (was 10,499 on main).
+  const bento = page.locator("[data-bento]")
+  const t = await bento.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, snap: getComputedStyle(el).scrollSnapType, first: el.firstElementChild!.getBoundingClientRect().width }))
+  expect(t.sw).toBeGreaterThan(t.cw)
+  expect(t.snap).toBe("x mandatory")
+  expect(t.first).toBeLessThan(t.cw)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+  await bento.focus()
+  await expect(bento).toBeFocused()
+  await page.keyboard.press("ArrowRight")
+  await expect.poll(() => bento.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(7_900)
+  expect(await page.locator("figure.shot img").first().getAttribute("loading")).toBeNull()
   const lefts = await page.locator('section[aria-labelledby="toko-title"] .chips li').evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().left)))])
   expect(lefts).toHaveLength(2)
   await page.goto(`${apex}/simulasi-kasir`)
