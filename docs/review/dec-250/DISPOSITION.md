@@ -15,3 +15,14 @@ Focused checks per the fast protocol: `check:fast`, Vitest `test/brand` + `test/
 e2e `auth-stage` + `auth` + `onboarding` + `brand` + `minisite` (all projects). Mutations M1–M5 red, restored with
 SHA-256 verification. A `/auth/me` 401 for an anonymous visitor of `/daftar-akun` is expected (the guard) and is the only
 console error the auth-stage test ignores.
+
+## GPT-6.2 Sol R2 (`R2-sol.md`, on `c60f3c5`): REQUEST_CHANGES, 0 P0/P1, 3 P2. All fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P2 | The forced-colors selection rule hides the keyboard focus ring on the checked unit pill. | **Fixed.** Inside `@media(forced-colors:active)`, after the checked rule: `.seg.unit label:has(input:focus-visible){outline:2px solid CanvasText;outline-offset:3px}`. Selection stays the `SelectedItem` fill; focus is a distinct outer system-colour ring. | e2e `minisite` in forced colors: Tab from `Berat paket` focuses the checked `gram` radio → 2px ring at 3px offset, same fill; Tab out → the idle selection indicator is back; Vitest CSS; mutation R2-M1 (rule removed) red. |
+| P2 | The owner `/totp` check could measure before the QR renders. | **Fixed.** The test waits for the `Kode QR pendaftaran TOTP` image and the fallback key before the three-viewport loop. The fully rendered enrolment screen fits with no page or inner scroll at 1440×900, 1366×768 and 390×844, so no layout change was needed. | e2e `auth-stage` owner `/totp`; mutation R2-M2 (QR forced to 560px) red, which proves the loop now measures the QR. |
+| P2 | The console filter dropped every `/auth/me` error, a `500` included. | **Fixed.** Only a message from `/api/app/auth/me` that contains `401` is ignored; any other status on that URL fails the console check. | Test-only narrowing (no app mutation applies); `auth-stage` passes with it. |
+
+Focused checks per Sol R2: `check:fast`, Vitest `test/brand` + `test/minisite`, e2e `auth-stage` + `minisite` on
+desktop-1280. Mutations R2-M1 and R2-M2 red, restored with SHA-256 verification.

@@ -40,7 +40,7 @@ describe("mini-site", () => {
     // DEC-250: no raw <select> on the mini-site; the unit is a gram | kg radio toggle with the same `unit` field.
     expect(h).not.toMatch(/<select[ >]/)
     // Sol R1: a persistent selected indicator in forced-colors mode.
-    expect(h).toContain(".seg.unit label:has(input:checked){outline:3px solid SelectedItem;outline-offset:-3px;background:SelectedItem;color:SelectedItemText;forced-color-adjust:none}")
+    expect(h).toContain(".seg.unit label:has(input:checked){outline:3px solid SelectedItem;outline-offset:-3px;background:SelectedItem;color:SelectedItemText;forced-color-adjust:none}.seg.unit label:has(input:focus-visible){outline:2px solid CanvasText;outline-offset:3px}}")
     expect(h).toContain('<fieldset><legend>Satuan</legend><div class="seg unit"><label><input type="radio" name="unit" value="g" checked> gram</label><label><input type="radio" name="unit" value="kg"> kg</label></div></fieldset>')
     expect((await postForm(`${t.base}/`, { destId: DEST, destLabel: "Tebet", weight: "1000", unit: "g" })).status).toBe(422)
     const q = await postForm(`${t.base}/`, { destId: DEST, destLabel: "Tebet", weight: "1", unit: "kg", "cf-turnstile-response": "ok" })

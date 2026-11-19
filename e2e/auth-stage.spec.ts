@@ -52,8 +52,8 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
   test.setTimeout(120_000)
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
-  // `/daftar-akun` asks `/auth/me` once (Sol R1 session guard); its 401 for an anonymous visitor is expected.
-  page.on("console", (m) => m.type() === "error" && !m.location().url.endsWith("/api/app/auth/me") && errors.push(m.text()))
+  // `/daftar-akun` asks `/auth/me` once (Sol R1 session guard); only its 401 for an anonymous visitor is expected (Sol R2).
+  page.on("console", (m) => m.type() === "error" && !(m.location().url.endsWith("/api/app/auth/me") && /\b401\b/.test(m.text())) && errors.push(m.text()))
 
   for (const size of SIZES) {
     await page.setViewportSize(size)
@@ -401,6 +401,9 @@ test("DEC-250: owner /totp split-studio tanpa scroll di 1440, 1366 dan 390", asy
   await page.getByLabel("Kata sandi").fill("admin-e2e-kuat-250")
   await page.getByRole("button", { name: "Lanjut" }).click()
   await expect(page.getByRole("heading", { name: "Aktifkan TOTP" })).toBeVisible()
+  // Sol R2: measure the fully rendered enrolment screen (QR + fallback key arrive asynchronously).
+  await expect(page.getByRole("img", { name: "Kode QR pendaftaran TOTP" })).toBeVisible()
+  await expect(page.locator("span.font-mono")).toBeVisible()
   for (const size of SIZES) {
     await page.setViewportSize(size)
     await fits(page, `owner /totp enrol ${size.width}x${size.height}`)
