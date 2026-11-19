@@ -52,8 +52,8 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
   test.setTimeout(120_000)
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
-  // `/daftar-akun` asks `/auth/me` once (Sol R1 session guard); only Chromium's `status of 401` for an anonymous visitor is expected (Sol R2/R3).
-  page.on("console", (m) => m.type() === "error" && !(m.location().url.endsWith("/api/app/auth/me") && /\bstatus of 401\b/.test(m.text())) && errors.push(m.text()))
+  // `/daftar-akun` asks `/auth/me` once (Sol R1 session guard); only Chromium's exact `Failed to load resource … status of 401` line for an anonymous visitor is expected (Sol R2–R4).
+  page.on("console", (m) => m.type() === "error" && !(m.location().url.endsWith("/api/app/auth/me") && /^Failed to load resource: the server responded with a status of 401(?: \(|$)/.test(m.text())) && errors.push(m.text()))
 
   for (const size of SIZES) {
     await page.setViewportSize(size)

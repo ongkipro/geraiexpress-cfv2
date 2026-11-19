@@ -34,3 +34,11 @@ desktop-1280. Mutations R2-M1 and R2-M2 red, restored with SHA-256 verification.
 | P2 | The console exception matched any standalone `401` in a `/auth/me` message, not strictly the HTTP status. | **Fixed.** The filter matches only Chromium's resource line `status of 401` on `/api/app/auth/me`; every other console error, including another status on that URL, fails the test. | `eslint e2e/auth-stage.spec.ts`; e2e `auth-stage` on desktop-1280. |
 
 Production code is unchanged in this round (test-only).
+
+## GPT-6.2 Sol R4 (`R4-sol.md`, on `59ac470`): REQUEST_CHANGES, 1 test-only P2. Fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P2 | The `status of 401` filter was not anchored to Chromium's resource message. | **Fixed.** The exception uses the anchored pattern `/^Failed to load resource: the server responded with a status of 401(?: \(|$)/` and still requires the `/api/app/auth/me` URL. | `eslint e2e/auth-stage.spec.ts`; e2e `auth-stage` on desktop-1280. |
+
+Production code is unchanged in this round (test-only).
