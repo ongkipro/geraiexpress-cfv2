@@ -1284,3 +1284,13 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   the Playwright webServer and passed on retry.
 - Sol R3 and R4 (test-only) anchored the `/auth/me` console exception to Chromium's exact `status of 401` line.
 - GPT-6.2 Sol R5 APPROVE on `b6f200b` (zero open findings) after R1 (5 + gap), R2 (3), R3 (1) and R4 (1) fixes.
+- Release run `RUN-20261119T053345Z-ea8b21d6` PASS (`pnpm check`, seo 10/10, e2e auth-stage/auth/onboarding/brand/
+  minisite, boundary reviewed). An earlier attempt (`RUN-20261119T052422Z-6cc5f6df`) is recorded BLOCKED: its
+  checks passed, but its docs commit landed before the boundary review because the `finish` output was piped to `tail`
+  and the `&&` chain did not stop. The fresh run re-ran every check on `d25d746` under `set -o pipefail`.
+- Live 2026-11-19 (owner-authorized): `main` fast-forwarded to `cd28823` and pushed. `pnpm build` (the 3D visual in
+  both `dist/assets/app` and `dist/assets/owner`) + bundle-audit PASS. Workers: staging
+  `4777f25b-9760-4407-aa0d-f7ef7577e5b5` (probes 5/5), production `c2b8b772-ce20-40af-9684-a74024748e2c`. Production
+  `/`, `/ekspedisi`, `/cara-kerja` 200 (apex without `Set-Cookie`; the bento track and the table roles are served),
+  app `/masuk` + `/daftar-akun` and owner `/masuk` 200 (both SPA bundles carry the split-studio, not the old arrow
+  label), owner `/loket-mitra-3d.webp` 200 `image/webp` 32,916 B, `probe.geraimitra.com` 200; probes 6/6. No migration.

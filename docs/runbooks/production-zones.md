@@ -104,3 +104,4 @@ so a rollback means `wrangler delete` of the env Worker after owner approval.
 | 2026-11-19 | DEC-247B brand inner pages, mini-site owner rules, courier logos, Indonesian validation (`2877b41`, Sol R4 APPROVE) | — | `ed5a44e6-587f-4fa9-ae08-d12536a2309c` | `2ffcc646-d0b0-44fb-ba25-4f3628ab52fe` |
 | 2026-11-19 | DEC-248 minimalist auth stage, `1 · 2 · 3` register, quiet brand closing (`3548b48`, Sol R3 APPROVE) | — | `60497461-9857-4b18-bc21-a0fb8aa15591` | `c7fb0d25-6e2b-45a3-b4cd-6c363dde5eaf` |
 | 2026-11-19 | DEC-249 slim home, Raka 3D counter, courier marquee, geometric `GE` logo, dev velocity (`6d79d70`, Sol R5 APPROVE) | — | `26bc21eb-d95c-4939-bd13-e7b49ee5a63f` | `ff3d1957-6c5b-42df-adef-61c006b424a5` |
+| 2026-11-19 | DEC-250 split-studio auth (app + owner), stacked semantic tables + bento track at 390, mini-site unit toggle (`cd28823`, Sol R5 APPROVE) | — | `4777f25b-9760-4407-aa0d-f7ef7577e5b5` | `c2b8b772-ce20-40af-9684-a74024748e2c` |
