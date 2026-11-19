@@ -26,3 +26,11 @@ console error the auth-stage test ignores.
 
 Focused checks per Sol R2: `check:fast`, Vitest `test/brand` + `test/minisite`, e2e `auth-stage` + `minisite` on
 desktop-1280. Mutations R2-M1 and R2-M2 red, restored with SHA-256 verification.
+
+## GPT-6.2 Sol R3 (`R3-sol.md`, on `cbcd1d5`): REQUEST_CHANGES, 0 P0/P1, 1 P2. Fixed.
+
+| # | Finding | Disposition | Proof |
+|---|---|---|---|
+| P2 | The console exception matched any standalone `401` in a `/auth/me` message, not strictly the HTTP status. | **Fixed.** The filter matches only Chromium's resource line `status of 401` on `/api/app/auth/me`; every other console error, including another status on that URL, fails the test. | `eslint e2e/auth-stage.spec.ts`; e2e `auth-stage` on desktop-1280. |
+
+Production code is unchanged in this round (test-only).
