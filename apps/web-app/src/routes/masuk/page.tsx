@@ -4,7 +4,7 @@ import { AuthCard, FormAlert } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { useTurnstile } from "../../lib/turnstile"
+import { SecurityStatus, useTurnstile } from "../../lib/turnstile"
 
 export function MasukPage() {
   const navigate = useNavigate()
@@ -35,15 +35,7 @@ export function MasukPage() {
   }
 
   return (
-    <AuthCard
-      title="Masuk"
-      description="Masuk ke ruang kerja gerai Anda."
-      corner={
-        <span>
-          <span className="hidden sm:inline">Belum punya akun? </span><Link to="/daftar-akun">Daftar</Link>
-        </span>
-      }
-    >
+    <AuthCard switcher="masuk" title="Masuk ke ruang kerja gerai" description="Email Pemilik atau Kasir gerai Anda.">
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         {error ? <FormAlert tone={locked ? "warn" : "danger"}>{error}</FormAlert> : null}
         <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} required />
@@ -53,11 +45,12 @@ export function MasukPage() {
             Lupa kata sandi?
           </Link>
         </div>
-        <div ref={turnstileBox} data-turnstile-slot className={ts.hasWidget ? "min-h-[65px]" : "hidden"} />
+        <div ref={turnstileBox} data-turnstile-slot className="w-full empty:hidden" />
         {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
         <Button type="submit" size="lg" disabled={pending || !ts.ready}>
           {pending ? "Memproses…" : "Masuk"}
         </Button>
+        <SecurityStatus ts={ts} />
       </form>
     </AuthCard>
   )

@@ -46,14 +46,15 @@ export function TextField(props: {
         <div className="relative">
           {input}
           {isPassword ? (
+            // DEC-250: a subtle pill inside a full-height hit area (44px on phones), never a bare text link.
             <button
               type="button"
               aria-pressed={shown}
               aria-controls={id}
               onClick={() => setShown((v) => !v)}
-              className="absolute inset-y-0 right-0 flex min-w-11 items-center justify-end rounded-r-lg px-3 text-sm font-medium text-[#64748B] hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-ring"
+              className="group absolute inset-y-0 right-0 flex min-w-11 items-center justify-end rounded-r-lg pr-1.5 pl-2 focus-visible:outline-2 focus-visible:outline-ring"
             >
-              {shown ? "Sembunyikan" : "Lihat"}
+              <span className="rounded-md bg-[#F4F6FA] px-2.5 py-1 text-xs font-semibold text-[#475569] group-hover:bg-[#E2E8F0] group-hover:text-[#0F172A]">{shown ? "Sembunyikan" : "Lihat"}</span>
             </button>
           ) : (
             <span id={`${id}-suffix`} className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-[#64748B] md:text-sm">

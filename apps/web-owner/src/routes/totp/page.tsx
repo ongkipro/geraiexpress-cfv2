@@ -100,7 +100,7 @@ export function TotpPage() {
 
   if (step === "codes" && codes) {
     return (
-      <AuthCard title="Simpan 8 Kode Pemulihan Cadangan Anda" description="Pakai salah satu kode ini untuk masuk bila HP atau aplikasi autentikator hilang, rusak, atau diganti. Simpan sekarang — kode tidak akan ditampilkan lagi.">
+      <AuthCard variant="owner" title="Simpan 8 Kode Pemulihan Cadangan Anda" description="Pakai salah satu kode ini untuk masuk bila HP atau aplikasi autentikator hilang, rusak, atau diganti. Simpan sekarang — kode tidak akan ditampilkan lagi.">
         <RecoveryCodesBox codes={codes} />
         <Button size="lg" onClick={() => void proceed()}>Saya Sudah Menyimpan, Lanjut ke Konsol</Button>
       </AuthCard>
@@ -109,7 +109,7 @@ export function TotpPage() {
 
   if (step === "rotate" && rotation) {
     return (
-      <AuthCard title="Daftarkan Autentikator Baru" description="Pindai kode QR ini dengan aplikasi autentikator di HP baru, lalu masukkan 6 digit kodenya. Autentikator lama tetap berlaku sampai langkah ini selesai.">
+      <AuthCard variant="owner" title="Daftarkan Autentikator Baru" description="Pindai kode QR ini dengan aplikasi autentikator di HP baru, lalu masukkan 6 digit kodenya. Autentikator lama tetap berlaku sampai langkah ini selesai.">
         <AuthenticatorQr otpauthUri={rotation.otpauthUri} secret={rotation.secret} label="Kode QR autentikator baru" />
         <form className="flex flex-col gap-5" onSubmit={confirmRotation} noValidate>
           {error ? <FormAlert>{error}</FormAlert> : null}
@@ -123,7 +123,7 @@ export function TotpPage() {
 
   if (step === "recovery") {
     return (
-      <AuthCard title="Kode Pemulihan Cadangan" description="Masukkan salah satu dari 8 kode pemulihan yang Anda simpan saat mengaktifkan TOTP. Setiap kode hanya bisa dipakai sekali.">
+      <AuthCard variant="owner" title="Kode Pemulihan Cadangan" description="Masukkan salah satu dari 8 kode pemulihan yang Anda simpan saat mengaktifkan TOTP. Setiap kode hanya bisa dipakai sekali.">
         <form className="flex flex-col gap-5" onSubmit={useRecovery} noValidate>
           {error ? <FormAlert>{error}</FormAlert> : null}
           <TextField label="Kode pemulihan" name="recovery" autoComplete="off" maxLength={11} hint="Format XXXX-XXXX, huruf besar atau kecil sama saja." value={recovery} onChange={(v) => setRecovery(v.toUpperCase().slice(0, 11))} required />
@@ -140,6 +140,7 @@ export function TotpPage() {
 
   return (
     <AuthCard
+      variant="owner"
       title={mode === "enrol" ? "Aktifkan TOTP" : "Kode TOTP"}
       description={mode === "enrol" ? "Pindai kode QR dengan aplikasi autentikator (Google Authenticator, Authy, 1Password). Kode QR hanya ditampilkan sekali." : "Masukkan 6 digit kode dari aplikasi autentikator Anda."}
     >

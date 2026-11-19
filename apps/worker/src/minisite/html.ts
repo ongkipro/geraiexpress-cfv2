@@ -69,6 +69,8 @@ input[aria-invalid=true]{border-color:var(--danger)}:focus-visible{outline:3px s
 .hint{color:var(--muted);font-size:14px;margin:6px 0 0;overflow-wrap:anywhere}.hint.sub{margin:0}.err{color:var(--danger);font-weight:500;font-size:15px;margin:6px 0 0}
 .seg{display:flex;gap:8px;flex-wrap:wrap}.seg label{margin:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--tile);cursor:pointer}
 .seg label:has(input:checked){background:var(--tint);color:var(--ac)}.seg input{width:18px;height:18px;min-height:0;margin:0;accent-color:var(--ac)}
+.pair>fieldset{margin-top:16px}.pair>fieldset>legend{margin-top:0}.seg.unit{flex-wrap:nowrap;gap:0;padding:0;border-radius:999px;background:var(--tile)}.seg.unit label{position:relative;flex:1;justify-content:center;padding:0 12px;background:transparent;font-weight:600;color:var(--muted)}
+.seg.unit label:has(input:checked){background:#fff;color:var(--ac);box-shadow:inset 0 0 0 1.5px var(--ac)}.seg.unit input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.seg.unit label:has(input:focus-visible){outline:2px solid var(--ac);outline-offset:2px}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:20px}.out{margin-top:24px;padding-top:20px;border-top:1px solid var(--hair)}
 .rates{list-style:none;margin:8px 0 0;padding:0}.rates li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--hair)}.rates li:first-child{border-top:0}
 .clogo{flex:none;display:grid;place-items:center;width:60px;height:40px;border-radius:10px;background:var(--tile)}.clogo img{max-width:48px;max-height:22px;width:auto;height:auto}

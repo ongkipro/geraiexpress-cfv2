@@ -140,11 +140,14 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
   for (const src of await strip.evaluateAll((els) => els.map((i) => (i as HTMLImageElement).getAttribute("src")))) await loaded(`ul.strip img[src="${src}"]`)
   expect(await overflow()).toBe(0)
 
+  // DEC-250: no raw <select> left on the public mini-site; `Satuan` is a gram | kg pill toggle (gram by default).
+  await expect(page.locator("select")).toHaveCount(0)
+  await expect(page.getByRole("group", { name: "Satuan" }).getByRole("radio", { name: "gram", exact: true })).toBeChecked()
   // Cek Ongkir: Kargo with P×L×T (≥ 5 kg), then Reguler billed by volume — courier logos on every row.
   await page.getByLabel("Kecamatan tujuan").fill("tebet")
   await page.getByRole("button", { name: /Tebet Barat/ }).click()
   await page.getByLabel("Berat paket").fill("6")
-  await page.getByLabel("Satuan").selectOption("kg")
+  await page.getByRole("radio", { name: "kg", exact: true }).check()
   await page.getByLabel("Panjang (cm)").fill("40")
   await page.getByLabel("Lebar (cm)").fill("30")
   await page.getByLabel("Tinggi (cm)").fill("20")

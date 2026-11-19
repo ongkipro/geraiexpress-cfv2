@@ -450,5 +450,26 @@ describe("brand site DEC-247", () => {
     expect(css).toContain(".faq details[open] summary::after{transform:rotate(45deg)")
     expect(css).not.toContain(".cl-steps")
   })
-})
 
+  it("DEC-250 mobile: stacked .tbl cards with data-col labels, Raka pills under the art, 2-column chips, one closing CTA on /simulasi-kasir", async () => {
+    const eks = await html("/ekspedisi")
+    expect(eks).toContain('<table class="tbl stack">')
+    const row = eks.match(/<tr><td><span class="tcour">[\s\S]*?<\/tr>/)![0]
+    expect([...row.matchAll(/data-col="([^"]+)"/g)].map((m) => m[1])).toEqual(["Reguler &amp; Ekonomi", "Kargo", "Pembayaran &amp; catatan"])
+    const cara = await html("/cara-kerja")
+    expect(cara).toContain('<table class="tbl stack">')
+    expect(cara.match(/<td data-col="Spesifikasi minimum">/g)?.length).toBe(4)
+    expect(cara.match(/<td data-col="Rekomendasi harian">/g)?.length).toBe(4)
+    const css = eks
+    expect(css).toContain(".tbl.stack td[data-col]::before{content:attr(data-col)")
+    expect(css).toContain("@media(max-width:519px){.raka-stage{display:flex;")
+    expect(css).toContain(".rk-pill{position:static;")
+    expect(css).toContain("@media(max-width:339px){.chips{grid-template-columns:1fr}}")
+    expect(css).not.toContain("@media(max-width:400px){.chips{grid-template-columns:1fr}}")
+    const sim = await html("/simulasi-kasir")
+    expect(sim.match(/>Daftar Gerai Sekarang</g)).toBeNull()
+    expect(sim.match(/href="\/fitur">Lihat Semua Fitur</g)?.length).toBe(1)
+    // check-page needs a visible breadcrumb next to BreadcrumbList; it stays, quieter on phones.
+    expect(eks).toContain('<nav class="wrap crumbs" aria-label="Breadcrumb">')
+  })
+})

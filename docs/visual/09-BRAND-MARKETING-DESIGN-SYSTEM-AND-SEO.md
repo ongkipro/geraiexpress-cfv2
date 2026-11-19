@@ -227,8 +227,11 @@ Diadaptasi dari sistem `adsbook.id` (referensi baca-saja) ke identitas loket Ger
   Tautan "langkah berikutnya" antar-subhalaman (pita *internal linking* §4) kini menjadi tombol kedua di panggung penutup.
 - **Screenshot produk:** diambil sebagai Kasir (tampilan pemilik memuat modal dan estimasi laba, yang tidak boleh tampil di halaman publik).
 - **Validasi formulir:** tidak ada gelembung validasi bawaan peramban berbahasa Inggris; pesan `setCustomValidity` berbahasa Indonesia.
+- **Ponsel 390px (DEC-250):** `table.tbl.stack` di `/ekspedisi` dan `/cara-kerja` menjadi kartu garis-rambut bertumpuk di bawah `760px` (sel pertama di atas, lalu pasangan berlabel `data-col`; `.tbl-wrap` tanpa geser horizontal). Dua pil Raka turun ke satu baris di bawah gambar pada `< 520px`. Delapan jenis toko tetap grid 2 kolom sampai `340px`. Ritme seksi `48px` dan tile bento `1.25rem`. `/simulasi-kasir` hanya punya satu panggung penutup tanpa baris CTA ganda. Breadcrumb tetap terlihat (wajib bagi `check-page` di samping `BreadcrumbList`), lebih tenang di ponsel.
 
 ### 6.3 Mini-site `<slug>.geraimitra.com` (white-label) — rilis DEC-247B
+
+DEC-250: `Satuan` pada Cek Ongkir adalah toggle pil `gram` | `kg` (radio `name="unit"`), sehingga tidak ada `<select>` mentah di mini-site.
 
 Token §6.1 dengan identitas gerai sendiri (tanpa logo/nama GeraiExpress di kepala halaman): logo gerai dari `/logo`
 (hanya media `purpose='logo'` milik tenant host itu) atau monogram inisial; favicon SVG inisial; `Buka Peta`

@@ -816,6 +816,15 @@ M1 CLOSED 2026-11-16: TASK-101..108, 110, 111, 199 DONE; TASK-109, 112 code/tool
   (before/after proof); `check:fast`, `GX_SKIP_BUILD`, `GX_REUSE_SERVER`, `GX_VITEST_WORKERS`, stale-state pruning;
   `check-page.mjs` 10/10, brand Vitest + e2e, mutations, screenshots in `docs/evidence/DEC-249/`; supervisor screenshot
   review before the single final gate.
+- **DEC-250** Split-studio auth + mobile 390 pass + mini-site unit toggle (R3; DEC-250; owner 2026-11-19) — **IN REVIEW**
+  (supervisor screenshot review, then one Sol review). Contract: visual 07 §3.1, DECISIONS DEC-250. Done when: app
+  `/masuk`, `/daftar-akun`, both `/daftar` steps and owner `/masuk` have no arrow in the brand mark, the studio panel
+  visible from 960px and hidden below, 0 `<footer>`, no page and no inner scroll at 1440×900, 1366×768 and 390×844; the
+  pill switcher, wizard bar, live domain pill + panel badge; Turnstile `interaction-only` + `flexible` + `light` with the
+  security status, no empty box and the retry path (e2e `auth-stage.spec.ts`); `.tbl-wrap` 0 horizontal overflow on
+  `/ekspedisi` and `/cara-kerja` at 390; Raka pills clear of the art and each other; chips 2 columns; one closing CTA on
+  `/simulasi-kasir`; 0 `<select>` on the mini-site; `check:fast`, brand + mini-site Vitest, `check-page.mjs` 10/10,
+  focused e2e; the 12 screenshots in `docs/evidence/DEC-250/`.
 - **TASK-704** Shift & Laci Kasir UI (P2, DEC-241). Launch hides Shift Loket from the sidebar, ⌘K, sidebar status,
   dashboards and the Keuangan `Kas & Shift` tab; the `/shift` API, `/kasir/shift` route, drawer math (spec 03 §4) and
   tests stay. Done when the owner asks for drawer reconciliation: restore the menu entry (under `Buat Pengiriman` or

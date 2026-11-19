@@ -70,7 +70,7 @@ html:not(.js) .burger{display:none}html:not(.js) .nojs-menu{display:inline-flex}
 .login-lk,.hact .cta{display:inline-flex}
 .hround,.mnav,.mnav-dim{display:none!important}
 }
-.crumbs{padding-top:20px;font-size:.875rem;color:var(--slate)}
+.crumbs{padding-top:20px;font-size:.875rem;color:var(--slate)}@media(max-width:760px){.crumbs{padding-top:14px;font-size:.8125rem}}
 .crumbs ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .crumbs a{color:var(--slate);text-decoration:none}.crumbs a:hover{color:var(--action);text-decoration:underline}
 
@@ -234,11 +234,13 @@ ul.rates li:last-child{border-bottom:0}
 .raka-stage.is-playing .rk-float{animation:gx-float 4.2s var(--ease) infinite}.raka-stage.is-playing .rk-late{animation-delay:-2.1s}
 @keyframes gx-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media(prefers-reduced-motion:reduce){.raka-stage .rk-float{animation:none!important}}
-@media(max-width:420px){.rk-pill{font-size:.75rem;padding:6px 10px}}
+/* DEC-250: on phones the pills leave the artwork and sit in one quiet row under it */
+@media(max-width:519px){.raka-stage{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:16px 12px 12px}.raka-stage img,.raka-stage .note{flex-basis:100%}.rk-pill{position:static;font-size:.75rem;padding:6px 10px}.raka-stage.is-playing .rk-float{animation:none}}
 .chips{list-style:none;margin:26px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .chips li{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05),0 8px 20px -12px rgba(15,23,42,.18);font-weight:600;font-size:.9375rem;color:var(--ink);line-height:1.25}
 .chips li::before{content:"";width:8px;height:8px;border-radius:999px;background:var(--action);box-shadow:0 0 0 4px var(--tint);flex-shrink:0}
-@media(max-width:400px){.chips{grid-template-columns:1fr}}
+@media(max-width:520px){.chips{gap:8px}.chips li{min-height:40px;padding:6px 10px;font-size:.8125rem;gap:7px}.chips li::before{width:6px;height:6px;box-shadow:0 0 0 3px var(--tint)}}
+@media(max-width:339px){.chips{grid-template-columns:1fr}}
 /* DEC-249: a slimmer home (<= 6,200px at 1440): tighter rhythm, one-line section titles, compact pricing and FAQ */
 @media(min-width:900px){main:has(>.hero-bleed) section.sec{padding-bottom:56px}main:has(>.hero-bleed) .shead{margin-bottom:28px}main:has(>.hero-bleed) .shead .sub{max-width:76ch}main:has(>.hero-bleed) .shead h2{max-width:none}}
 main:has(>.hero-bleed) .readout .incl{margin-top:14px;gap:6px;font-size:.9rem}
@@ -370,6 +372,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9375rem;text-align:left
 .tbl tbody tr:last-child td{border-bottom:0}
 .tbl td strong{color:var(--ink)}
 .tcour{display:flex;align-items:center;gap:12px;white-space:nowrap}
+/* DEC-250: below 760px a .tbl.stack row becomes a hairline card: the first cell on top, then labelled pairs */
+@media(max-width:760px){.tbl.stack thead{display:none}.tbl.stack,.tbl.stack tbody{display:block}
+.tbl.stack tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;padding:18px 0;border-bottom:var(--hairline)}
+.tbl.stack tbody tr:last-child{border-bottom:0}.tbl.stack tr:first-child{padding-top:4px}
+.tbl.stack td{display:block;padding:0;border:0;min-width:0;font-size:.9375rem}.tbl.stack td:first-child,.tbl.stack td.wide{grid-column:1/-1}
+.tbl.stack td[data-col]::before{content:attr(data-col);display:block;margin-bottom:3px;color:var(--slate);font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}}
 
 /* Alternating 5fr/7fr rows (adsbook PillarRows / StepFlow parity): /fitur pillars and /cara-kerja steps */
 .prows{display:grid;gap:56px}@media(min-width:900px){.prows{gap:88px}}
@@ -506,6 +514,7 @@ ul.rates button:hover{background:var(--action);color:#fff}
 .st{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:.75rem;font-weight:650;background:#F1F5F9;color:var(--body);white-space:nowrap}.st.ok{background:var(--tint);color:var(--action)}
 .layers figcaption{margin-top:14px;font-size:.8125rem;color:var(--slate)}
 @media(max-width:520px){.lf-table th:nth-child(3),.lf-table td:nth-child(3){display:none}}
+@media(max-width:520px){.lf-table th,.lf-table td{padding:8px 6px 8px 0}.lf-table td:first-child{gap:6px}.lf-table td:first-child span{white-space:nowrap}.lf-table .st{white-space:nowrap}}
 .proof{display:grid;gap:20px}@media(min-width:900px){.proof{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}}
 .proof .float{margin-top:auto}
 .rb{display:grid;gap:12px}
@@ -525,4 +534,6 @@ footer.ftr{background:var(--tile);border-top:var(--hairline);padding:56px 0 40px
 .fcol ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;align-content:start}
 .fcol a{color:var(--body);text-decoration:none;display:inline-flex;align-items:center;min-height:28px;line-height:1.45}.fcol a:hover{color:var(--action);text-decoration:underline}
 .flegal{margin-top:40px;padding-top:20px;border-top:var(--hairline);display:grid;gap:6px;font-size:.875rem}
+/* DEC-250: a crisper mobile rhythm on every page */
+@media(max-width:760px){section.sec{padding:48px 0}section.sec.tight{padding-top:24px;padding-bottom:32px}.bento .tile,main:has(>.hero-bleed) .bento .tile{padding:1.25rem}.bento,main:has(>.hero-bleed) .bento{gap:14px}.bento>.tile,main:has(>.hero-bleed) .bento>.tile{gap:16px}.bento .float{padding:.9rem 1rem}}
 `

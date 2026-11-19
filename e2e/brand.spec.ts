@@ -559,3 +559,33 @@ test("Brand DEC-249: beranda ramping, marquee kurir, Raka, dan /fitur diperkaya"
   expect(order[1]).toBeLessThan(order[2]!)
   expect(errors).toEqual([])
 })
+
+// DEC-250: the phone pass — stacked table cards never scroll sideways, Raka's pills sit under the art without touching,
+// the eight store types stay a 2-column grid, and /simulasi-kasir ends in a single closing CTA.
+test("Brand DEC-250: tabel bertumpuk tanpa geser di 390, pill Raka di bawah gambar, chips 2 kolom, satu CTA penutup", async ({ page }, info) => {
+  test.skip(info.project.name !== "phone-390", "the phone layout")
+  const apex = APP.replace("app.", "")
+  for (const path of ["/ekspedisi", "/cara-kerja"]) {
+    await page.goto(`${apex}${path}`)
+    const wrap = page.locator(".tbl-wrap")
+    await expect(wrap).toHaveCount(1)
+    expect(await wrap.evaluate((el) => el.scrollWidth - el.clientWidth), path).toBe(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), path).toBe(0)
+    await expect(page.locator(".tbl.stack thead")).toBeHidden()
+    const label = await page.locator(".tbl.stack td[data-col]").first().evaluate((el) => getComputedStyle(el, "::before").content)
+    expect(label, path).toBe(path === "/ekspedisi" ? '"Reguler & Ekonomi"' : '"Spesifikasi minimum"')
+  }
+  await page.goto(`${apex}/`)
+  await page.locator("[data-raka]").scrollIntoViewIfNeeded()
+  const box = async (sel: string) => (await page.locator(sel).boundingBox())!
+  const [a, b, img] = [await box(".rk-a"), await box(".rk-b"), await box(".raka-stage img")]
+  expect(a.y).toBeGreaterThanOrEqual(img.y + img.height - 1)
+  expect(b.y).toBeGreaterThanOrEqual(img.y + img.height - 1)
+  expect(a.y + a.height <= b.y || b.y + b.height <= a.y || a.x + a.width <= b.x || b.x + b.width <= a.x).toBe(true)
+  const lefts = await page.locator('section[aria-labelledby="toko-title"] .chips li').evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().left)))])
+  expect(lefts).toHaveLength(2)
+  await page.goto(`${apex}/simulasi-kasir`)
+  await expect(page.getByRole("link", { name: "Daftar Gerai Sekarang" })).toHaveCount(0)
+  await expect(page.locator("main").getByRole("link", { name: "Lihat Semua Fitur" })).toHaveCount(1)
+})
+

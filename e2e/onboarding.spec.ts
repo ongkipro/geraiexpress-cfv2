@@ -30,6 +30,8 @@ test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) �
   await page.getByLabel("Kata sandi").fill("pemilik-e2e-kuat-1")
   await page.getByRole("button", { name: "Buat Akun" }).click()
   await page.getByLabel("Nama gerai").fill("Toko Uji Coba")
+  // DEC-250: the address follows the name in a live pill; `Ubah` opens the editor.
+  await page.getByRole("button", { name: "Ubah" }).click()
   await page.getByLabel("Alamat gerai").fill(slug)
   await page.getByLabel("WhatsApp gerai").fill("081234560000")
   await page.getByLabel("Email untuk akun Mengantar").fill(`seller-${slug}@contoh.test`)

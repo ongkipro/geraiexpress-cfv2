@@ -55,8 +55,11 @@ export function useTurnstile() {
         const id = window.turnstile.render(el, {
           sitekey: siteKey,
           language: "id",
-          // DEC-248: fills the 380/440px form column (narrow screens included) inside a reserved 65px slot.
+          // DEC-250 (AUTH-MINIMALIST-STEP-UX-SPEC §1.3): the check runs silently; almost every visitor sees no box at
+          // all, and a visitor Cloudflare must challenge gets a full-width widget that grows the slot only then.
+          appearance: "interaction-only",
           size: "flexible",
+          theme: "light",
           callback: (t: string) => setToken(t),
           "expired-callback": () => setToken(null),
           "error-callback": () => setToken(null),
@@ -78,6 +81,20 @@ export function useTurnstile() {
     if (siteKey) setToken(null)
   }, [widget, siteKey])
   const current = siteKey === null ? DEV_TOKEN : token
-  // `hasWidget`: a real challenge is configured, so forms reserve its slot (none locally with the test keys).
+  // `hasWidget`: a real challenge is configured (none locally with the test keys), so forms show the security status.
   return { setContainer, token: current, ready: current !== null && siteKey !== undefined, failed, reset, hasWidget: Boolean(siteKey) }
+}
+
+/**
+ * The one-line security status under a submit button (DEC-250): pending while the invisible check runs, verified once
+ * the token is in. Nothing locally (no widget) and nothing when the script failed (the form shows its own alert).
+ */
+export function SecurityStatus({ ts }: { ts: { hasWidget: boolean; ready: boolean; failed: boolean } }) {
+  if (!ts.hasWidget || ts.failed) return null
+  return (
+    <p data-security-status data-state={ts.ready ? "ok" : "pending"} aria-live="polite" className="-mt-1 flex items-center justify-center gap-1.5 text-xs font-medium text-[#64748B]">
+      <span aria-hidden className={ts.ready ? "text-[#15803D]" : undefined}>{ts.ready ? "●" : "○"}</span>
+      {ts.ready ? "Koneksi terverifikasi · Proteksi Cloudflare aktif" : "Memverifikasi koneksi aman…"}
+    </p>
+  )
 }

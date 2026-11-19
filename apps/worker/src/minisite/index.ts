@@ -153,7 +153,7 @@ async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
 <h2>Cek ongkir</h2><p class="hint sub">Harga publik, dari ${e(s.outlet.name)}.</p>
 ${areaField("dest", "Kecamatan tujuan", v, errors.destinationAreaId)}
 <div class="grid2 pair"><div>${field("weight", "Berat paket", { value: v.weight, attrs: ' inputmode="decimal" required pattern="[0-9]+([.,][0-9]+)?" data-msg-invalid="Isi berat dengan angka, contoh 1000 atau 1,5."', error: errors.weightGram })}</div>
-<div><label for="unit">Satuan</label><select id="unit" name="unit"><option value="g"${v.unit !== "kg" ? " selected" : ""}>gram</option><option value="kg"${v.unit === "kg" ? " selected" : ""}>kg</option></select></div></div>
+<fieldset><legend>Satuan</legend><div class="seg unit">${radio("unit", "g", "gram", v.unit !== "kg")}${radio("unit", "kg", "kg", v.unit === "kg")}</div></fieldset></div>
 <fieldset><legend>Ukuran paket, P × L × T cm (opsional)</legend><div class="dims">${dimField("lengthCm", "Panjang (cm)", v)}<span aria-hidden="true">×</span>${dimField("widthCm", "Lebar (cm)", v)}<span aria-hidden="true">×</span>${dimField("heightCm", "Tinggi (cm)", v)}</div>
 ${errors.dims ? `<p class="err" role="alert">${e(errors.dims)}</p>` : `<p class="hint">Untuk paket besar tapi ringan: ongkir memakai berat volume bila lebih besar.</p>`}</fieldset>
 <fieldset><legend>Layanan</legend><div class="seg">${radio("svc", "regular", "Reguler", v.svc !== "cargo")}${radio("svc", "cargo", "Kargo (mulai 5 kg, Non-COD)", v.svc === "cargo")}</div></fieldset>

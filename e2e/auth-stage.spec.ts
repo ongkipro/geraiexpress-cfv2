@@ -2,9 +2,10 @@ import type { Page } from "@playwright/test"
 import { expect, test } from "./fixtures"
 import { APP, lastMail, OWNER, uniqueEmail } from "./helpers"
 
-// DEC-248 (owner 2026-11-19): every auth route is one white viewport — no <footer>, no page scroll, the centre fits
-// without scrolling inside itself — at 1440×900, 1366×768 and 390×844; a register flow `1 · Akun — 2 · Gerai —
-// 3 · Titik Jemput`; a `Lihat` / `Sembunyikan` password toggle.
+// DEC-250 (supersedes the DEC-248 stage): every auth route is a 100dvh split-studio — no <footer>, no page scroll, the
+// form column fits without scrolling inside itself — at 1440×900, 1366×768 and 390×844. The brand mark never carries
+// an arrow (`← Beranda` is a separate link); the porcelain studio panel shows from 960px and folds away below it; the
+// register flow is a three-segment wizard bar `Langkah n / 3`; a `Lihat` / `Sembunyikan` password pill.
 const SIZES = [
   { width: 1440, height: 900 },
   { width: 1366, height: 768 },
@@ -21,7 +22,30 @@ async function fits(page: Page, what: string) {
   expect(m, what).toEqual({ page: 0, wide: 0, inner: 0 })
 }
 
-test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa scroll di 1440, 1366 dan 390", async ({ page, request }, info) => {
+// The studio contract on one page: a clean mark (no arrow in it), the panel only from 960px, `← Beranda` on app only.
+async function studio(page: Page, what: string, app: boolean) {
+  const wide = page.viewportSize()!.width >= 960
+  const panel = page.locator("[data-auth-panel]")
+  await expect(panel, what)[wide ? "toBeVisible" : "toBeHidden"]()
+  await expect(page.locator("[data-auth-bar]"), what)[wide ? "toBeHidden" : "toBeVisible"]()
+  const mark = page.locator(wide ? "[data-auth-panel] [data-auth-mark]" : "[data-auth-bar] [data-auth-mark]")
+  await expect(mark, what).toBeVisible()
+  await expect(mark, what).toContainText("GeraiExpress")
+  expect(await mark.innerText(), what).not.toContain("←")
+  const home = page.locator(wide ? "[data-auth-panel] [data-auth-home]" : "[data-auth-bar] [data-auth-home]")
+  if (app) {
+    await expect(home, what).toHaveText("← Beranda")
+    await expect(home, what).toHaveAttribute("href", APP.replace("app.", ""))
+    await expect(mark, what).toHaveAttribute("href", APP.replace("app.", ""))
+  } else {
+    await expect(home, what).toHaveCount(0)
+    await expect(page.locator("[data-auth-switch]"), what).toHaveCount(0)
+    expect(await mark.evaluate((el) => el.tagName), what).toBe("DIV")
+  }
+  if (wide) await expect(panel.locator("[data-auth-visual]"), what).toHaveAttribute("src", "/loket-mitra-3d.webp")
+}
+
+test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa panah di logo, tanpa footer, tanpa scroll di 1440, 1366 dan 390", async ({ page, request }, info) => {
   test.skip(info.project.name !== "desktop-1280", "the three viewports are set inside this test")
   test.setTimeout(120_000)
   const errors: string[] = []
@@ -32,17 +56,25 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
     await page.setViewportSize(size)
     const at = `${size.width}x${size.height}`
     await page.goto(`${APP}/masuk`)
-    await expect(page.getByRole("heading", { name: "Masuk" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Masuk ke ruang kerja gerai" })).toBeVisible()
     await fits(page, `app /masuk ${at}`)
-    await expect(page.getByRole("link", { name: "Daftar" })).toHaveAttribute("href", "/daftar-akun")
-    await expect(page.getByRole("link", { name: /kembali ke situs utama/ })).toHaveAttribute("href", APP.replace("app.", ""))
+    await studio(page, `app /masuk ${at}`, true)
+    const sw = page.getByRole("navigation", { name: "Masuk atau daftar gerai" })
+    await expect(sw.getByRole("link", { name: "Masuk ke Loket" })).toHaveAttribute("aria-current", "page")
+    await expect(sw.getByRole("link", { name: "Daftar Gerai Baru" })).toHaveAttribute("href", "/daftar-akun")
+    if (size.width >= 960) await expect(page.locator("[data-auth-panel] h2")).toHaveText("Satu pintu ke meja kasir & pembukuan gerai.")
     await page.goto(`${OWNER}/masuk`)
     await expect(page.getByRole("heading", { name: "Masuk Super Admin" })).toBeVisible()
     await fits(page, `owner /masuk ${at}`)
-    await expect(page.getByRole("link", { name: /situs utama/ })).toHaveCount(0)
+    await studio(page, `owner /masuk ${at}`, false)
+    if (size.width >= 960) await expect(page.locator("[data-auth-panel]")).toContainText("Konsol internal GeraiExpress")
     await page.goto(`${APP}/daftar-akun`)
     await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("1 · Akun")
+    await expect(page.locator("[data-wizard]")).toContainText("Langkah 1 / 3")
+    await expect(page.getByRole("navigation", { name: "Masuk atau daftar gerai" }).getByRole("link", { name: "Daftar Gerai Baru" })).toHaveAttribute("aria-current", "page")
     await fits(page, `/daftar-akun ${at}`)
+    await studio(page, `/daftar-akun ${at}`, true)
+    if (size.width >= 960) await expect(page.locator("[data-auth-slug]")).toHaveText("namagerai.geraimitra.com")
   }
 
   // Password toggle: a real button, pressed state, the value never changes.
@@ -69,6 +101,12 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await expect(page.getByRole("button", { name: "Kirim ulang" })).toBeVisible()
   await expect(page.getByRole("status")).toHaveCount(0)
   await fits(page, "otp 1366x768")
+  // The wizard bar's quiet `← Kembali` returns from the OTP to the email; a fresh code continues the flow.
+  await page.locator("[data-wizard]").getByRole("button", { name: "← Kembali" }).click()
+  await expect(page.getByLabel("Email")).toHaveValue(email)
+  await expect(page.locator("[data-wizard]").getByRole("button")).toHaveCount(0)
+  await page.getByRole("button", { name: "Kirim Kode" }).click()
+  await expect(page.getByText(`Kode dikirim ke ${email}. Berlaku 10 menit.`)).toBeVisible()
   await page.getByLabel("Kode verifikasi").fill((await lastMail(request, email, "signup_otp")).code!)
   await page.getByRole("button", { name: "Verifikasi" }).click()
   await page.getByLabel("Nama lengkap").fill("Bu Rina")
@@ -76,17 +114,36 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await fits(page, "profile 1366x768")
   await page.getByRole("button", { name: "Buat Akun" }).click()
   await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("2 · Gerai")
-  await expect(page.getByText(".geraimitra.com", { exact: true })).toBeVisible()
+  await expect(page.locator("[data-wizard]")).toContainText("Langkah 2 / 3")
+  await expect(page.locator("[data-wizard]").getByRole("button")).toHaveCount(0)
+  // Live domain pill: the address follows the name, the studio panel mirrors it, `Ubah` opens the editor.
+  const pill = page.locator("[data-domain-pill]")
+  await expect(pill).toContainText("namagerai.geraimitra.com")
+  await expect(page.getByLabel("Alamat gerai")).toHaveCount(0)
+  await page.getByLabel("Nama gerai").fill("Gerai Berkah Jaya")
+  await expect(pill).toContainText("gerai-berkah-jaya.geraimitra.com")
+  await expect(pill).toContainText("✓ Otomatis")
+  await expect(page.locator("[data-auth-slug]")).toHaveText("gerai-berkah-jaya.geraimitra.com")
   for (const size of SIZES) {
     await page.setViewportSize(size)
     await fits(page, `tahap 2 ${size.width}x${size.height}`)
   }
+  await pill.getByRole("button", { name: "Ubah" }).click()
+  await expect(pill.getByRole("button", { name: "Ubah" })).toHaveAttribute("aria-expanded", "true")
+  await page.getByLabel("Alamat gerai").fill("berkah-jaya-1")
+  await expect(pill).toContainText("berkah-jaya-1.geraimitra.com")
+  await expect(pill).toContainText("Diubah manual")
+  await fits(page, "tahap 2 with the slug editor 390x844")
+  await page.setViewportSize(SIZES[1]!)
+  await expect(page.locator("[data-auth-slug]")).toHaveText("berkah-jaya-1.geraimitra.com")
   await page.getByLabel("Nama gerai").fill("Toko Uji Satu")
+  await expect(pill).toContainText("berkah-jaya-1.geraimitra.com")
   await page.getByLabel("WhatsApp gerai").fill("081234560000")
   const seller1 = `seller-${Date.now().toString(36)}@contoh.test`
   await page.getByLabel("Email untuk akun Mengantar").fill(seller1)
   await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
   await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("3 · Titik Jemput")
+  await expect(page.locator("[data-wizard]")).toContainText("Langkah 3 / 3")
   await expect(page.getByLabel("HP PIC")).toHaveValue("081234560000")
   for (const size of SIZES) {
     await page.setViewportSize(size)
@@ -121,7 +178,7 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await expect(page.locator("[data-seller-email]")).toHaveText(seller1)
   await page.getByRole("checkbox").check()
   await expect(page.getByRole("button", { name: "Ajukan Gerai" })).toBeEnabled()
-  await page.getByRole("button", { name: "← Kembali" }).click()
+  await page.locator("[data-wizard]").getByRole("button", { name: "← Kembali" }).click()
   await expect(page.getByLabel("Nama gerai")).toHaveValue("Toko Uji Satu")
   const seller2 = `seller2-${Date.now().toString(36)}@contoh.test`
   await page.getByLabel("Email untuk akun Mengantar").fill(seller2)
@@ -134,7 +191,7 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   await expect(page.getByLabel("HP PIC")).toHaveValue("081234569999")
   // … and keeps the applicant's own number once edited.
   await page.getByLabel("HP PIC").fill("081200000001")
-  await page.getByRole("button", { name: "← Kembali" }).click()
+  await page.locator("[data-wizard]").getByRole("button", { name: "← Kembali" }).click()
   await page.getByLabel("WhatsApp gerai").fill("081234567777")
   await page.getByRole("button", { name: "Lanjut ke Titik Jemput" }).click()
   await expect(page.getByLabel("HP PIC")).toHaveValue("081200000001")
@@ -196,47 +253,64 @@ test("DEC-248: masuk (app + owner), daftar 1 · 2 · 3 — tanpa footer, tanpa s
   expect(errors).toEqual([])
 })
 
-// Sol R1 (P2): with a real challenge configured the slot is reserved (65px, `size: "flexible"`), so the widget never
-// shifts the form, and the pages still fit every viewport. Config and widget are stubbed (no third-party call).
-test("DEC-248: slot Turnstile 65px dipesan saat widget nyata dikonfigurasi, tetap tanpa scroll", async ({ page }, info) => {
+// DEC-250 (AUTH-MINIMALIST-STEP-UX-SPEC §1.3): with a real challenge configured the widget renders with
+// `appearance: "interaction-only"`, `size: "flexible"`, `theme: "light"` — no reserved 65px box; a one-line security status
+// goes from pending to verified, and only a visitor Cloudflare must challenge sees a full-width widget. Config and widget
+// are stubbed (no third-party call).
+test("DEC-250: Turnstile interaction-only tanpa kotak kosong, status keamanan, tantangan melebar penuh, retry", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop-1280", "the three viewports are set inside this test")
   await page.route("**/api/app/auth/config", (r) => r.fulfill({ json: { ok: true, data: { turnstileSiteKey: "0x4AAAAAAA-e2e-stub" } } }))
   await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js*", (r) =>
     r.fulfill({
       contentType: "text/javascript",
+      // interaction-only: a passing visitor gets an invisible widget; `?challenge` makes the stub ask for interaction.
       body:
-        'window.__tsResets=0;window.turnstile={render:function(el,o){window.__tsCb=o.callback;var d=document.createElement("div");d.style.height="65px";d.setAttribute("data-size",o.size);setTimeout(function(){el.appendChild(d);o.callback("stub-token")},300);return "w1"},reset:function(){window.__tsResets++;setTimeout(function(){window.__tsCb("stub-token-2")},300)},remove:function(){}}',
+        'window.__tsResets=0;window.turnstile={render:function(el,o){window.__tsOpts=o;window.__tsCb=o.callback;var d=document.createElement("div");d.setAttribute("data-size",o.size);var ask=location.search.indexOf("challenge")>=0;d.style.height=ask?"65px":"0px";d.style.width="100%";setTimeout(function(){el.appendChild(d);if(!ask)o.callback("stub-token")},1200);return "w1"},reset:function(){window.__tsResets++;setTimeout(function(){window.__tsCb("stub-token-2")},1200)},remove:function(){}}',
     }),
   )
   for (const path of ["/masuk", "/daftar-akun"]) {
     for (const size of SIZES) {
       await page.setViewportSize(size)
       await page.goto(`${APP}${path}`)
-      const slot = page.locator("[data-turnstile-slot]")
+      const at = `${path} ${size.width}x${size.height}`
+      const status = page.locator("[data-security-status]")
       const submit = page.getByRole("button", { name: path === "/masuk" ? "Masuk" : "Kirim Kode", exact: true })
-      // Reserved while the widget is still loading (the stub renders after 300 ms) …
-      await expect(slot).toBeVisible()
-      await expect(slot.locator("[data-size]")).toHaveCount(0)
-      expect(Math.round((await slot.boundingBox())!.height), `${path} slot`).toBeGreaterThanOrEqual(65)
-      const before = (await submit.boundingBox())!.y
-      // … so the widget arriving moves nothing.
-      await expect(slot.locator("[data-size]")).toHaveAttribute("data-size", "flexible")
-      await expect(submit).toBeEnabled()
-      expect((await submit.boundingBox())!.y, `${path} shift`).toBe(before)
-      await fits(page, `${path} with widget ${size.width}x${size.height}`)
+      await expect(status, at).toHaveAttribute("data-state", "pending")
+      await expect(status, at).toContainText("Memverifikasi koneksi aman…")
+      await expect(submit, at).toBeDisabled()
+      await expect(status, at).toHaveAttribute("data-state", "ok")
+      await expect(status, at).toContainText("Koneksi terverifikasi · Proteksi Cloudflare aktif")
+      await expect(submit, at).toBeEnabled()
+      const opts = await page.evaluate(() => (window as unknown as { __tsOpts: Record<string, unknown> }).__tsOpts)
+      expect({ appearance: opts.appearance, size: opts.size, theme: opts.theme }, at).toEqual({ appearance: "interaction-only", size: "flexible", theme: "light" })
+      // No empty box for a passing visitor.
+      expect(Math.round((await page.locator("[data-turnstile-slot]").boundingBox())?.height ?? 0), at).toBe(0)
+      await fits(page, `${at} with widget`)
     }
   }
-  // Widget-enabled retry (Sol R1): a failed sign-in resets the widget; `Masuk` waits for the fresh token.
+  // A challenged visitor: the widget takes the full card width; the page still never scrolls.
+  await page.setViewportSize(SIZES[2]!)
+  await page.goto(`${APP}/masuk?challenge=1`)
+  const slot = page.locator("[data-turnstile-slot]")
+  await expect(slot.locator("[data-size]")).toHaveAttribute("data-size", "flexible")
+  const [s, f] = [(await slot.boundingBox())!, (await page.getByLabel("Email").boundingBox())!]
+  expect(Math.round(s.height)).toBe(65)
+  expect(Math.round(s.width)).toBe(Math.round(f.width))
+  await expect(page.locator("[data-security-status]")).toHaveAttribute("data-state", "pending")
+  await fits(page, "/masuk challenged 390x844")
+  // Widget-enabled retry: a failed sign-in resets the widget; `Masuk` waits for the fresh token.
   await page.setViewportSize(SIZES[0]!)
   await page.goto(`${APP}/masuk`)
   const masuk = page.getByRole("button", { name: "Masuk", exact: true })
   await expect(masuk).toBeEnabled()
-  await page.getByLabel("Email").fill(uniqueEmail("e2e-248-retry"))
+  await page.getByLabel("Email").fill(uniqueEmail("e2e-250-retry"))
   await page.getByLabel("Kata sandi").fill("salah-sekali-9")
   await masuk.click()
   await expect(page.getByRole("alert")).toBeVisible()
   expect(await page.evaluate(() => (window as unknown as { __tsResets: number }).__tsResets)).toBe(1)
   await expect(masuk).toBeDisabled()
+  await expect(page.locator("[data-security-status]")).toHaveAttribute("data-state", "pending")
   await expect(masuk).toBeEnabled()
+  await expect(page.locator("[data-security-status]")).toHaveAttribute("data-state", "ok")
   await fits(page, "/masuk after a failed attempt with widget")
 })

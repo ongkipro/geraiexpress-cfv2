@@ -111,20 +111,30 @@ Legend — **Role:** O = Gerai Admin (owner), K = Kasir, S = Super Admin, P = pu
 
 ### 3.1 Auth & onboarding (`app.`)
 
-DEC-248 auth stage (owner 2026-11-19), for every route in this table and the Super Admin `/masuk` + `/totp`. One white
-viewport (`h-dvh`) with no page footer and no page scroll; the centre scrolls inside itself only when the viewport is
-too short (a phone keyboard). A quiet top bar holds the brand escape on the left: `← GeraiExpress` linking to the brand
-site on `app.`, a static mark on `owner.`. The contextual switch sits on the right: `Belum punya akun? Daftar`,
-`Sudah punya akun? Masuk`, `Kembali`, `Keluar`; on phones only the link shows. The form is a frameless block dead
-centre: 380px for sign-in/OTP/TOTP, 440px for register. It has a 24px `-0.02em` semibold title, a one-line `#64748B`
-subtitle, inputs 44px on phones and 40px on desktop (the largest the DEC-239 desk contract allows), a `Lihat` /
-`Sembunyikan` text toggle inside every password field, and a `#0B4FE3` primary. Not allowed: split screens,
-illustrations, testimonials, card-in-card, and colored alert boxes for routine notices.
+DEC-250 split-studio (owner 2026-11-19, `adsbook.id` `AuthSplit` parity; supersedes the DEC-248 stage), for every route
+in this table and the Super Admin `/masuk` + `/totp`. One `h-dvh` viewport with no header, no `<footer>` and no page
+scroll; only the form column scrolls, and only when the viewport is too short (a phone keyboard). From 960px it is a
+`5.4fr / 4.6fr` grid. **Left (white):** on `/masuk`, `/daftar-akun` and `/daftar` a porcelain pill switcher
+`Masuk ke Loket` | `Daftar Gerai Baru` (the current page a white chip in `#0B4FE3`), then one floating white card
+(`max-w-[460px]`, `rounded-[22px]`, hairline border, float shadow, 220ms entrance). The card has a 24px extrabold title
+ending in a blue dot, a one-line `#64748B` subtitle, inputs 44px on phones and 40px on desktop (DEC-239), a `Lihat` /
+`Sembunyikan` pill inside every password field, and a `#0B4FE3` primary. **Right (from 960px):** a porcelain `#F4F6FA`
+`rounded-[28px]` studio panel with a masked dot grid. At its top sits the clean `[GE] GeraiExpress · by Mengantar`
+mark, with no arrow on it (a link to the brand site on `app.`, static on `owner.`), and a separate quiet `← Beranda`
+(`app.` only). In the middle are the floating `/loket-mitra-3d.webp` (`max-h-[26dvh]`, 6s float, still under reduced
+motion) and a contextual pitch: title, lead, three blue checks, plus on register the live `● {slug || namagerai}.geraimitra.com`
+badge. One legal line sits at its foot (`© GeraiExpress · Ketentuan Layanan · Kebijakan Privasi`; `Konsol internal
+GeraiExpress` on `owner.`). Below 960px the panel folds away and a compact bar (mark left, `← Beranda` right) sits above the
+card. The register card opens with the wizard bar: an optional quiet `← Kembali` (OTP sub-step and step 3), three thin
+segments and `Langkah n / 3`. Turnstile renders with `appearance: "interaction-only"`, `size: "flexible"`, `theme: "light"`;
+there is no reserved box. A passing visitor sees only a one-line status under the submit (`○ Memverifikasi koneksi
+aman…` → `● Koneksi terverifikasi · Proteksi Cloudflare aktif`), and a challenged visitor gets the widget at full card
+width. Not allowed: an arrow on the brand mark, testimonials, card-in-card, and colored alert boxes for routine notices.
 
 | Route | Role | Title | Primary | Content blocks (order) | Notes |
 |---|---|---|---|---|---|
-| `/masuk` | P | Masuk | `Masuk` | email, password (`Lihat`), `Lupa kata sandi?`, Turnstile; top-right `Belum punya akun? Daftar` | DEC-248 auth stage, 380px, zero scroll |
-| `/daftar-akun` → `/daftar` | P → O | Daftar Gerai · Identitas gerai · Titik jemput kurir | `Kirim Kode` → `Buat Akun` → `Lanjut ke Titik Jemput →` → `Ajukan Gerai` | indicator `1 · Akun — 2 · Gerai — 3 · Titik Jemput`. **1** email → 6-digit code (mono, quiet `Ganti email` / `Kirim ulang`) → name + password. **2** nama gerai, alamat gerai with a fixed `.geraimitra.com` suffix, WhatsApp gerai \| email akun Mengantar. **3** kecamatan search (results float over the form), street, `PIC penjemputan` \| `HP PIC` (pre-filled from WhatsApp gerai), `+ Titik koordinat peta (opsional)` disclosure, Mengantar consent, `← Kembali` + `Ajukan Gerai` (the old summary step is folded in) | DEC-248, 440px, every step zero scroll at 1440×900, 1366×768, 390×844 |
+| `/masuk` | P | Masuk ke ruang kerja gerai | `Masuk` | switcher, email, password (`Lihat` pill), `Lupa kata sandi?`, silent Turnstile + security status | DEC-250 split-studio, zero scroll |
+| `/daftar-akun` → `/daftar` | P → O | Buat akun pemilik · Identitas gerai · Titik jemput kurir | `Kirim Kode` → `Buat Akun` → `Lanjut ke Titik Jemput →` → `Ajukan Gerai` | wizard bar `Langkah 1 / 3` … `3 / 3` (step names kept for assistive technology). **1** email → 6-digit code (mono, `← Kembali` in the bar, quiet `Ganti email` / `Kirim ulang`) → name + password. **2** nama gerai with the live domain pill `slug.geraimitra.com · ✓ Otomatis · [Ubah]` (the address follows the name until `Ubah` or a server slug error opens the `.geraimitra.com` editor; the studio badge mirrors it), WhatsApp gerai \| email akun Mengantar. **3** kecamatan search (results float over the form), street, `PIC penjemputan` \| `HP PIC` (pre-filled from WhatsApp gerai), `+ Titik koordinat peta (opsional)` disclosure, Mengantar consent naming the seller email, `Ajukan Gerai` (`← Kembali` in the bar) | DEC-250, every step zero scroll at 1440×900, 1366×768, 390×844; step 1 → 2 is committed (no back) |
 | `/daftar/status` | O | Status Pengajuan | — | timeline `Diajukan → Ditinjau → Akun Mengantar → Aktif`, contact line | Shown until approved |
 | `/undangan/:token` | P | Gabung sebagai Kasir | `Buat Akun` | outlet name, inviter, password form | 7-day single-use |
 | `/lupa-sandi`, `/atur-sandi/:token` | P | Atur Ulang Kata Sandi | `Kirim Tautan` / `Simpan` | — | — |

@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react"
-import { Link, useNavigate } from "@tanstack/react-router"
-import { AuthCard, FormAlert, RegisterSteps } from "../../components/auth/auth-card"
+import { useNavigate } from "@tanstack/react-router"
+import { AuthCard, FormAlert, WizardBar } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { api, ApiError } from "../../lib/api"
-import { useTurnstile } from "../../lib/turnstile"
+import { SecurityStatus, useTurnstile } from "../../lib/turnstile"
 
 type Step = "email" | "otp" | "profile"
 
@@ -67,20 +67,16 @@ export function DaftarAkunPage() {
     })
   }
 
-  // DEC-248: Tahap 1 of `1 · Akun — 2 · Gerai — 3 · Titik Jemput`; its three sub-states share one calm frame.
+  // DEC-250: Langkah 1 / 3 of the wizard; its three sub-states share one card, `← Kembali` returns from the OTP to the email.
   const quiet = "inline-flex min-h-11 items-center text-sm font-medium text-[#64748B] underline-offset-4 hover:text-[#0F172A] hover:underline disabled:opacity-50 md:min-h-9"
+  const backToEmail = () => { setStep("email"); setCode(""); setError(null) }
   return (
     <AuthCard
-      wide
-      title="Daftar Gerai"
-      progress={<RegisterSteps current={1} />}
+      switcher="daftar"
+      title="Buat akun pemilik"
+      progress={<WizardBar current={1} onBack={step === "otp" && !pending ? backToEmail : undefined} />}
       description={
         step === "email" ? "Mulai dengan email pemilik. Kami kirim kode 6 digit." : step === "otp" ? `Kode dikirim ke ${email}. Berlaku 10 menit.` : "Nama dan kata sandi untuk masuk ke ruang kerja."
-      }
-      corner={
-        <span>
-          <span className="hidden sm:inline">Sudah punya akun? </span><Link to="/masuk">Masuk</Link>
-        </span>
       }
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
@@ -88,6 +84,7 @@ export function DaftarAkunPage() {
         <form className="flex flex-col gap-4" onSubmit={sendCode} noValidate>
           <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
           <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Kode"}</Button>
+          <SecurityStatus ts={ts} />
         </form>
       ) : null}
       {step === "otp" ? (
@@ -95,12 +92,13 @@ export function DaftarAkunPage() {
           <TextField label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
           <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
           <div className="-mt-1 flex items-center justify-between">
-            <button type="button" className={quiet} disabled={pending} onClick={() => { setStep("email"); setCode(""); setError(null) }}>Ganti email</button>
+            <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
             <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
           </div>
         </form>
       ) : null}
-      {step === "email" || step === "otp" ? <div ref={turnstileBox} data-turnstile-slot className={ts.hasWidget ? "min-h-[65px]" : "hidden"} /> : null}
+      {/* One widget for the email and OTP sub-states (`Kirim ulang` needs a fresh token); 0px unless challenged. */}
+      {step === "email" || step === "otp" ? <div ref={turnstileBox} data-turnstile-slot className="-mt-2 w-full empty:hidden" /> : null}
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
         <form className="flex flex-col gap-4" onSubmit={complete} noValidate>

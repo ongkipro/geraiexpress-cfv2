@@ -474,9 +474,9 @@ export function renderEkspedisi(app: string): string {
 <section class="sec tight" aria-labelledby="jaringan-title"><div class="wrap">
 <ul class="pgrid pgrid-gap" aria-label="Sembilan ekspedisi mitra Mengantar">${Object.keys(COURIERS).map((k) => `<li class="pbadge">${courierImg(k, 28)}</li>`).join("")}</ul>
 <div class="shead"><h2 id="jaringan-title">Jaringan kurir dalam satu layar perbandingan</h2><p class="sub">Pemilik gerai bebas mengaktifkan atau menonaktifkan ekspedisi sesuai jadwal kurir penjemput di kecamatannya.</p></div>
-<div class="tbl-wrap"><table class="tbl">
+<div class="tbl-wrap"><table class="tbl stack">
 <thead><tr><th scope="col">Ekspedisi</th><th scope="col">Reguler &amp; Ekonomi</th><th scope="col">Kargo</th><th scope="col">Pembayaran &amp; catatan</th></tr></thead>
-<tbody>${rows.map(([k, reg, car, cod]) => `<tr><td><span class="tcour"><span class="tlogo">${courierImg(k!, 24, true)}</span><strong>${e(COURIERS[k!]!.name)}</strong></span></td><td>${e(reg)}</td><td>${e(car)}</td><td>${e(cod)}</td></tr>`).join("")}</tbody>
+<tbody>${rows.map(([k, reg, car, cod]) => `<tr><td><span class="tcour"><span class="tlogo">${courierImg(k!, 24, true)}</span><strong>${e(COURIERS[k!]!.name)}</strong></span></td><td data-col="Reguler &amp; Ekonomi">${e(reg)}</td><td data-col="Kargo">${e(car)}</td><td data-col="Pembayaran &amp; catatan" class="wide">${e(cod)}</td></tr>`).join("")}</tbody>
 </table></div>
 <p class="note">Ketersediaan rute dan jadwal penjemputan mengikuti cakupan aktif jaringan Mengantar pada titik jemput gerai Anda.</p>
 </div></section>
@@ -589,13 +589,13 @@ ${STEPS.map((s, i) => `<article class="prow${i % 2 ? " flip" : ""}" id="langkah-
 
 <section class="sec tight" aria-labelledby="alat-title"><div class="wrap">
 <div class="shead"><h2 id="alat-title">Spesifikasi peralatan meja loket</h2><p class="sub">Gunakan merek apa pun yang mudah dibeli di kota Anda; tidak ada penguncian merek perangkat keras.</p></div>
-<div class="tbl-wrap"><table class="tbl">
+<div class="tbl-wrap"><table class="tbl stack">
 <thead><tr><th scope="col">Perangkat</th><th scope="col">Spesifikasi minimum</th><th scope="col">Rekomendasi meja kasir harian</th></tr></thead>
 <tbody>
-<tr><td><strong>Perangkat kasir</strong></td><td>HP Android (Chrome terbaru) dengan internet stabil</td><td>Laptop atau PC layar ≥ 13 inci agar tampilan kasir 60/40 dan tabel kiriman leluasa</td></tr>
-<tr><td><strong>Timbangan paket</strong></td><td>Timbangan digital meja kapasitas 10–30 kg</td><td>Timbangan duduk digital 30–50 kg (ketelitian 5–10 gram) dan meteran gulung untuk paket besar</td></tr>
-<tr><td><strong>Printer resi</strong></td><td>Printer struk thermal Bluetooth 58 mm (kertas roll biasa)</td><td>Printer label <em>direct thermal</em> lebar 100 mm (stiker 100×150 mm, USB atau LAN)</td></tr>
-<tr><td><strong>Pemindai kode</strong></td><td>Kamera HP atau webcam bawaan browser</td><td>Pemindai barcode/QR 2D USB untuk mempercepat pindai QR draf dan manifest pickup</td></tr>
+<tr><td><strong>Perangkat kasir</strong></td><td data-col="Spesifikasi minimum">HP Android (Chrome terbaru) dengan internet stabil</td><td data-col="Rekomendasi harian">Laptop atau PC layar ≥ 13 inci agar tampilan kasir 60/40 dan tabel kiriman leluasa</td></tr>
+<tr><td><strong>Timbangan paket</strong></td><td data-col="Spesifikasi minimum">Timbangan digital meja kapasitas 10–30 kg</td><td data-col="Rekomendasi harian">Timbangan duduk digital 30–50 kg (ketelitian 5–10 gram) dan meteran gulung untuk paket besar</td></tr>
+<tr><td><strong>Printer resi</strong></td><td data-col="Spesifikasi minimum">Printer struk thermal Bluetooth 58 mm (kertas roll biasa)</td><td data-col="Rekomendasi harian">Printer label <em>direct thermal</em> lebar 100 mm (stiker 100×150 mm, USB atau LAN)</td></tr>
+<tr><td><strong>Pemindai kode</strong></td><td data-col="Spesifikasi minimum">Kamera HP atau webcam bawaan browser</td><td data-col="Rekomendasi harian">Pemindai barcode/QR 2D USB untuk mempercepat pindai QR draf dan manifest pickup</td></tr>
 </tbody>
 </table></div>
 </div></section>
@@ -866,7 +866,6 @@ ${selBox("bayar", "Cara bayar di loket", [["Tunai", "Tunai"], ["QRIS gerai", "QR
 <div class="lbl-bar" aria-hidden="true"></div>
 <p id="lbl-dest" class="lbl-dest">Barcode resi kurir dan QR lacak tercetak siap tempel ke paket.</p>
 </div>
-<div class="row"><a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai Sekarang</a><a class="cta ghost" href="/fitur">Lihat Semua Fitur</a></div>
 </div>
 </div>
 </div></section>

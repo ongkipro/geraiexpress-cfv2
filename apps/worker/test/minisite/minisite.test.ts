@@ -37,10 +37,14 @@ describe("mini-site", () => {
     const h = await home.text()
     expect(h).toContain("<h1>msongkir</h1>")
     expect(h).toContain("Didukung jaringan resmi GeraiExpress")
+    // DEC-250: no raw <select> on the mini-site; the unit is a gram | kg radio toggle with the same `unit` field.
+    expect(h).not.toMatch(/<select[ >]/)
+    expect(h).toContain('<fieldset><legend>Satuan</legend><div class="seg unit"><label><input type="radio" name="unit" value="g" checked> gram</label><label><input type="radio" name="unit" value="kg"> kg</label></div></fieldset>')
     expect((await postForm(`${t.base}/`, { destId: DEST, destLabel: "Tebet", weight: "1000", unit: "g" })).status).toBe(422)
     const q = await postForm(`${t.base}/`, { destId: DEST, destLabel: "Tebet", weight: "1", unit: "kg", "cf-turnstile-response": "ok" })
     const body = await q.text()
     expect(q.status).toBe(200)
+    expect(body).toContain('<input type="radio" name="unit" value="kg" checked> kg')
     expect(body).toMatch(/J&amp;T Express[\s\S]*Rp 12\.500/)
     // Never cost or margin on a public page: provider net (Rp 10.000 for J&T 1 kg at 20 %) must not appear.
     expect(body).not.toContain("Rp 10.000")

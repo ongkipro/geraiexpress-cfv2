@@ -1,0 +1,27 @@
+DEC-250 UI measurements (local wrangler dev, Chromium, 2026-11-19)
+
+Auth split-studio: page = scrollHeight - innerHeight, inner = form column scrollHeight - clientHeight
+  app /masuk          1440x900 page 0 inner 0 | 1366x768 page 0 inner 0 | 390x844 page 0 inner 0
+  owner /masuk        1440x900 page 0 inner 0 | 1366x768 page 0 inner 0 | 390x844 page 0 inner 0
+  /daftar-akun (1/3)  1440x900 page 0 inner 0 | 1366x768 page 0 inner 0 | 390x844 page 0 inner 0
+  /daftar step 2/3    1440x900 page 0 inner 0 | 1366x768 page 0 inner 0 | 390x844 page 0 inner 0
+  /daftar step 3/3    1440x900 page 0 inner 0 | 1366x768 page 0 inner 0 | 390x844 page 0 inner 0
+  (first pass step 3 overflowed 26 px at 1366 and 73 px at 390; fixed by tighter consent copy, a one-line lead,
+   card gap 16 px, phone card padding 16 px and less column padding on short desktops)
+  Studio panel visible >= 960 px, hidden below; mark has no arrow; `← Beranda` separate (app only); 0 <footer>.
+  Turnstile options asserted: appearance interaction-only, size flexible, theme light; slot 0 px for a passing visitor,
+  65 px at full card width when challenged (stub).
+
+Brand 390x844 (baseline = main c5b8296 on :55190, after = dec-250)
+  .tbl-wrap horizontal overflow  /ekspedisi 325 -> 0   /cara-kerja 191 -> 0
+  document height                /           10,499 -> 9,987
+                                 /ekspedisi   4,025 -> 4,773 (tables now stack)
+                                 /cara-kerja  7,718 -> 7,874
+                                 /fitur       9,094 -> 8,913
+                                 /simulasi    3,322 -> 3,122
+  Raka pills: under the art, not overlapping each other; chips: 2 columns; page horizontal overflow 0 on all five.
+  Home at 1440x900: 6,279 px (DEC-249 limit 6,300 holds).
+  Note: the mandate's ~7,800 px target for / at 390 is not reached by the specified CSS (section rhythm, tile padding);
+  the bento (2,983 px of six full-width tiles) dominates and would need a structural change (e.g. a phone carousel).
+
+Mini-site: 0 <select> at 390 and 1440; `Satuan` gram | kg radio toggle, `unit` field unchanged (g / kg).

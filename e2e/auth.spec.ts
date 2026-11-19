@@ -5,7 +5,7 @@ test.describe("TASK-105 accounts", () => {
   test("sign up with email OTP, log out, log in, reset password", async ({ page, request }) => {
     const email = uniqueEmail("e2e-owner")
     await page.goto(`${APP}/daftar-akun`)
-    await expect(page.getByRole("heading", { name: "Daftar Gerai" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Buat akun pemilik" })).toBeVisible()
     await page.getByLabel("Email").fill(email)
     await page.getByRole("button", { name: "Kirim Kode" }).click()
     await expect(page.getByText("Kode dikirim ke")).toBeVisible()
@@ -16,7 +16,7 @@ test.describe("TASK-105 accounts", () => {
     await page.getByLabel("Kata sandi").fill("sandi-e2e-kuat-1")
     await page.getByRole("button", { name: "Buat Akun" }).click()
     // The account step continues into the outlet application (TASK-203).
-    // DEC-248: `1 · Akun — 2 · Gerai — 3 · Titik Jemput`, now on Tahap 2.
+    // DEC-250 wizard bar (`Langkah 2 / 3`); the step names stay in the list for assistive technology.
     await expect(page.getByRole("list", { name: "Tahap pendaftaran" }).locator('[aria-current="step"]')).toHaveText("2 · Gerai")
     // No gerai yet → the workspace sends the applicant to the application status page.
     await page.goto(`${APP}/`)

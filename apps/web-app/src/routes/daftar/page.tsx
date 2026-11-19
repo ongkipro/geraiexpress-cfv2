@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from "react"
-import { Link, useNavigate } from "@tanstack/react-router"
-import { AuthCard, FormAlert, RegisterSteps } from "../../components/auth/auth-card"
+import { useNavigate } from "@tanstack/react-router"
+import { AuthCard, FormAlert, WizardBar } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "../../components/ui/field"
@@ -16,7 +16,12 @@ interface Area {
 
 type Step = 2 | 3
 
-// Outlet application after the account (DEC-248 `1 · Akun — 2 · Gerai — 3 · Titik Jemput`; each step fits one viewport,
+/** `Gerai Berkah Jaya` → `gerai-berkah-jaya` (the 3–30 char `*.geraimitra.com` rule; the server stays the judge). */
+function slugify(name: string): string {
+  return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 30).replace(/-+$/, "")
+}
+
+// Outlet application after the account (DEC-250 wizard `Langkah 2 / 3` and `3 / 3`; each step fits one viewport,
 // the summary step is folded into Tahap 3). PR-01: submission is blocked until the pickup area is chosen from the
 // Mengantar address search.
 export function DaftarPage() {
@@ -24,6 +29,9 @@ export function DaftarPage() {
   const [step, setStep] = useState<Step>(2)
   const [businessName, setBusinessName] = useState("")
   const [slug, setSlug] = useState("")
+  // The address follows the name until the applicant opens `Ubah` (or the server rejects it) and types their own.
+  const [slugOpen, setSlugOpen] = useState(false)
+  const [slugEdited, setSlugEdited] = useState(false)
   const [whatsapp, setWhatsapp] = useState("")
   const [sellerEmail, setSellerEmail] = useState("")
   const [picName, setPicName] = useState("")
@@ -99,6 +107,7 @@ export function DaftarPage() {
       setFieldErrors(ae?.body.field_errors ?? {})
       const fe = ae?.body.field_errors ?? {}
       if (fe.slug || fe.businessName || fe.contactWhatsapp || fe.sellerEmail) setStep(2)
+      if (fe.slug) setSlugOpen(true)
       if (fe.latitude || fe.longitude) setCoords(true)
     } finally {
       setPending(false)
@@ -118,17 +127,33 @@ export function DaftarPage() {
   }
   return (
     <AuthCard
-      wide
+      switcher="daftar"
+      slug={slug}
       title={step === 2 ? "Identitas gerai" : "Titik jemput kurir"}
-      progress={<RegisterSteps current={step} />}
-      description={step === 2 ? "Nama dan alamat situs gerai, serta kontak untuk akun Mengantar." : "Lokasi tempat kurir menjemput paket dari gerai Anda."}
-      corner={<Link to="/">Kembali</Link>}
+      progress={<WizardBar current={step} onBack={step === 3 && !pending ? () => setStep(2) : undefined} />}
+      description={step === 2 ? "Nama dan alamat situs gerai, serta kontak untuk akun Mengantar." : "Tempat kurir menjemput paket gerai Anda."}
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
       {step === 2 ? (
         <form className="flex flex-col gap-4" onSubmit={toPickup} noValidate>
-          <TextField label="Nama gerai" name="businessName" value={businessName} onChange={(v) => { setBusinessName(v); if (!slug) setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 30)) }} error={fieldErrors.businessName} required maxLength={80} />
-          <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => setSlug(v.toLowerCase())} error={fieldErrors.slug} suffix=".geraimitra.com" required maxLength={30} />
+          <div className="flex flex-col gap-2">
+            <TextField label="Nama gerai" name="businessName" value={businessName} onChange={(v) => { setBusinessName(v); if (!slugEdited) setSlug(slugify(v)) }} error={fieldErrors.businessName} required maxLength={80} />
+            {/* DEC-250: the live address pill; `Ubah` (or a server slug error) opens the editor. */}
+            <div data-domain-pill className="flex items-center gap-2 rounded-2xl bg-[#F4F6FA] py-1.5 pr-1.5 pl-3 sm:gap-3 sm:pl-3.5">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="font-mono text-xs font-semibold [overflow-wrap:anywhere] text-[#0F172A] sm:text-[13px]">{slug || "namagerai"}.geraimitra.com</span>
+                <span className={`text-xs font-semibold ${!slugEdited && slug ? "text-[#15803D]" : "text-[#64748B]"}`}>{slugEdited ? "Diubah manual" : slug ? "✓ Otomatis" : "Diisi dari nama gerai"}</span>
+              </span>
+              <button type="button" aria-expanded={slugOpen || Boolean(fieldErrors.slug)} aria-controls="slug-editor" onClick={() => setSlugOpen((v) => !v)} className="inline-flex min-h-11 shrink-0 items-center rounded-xl bg-white px-3 text-[13px] sm:px-4 font-bold text-[#0B4FE3] shadow-[0_1px_2px_rgb(15_23_42/0.08)] hover:bg-[#EEF4FF] md:min-h-9">
+                Ubah
+              </button>
+            </div>
+            {slugOpen || fieldErrors.slug ? (
+              <div id="slug-editor">
+                <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => { setSlug(v.toLowerCase()); setSlugEdited(true) }} error={fieldErrors.slug} suffix=".geraimitra.com" required maxLength={30} />
+              </div>
+            ) : null}
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
             <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
@@ -137,7 +162,7 @@ export function DaftarPage() {
         </form>
       ) : null}
       {step === 3 ? (
-        <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <form className="flex flex-col gap-3.5" onSubmit={submit} noValidate>
           <Field data-invalid={fieldErrors.areaId ? true : undefined}>
             <FieldLabel htmlFor="area-search">Cari kelurahan / kecamatan / kode pos</FieldLabel>
             <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setListOpen(false) }}>
@@ -212,12 +237,9 @@ export function DaftarPage() {
             <p className="mt-2 text-sm text-muted-foreground">Dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           </details>
           <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
-            <span className="text-sm leading-snug">Saya setuju GeraiExpress membuat akun seller Mengantar atas nama gerai saya dengan email <strong className="font-semibold [overflow-wrap:anywhere] text-[#0F172A]" data-seller-email>{sellerEmail}</strong>, dan saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun Mengantar tersebut.</span>
+            <span className="text-sm leading-snug">Saya setuju GeraiExpress membuatkan akun seller Mengantar untuk gerai ini dengan email <strong className="font-semibold [overflow-wrap:anywhere] text-[#0F172A]" data-seller-email>{sellerEmail}</strong>, serta menyetujui Syarat & Ketentuan dan Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun tersebut.</span>
           </CheckboxField>
-          <div className="flex gap-3">
-            <Button type="button" variant="outline" size="lg" onClick={() => setStep(2)} disabled={pending}>← Kembali</Button>
-            <Button type="submit" size="lg" className="flex-1" disabled={pending || !consent || !area}>{pending ? "Mengirim…" : "Ajukan Gerai"}</Button>
-          </div>
+          <Button type="submit" size="lg" disabled={pending || !consent || !area}>{pending ? "Mengirim…" : "Ajukan Gerai"}</Button>
         </form>
       ) : null}
     </AuthCard>

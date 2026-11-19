@@ -28,7 +28,7 @@ export function OwnerMasukPage() {
   }
 
   return (
-    <AuthCard title="Masuk Super Admin" description="Konsol platform GeraiExpress. Setelah kata sandi, Anda memasukkan kode TOTP.">
+    <AuthCard variant="owner" title="Masuk Super Admin" description="Konsol platform GeraiExpress. Setelah kata sandi, Anda memasukkan kode TOTP.">
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
         <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="username" value={email} onChange={setEmail} required />
