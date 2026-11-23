@@ -49,7 +49,10 @@ export function DataUsahaPage() {
       <SectionCard title="Badan usaha" description="Bentuk dan nama resmi usaha gerai.">
         <div className="flex flex-col gap-4">
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium">Bentuk usaha</legend>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <legend className="text-sm font-medium">Bentuk usaha</legend>
+              {f.entityType ? <Button type="button" variant="ghost" size="sm" onClick={() => set({ entityType: "" })}>Kosongkan pilihan</Button> : null}
+            </div>
             <ChoiceGroup label="Bentuk usaha" layout="grid" className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" value={f.entityType || null} onValueChange={(v) => set({ entityType: v })} choices={ENTITIES.map(([id, label]) => ({ value: id, label }))} />
           </fieldset>
           <div className="grid gap-4 sm:grid-cols-2">

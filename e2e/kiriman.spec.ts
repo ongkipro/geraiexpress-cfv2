@@ -22,6 +22,7 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   await page.getByRole("link", { name: /Belum Dibayar/ }).click()
   await expect(page).toHaveURL(/tab=belum-dibayar/)
   await page.getByRole("button", { name: "Tandai Lunas" }).first().click()
+  await page.getByRole("button", { name: "Simpan Lunas" }).click()
   await expect(page.getByText(`INV ${slug.toUpperCase()} ditandai lunas (QRIS).`)).toBeVisible()
   await expect(page.getByRole("link", { name: /^Belum Dibayar\s*0$/ })).toBeVisible()
   await expect(page.getByText("Belum ada kiriman di sini")).toBeVisible()

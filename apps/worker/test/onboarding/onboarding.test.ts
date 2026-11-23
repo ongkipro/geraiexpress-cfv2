@@ -75,7 +75,9 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
     expect((await ownerPost(`/gerai/applications/${applicationId}/reject`, admin, { reason: "Foto titik jemput belum jelas" })).status).toBe(200)
     expect((await ownerPost(`/gerai/applications/${applicationId}/reject`, admin, { reason: "Foto titik jemput belum jelas" })).status).toBe(409)
     expect((await statusEmails(tenantId))!.n).toBe(1)
-    expect(await (await exports.default.fetch(`${APP}/api/app/onboarding/status`, { headers: { cookie: user.cookie } })).json()).toMatchObject({ data: { application: { state: "rejected", decision_reason: "Foto titik jemput belum jelas" } } })
+    expect(await (await exports.default.fetch(`${APP}/api/app/onboarding/status`, { headers: { cookie: user.cookie } })).json()).toMatchObject({
+      data: { application: { state: "rejected", decision_reason: "Foto titik jemput belum jelas", contact_whatsapp: "081234567890", seller_email: "ditolak@contoh.test" } },
+    })
     expect((await appPost("/onboarding/application", user.cookie, application("ditolak", "ditolak@contoh.test"))).status).toBe(201)
   })
 
@@ -103,6 +105,8 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
       const row = s.storage.sql.exec<{ encrypted_api_key: string; seller_id: string | null }>("SELECT encrypted_api_key, seller_id FROM mengantar_connections").one()
       expect(row.encrypted_api_key).not.toContain("BYOK-KEY")
       expect(row.seller_id).toBeNull()
+      const outlet = s.storage.sql.exec<{ whatsapp: string | null }>("SELECT whatsapp FROM tenant_outlets WHERE is_default = 1").one()
+      expect(outlet.whatsapp).toBe("081234567890")
     })
   })
 })

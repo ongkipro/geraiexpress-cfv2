@@ -172,7 +172,11 @@ export function useQuoteForm(initial: QuoteInitial | undefined, hooks: QuoteHook
 
   // The request the form describes right now; a selection is valid only while it equals the last quoted one.
   const current: QuoteRequest = { destinationAreaId: area?.id ?? "", mode, weightGram: gram }
-  if (dims.l || dims.w || dims.h) Object.assign(current, { lengthCm: Number(dims.l), widthCm: Number(dims.w), heightCm: Number(dims.h) })
+  const dimL = Number(dims.l)
+  const dimW = Number(dims.w)
+  const dimH = Number(dims.h)
+  // Only include dimensions once all three sides are positive so typing P/L/T never fires a premature 422.
+  if (dimL > 0 && dimW > 0 && dimH > 0) Object.assign(current, { lengthCm: dimL, widthCm: dimW, heightCm: dimH })
   if (kind === "cod_goods") current.codGoodsIdr = Number(goods.replace(/\D/g, ""))
   if (kind === "non_cod" && declared) current.declaredValueIdr = Number(declared.replace(/\D/g, ""))
   if (dg) current.dangerousGoods = true
@@ -288,10 +292,11 @@ export type QuoteForm = ReturnType<typeof useQuoteForm>
  */
 export function PackageFields({ f, disclosure, children, extra, extraFilled = false }: { f: QuoteForm; disclosure: boolean; children?: ReactNode; extra?: ReactNode; extraFilled?: boolean }) {
   const { pos } = f
-  const filled = !!(f.dims.l || f.dims.w || f.dims.h || f.packing || f.dg || (f.kind === "non_cod" && f.declared) || (f.feeAllowed && pos?.serviceFeeIdr && !f.serviceFee) || extraFilled)
-  // Opens by itself while an option holds a value; once the operator toggles it, their choice wins.
+  const hasOptionError = !!(f.errors.declaredValueIdr || f.errors.dims)
+  const filled = !!(f.dims.l || f.dims.w || f.dims.h || f.packing || f.dg || (f.kind === "non_cod" && f.declared) || (f.feeAllowed && pos?.serviceFeeIdr && !f.serviceFee) || extraFilled || hasOptionError)
+  // Opens by itself while an option holds a value or error; once the operator toggles it, their choice wins.
   const [openChoice, setOpen] = useState<boolean | null>(null)
-  const open = openChoice ?? filled
+  const open = hasOptionError ? true : (openChoice ?? filled)
   const options = (
     <div className="grid gap-4 sm:grid-cols-2">
       <Field data-invalid={f.errors.dims ? true : undefined}>
@@ -455,7 +460,7 @@ export function CourierResults({
         </div>
 
         <div className="flex min-w-0 flex-col gap-2">
-          {f.loading && !data ? <LoadingState label="Menghitung ongkir semua ekspedisi" rows={4} /> : f.error ? <ErrorState message={f.error} /> : !data ? (
+          {f.loading && !data ? <LoadingState label="Menghitung ongkir semua ekspedisi" rows={4} /> : f.error ? <ErrorState message={f.error} onRetry={() => void f.submit()} /> : !data ? (
             <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-sm text-muted-foreground">{empty}</p>
           ) : (
             <>

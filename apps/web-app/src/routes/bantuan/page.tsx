@@ -4,18 +4,30 @@ import { Field, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { api } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
+import { isOwner, useWorkspace } from "../../shell/workspace"
 import { Panel, SectionCard } from "../../components/admin/page"
 import { AnchorButton, LinkButton } from "../../components/admin/link-button"
 
 // `Bantuan & Panduan` (visual 07 `/bantuan`): searchable guides (first setup, printer on PC, custom domain, COD flow,
 // returns) and `Hubungi Bantuan` on WhatsApp (contact set by the platform; email as fallback).
-interface Guide { id: string; title: string; steps: string[]; link?: { to: string; label: string } }
+interface Guide { id: string; title: string; steps: string[]; link?: { to: string; label: string; ownerOnly?: boolean } }
 const GUIDES: Guide[] = [
   {
     id: "mulai",
     title: "Persiapan pertama gerai",
     steps: ["Lengkapi Profil Gerai: nama, WhatsApp, dan alamat jemput.", "Hubungkan akun Mengantar dan aktifkan webhook di Pengaturan › Mengantar.", "Pilih ekspedisi yang dipakai di Pengaturan › Ekspedisi Aktif.", "Undang kasir di Pengaturan › Anggota."],
-    link: { to: "/pengaturan/profil", label: "Buka Profil Gerai" },
+    link: { to: "/pengaturan/profil", label: "Buka Profil Gerai", ownerOnly: true },
+  },
+  {
+    id: "mengantar",
+    title: "Masuk Seller Web Mengantar & Top-up Saldo",
+    steps: [
+      "Buka app.mengantar.com lalu masuk memakai email akun Mengantar yang Anda daftarkan.",
+      "Bila akun dibuat otomatis oleh GeraiExpress dan belum punya kata sandi, klik Lupa Password di Mengantar untuk membuat kata sandi.",
+      "Isi saldo Mengantar melalui menu Saldo / Top-up agar kiriman Non-COD langsung terbit resi otomatis.",
+      "Untuk kabar status otomatis, salin URL webhook dari Pengaturan › Mengantar ke Integrasi Public API di Mengantar, lalu simpan Webhook Secret-nya.",
+    ],
+    link: { to: "/pengaturan/mengantar", label: "Buka Pengaturan Mengantar", ownerOnly: true },
   },
   {
     id: "printer",
@@ -37,10 +49,13 @@ const GUIDES: Guide[] = [
     id: "domain",
     title: "Domain sendiri untuk mini-site",
     steps: ["Siapkan domain atau subdomain milik gerai.", "Tambahkan domain di Pengaturan › Mini-Site (paket Pro).", "Buat record DNS sesuai petunjuk yang muncul, lalu tunggu verifikasi.", "Sertifikat HTTPS dibuat otomatis setelah DNS benar."],
+    link: { to: "/pengaturan/mini-site", label: "Buka Pengaturan Mini-Site", ownerOnly: true },
   },
 ]
 
 export function BantuanPage() {
+  const w = useWorkspace()
+  const owner = isOwner(w)
   const [q, setQ] = useState("")
   const [support, setSupport] = useState<{ whatsapp: string | null; email: string } | null>(null)
   useEffect(() => {
@@ -88,7 +103,7 @@ export function BantuanPage() {
                       </li>
                     ))}
                   </ol>
-                  {g.link ? <LinkButton variant="outline" size="sm" className="mt-3" to={g.link.to}>{g.link.label}</LinkButton> : null}
+                  {g.link && (!g.link.ownerOnly || owner) ? <LinkButton variant="outline" size="sm" className="mt-3" to={g.link.to}>{g.link.label}</LinkButton> : null}
                 </div>
               </details>
             </li>

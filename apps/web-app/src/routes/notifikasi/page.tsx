@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link } from "@tanstack/react-router"
+import { Link, useRouter } from "@tanstack/react-router"
 import { Button } from "../../components/ui/button"
+import { FormAlert } from "../../components/auth/auth-card"
+import { linkTo } from "../../components/admin/shell"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { Panel } from "../../components/admin/page"
@@ -20,8 +22,10 @@ const dayLabel = (ms: number) => {
 const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
 
 export function NotifikasiPage() {
+  const router = useRouter()
   const [data, setData] = useState<{ items: Item[]; unread: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const load = useCallback(() => {
     api<{ items: Item[]; unread: number }>("/notifications")
@@ -34,16 +38,24 @@ export function NotifikasiPage() {
   useEffect(load, [load])
 
   async function markAll() {
+    if (pending) return
     setPending(true)
+    setActionError(null)
     try {
       await api("/notifications/read", { body: { all: true } })
       load()
+      void router.invalidate()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.body.message : "Gagal menandai notifikasi. Coba lagi.")
     } finally {
       setPending(false)
     }
   }
   async function open(item: Item) {
-    if (!item.readAt) await api("/notifications/read", { body: { ids: [item.id] } }).catch(() => undefined)
+    if (!item.readAt) {
+      await api("/notifications/read", { body: { ids: [item.id] } }).catch(() => undefined)
+      void router.invalidate()
+    }
   }
 
   const groups = new Map<string, Item[]>()
@@ -53,9 +65,10 @@ export function NotifikasiPage() {
     <div>
       <PageTitle title="Notifikasi">
         <Button onClick={markAll} disabled={pending || !data?.unread}>
-          Tandai Semua Dibaca
+          {pending ? "Memproses…" : "Tandai Semua Dibaca"}
         </Button>
       </PageTitle>
+      {actionError ? <div className="mb-4"><FormAlert>{actionError}</FormAlert></div> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : !data ? <LoadingState label="Memuat notifikasi" /> : data.items.length === 0 ? (
         <Panel className="p-0 md:p-0"><EmptyState title="Belum ada notifikasi" body="Kabar penting soal kiriman, penjemputan dan akun Mengantar akan tampil di sini." /></Panel>
       ) : (
@@ -79,7 +92,7 @@ export function NotifikasiPage() {
                   return (
                     <li key={i.id}>
                       {i.link ? (
-                        <Link to={i.link} onClick={() => open(i)} className="block min-h-11 px-4 py-3 hover:bg-muted">{inner}</Link>
+                        <Link {...(linkTo(i.link) as { to: string })} onClick={() => void open(i)} className="block min-h-11 px-4 py-3 hover:bg-muted">{inner}</Link>
                       ) : (
                         <button type="button" onClick={async () => { await open(i); load() }} className="block min-h-11 w-full px-4 py-3 text-left hover:bg-muted">{inner}</button>
                       )}

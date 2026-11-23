@@ -42,12 +42,14 @@ export function DaftarPage() {
   const [query, setQuery] = useState("")
   // Results belong to the exact trimmed query that produced them (Sol R2): while a new query is pending (debounce or
   // request in flight) the old options are gone, so ArrowDown + Enter can never pick a stale area.
-  const [results, setResults] = useState<{ q: string; items: Area[] }>({ q: "", items: [] })
+  const [results, setResults] = useState<{ q: string; items: Area[]; state: "ok" | "error" }>({ q: "", items: [], state: "ok" })
   const areas = results.q === query.trim() ? results.items : []
   const [area, setArea] = useState<Area | null>(null)
+  const searchingArea = !area && query.trim().length >= 3 && results.q !== query.trim()
   const [consent, setConsent] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rejectNote, setRejectNote] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const consentId = useId()
   const [coords, setCoords] = useState(false)
@@ -63,25 +65,73 @@ export function DaftarPage() {
     setHl(-1)
   }
 
+  // Prefill rejected application so the applicant can fix fields without re-typing everything.
+  useEffect(() => {
+    let alive = true
+    api<{
+      application: {
+        state: string
+        business_name: string
+        slug: string
+        decision_reason: string | null
+        contact_whatsapp?: string | null
+        seller_email?: string | null
+        outlet?: { picName?: string; picPhone?: string; areaId?: string; areaLabel?: string; streetAddress?: string; postalCode?: string | null; latitude?: number | null; longitude?: number | null } | null
+      } | null
+    }>("/onboarding/status")
+      .then((d) => {
+        if (!alive || d.application?.state !== "rejected") return
+        const a = d.application
+        setRejectNote(a.decision_reason || "Periksa kembali data gerai lalu ajukan ulang.")
+        setBusinessName((cur) => cur || a.business_name)
+        setSlug((cur) => {
+          if (cur) return cur
+          setSlugEdited(a.slug !== slugify(a.business_name))
+          return a.slug
+        })
+        if (a.contact_whatsapp) setWhatsapp((cur) => cur || a.contact_whatsapp!)
+        if (a.seller_email) setSellerEmail((cur) => cur || a.seller_email!)
+        const o = a.outlet
+        if (o) {
+          if (o.picName) setPicName((cur) => cur || o.picName!)
+          if (o.picPhone) {
+            setPicPhone((cur) => cur || o.picPhone!)
+            if (o.picPhone !== a.contact_whatsapp) setPicPhoneEdited(true)
+          }
+          if (o.streetAddress) setStreet((cur) => cur || o.streetAddress!)
+          if (o.areaId && o.areaLabel) {
+            setArea((cur) => cur ?? { id: o.areaId!, label: o.areaLabel!, postalCode: o.postalCode ?? null })
+            setQuery((cur) => cur || o.areaLabel!)
+          }
+          if (o.latitude != null) setLat((cur) => cur || String(o.latitude))
+          if (o.longitude != null) setLng((cur) => cur || String(o.longitude))
+        }
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+
   useEffect(() => {
     const q = query.trim()
-    if (q.length < 3) return
+    if (q.length < 3 || area) return
     let alive = true
     const t = setTimeout(() => {
       api<{ items: Area[] }>(`/onboarding/areas?q=${encodeURIComponent(q)}`)
         .then((r) => {
           if (!alive) return
           // A new result set never keeps an index from the old one (`areas[hl]` is always defined).
-          setResults({ q, items: r.items })
+          setResults({ q, items: r.items, state: "ok" })
           setHl(-1)
         })
-        .catch(() => alive && setResults({ q, items: [] }))
+        .catch(() => alive && setResults({ q, items: [], state: "error" }))
     }, 300)
     return () => {
       alive = false
       clearTimeout(t)
     }
-  }, [query])
+  }, [query, area])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -121,6 +171,18 @@ export function DaftarPage() {
   }, [showList, hl])
   const toPickup = (e: FormEvent) => {
     e.preventDefault()
+    const fe: Record<string, string> = {}
+    if (businessName.trim().length < 2) fe.businessName = "Nama gerai wajib diisi."
+    if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(slug.trim())) fe.slug = "Alamat gerai 3–30 karakter (huruf kecil, angka, tanda hubung)."
+    if (!/^(?:\+?62|0)8\d{8,12}$/.test(whatsapp.replace(/[\s\-().]/g, ""))) fe.contactWhatsapp = "Masukkan nomor WhatsApp Indonesia (contoh: 0812xxxxxxxx)."
+    if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,24}$/i.test(sellerEmail.trim())) fe.sellerEmail = "Masukkan alamat email yang valid."
+    if (Object.keys(fe).length) {
+      setFieldErrors(fe)
+      if (fe.slug) setSlugOpen(true)
+      return
+    }
+    setFieldErrors({})
+    setError(null)
     // Smart default: the pickup contact usually answers the gerai WhatsApp, until the applicant edits HP PIC.
     if (!picPhoneEdited) setPicPhone(whatsapp)
     setStep(3)
@@ -133,6 +195,7 @@ export function DaftarPage() {
       progress={<WizardBar current={step} onBack={step === 3 && !pending ? () => setStep(2) : undefined} />}
       description={step === 2 ? "Nama dan alamat situs gerai, serta kontak untuk akun Mengantar." : "Tempat kurir menjemput paket gerai Anda."}
     >
+      {rejectNote && !error ? <FormAlert tone="warn">Pengajuan sebelumnya perlu diperbaiki: {rejectNote}</FormAlert> : null}
       {error ? <FormAlert>{error}</FormAlert> : null}
       {step === 2 ? (
         <form className="flex flex-col gap-4" onSubmit={toPickup} noValidate>
@@ -219,11 +282,23 @@ export function DaftarPage() {
                 </ul>
               ) : null}
             </div>
-            <FieldDescription id="area-help">{area ? `Dipilih: ${area.label}` : fieldErrors.areaId ?? "Ketik minimal 3 huruf, lalu pilih dari daftar."}</FieldDescription>
+            <FieldDescription id="area-help">
+              {area
+                ? `Dipilih: ${area.label}`
+                : fieldErrors.areaId
+                  ? fieldErrors.areaId
+                  : searchingArea
+                    ? "Mencari wilayah…"
+                    : query.trim().length >= 3 && results.q === query.trim() && results.state === "error"
+                      ? "Pencarian wilayah gagal. Periksa koneksi lalu ketik ulang."
+                      : query.trim().length >= 3 && results.q === query.trim() && areas.length === 0
+                        ? "Wilayah tidak ditemukan. Coba ketik nama kecamatan atau kode pos."
+                        : "Ketik minimal 3 huruf, lalu pilih dari daftar."}
+            </FieldDescription>
           </Field>
-          <TextField label="Alamat lengkap titik jemput" name="street" value={street} onChange={setStreet} required maxLength={300} />
+          <TextField label="Alamat lengkap titik jemput" name="street" value={street} onChange={setStreet} error={fieldErrors.streetAddress} required maxLength={300} />
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <TextField label="PIC penjemputan" name="picName" value={picName} onChange={setPicName} required maxLength={80} />
+            <TextField label="PIC penjemputan" name="picName" value={picName} onChange={setPicName} error={fieldErrors.picName} required maxLength={80} />
             <TextField label="HP PIC" name="picPhone" inputMode="numeric" value={picPhone} onChange={(v) => { setPicPhone(v); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
           </div>
           <details open={coords} onToggle={(e) => setCoords((e.target as HTMLDetailsElement).open)} className="group">

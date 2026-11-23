@@ -33,13 +33,16 @@ export function PenerimaPage() {
   const [items, setItems] = useState<Recipient[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Recipient | "new" | null>(null)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ items: Recipient[] }>(`/contacts/recipients?q=${encodeURIComponent(q)}`)
       .then((d) => {
+        if (mine !== gen.current) return
         setError(null)
         setItems(d.items)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Daftar penerima tidak dapat dimuat."))
+      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar penerima tidak dapat dimuat."))
   }, [q])
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0)
@@ -154,7 +157,29 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
       {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
-        {recipient && canArchive ? <Button type="button" variant="outline" onClick={async () => { await api(`/contacts/recipients/${recipient.id}/archive`, { body: {} }); onSaved() }}>Arsipkan</Button> : null}
+        {recipient && canArchive ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={async () => {
+              if (pending) return
+              if (!window.confirm(`Arsipkan penerima “${recipient.name}”?`)) return
+              setPending(true)
+              setMsg(null)
+              try {
+                await api(`/contacts/recipients/${recipient.id}/archive`, { body: {} })
+                onSaved()
+              } catch (err) {
+                setMsg(err instanceof ApiError ? err.body.message : "Gagal mengarsipkan penerima.")
+              } finally {
+                setPending(false)
+              }
+            }}
+          >
+            Arsipkan
+          </Button>
+        ) : null}
       </div>
     </form>
   )

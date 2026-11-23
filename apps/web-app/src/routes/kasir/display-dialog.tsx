@@ -136,7 +136,7 @@ export function CustomerDisplayButton({ display, owner }: { display: ReturnType<
     }
   }
   const hasQris = pairing?.hasQris ?? display.status?.hasQris ?? false
-  const until = (pairing?.expiresAt ?? display.status?.expiresAt) ? new Date(pairing?.expiresAt ?? display.status!.expiresAt!).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null
+  const until = (pairing?.expiresAt ?? display.status?.expiresAt) ? `${new Date(pairing?.expiresAt ?? display.status!.expiresAt!).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB` : null
 
   return (
     <>
@@ -165,7 +165,13 @@ export function CustomerDisplayButton({ display, owner }: { display: ReturnType<
               </div>
               <p className="text-center text-xs text-muted-foreground">Pindai dengan kamera tablet/HP loket, atau buka tautan di jendela kedua PC ini.</p>
               <CopyField label="Tautan layar" value={pairing.pairUrl} />
-              <Button type="button" onClick={() => window.open(pairing.pairUrl, "_blank", "noopener")}>
+              <Button
+                type="button"
+                onClick={() => {
+                  const win = window.open(pairing.pairUrl, "_blank", "noopener")
+                  if (!win) setMsg("Browser memblokir jendela baru. Salin tautan layar di atas lalu buka di tab baru.")
+                }}
+              >
                 <ExternalLinkIcon aria-hidden /> Buka di Jendela Baru
               </Button>
             </div>

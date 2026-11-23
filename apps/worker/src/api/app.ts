@@ -220,13 +220,16 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
   r("GET", "/onboarding/status", "app_session", "self", async (c) => {
     const a = await c.env.DB.prepare(
-      `SELECT a.state, a.business_name, a.submitted_at, a.decided_at, a.decision_reason, t.slug, t.status AS tenant_status, o.onboarding_state
+      `SELECT a.state, a.business_name, a.contact_whatsapp, a.seller_email, a.outlet_json, a.submitted_at, a.decided_at, a.decision_reason, t.slug, t.status AS tenant_status, o.onboarding_state
        FROM tenant_applications a JOIN tenants t ON t.id = a.tenant_id LEFT JOIN tenant_onboarding o ON o.tenant_id = t.id
        WHERE a.applicant_user_id = ? ORDER BY a.created_at DESC LIMIT 1`,
     )
       .bind(c.get("session").user.id)
-      .first()
-    return ok({ application: a ?? null })
+      .first<Record<string, unknown>>()
+    if (!a) return ok({ application: null })
+    const { outlet_json, contact_whatsapp, seller_email, ...base } = a
+    const extra = base.state === "rejected" ? { contact_whatsapp, seller_email, outlet: typeof outlet_json === "string" ? JSON.parse(outlet_json) : null } : {}
+    return ok({ application: { ...base, ...extra } })
   })
   // BYOK (PR-02): owner of an approved gerai whose email already had a Mengantar account pastes their own key.
   r("POST", "/onboarding/byok", "app_owner", "self", async (c) => {

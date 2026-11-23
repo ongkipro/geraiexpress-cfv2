@@ -727,16 +727,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: r ? { id: r.id, areaId: r.mengantar_area_id, name: r.name } : null }
   }
 
-  async upsertDefaultOutlet(tenantId: string, o: { name: string; picName?: string | null; picPhone?: string | null; areaId: string; areaLabel?: string | null; street?: string | null; postalCode?: string | null; latitude?: number | null; longitude?: number | null }, now: number = Date.now()): Promise<VaultResult<string>> {
+  async upsertDefaultOutlet(tenantId: string, o: { name: string; whatsapp?: string | null; picName?: string | null; picPhone?: string | null; areaId: string; areaLabel?: string | null; street?: string | null; postalCode?: string | null; latitude?: number | null; longitude?: number | null }, now: number = Date.now()): Promise<VaultResult<string>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
     const cur = sql.exec<{ id: string }>("SELECT id FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]
     const id = cur?.id ?? crypto.randomUUID()
     sql.exec(
-      `INSERT INTO tenant_outlets (id, tenant_id, name, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at, latitude, longitude)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10, ?11, ?12)
-       ON CONFLICT(id) DO UPDATE SET name = ?3, pic_name = COALESCE(?4, pic_name), pic_phone = COALESCE(?5, pic_phone), mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9,
+      `INSERT INTO tenant_outlets (id, tenant_id, name, whatsapp, pic_name, pic_phone, mengantar_area_id, subdistrict_name, postal_code, street_address, is_default, created_at, updated_at, latitude, longitude)
+       VALUES (?1, ?2, ?3, ?14, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10, ?10, ?11, ?12)
+       ON CONFLICT(id) DO UPDATE SET name = ?3, whatsapp = COALESCE(?14, whatsapp), pic_name = COALESCE(?4, pic_name), pic_phone = COALESCE(?5, pic_phone), mengantar_area_id = ?6, subdistrict_name = ?7, postal_code = ?8, street_address = ?9,
          -- A moved pickup point (area, street or pinpoint) must be registered again at Mengantar (never keep shipping
          -- from the old address); ?13 = the caller sent coordinates (the profile form), else they are kept.
          latitude = CASE WHEN ?13 THEN ?11 ELSE latitude END, longitude = CASE WHEN ?13 THEN ?12 ELSE longitude END,
@@ -754,6 +754,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       o.latitude ?? null,
       o.longitude ?? null,
       o.latitude !== undefined || o.longitude !== undefined ? 1 : 0,
+      o.whatsapp ?? null,
     )
     return { ok: true, value: id }
   }
@@ -2050,7 +2051,14 @@ export class GeraiVaultDO extends DurableObject<Env> {
       if (v.logoMediaId && !sql.exec("SELECT 1 FROM media_objects WHERE id = ? AND purpose = 'logo'", v.logoMediaId).toArray().length) return invalid({ logoMediaId: "Logo tidak ditemukan. Unggah ulang." })
       await this.upsertDefaultOutlet(tenantId, { name: v.name, areaId: v.areaId, areaLabel: v.areaLabel, street: v.street, postalCode: v.postalCode, latitude: v.latitude, longitude: v.longitude }, now)
       this.ctx.storage.transactionSync(() => {
-        sql.exec("UPDATE tenant_outlets SET whatsapp = ?, opening_hours = ?, logo_media_id = ?, updated_at = ? WHERE is_default = 1", v.whatsapp, v.openingHours, v.logoMediaId, now)
+        sql.exec(
+          "UPDATE tenant_outlets SET whatsapp = ?, opening_hours = ?, logo_media_id = CASE WHEN ?5 THEN logo_media_id ELSE ?3 END, updated_at = ?4 WHERE is_default = 1",
+          v.whatsapp,
+          v.openingHours,
+          v.logoMediaId ?? null,
+          now,
+          v.logoMediaId === undefined ? 1 : 0,
+        )
         this.audit(tenantId, now, "user", actorId, "settings.profile", {})
       })
       return { ok: true }

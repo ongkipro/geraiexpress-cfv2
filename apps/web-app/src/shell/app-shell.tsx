@@ -188,9 +188,29 @@ export function commandsFor(menus: string[], owner = false): ShellCommand[] {
     if (n.children) for (const c of n.children) out.push({ label: c.label, description: n.label, group, to: c.to, icon: n.icon })
     else out.push({ label: n.label, group, to: n.to, icon: n.icon })
   }
+  const settingsItems: Array<[string, string, boolean]> = [
+    ["profil", "Profil Gerai", true],
+    ["mini-site", "Mini-Site & Domain", true],
+    ["data-usaha", "Data Usaha & NPWP", true],
+    ["ekspedisi", "Ekspedisi Aktif", true],
+    ["printer", "Printer & Struk", false],
+    ["label-privasi", "Label & Privasi", true],
+    ["packing", "Packing & Biaya", true],
+    ["anggota", "Anggota & Kasir", true],
+    ["mengantar", "Koneksi & Webhook Mengantar", true],
+    ["api-mcp", "API & MCP", true],
+  ]
+  if (menus.includes("pengaturan")) {
+    for (const [slug, label, ownerOnlyItem] of settingsItems) {
+      if (ownerOnlyItem && !owner) continue
+      out.push({ label, description: "Pengaturan", group: "Pengaturan", to: `/pengaturan/${slug}`, icon: SettingsIcon })
+    }
+  }
   out.push(
     { label: "Lacak INV, AWB atau HP", description: "Cek Resi", group: "Tugas", to: "/kasir/cek-resi", keywords: "cari resi awb inv lacak", icon: SearchIcon },
     { label: "Notifikasi", group: "Tugas", to: "/notifikasi", icon: BellIcon },
+    { label: "Akun Saya", description: "Profil, kata sandi & sesi", group: "Tugas", to: "/akun", keywords: "profil password sandi sesi ukuran teks", icon: SettingsIcon },
+    { label: "Bantuan & Panduan", group: "Tugas", to: "/bantuan", keywords: "panduan bantuan kontak cs", icon: GlobeIcon },
     ...(owner ? [{ label: "Status Operasional", description: "Kesehatan & kesiapan gerai", group: "Tugas", to: "/status", keywords: "status kesehatan health periksa ulang webhook sinkron", icon: ActivityIcon }] : []),
   )
   return out
@@ -199,18 +219,19 @@ export function commandsFor(menus: string[], owner = false): ShellCommand[] {
 /** Sidebar foot: the counter's own state — label format and the Mengantar connection (DEC-241: no shift row). */
 function CounterStatus({ owner }: { owner: boolean }) {
   const [format, setFormat] = useState<Format | null>(null)
-  const [hook, setHook] = useState<{ sellerId: string | null; webhookState: string | null } | null>(null)
+  const [hook, setHook] = useState<{ sellerId: string | null; onboardingState: string | null; webhookState: string | null } | null>(null)
   useEffect(() => {
     const load = () => {
       api<{ format: Format }>("/print/settings").then((s) => setFormat(s.format)).catch(() => setFormat(null))
-      if (owner) api<{ sellerId: string | null; webhookState: string | null }>("/settings/mengantar").then(setHook).catch(() => setHook(null))
+      if (owner) api<{ sellerId: string | null; onboardingState: string | null; webhookState: string | null }>("/settings/mengantar").then(setHook).catch(() => setHook(null))
     }
     load()
     // Saving the label format (or a settings page) refreshes this block.
     window.addEventListener(COUNTER_STATUS_EVENT, load)
     return () => window.removeEventListener(COUNTER_STATUS_EVENT, load)
   }, [owner])
-  const mengantar = !hook ? { value: "—", tone: "muted" as const } : !hook.sellerId ? { value: "Belum terhubung", tone: "warn" as const } : hook.webhookState === "active" ? { value: "Terhubung", tone: "safe" as const } : { value: "Webhook belum aktif", tone: "warn" as const }
+  const connected = Boolean(hook && (hook.onboardingState === "connected" || hook.onboardingState === "byok_connected" || hook.sellerId))
+  const mengantar = !hook ? { value: "—", tone: "muted" as const } : !connected ? { value: "Belum terhubung", tone: "warn" as const } : hook.webhookState === "active" ? { value: "Terhubung", tone: "safe" as const } : { value: "Webhook belum aktif", tone: "warn" as const }
   return (
     <SidebarStatusCard
       title="Status loket"
@@ -259,7 +280,7 @@ export function AppShell() {
   const toolbar = (
     <>
       {/* Phones only: the sidebar (with its QR button) is a Sheet there, so the topbar carries the scan shortcut. */}
-      <Button variant="ghost" size="icon" aria-label="Pindai QR" className="text-slate-500 md:hidden" onClick={() => navigate({ to: "/kasir" })}>
+      <Button variant="ghost" size="icon" aria-label="Pindai QR" className="text-slate-500 md:hidden" onClick={() => navigate({ to: "/kasir", search: { scan: "1" } })}>
         <QrCodeIcon aria-hidden />
       </Button>
       {/* DEC-244: owner only — Kasir never renders it nor calls /status. */}
@@ -290,7 +311,7 @@ export function AppShell() {
             <Button variant={primaryCta(path) ? "default" : "outline"} className="flex-1" onClick={() => navigate({ to: "/kasir" })}>
               <PlusIcon aria-hidden data-icon="inline-start" /> Kiriman Baru
             </Button>
-            <Button variant="outline" size="icon" aria-label="Scan QR" onClick={() => navigate({ to: "/kasir" })}>
+            <Button variant="outline" size="icon" aria-label="Scan QR" onClick={() => navigate({ to: "/kasir", search: { scan: "1" } })}>
               <QrCodeIcon aria-hidden />
             </Button>
           </div>

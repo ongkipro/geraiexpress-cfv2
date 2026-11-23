@@ -125,20 +125,22 @@ export function renderTemplate<T extends TemplateId>(id: T, vars: TemplateVars[T
     }
     case "application_submitted": {
       const { outletName, slug, link } = vars as TemplateVars["application_submitted"]
+      const domain = slug.includes(".") ? slug : `${slug}.geraimitra.com`
       const f = footer(legal, "Anda menerima email ini karena mengajukan pendaftaran gerai di GeraiExpress.")
       return {
         subject: `Pengajuan gerai ${outletName} diterima`,
-        text: `Terima kasih, pengajuan gerai ${outletName} (${slug}) sudah kami terima dan sedang ditinjau oleh tim GeraiExpress.\n\nPantau status pengajuan Anda di sini:\n${assertLink(link)}${f.text}`,
-        html: wrap(`<h1 style="font-size:22px;margin:0 0 16px">Pengajuan gerai diterima</h1><p>Terima kasih, pengajuan gerai <strong>${esc(outletName)}</strong> (<code>${esc(slug)}</code>) sudah kami terima dan sedang ditinjau oleh tim GeraiExpress.</p>${button(assertLink(link), "Pantau Status Pengajuan")}`, f.html),
+        text: `Terima kasih, pengajuan gerai ${outletName} (${domain}) sudah kami terima dan sedang ditinjau oleh tim GeraiExpress.\n\nPantau status pengajuan Anda di sini:\n${assertLink(link)}${f.text}`,
+        html: wrap(`<h1 style="font-size:22px;margin:0 0 16px">Pengajuan gerai diterima</h1><p>Terima kasih, pengajuan gerai <strong>${esc(outletName)}</strong> (<code>${esc(domain)}</code>) sudah kami terima dan sedang ditinjau oleh tim GeraiExpress.</p>${button(assertLink(link), "Pantau Status Pengajuan")}`, f.html),
       }
     }
     case "admin_new_application": {
       const { outletName, slug, areaLabel, link } = vars as TemplateVars["admin_new_application"]
+      const domain = slug.includes(".") ? slug : `${slug}.geraimitra.com`
       const f = footer(legal, "Notifikasi otomatis konsol Super Admin GeraiExpress.")
       return {
         subject: `Pengajuan gerai baru: ${outletName}`,
-        text: `Ada pengajuan gerai baru yang menunggu tinjauan:\n- Nama gerai: ${outletName}\n- Alamat: ${slug}\n- Wilayah titik jemput: ${areaLabel}\n\nTinjau pengajuan di konsol Super Admin:\n${assertLink(link)}${f.text}`,
-        html: wrap(`<h1 style="font-size:22px;margin:0 0 16px">Pengajuan gerai baru</h1><p>Ada pengajuan gerai baru yang menunggu tinjauan:</p><ul style="padding-left:20px;margin:12px 0"><li><strong>Nama gerai:</strong> ${esc(outletName)}</li><li><strong>Alamat:</strong> <code>${esc(slug)}</code></li><li><strong>Titik jemput:</strong> ${esc(areaLabel)}</li></ul>${button(assertLink(link), "Tinjau Pengajuan")}`, f.html),
+        text: `Ada pengajuan gerai baru yang menunggu tinjauan:\n- Nama gerai: ${outletName}\n- Alamat: ${domain}\n- Wilayah titik jemput: ${areaLabel}\n\nTinjau pengajuan di konsol Super Admin:\n${assertLink(link)}${f.text}`,
+        html: wrap(`<h1 style="font-size:22px;margin:0 0 16px">Pengajuan gerai baru</h1><p>Ada pengajuan gerai baru yang menunggu tinjauan:</p><ul style="padding-left:20px;margin:12px 0"><li><strong>Nama gerai:</strong> ${esc(outletName)}</li><li><strong>Alamat:</strong> <code>${esc(domain)}</code></li><li><strong>Titik jemput:</strong> ${esc(areaLabel)}</li></ul>${button(assertLink(link), "Tinjau Pengajuan")}`, f.html),
       }
     }
   }

@@ -26,6 +26,7 @@ export function BatchPage() {
   const owner = isOwner(w)
   const [v, setV] = useState<BulkView | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tabChoice, setTabChoice] = useState<"ready" | "fix" | null>(null)
   const load = useCallback(() => {
     api<BulkView>(`/bulk/${batch}`)
       .then((d) => {
@@ -48,12 +49,13 @@ export function BatchPage() {
   const fix = v.rows.filter((r) => r.state === "needs_fix" || r.state === "pending")
   const created = v.rows.filter((r) => r.state === "created")
   const editable = ["draft", "checking", "ready"].includes(v.batch.state)
+  const activeTab = tabChoice ?? (fix.length && !ready.length ? "fix" : "ready")
   return (
     <div className="pb-24 md:pb-0">
       <PageTitle title="Paket Massal" description={`${v.sender ? (v.sender.brand ?? v.sender.name) : "Pengirim"} · ${v.batch.file_name ?? "isian manual"} · ${BATCH_STATE[v.batch.state] ?? v.batch.state}`} />
       <Totals v={v} owner={owner} />
       {editable ? (
-        <Tabs defaultValue={fix.length && !ready.length ? "fix" : "ready"} className="mt-6">
+        <Tabs value={activeTab} onValueChange={(t) => setTabChoice(t as "ready" | "fix")} className="mt-6">
           <TabsList aria-label="Status baris">
             <TabsTrigger value="ready">Siap ({ready.length})</TabsTrigger>
             <TabsTrigger value="fix">Perlu Diperbaiki ({fix.length})</TabsTrigger>
@@ -150,15 +152,17 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
       ) : r.errors.some((e) => e.startsWith("Kecamatan")) ? (
         <AreaPicker label="Cari kecamatan tujuan" value={area} onChange={setArea} />
       ) : null}
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <Field><FieldLabel htmlFor={`fn${r.row_no}`}>Nama penerima</FieldLabel><Input id={`fn${r.row_no}`} value={cells.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
         <Field><FieldLabel htmlFor={`fp${r.row_no}`}>No HP</FieldLabel><Input id={`fp${r.row_no}`} inputMode="tel" value={cells.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></Field>
         <Field><FieldLabel htmlFor={`fa${r.row_no}`}>Alamat</FieldLabel><Input id={`fa${r.row_no}`} value={cells.street ?? ""} onChange={(e) => set("street", e.target.value)} /></Field>
+        <Field><FieldLabel htmlFor={`fi${r.row_no}`}>Isi paket</FieldLabel><Input id={`fi${r.row_no}`} value={cells.content ?? ""} onChange={(e) => set("content", e.target.value)} /></Field>
         <Field><FieldLabel htmlFor={`fb${r.row_no}`}>Berat (gram)</FieldLabel><Input id={`fb${r.row_no}`} inputMode="numeric" className="tabular-nums" value={cells.weightGram ?? ""} onChange={(e) => set("weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
+        <Field><FieldLabel htmlFor={`fc${r.row_no}`}>COD (Rp)</FieldLabel><Input id={`fc${r.row_no}`} inputMode="numeric" className="tabular-nums" value={cells.codIdr ?? ""} onChange={(e) => set("codIdr", e.target.value.replace(/\D/g, ""))} /></Field>
       </div>
       {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={pending} onClick={() => save(false)}>Simpan & Periksa</Button>
+        <Button variant="outline" disabled={pending} onClick={() => save(false)}>{pending ? "Memeriksa…" : "Simpan & Periksa"}</Button>
         <Button variant="ghost" disabled={pending} onClick={() => save(true)}>Hapus baris</Button>
       </div>
     </li>
@@ -216,41 +220,59 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
   const [key] = useState(newKey)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const issued = v.rows.filter((r) => r.awb_number).map((r) => r.shipment_slug!)
   const unissued = v.rows.filter((r) => r.state === "created" && !r.awb_number && r.dispatch_state !== "cancelled")
   const paid = v.batch.counter_payment_status === "paid"
+  const cashNum = Number(cash.replace(/\D/g, ""))
   async function pay() {
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {
-      const res = await fetch(`/api/app/bulk/${v.batch.id}/pay`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? Number(cash.replace(/\D/g, "")) : undefined }) })
-      const j = (await res.json()) as { ok: boolean; data?: { totalIdr: number; changeIdr: number | null }; error?: { message: string } }
-      if (!j.ok) setMsg({ tone: "danger", text: j.error!.message })
+      const res = await fetch(`/api/app/bulk/${v.batch.id}/pay`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? cashNum : undefined }) })
+      const j = (await res.json().catch(() => null)) as { ok: boolean; data?: { totalIdr: number; changeIdr: number | null }; error?: { message: string } } | null
+      if (!j?.ok) setMsg({ tone: "danger", text: j?.error?.message ?? "Pembayaran batch gagal dicatat. Coba lagi." })
       else {
         setMsg({ tone: "safe", text: `Lunas ${rp(j.data!.totalIdr)}${j.data!.changeIdr ? ` · kembalian ${rp(j.data!.changeIdr)}` : ""}.` })
         reload()
       }
+    } catch {
+      setMsg({ tone: "danger", text: "Koneksi terputus saat mencatat pembayaran. Coba lagi." })
     } finally {
       setPending(false)
     }
   }
   async function printAll() {
+    if (printing || !issued.length) return
+    setPrinting(true)
     setMsg(null)
     try {
-      // Larger batches split automatically into PDFs of at most 50 labels.
-      for (let i = 0; i < issued.length; i += 50) printPdf((await fetchPrint({ slugs: issued.slice(i, i + 50), format: "label_10x15_with_stub" })).blob)
+      // Print first batch of up to 50 labels; if more than 50, open subsequent chunks sequentially.
+      for (let i = 0; i < issued.length; i += 50) {
+        const { blob } = await fetchPrint({ slugs: issued.slice(i, i + 50), format: "label_10x15_with_stub" })
+        printPdf(blob)
+      }
       reload()
     } catch (e) {
       setMsg({ tone: "danger", text: e instanceof PrintError ? e.message : "Gagal menyiapkan label." })
+    } finally {
+      setPrinting(false)
     }
   }
   async function cancelUnissued() {
+    if (cancelling) return
+    if (!window.confirm(`Batalkan ${unissued.length} kiriman yang belum terbit?`)) return
+    setCancelling(true)
     try {
       const r = await api<{ cancelled: number; skipped: number }>(`/bulk/${v.batch.id}/cancel-unissued`, { body: {} })
       setMsg({ tone: "safe", text: `${r.cancelled} kiriman dibatalkan${r.skipped ? `, ${r.skipped} dilewati (sudah dibayar — batalkan pembayarannya dulu)` : ""}.` })
       reload()
     } catch (e) {
       setMsg({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Gagal membatalkan." })
+    } finally {
+      setCancelling(false)
     }
   }
   return (
@@ -267,14 +289,23 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
             <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
             <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
           </ToggleGroup>
-          {method === "tunai" ? <Field><FieldLabel htmlFor="uang">Uang diterima</FieldLabel><Input id="uang" inputMode="numeric" className="w-40 tabular-nums" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} /></Field> : null}
-          <Button size="lg" disabled={pending || (method === "tunai" && !cash)} onClick={pay}>Tandai Lunas {rp(v.totals.due)}</Button>
+          {method === "tunai" ? (
+            <Field>
+              <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Input id="uang" inputMode="numeric" className="w-40 tabular-nums" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} />
+                <Button type="button" variant="outline" size="sm" onClick={() => setCash(v.totals.due.toLocaleString("id-ID"))}>Uang pas</Button>
+              </div>
+              {cashNum >= v.totals.due ? <p className="text-xs font-medium text-safe tabular-nums">Kembalian {rp(cashNum - v.totals.due)}</p> : <p className="text-xs text-muted-foreground">Minimal {rp(v.totals.due)}.</p>}
+            </Field>
+          ) : null}
+          <Button size="lg" disabled={pending || (method === "tunai" && cashNum < v.totals.due)} onClick={pay}>{pending ? "Memproses…" : `Tandai Lunas ${rp(v.totals.due)}`}</Button>
         </div>
       )}
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={issued.length === 0} onClick={printAll}><PrinterIcon aria-hidden /> Cetak Semua ({issued.length})</Button>
-        {unissued.length ? <Button variant="ghost" onClick={cancelUnissued}>Batalkan yang Belum Terbit ({unissued.length})</Button> : null}
+        <Button variant="outline" disabled={printing || issued.length === 0} onClick={printAll}><PrinterIcon aria-hidden /> {printing ? "Menyiapkan…" : `Cetak Semua (${issued.length})`}</Button>
+        {unissued.length ? <Button variant="ghost" disabled={cancelling} onClick={cancelUnissued}>{cancelling ? "Membatalkan…" : `Batalkan yang Belum Terbit (${unissued.length})`}</Button> : null}
       </div>
     </Panel>
   )

@@ -83,11 +83,11 @@ input[aria-invalid=true]{border-color:var(--danger)}:focus-visible{outline:3px s
 .why{display:grid;gap:16px;list-style:none;margin:20px 0 0;padding:0}.why li{border-top:1px solid var(--hair);padding-top:14px}.why b{display:block;color:var(--ink);margin-bottom:2px}@media(min-width:720px){.why{grid-template-columns:repeat(3,1fr);gap:28px}}
 .trk{display:flex;gap:14px;align-items:center;margin:12px 0 0}.trk p{margin:0}.st{color:var(--ink);font-weight:700;font-size:18px}
 .steps{list-style:none;margin:20px 0 0;padding:0}.steps li{position:relative;padding:0 0 16px 26px}.steps li::before{content:"";position:absolute;left:4px;top:7px;width:10px;height:10px;border-radius:50%;background:#CBD5E1}
-.steps li[aria-current]::before{background:var(--ac)}.steps li[aria-current]{color:var(--ink);font-weight:600}
+.steps li.done::before,.steps li[aria-current]::before{background:var(--ac)}.steps li.done,.steps li[aria-current]{color:var(--ink);font-weight:600}
 .qr{max-width:260px;margin:16px 0;padding:12px;border-radius:16px;background:var(--tile)}.qr svg{width:100%;height:auto;display:block}
 .inv{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:28px;font-weight:700;color:var(--ink);letter-spacing:.06em;margin:4px 0 0}
 footer{margin-top:64px;background:var(--tile);border-top:1px solid var(--hair);padding:24px 0 32px;font-size:14px;color:var(--body)}footer .wrap{display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
-.ac{list-style:none;margin:6px 0 0;padding:6px;background:#fff;border-radius:12px;box-shadow:var(--float)}.ac button{display:block;width:100%;text-align:left;min-height:44px;padding:8px 10px;background:#fff;border:0;border-radius:8px;font:inherit;color:var(--ink);cursor:pointer}.ac button:hover{background:var(--tile)}
+.ac{list-style:none;margin:6px 0 0;padding:6px;background:#fff;border-radius:12px;box-shadow:var(--float)}.ac button{display:block;width:100%;text-align:left;min-height:44px;padding:8px 10px;background:#fff;border:0;border-radius:8px;font:inherit;color:var(--ink);cursor:pointer}.ac button:hover,.ac button.hl{background:var(--tile)}.ac .ac-msg{padding:10px 12px;font-size:14px;color:var(--muted)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}`
 
 const TABS: Array<[Shell["tab"], string, string]> = [
@@ -96,7 +96,7 @@ const TABS: Array<[Shell["tab"], string, string]> = [
   ["lacak", "/lacak", "Lacak Paket"],
 ]
 
-export const wa = (phone: string, text?: string) => `https://wa.me/62${phone.replace(/\D/g, "").replace(/^0/, "")}${text ? `?text=${encodeURIComponent(text)}` : ""}`
+export const wa = (phone: string, text?: string) => `https://wa.me/62${phone.replace(/\D/g, "").replace(/^(?:0|62)/, "")}${text ? `?text=${encodeURIComponent(text)}` : ""}`
 export const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`.replace(/\u00a0/g, " ")
 
 /** Courier code (catalog `courier_code`) → logo served same-origin at `/couriers/<key>.svg`; `w` = width at 20 px tall. */
@@ -216,8 +216,13 @@ export const COD_SCRIPT = `<script>(()=>{const b=document.getElementById('codBox
 
 /** Area search enhancement for a `<input data-area>` + hidden id/label inputs (works without JS via `/area?q=`). */
 export const AREA_SCRIPT = `<script>
-for(const box of document.querySelectorAll('[data-area]')){const id=document.getElementById(box.dataset.area+'Id'),lab=document.getElementById(box.dataset.area+'Label'),list=document.createElement('ul');list.className='ac';list.hidden=true;box.after(list);let t;
-box.addEventListener('input',()=>{id.value='';clearTimeout(t);const q=box.value.trim();if(q.length<3){list.hidden=true;return}t=setTimeout(async()=>{const r=await fetch('/area?q='+encodeURIComponent(q));const j=await r.json();list.innerHTML='';for(const a of j.items){const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=a.label;b.onclick=()=>{id.value=a.id;lab.value=a.label;box.value=a.label;list.hidden=true};li.append(b);list.append(li)}list.hidden=!j.items.length},250)})}
+for(const box of document.querySelectorAll('[data-area]')){const id=document.getElementById(box.dataset.area+'Id'),lab=document.getElementById(box.dataset.area+'Label'),list=document.createElement('ul');list.className='ac';list.hidden=true;list.setAttribute('role','listbox');box.setAttribute('role','combobox');box.setAttribute('aria-autocomplete','list');box.setAttribute('aria-expanded','false');box.after(list);let t,gen=0,hl=-1,btns=[];
+const hide=()=>{list.hidden=true;box.setAttribute('aria-expanded','false');hl=-1};
+const mark=n=>{hl=n;btns.forEach((b,i)=>{b.classList.toggle('hl',i===hl);if(i===hl)b.scrollIntoView({block:'nearest'})})};
+const msg=s=>{list.innerHTML='';btns=[];const li=document.createElement('li');li.className='ac-msg';li.textContent=s;list.append(li);list.hidden=false;box.setAttribute('aria-expanded','true')};
+box.addEventListener('input',()=>{id.value='';lab.value='';clearTimeout(t);const q=box.value.trim(),g=++gen;if(q.length<3){hide();return}t=setTimeout(async()=>{try{msg('Mencari wilayah…');const r=await fetch('/area?q='+encodeURIComponent(q));if(g!==gen)return;if(!r.ok)throw 0;const j=await r.json();if(g!==gen)return;list.innerHTML='';btns=[];hl=-1;if(!j.items||!j.items.length){msg('Wilayah tidak ditemukan. Coba ketik nama kecamatan atau kode pos.');return}for(const a of j.items){const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=a.label;b.onclick=()=>{id.value=a.id;lab.value=a.label;box.value=a.label;hide()};li.append(b);list.append(li);btns.push(b)}list.hidden=false;box.setAttribute('aria-expanded','true')}catch{if(g===gen)msg('Gagal memuat wilayah. Periksa koneksi lalu coba lagi.')}},250)});
+box.addEventListener('keydown',ev=>{if(list.hidden||!btns.length){if(ev.key==='Escape')hide();return}if(ev.key==='ArrowDown'){ev.preventDefault();mark((hl+1)%btns.length)}else if(ev.key==='ArrowUp'){ev.preventDefault();mark(hl<=0?btns.length-1:hl-1)}else if(ev.key==='Enter'&&hl>=0){ev.preventDefault();btns[hl].click()}else if(ev.key==='Escape'){ev.preventDefault();hide()}});
+document.addEventListener('pointerdown',ev=>{if(!list.hidden&&ev.target!==box&&!list.contains(ev.target))hide()})}
 </script>`
 
 export const turnstile = (siteKey: string | null) => (siteKey ? `<div class="cf-turnstile" data-sitekey="${e(siteKey)}" data-language="id" data-appearance="interaction-only" style="margin-top:12px"></div>` : `<input type="hidden" name="cf-turnstile-response" value="dev-token">`)

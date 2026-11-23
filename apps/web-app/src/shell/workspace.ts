@@ -32,6 +32,7 @@ export type TextSize = (typeof TEXT_SIZES)[number]["id"]
 /** The sidebar counter status (shift, label format) listens for this after a mutation that changes it. */
 export const COUNTER_STATUS_EVENT = "gx:counter-status"
 export const refreshCounterStatus = () => window.dispatchEvent(new Event(COUNTER_STATUS_EVENT))
+export const TEXT_SIZE_EVENT = "gx:text-size"
 
 export function applyTextSize(size: TextSize) {
   if (size === "normal") delete document.documentElement.dataset.text
@@ -41,6 +42,7 @@ export function applyTextSize(size: TextSize) {
   } catch {
     // storage unavailable: the choice lasts for this page only
   }
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(TEXT_SIZE_EVENT, { detail: size }))
 }
 
 export function storedTextSize(): TextSize {

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
+import { claimKindLabel, courierLabel } from "../../../lib/status"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { EmptyState, ErrorState, LoadingState } from "../../../shell/states"
 import { rp } from "../../kasir/quote-panel"
@@ -15,7 +16,7 @@ interface Row { slug: string; awb: string | null; courier: string; status: strin
 const BUCKETS: Array<{ id: Bucket; label: string }> = [
   { id: "tidak_bergerak", label: "Tidak Bergerak" },
   { id: "gagal_antar", label: "Gagal Antar" },
-  { id: "selisih_berat", label: "Selisih Berat / Cordest" },
+  { id: "selisih_berat", label: "Selisih Berat / Tujuan" },
   { id: "bisa_klaim", label: "Bisa Klaim" },
   { id: "bertentangan", label: "Status Bertentangan" },
   { id: "perlu_tindakan", label: "Gagal Terbit / Diperiksa" },
@@ -30,6 +31,8 @@ export function Kendala() {
   const owner = isOwner(w)
   const [bucket, setBucket] = useState<Bucket>("tidak_bergerak")
   const [d, setD] = useState<{ counts: Record<Bucket, number>; rows: Row[] } | null>(null)
+  const [loadedBucket, setLoadedBucket] = useState<Bucket | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   // Only the latest bucket request may paint (a slower earlier bucket must not overwrite the one now selected).
@@ -41,11 +44,19 @@ export function Kendala() {
         if (mine !== gen.current) return
         setError(null)
         setD(x)
+        setLoadedBucket(bucket)
       })
-      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setError(e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat.")
+        setLoadedBucket(bucket)
+      })
   }, [bucket])
   useEffect(load, [load])
+  const loading = loadedBucket !== bucket && !error
   const act = async (fn: () => Promise<unknown>, ok: string) => {
+    if (busy) return
+    setBusy(true)
     setMsg(null)
     try {
       await fn()
@@ -53,6 +64,8 @@ export function Kendala() {
       load()
     } catch (e) {
       setMsg({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Gagal menyimpan." })
+    } finally {
+      setBusy(false)
     }
   }
   if (error) return <ErrorState message={error} onRetry={load} />
@@ -66,11 +79,11 @@ export function Kendala() {
         ))}
       </div>
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
-      {!d ? <LoadingState label="Memuat kendala" /> : d.rows.length === 0 ? (
+      {!d || loading ? <LoadingState label="Memuat kendala" /> : d.rows.length === 0 ? (
         <EmptyState title="Tidak ada kendala" body="Kiriman di kategori ini akan muncul di sini." />
       ) : (
         <ul className="flex flex-col gap-3">
-          {d.rows.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} act={act} />)}
+          {d.rows.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} busy={busy} act={act} />)}
         </ul>
       )}
       <p className="text-base md:text-sm text-muted-foreground">Batas klaim mengikuti ketentuan Mengantar per ekspedisi. Batas berbasis hari kerja ditampilkan sebagai hari kalender, jadi bisa lebih cepat dari sebenarnya.</p>
@@ -78,42 +91,43 @@ export function Kendala() {
   )
 }
 
-function KendalaRow({ r, bucket, owner, act }: { r: Row; bucket: Bucket; owner: boolean; act: (fn: () => Promise<unknown>, ok: string) => Promise<void> }) {
+function KendalaRow({ r, bucket, owner, busy, act }: { r: Row; bucket: Bucket; owner: boolean; busy: boolean; act: (fn: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const [note, setNote] = useState(r.conflict_note ?? "")
+  const bandLabel = r.band ? BAND[r.band] ?? r.band : null
   return (
     <Panel as="li" className="flex flex-col gap-2 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
-        <span className="text-base md:text-sm text-muted-foreground tabular-nums">{r.courier} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
+        <span className="text-base md:text-sm text-muted-foreground tabular-nums">{courierLabel(r.courier)} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
       </div>
       <p className="text-base md:text-sm">
-        Scan terakhir {when(r.last_scan_at)}{r.band ? ` · tidak bergerak ${BAND[r.band]}` : ""}
+        Scan terakhir {when(r.last_scan_at)}{bandLabel ? ` · tidak bergerak ${bandLabel}` : ""}
         {r.adjustment_idr ? <span className="font-medium"> · penyesuaian Mengantar {rp(r.adjustment_idr)}</span> : null}
       </p>
       {r.claim_kind ? (
         <div className="flex flex-wrap items-center gap-2">
-          {r.countdown ? <span className={`inline-flex h-8 items-center rounded-full px-3 text-base md:text-sm font-medium ${TONE[r.countdown.tone]}`}>{r.countdown.expired ? "Kedaluwarsa" : `Bisa Klaim — ${r.countdown.label}`}</span> : null}
+          {r.countdown ? <span className={`inline-flex h-8 items-center rounded-full px-3 text-base md:text-sm font-medium ${TONE[r.countdown.tone] ?? TONE.muted}`}>{r.countdown.expired ? "Kedaluwarsa" : `Bisa Klaim — ${r.countdown.label}`}</span> : null}
           {r.claim ? (
             <>
-              <span className="text-base md:text-sm">Klaim {r.claim_kind}: {CLAIM_STATUS[r.claim.status] ?? r.claim.status}</span>
+              <span className="text-base md:text-sm">Klaim {claimKindLabel(r.claim_kind)}: {CLAIM_STATUS[r.claim.status] ?? r.claim.status}</span>
               <a href={`/api/app/claims/${r.claim.id}/packet`} target="_blank" rel="noopener" className="text-base md:text-sm text-primary underline-offset-4 hover:underline">Paket klaim</a>
-              {r.claim.status === "draft" ? <Button variant="outline" onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "submitted" } }), "Klaim ditandai sudah diajukan ke Mengantar.")}>Tandai Sudah Diajukan</Button> : null}
+              {r.claim.status === "draft" ? <Button variant="outline" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "submitted" } }), "Klaim ditandai sudah diajukan ke Mengantar.")}>Tandai Sudah Diajukan</Button> : null}
               {owner && r.claim.status === "submitted" ? (
                 <>
-                  <Button variant="outline" onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "approved" } }), "Klaim disetujui.")}>Disetujui</Button>
-                  <Button variant="ghost" onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "rejected" } }), "Klaim ditolak.")}>Ditolak</Button>
+                  <Button variant="outline" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "approved" } }), "Klaim disetujui.")}>Disetujui</Button>
+                  <Button variant="ghost" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "rejected" } }), "Klaim ditolak.")}>Ditolak</Button>
                 </>
               ) : null}
             </>
           ) : !r.countdown?.expired ? (
-            <Button onClick={() => act(() => api(`/shipments/${r.slug}/claim`, { body: { kind: r.claim_kind } }), "Draf klaim dibuat. Kirim paket klaim ke Live Chat Mengantar.")}>Ajukan Klaim</Button>
+            <Button disabled={busy} onClick={() => act(() => api(`/shipments/${r.slug}/claim`, { body: { kind: r.claim_kind } }), "Draf klaim dibuat. Kirim paket klaim ke Live Chat Mengantar.")}>Ajukan Klaim</Button>
           ) : null}
         </div>
       ) : null}
       {bucket === "bertentangan" && owner ? (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-0 flex-1 flex-col gap-1 text-base md:text-sm">Catatan pengecekan<Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></label>
-          <Button variant="outline" onClick={() => act(() => api(`/shipments/${r.slug}/conflict-note`, { body: { note, resolve: true } }), "Catatan disimpan dan kendala ditutup.")}>Simpan & Tutup</Button>
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-base md:text-sm">Catatan pengecekan (min. 3 karakter)<Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Contoh: sudah dikonfirmasi ke pengirim" /></label>
+          <Button variant="outline" disabled={busy || note.trim().length < 3} onClick={() => act(() => api(`/shipments/${r.slug}/conflict-note`, { body: { note: note.trim(), resolve: true } }), "Catatan disimpan dan kendala ditutup.")}>Simpan & Tutup</Button>
         </div>
       ) : null}
     </Panel>

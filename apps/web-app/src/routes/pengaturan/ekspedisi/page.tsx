@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { cn } from "cn"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { Switch } from "../../../components/ui/switch"
-import { FormAlert } from "../../../components/auth/auth-card"
 import { api, ApiError } from "../../../lib/api"
 import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
 import { CourierLogo } from "../../../components/admin/courier-logo"
+import { ErrorState } from "../../../shell/states"
 import { SettingsLayout } from "../index/shared"
 import { toast } from "sonner"
 
@@ -45,14 +45,18 @@ export function PengaturanEkspedisiPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ items: CourierRow[] }>("/settings/couriers")
-      .then((d) => setRows(d.items))
+      .then((d) => {
+        setError(null)
+        setRows(d.items)
+      })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) window.location.assign("/masuk")
         else setError(e instanceof ApiError ? e.body.message : "Daftar ekspedisi tidak dapat dimuat.")
       })
   }, [])
+  useEffect(load, [load])
 
   // DEC-236: one toast system (shadcn Sonner in the shell), announced politely to screen readers.
   const show = (text: string, tone: "safe" | "danger" = "safe") => void (tone === "safe" ? toast.success(text) : toast.error(text))
@@ -75,7 +79,7 @@ export function PengaturanEkspedisiPage() {
 
   return (
     <SettingsLayout title="Ekspedisi Aktif" description="Pilih ekspedisi yang tampil di kasir dan mini-site gerai. Perubahan langsung tersimpan. Diskon ongkir diatur GeraiExpress dan diterapkan tim Mengantar.">
-      {error ? <FormAlert>{error}</FormAlert> : null}
+      {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!rows && !error ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat ekspedisi">
           <Skeleton className="h-20 w-full" />

@@ -11,6 +11,7 @@
 import { qrSvg } from "@gx/thermal-print"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { PublicTrack } from "../do/gerai-vault"
+import { parseDraft } from "../do/gerai-vault/minisite"
 import { searchAreas } from "../couriers/areas"
 import { hit } from "../auth/throttle"
 import { verifyTurnstile } from "../auth/turnstile"
@@ -189,25 +190,40 @@ export function handoff(q: URLSearchParams): { weight: string; recipientId: stri
 
 async function kirimForm(env: Env, c: Ctx, request: Request, url: URL): Promise<Response> {
   const s = await shell(env, c, "kirim", "Kirim dari Rumah", "Isi data paket dari rumah, dapatkan kode QR, lalu tunjukkan ke kasir. Tidak perlu antre mengetik alamat.", "/kirim")
-  if (!s) return notFoundHtml()
+  if (!s) return preparing(env, c)
   let v: Record<string, string> = { ...handoff(url.searchParams), cod: "0" }
   let errors: Record<string, string> = {}
   if (request.method === "POST") {
     const f = await request.formData()
     v = Object.fromEntries([...f.entries()].map(([k, x]) => [k, String(x).slice(0, 300)]))
+    const draftInput = {
+      cod: v.cod === "1",
+      senderName: v.senderName,
+      senderPhone: v.senderPhone,
+      senderStore: v.senderStore,
+      recipientName: v.recipientName,
+      recipientPhone: v.recipientPhone,
+      recipientAreaId: v.recipientId,
+      recipientAreaLabel: v.recipientLabel,
+      recipientStreet: v.recipientStreet,
+      content: v.content,
+      weightGram: Number(v.weight),
+      codGoodsIdr: Number((v.codGoods ?? "").replace(/\D/g, "")),
+    }
     if (!(await humanOk(env, request, f.get("cf-turnstile-response")))) errors.form = "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi."
     else {
-      const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
-      const lim = await hit(env.DB, `ms-draft:${ip}`, 5, 3600_000, Date.now())
-      if (!lim.allowed) errors.form = "Terlalu banyak pengajuan dari jaringan ini. Coba lagi nanti atau langsung datang ke gerai."
+      // Validate form fields BEFORE spending the per-IP creation quota so a customer typo doesn't lock them out.
+      const precheck = parseDraft(draftInput)
+      if (!precheck.ok) errors = precheck.errors
       else {
-        const r = await vaultFor(env, c.tenantId).createMinisiteDraft(
-          c.tenantId,
-          { cod: v.cod === "1", senderName: v.senderName, senderPhone: v.senderPhone, senderStore: v.senderStore, recipientName: v.recipientName, recipientPhone: v.recipientPhone, recipientAreaId: v.recipientId, recipientAreaLabel: v.recipientLabel, recipientStreet: v.recipientStreet, content: v.content, weightGram: Number(v.weight), codGoodsIdr: Number((v.codGoods ?? "").replace(/\D/g, "")) },
-          ip,
-        )
-        if (r.ok) return new Response(null, { status: 303, headers: { location: `/kirim/${r.value.slug}`, "cache-control": "no-store" } })
-        errors = r.errors ?? { form: "Gerai sedang tidak bisa menerima pengajuan. Coba lagi nanti." }
+        const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
+        const lim = await hit(env.DB, `ms-draft:${ip}`, 5, 3600_000, Date.now())
+        if (!lim.allowed) errors.form = "Terlalu banyak pengajuan dari jaringan ini. Coba lagi nanti atau langsung datang ke gerai."
+        else {
+          const r = await vaultFor(env, c.tenantId).createMinisiteDraft(c.tenantId, draftInput, ip)
+          if (r.ok) return new Response(null, { status: 303, headers: { location: `/kirim/${r.value.slug}`, "cache-control": "no-store" } })
+          errors = r.errors ?? { form: "Gerai sedang tidak bisa menerima pengajuan. Coba lagi nanti." }
+        }
       }
     }
   }
@@ -252,7 +268,8 @@ async function kirimCard(env: Env, c: Ctx, slug: string): Promise<Response> {
 // ---- Lacak ---------------------------------------------------------------------------------------------------
 
 const STEPS = ["Diterima gerai", "Diserahkan ke kurir", "Dalam perjalanan", "Terkirim"]
-const stepOf = (status: string) => (status === "delivered" ? 3 : ["in_transit", "undelivery_hold", "rts_in_transit"].includes(status) ? 2 : ["handed_to_courier"].includes(status) ? 1 : 0)
+const NO_STEPPER = new Set(["draft", "cancelled", "lost", "rts_in_transit", "provider_returned", "rts_at_gerai", "rts_returned_to_sender"])
+const stepOf = (status: string) => (status === "delivered" ? 3 : ["in_transit", "undelivery_hold"].includes(status) ? 2 : ["handed_to_courier"].includes(status) ? 1 : 0)
 
 function trackBody(t: PublicTrack, host: string, unlocked?: { recipientName: string; note: string | null }, gateError?: string, siteKey: string | null = null): string {
   const when = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
@@ -262,7 +279,7 @@ function trackBody(t: PublicTrack, host: string, unlocked?: { recipientName: str
   return `<div class="out" id="hasil"><h2>INV ${e(t.inv.toUpperCase())}${t.awb ? ` · ${e(t.awb)}` : ""}</h2>
 <div class="trk">${logo ? `<span class="clogo">${logo}</span>` : ""}<div><p class="st">${e(t.statusLabel)}</p>${courier ? `<p class="tag">${e(courier)}</p>` : ""}</div></div>
 <p>${t.sender ? `Dari ${e(t.sender)}` : ""}${t.originArea ? ` (${e(t.originArea)})` : ""}${t.recipient ? ` → ${e(t.recipient)}` : ""}${t.destinationArea ? ` (${e(t.destinationArea)})` : ""}</p>
-${t.status === "draft" ? "" : `<ol class="steps" aria-label="Tahap pengiriman">${STEPS.map((x, i) => `<li${i <= step ? ' aria-current="step"' : ""}>${x}</li>`).join("")}</ol>`}
+${NO_STEPPER.has(t.status) ? "" : `<ol class="steps" aria-label="Tahap pengiriman">${STEPS.map((x, i) => `<li${i === step ? ' aria-current="step"' : i < step ? ' class="done"' : ""}>${x}</li>`).join("")}</ol>`}
 ${t.timeline.length ? `<h3>Riwayat</h3><ul class="rates">${t.timeline.map((x) => `<li><span class="rn">${e(x.label)}</span><span class="tag">${when(x.at)}</span></li>`).join("")}</ul>` : ""}
 ${
   t.delivered
@@ -290,11 +307,12 @@ const trackPage = (q: string, result: string) =>
 
 async function lacak(env: Env, c: Ctx, request: Request, url: URL): Promise<Response> {
   const s = await shell(env, c, "lacak", "Lacak Paket", "Lacak kiriman dari gerai ini dengan nomor INV atau resi. Data penerima dilindungi.", "/lacak", true)
-  if (!s) return notFoundHtml()
+  if (!s) return preparing(env, c)
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 40)
   let result = ""
   let status = 200
   let found: PublicTrack | null = null
+  const shareHost = c.canonicalHost ?? c.host
   if (q) {
     const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
     const lim = await hit(env.DB, `ms-track:${ip}`, 30, 60_000, Date.now())
@@ -303,7 +321,7 @@ async function lacak(env: Env, c: Ctx, request: Request, url: URL): Promise<Resp
       status = 429
     } else {
       const t = await vaultFor(env, c.tenantId).minisiteTrack(c.tenantId, q)
-      if (t.ok && t.value) result = trackBody((found = t.value), c.host, undefined, undefined, s.turnstileSiteKey)
+      if (t.ok && t.value) result = trackBody((found = t.value), shareHost, undefined, undefined, s.turnstileSiteKey)
       else {
         result = `<p class="err" role="alert">Kiriman tidak ditemukan di gerai ini. Periksa kembali nomor INV atau resi.</p>`
         status = 404
@@ -323,15 +341,16 @@ async function unlockGate(env: Env, c: Ctx, request: Request, slug: string): Pro
   if (!t.ok || !t.value) return notFoundHtml()
   const k = s.turnstileSiteKey
   const found = t.value
+  const shareHost = c.canonicalHost ?? c.host
   const view = (body: string, status = 200) => html(page(trackWa(s, found), trackPage(found.inv.toUpperCase(), body), TURNSTILE_SCRIPT(k)), status)
-  if (!lim.allowed) return view(trackBody(t.value, c.host, undefined, "Terlalu banyak percobaan dari jaringan ini. Coba lagi nanti.", k), 429)
+  if (!lim.allowed) return view(trackBody(t.value, shareHost, undefined, "Terlalu banyak percobaan dari jaringan ini. Coba lagi nanti.", k), 429)
   // The recipient-name gate is a human check too (no scripted guessing across INVs).
-  if (!(await humanOk(env, request, f.get("cf-turnstile-response")))) return view(trackBody(t.value, c.host, undefined, "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.", k), 400)
+  if (!(await humanOk(env, request, f.get("cf-turnstile-response")))) return view(trackBody(t.value, shareHost, undefined, "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.", k), 400)
   const u = await vaultFor(env, c.tenantId).minisiteUnlock(c.tenantId, slug, String(f.get("last4") ?? "").trim())
   if (!u.ok) return notFoundHtml()
-  if (u.value.ok) return view(trackBody(t.value, c.host, u.value.value))
+  if (u.value.ok) return view(trackBody(t.value, shareHost, u.value.value))
   const msg = u.value.code === "LOCKED" ? "Terlalu banyak angka salah. Coba lagi dalam 15 menit." : u.value.code === "NOT_DELIVERED" ? "Rincian penerima hanya bisa dibuka setelah paket terkirim." : "Angka tidak cocok."
-  return view(trackBody(t.value, c.host, undefined, msg, k), u.value.code === "LOCKED" ? 429 : 400)
+  return view(trackBody(t.value, shareHost, undefined, msg, k), u.value.code === "LOCKED" ? 429 : 400)
 }
 
 // ---- Static identity: outlet logo + courier logos (DEC-247) ----------------------------------------------------

@@ -18,7 +18,8 @@ export interface ProfileForm {
   areaLabel: string | null
   street: string
   postalCode: string | null
-  logoMediaId: string | null
+  /** `undefined` = keep existing logo; `null` = clear logo; UUID = replace logo. */
+  logoMediaId: string | null | undefined
   /** Pickup pinpoint (Mengantar `pinpointData`, required for a Pos Indonesia scheduled pickup); both or neither. */
   latitude: number | null
   longitude: number | null
@@ -45,7 +46,7 @@ export function parseProfile(b: Record<string, unknown>): FormResult<ProfileForm
   if (!street) e.street = "Alamat minimal dua kata."
   const postal = b.postalCode === "" || b.postalCode == null ? null : /^\d{5}$/.test(String(b.postalCode)) ? String(b.postalCode) : undefined
   if (postal === undefined) e.postalCode = "Kode pos 5 angka."
-  const logo = typeof b.logoMediaId === "string" && /^[0-9a-f-]{36}$/.test(b.logoMediaId) ? b.logoMediaId : null
+  const logo = b.logoMediaId === undefined ? undefined : typeof b.logoMediaId === "string" && /^[0-9a-f-]{36}$/.test(b.logoMediaId) ? b.logoMediaId : null
   const lat = coordinate(b.latitude, 90)
   const lng = coordinate(b.longitude, 180)
   if (lat === undefined) e.latitude = "Latitude angka -90 sampai 90, contoh -6.9456."

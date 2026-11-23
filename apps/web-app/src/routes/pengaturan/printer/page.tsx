@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react"
 import { ImageUpIcon, Trash2Icon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
@@ -54,12 +54,26 @@ function DeviceCard() {
 
 function KasirFormatInfo() {
   const [fmt, setFmt] = useState<Format | null>(null)
-  useEffect(() => {
-    api<{ format: Format }>("/print/settings").then((s) => setFmt(s.format)).catch(() => undefined)
+  const [err, setErr] = useState<string | null>(null)
+  const load = useCallback(() => {
+    api<{ format: Format }>("/print/settings")
+      .then((s) => {
+        setErr(null)
+        setFmt(s.format)
+      })
+      .catch((e) => setErr(e instanceof ApiError ? e.body.message : "Format label tidak dapat dimuat."))
   }, [])
+  useEffect(load, [load])
   return (
     <SectionCard title="Format label gerai" description="Format bawaan diatur oleh pemilik gerai.">
-      <p className="text-sm">{fmt ? <><span className="font-medium">{FORMAT_LABEL[fmt]}</span> — {PAPER_HINT[fmt]}.</> : "Memuat…"}</p>
+      {err ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-danger">
+          <span>{err}</span>
+          <Button type="button" variant="outline" size="sm" onClick={load}>Coba Lagi</Button>
+        </div>
+      ) : (
+        <p className="text-sm">{fmt ? <><span className="font-medium">{FORMAT_LABEL[fmt]}</span> — {PAPER_HINT[fmt]}.</> : "Memuat…"}</p>
+      )}
     </SectionCard>
   )
 }
@@ -105,13 +119,20 @@ const QRIS_UPLOAD_FAILED = "Gagal mengunggah gambar QRIS. Periksa koneksi lalu c
 
 function QrisCard({ owner }: { owner: boolean }) {
   const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const file = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    api<{ hasQris: boolean; url: string | null }>("/settings/qris").then(setQ).catch(() => setQ({ hasQris: false, url: null }))
+  const load = useCallback(() => {
+    api<{ hasQris: boolean; url: string | null }>("/settings/qris")
+      .then((d) => {
+        setLoadErr(null)
+        setQ(d)
+      })
+      .catch((e) => setLoadErr(e instanceof ApiError ? e.body.message : "Status QRIS tidak dapat dimuat."))
   }, [])
+  useEffect(load, [load])
   async function pick(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     e.target.value = ""
@@ -146,12 +167,18 @@ function QrisCard({ owner }: { owner: boolean }) {
   }
   return (
     <SectionCard title="QRIS Loket (Layar Pelanggan)" description={owner ? "Gambar QRIS statis gerai. Tampil di layar pelanggan saat kasir memilih QRIS." : "Diatur oleh pemilik gerai. Tampil di layar pelanggan saat Anda memilih QRIS."}>
+      {loadErr ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-danger">
+          <span>{loadErr}</span>
+          <Button type="button" variant="outline" size="sm" onClick={load}>Coba Lagi</Button>
+        </div>
+      ) : (
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="grid size-40 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
           {q?.url ? <img src={q.url} alt="QRIS gerai" className="size-full object-contain p-1.5" /> : <span className="px-3 text-center text-xs text-muted-foreground">{q ? "Belum ada QRIS" : "Memuat…"}</span>}
         </div>
         <div className="flex min-w-0 flex-col gap-2.5">
-          <p className="text-sm text-slate-700">{q?.hasQris ? "QRIS sudah terpasang." : "Belum diunggah. Tanpa gambar, layar pelanggan meminta pelanggan memindai QRIS di meja kasir."}</p>
+          <p className="text-sm text-slate-700">{q ? (q.hasQris ? "QRIS sudah terpasang." : "Belum diunggah. Tanpa gambar, layar pelanggan meminta pelanggan memindai QRIS di meja kasir.") : "Memuat status QRIS…"}</p>
           {owner ? (
             <>
               <p className="text-xs text-muted-foreground">PNG, JPG atau WEBP, maksimal 2 MB. Pakai QRIS statis dari bank/penyedia Anda.</p>
@@ -171,6 +198,7 @@ function QrisCard({ owner }: { owner: boolean }) {
           {msg ? <p role="alert" className="text-sm font-medium text-danger">{msg}</p> : null}
         </div>
       </div>
+      )}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -60,6 +60,7 @@ function OpenForm({ onOpened }: { onOpened: () => void }) {
   const [pending, setPending] = useState(false)
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setError(null)
     try {
@@ -93,10 +94,12 @@ function OpenShift({ shift, totals, onClosed }: { shift: Shift; totals: Totals; 
   const variance = counted ? digits(counted) - totals.expectedCash : null
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setError(null)
     try {
-      await api("/shift/close", { body: { countedCashIdr: digits(counted), reasonCode: reason || undefined, note: note || undefined } })
+      const hasVar = variance !== null && variance !== 0
+      await api("/shift/close", { body: { countedCashIdr: digits(counted), reasonCode: hasVar ? reason || undefined : undefined, note: hasVar ? note || undefined : undefined } })
       refreshCounterStatus()
       onClosed()
     } catch (err) {

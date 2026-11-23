@@ -21,8 +21,9 @@ import { cn } from "cn"
 // DEC-251: pickup chip in the header, courier cards (Reguler / Cargo tabs; cargo is Non-COD only, `service_class` from
 // `GET /bulk/services`), and `.xlsx` read in the browser into the same CSV the endpoint already accepts.
 interface Service { code: string; name: string; cargo: boolean; cod: boolean }
-type Cells = { name: string; phone: string; street: string; areaText: string; weightGram: string; codIdr: string; content: string }
-const EMPTY: Cells = { name: "", phone: "", street: "", areaText: "", weightGram: "1000", codIdr: "", content: "" }
+type Cells = { id: string; name: string; phone: string; street: string; areaText: string; weightGram: string; codIdr: string; content: string }
+let nextRowId = 1
+const makeRow = (): Cells => ({ id: `r${nextRowId++}`, name: "", phone: "", street: "", areaText: "", weightGram: "1000", codIdr: "", content: "" })
 const MODES = [
   { id: "none", label: "Tanpa COD" },
   { id: "buyer_bears_fee", label: "COD, fee ditanggung pembeli" },
@@ -38,7 +39,7 @@ export function PaketMassalPage() {
   const [service, setService] = useState("")
   const [tab, setTab] = useState<"regular" | "cargo">("regular")
   const [mode, setMode] = useState("none")
-  const [rows, setRows] = useState<Cells[]>([{ ...EMPTY }])
+  const [rows, setRows] = useState<Cells[]>(() => [makeRow()])
   const [file, setFile] = useState<{ name: string; text: string } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
@@ -119,7 +120,18 @@ export function PaketMassalPage() {
     setMsg(null)
     setErrors({})
     try {
-      const body = { senderId: sender?.id, serviceCode: service, codFeeMode: mode, ...(file ? { csv: file.text, fileName: file.name } : { rows: rows.filter((r) => Object.values(r).some((v) => v && v !== "1000")) }) }
+      const body = {
+        senderId: sender?.id,
+        serviceCode: service,
+        codFeeMode: mode,
+        ...(file
+          ? { csv: file.text, fileName: file.name }
+          : {
+              rows: rows
+                .map(({ id: _id, ...rest }) => ({ ...rest, codIdr: mode === "none" ? "" : rest.codIdr }))
+                .filter((r) => Object.values(r).some((v) => v && v !== "1000")),
+            }),
+      }
       const r = await api<{ id: string }>("/bulk", { body })
       await navigate({ to: "/kiriman/massal/$batch", params: { batch: r.id } })
     } catch (e) {
@@ -219,14 +231,15 @@ export function PaketMassalPage() {
           ) : (
             <ol className="flex flex-col divide-y border-y">
               {rows.map((r, i) => (
-                <li key={i} className="grid gap-3 py-4 md:grid-cols-6">
+                <li key={r.id} className="grid gap-3 py-4 md:grid-cols-6">
                   <p className="text-base md:text-sm font-medium md:col-span-6">Baris {i + 1}</p>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`n${i}`}>Nama penerima</FieldLabel><Input id={`n${i}`} value={r.name} onChange={(e) => set(i, "name", e.target.value)} /></Field>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`p${i}`}>No HP</FieldLabel><Input id={`p${i}`} inputMode="tel" value={r.phone} onChange={(e) => set(i, "phone", e.target.value)} /></Field>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`k${i}`}>Kecamatan/Kota</FieldLabel><Input id={`k${i}`} value={r.areaText} onChange={(e) => set(i, "areaText", e.target.value)} /></Field>
-                  <Field className="md:col-span-3"><FieldLabel htmlFor={`a${i}`}>Alamat</FieldLabel><Input id={`a${i}`} value={r.street} onChange={(e) => set(i, "street", e.target.value)} /></Field>
-                  <Field><FieldLabel htmlFor={`b${i}`}>Berat (gram)</FieldLabel><Input id={`b${i}`} inputMode="numeric" className="tabular-nums" value={r.weightGram} onChange={(e) => set(i, "weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
-                  <Field><FieldLabel htmlFor={`c${i}`}>COD (Rp)</FieldLabel><Input id={`c${i}`} inputMode="numeric" className="tabular-nums" value={r.codIdr} onChange={(e) => set(i, "codIdr", e.target.value.replace(/\D/g, ""))} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`n${r.id}`}>Nama penerima</FieldLabel><Input id={`n${r.id}`} value={r.name} onChange={(e) => set(i, "name", e.target.value)} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`p${r.id}`}>No HP</FieldLabel><Input id={`p${r.id}`} inputMode="tel" value={r.phone} onChange={(e) => set(i, "phone", e.target.value)} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`k${r.id}`}>Kecamatan/Kota</FieldLabel><Input id={`k${r.id}`} value={r.areaText} onChange={(e) => set(i, "areaText", e.target.value)} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`a${r.id}`}>Alamat</FieldLabel><Input id={`a${r.id}`} value={r.street} onChange={(e) => set(i, "street", e.target.value)} /></Field>
+                  <Field><FieldLabel htmlFor={`i${r.id}`}>Isi paket</FieldLabel><Input id={`i${r.id}`} value={r.content} placeholder="Pakaian" maxLength={100} onChange={(e) => set(i, "content", e.target.value)} /></Field>
+                  <Field><FieldLabel htmlFor={`b${r.id}`}>Berat (gram)</FieldLabel><Input id={`b${r.id}`} inputMode="numeric" className="tabular-nums" value={r.weightGram} onChange={(e) => set(i, "weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
+                  <Field><FieldLabel htmlFor={`c${r.id}`}>COD (Rp)</FieldLabel><Input id={`c${r.id}`} inputMode="numeric" className="tabular-nums" disabled={mode === "none" || !!codLock} placeholder={mode === "none" || codLock ? "Non-COD" : "0"} value={mode === "none" || codLock ? "" : r.codIdr} onChange={(e) => set(i, "codIdr", e.target.value.replace(/\D/g, ""))} /></Field>
                   <div className="flex items-end">
                     <Button variant="ghost" aria-label={`Hapus baris ${i + 1}`} disabled={rows.length === 1} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}><Trash2Icon aria-hidden /> Hapus</Button>
                   </div>
@@ -234,15 +247,16 @@ export function PaketMassalPage() {
               ))}
             </ol>
           )}
-          {!file ? <div><Button variant="outline" disabled={rows.length >= 200} onClick={() => setRows((rs) => [...rs, { ...EMPTY }])}><PlusIcon aria-hidden /> Tambah Baris</Button></div> : null}
+          {!file ? <div><Button variant="outline" disabled={rows.length >= 200} onClick={() => setRows((rs) => [...rs, makeRow()])}><PlusIcon aria-hidden /> Tambah Baris</Button></div> : null}
           {errors.rows ? <FieldError>{errors.rows}</FieldError> : <FieldDescription>Kolom template: Nama Penerima, No HP, Alamat, Kecamatan/Kota, Kode Pos, Isi Paket, Berat (gram), Panjang, Lebar, Tinggi, COD (Rp), Nilai Barang (Rp), Catatan.</FieldDescription>}
         </div>
         </SectionCard>
 
         {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="lg" disabled={pending || reading || !sender || !serviceOk} onClick={submit}>{pending ? "Memeriksa…" : reading ? "Membaca berkas…" : "Periksa Baris"}</Button>
           <Link to="/kiriman/massal" className="inline-flex h-11 items-center px-2 text-base md:text-sm text-primary underline-offset-4 hover:underline">Riwayat Massal</Link>
+          {!sender ? <span className="text-xs text-muted-foreground">Pilih pengirim dulu untuk mengaktifkan tombol.</span> : !serviceOk ? <span className="text-xs text-muted-foreground">Pilih ekspedisi pada kategori yang aktif.</span> : null}
         </div>
       </div>
     </div>

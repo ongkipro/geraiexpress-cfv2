@@ -1,5 +1,5 @@
-import { statusLabel } from "../../lib/status"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { courierLabel, statusLabel } from "../../lib/status"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { ArrowRightIcon, BanknoteIcon, ChevronRightIcon, CircleCheckIcon, PackageIcon, ReceiptIcon, TrendingUpIcon, WalletIcon } from "lucide-react"
 import { paramsOf, periodFromParams, previousOf, rangeLabel, type Period } from "@gx/domain/period"
@@ -62,18 +62,28 @@ export function DashboardPage() {
 
 function useDashboard(params: Record<string, string>) {
   const [data, setData] = useState<Resp | null>(null)
+  const [loadedQs, setLoadedQs] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const gen = useRef(0)
   const qs = new URLSearchParams(params).toString()
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<Resp>(`/dashboard${qs ? `?${qs}` : ""}`)
       .then((r) => {
+        if (mine !== gen.current) return
         setError(null)
         setData(r)
+        setLoadedQs(qs)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Dashboard tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setError(e instanceof ApiError ? e.body.message : "Dashboard tidak dapat dimuat.")
+        setLoadedQs(qs)
+      })
   }, [qs])
   useEffect(load, [load])
-  return { data, error, load }
+  const loading = loadedQs !== qs && !error
+  return { data, error, loading, load }
 }
 
 function OwnerDashboard() {
@@ -82,10 +92,10 @@ function OwnerDashboard() {
   // The WIB "today" is read once per mount (a dashboard open across midnight keeps its range until reload).
   const [mountedAt] = useState(() => Date.now())
   const period = useMemo(() => periodFromParams(search, mountedAt), [search, mountedAt])
-  const { data, error, load } = useDashboard(paramsOf(period))
+  const { data, error, loading, load } = useDashboard(paramsOf(period))
   const setPeriod = (p: Period) => void navigate({ to: "/", search: paramsOf(p) as never })
   const header = (
-    <PageHeader title="Dashboard" description={`Periode ${rangeLabel(period)} · WIB`}>
+    <PageHeader title="Dashboard" description={`Periode ${rangeLabel(period)} · WIB${loading && data ? " · Memperbarui…" : ""}`}>
       <PeriodFilter value={period} onChange={setPeriod} />
     </PageHeader>
   )
@@ -96,15 +106,21 @@ function OwnerDashboard() {
   const vs = `vs ${rangeLabel(previousOf(period))}`
   const shipTrend = pct(k.shipments, k.shipmentsPrev)
   const paidTrend = pct(k.paidIdr, k.paidPrevIdr)
+  const paidFooter = [
+    `Tunai ${short(k.paidByMethod.tunai)}`,
+    `QRIS ${short(k.paidByMethod.qris)}`,
+    `Transfer ${short(k.paidByMethod.transfer)}`,
+    ...(k.paidByMethod.deposit ? [`Deposit ${short(k.paidByMethod.deposit)}`] : []),
+  ].join(" · ")
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
+    <div className={`flex flex-col gap-4 md:gap-5 ${loading ? "opacity-75 transition-opacity" : ""}`}>
       {header}
       {/* One KPI strip (TokoPhi money strip): volume, money in, money owed, safe balance and the two profit figures —
           Estimasi Laba and Laba Kas stay two separate tiles, never summed. */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-6">
         <MetricCard icon={PackageIcon} label="Kiriman" value={`${nf.format(k.shipments)} paket`} trend={shipTrend === null ? null : { value: shipTrend, label: vs }} footer={`Non-COD ${nf.format(k.nonCod)} · COD ${nf.format(k.cod)}`} />
-        <MetricCard icon={BanknoteIcon} label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={`Tunai ${short(k.paidByMethod.tunai)} · QRIS ${short(k.paidByMethod.qris)} · Transfer ${short(k.paidByMethod.transfer)}`} />
-        <MetricCard icon={ReceiptIcon} label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
+        <MetricCard icon={BanknoteIcon} label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={paidFooter} />
+        <MetricCard icon={ReceiptIcon} label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman?tab=belum-dibayar" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
         <MetricCard
           icon={WalletIcon}
           label="Saldo Mengantar aman"
@@ -154,7 +170,7 @@ function OwnerDashboard() {
             empty={<EmptyState title="Belum ada kiriman" body="Kiriman yang resinya sudah terbit di periode ini akan muncul di sini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />}
             columns={[
               { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary tabular-nums underline-offset-4 hover:underline">INV {r.slug.toUpperCase()}</Link> },
-              { key: "kurir", header: "Ekspedisi", cell: (r) => r.courier },
+              { key: "kurir", header: "Ekspedisi", cell: (r) => courierLabel(r.courier) },
               { key: "penerima", header: "Penerima", cell: (r) => r.recipient ?? "—", wide: true },
               { key: "tagihan", header: "Tagihan", align: "right", cell: (r) => rp(r.due) },
               { key: "bayar", header: "Pembayaran", cell: (r) => <PaymentBadge payment={r.payment} method={r.method} /> },
@@ -237,7 +253,10 @@ const statusTone = (s: string): StatusTone =>
   ["delivered", "rts_returned_to_sender"].includes(s) ? "safe" : ["undelivery_hold", "lost", "cancelled", "failed"].includes(s) ? "danger" : ["draft", "provider_unpaid_hold"].includes(s) ? "warn" : "primary"
 
 function PaymentBadge({ payment, method }: { payment: string; method: string | null }) {
-  if (payment === "paid") return <StatusBadge tone="safe">Lunas · {METHOD[method ?? ""] ?? method}</StatusBadge>
+  if (payment === "paid") {
+    const m = method ? METHOD[method] ?? method : null
+    return <StatusBadge tone="safe">{m ? `Lunas · ${m}` : "Lunas"}</StatusBadge>
+  }
   if (payment === "unpaid") return <StatusBadge tone="warn">Belum dibayar</StatusBadge>
   return <StatusBadge tone="muted">Tanpa tagihan</StatusBadge>
 }
@@ -247,8 +266,9 @@ function Actions({ a }: { a: OwnerData["actions"] }) {
   const items = ([
     { n: a.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar", tone: "warn" },
     { n: a.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo", tone: "danger" },
-    { n: a.failed, label: "Gagal diterbitkan", to: "/kiriman", tone: "danger" },
-    { n: a.stuck, label: "Tertahan > 48 jam", to: "/kiriman", tone: "warn" },
+    { n: a.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala", tone: "danger" },
+    { n: a.stuck, label: "Tertahan > 48 jam", to: "/kiriman?tab=kendala", tone: "warn" },
+    { n: a.variance, label: "Shift dengan selisih kas", to: "/kasir/shift", tone: "danger" },
     { n: a.readyForPickup, label: "Siap dijemput kurir", to: "/kiriman?tab=pickup", tone: "warn" },
   ] satisfies Array<{ n: number; label: string; to: string; tone: StatusTone }>).filter((x) => x.n > 0)
   return (
@@ -286,12 +306,14 @@ function CounterHome({ name }: { name: string }) {
   if (error) return <div><PageHeader title="Tugas Loket Hari Ini" /><ErrorState message={error} onRetry={load} /></div>
   if (!data || data.kind !== "counter") return <LoadingState label="Memuat tugas loket" />
   const d = data.data
-  const tasks: Array<{ n: number; label: string; to: string }> = [
-    { n: d.actions.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar" },
-    { n: d.actions.readyForPickup, label: "Paket siap dijemput kurir", to: "/kiriman?tab=pickup" },
-    { n: d.actions.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo" },
-    { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman" },
-  ].filter((x) => x.n > 0)
+  const tasks: Array<{ n: number; label: string; to: string; tone: "warn" | "danger" }> = (
+    [
+      { n: d.actions.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar", tone: "warn" },
+      { n: d.actions.readyForPickup, label: "Paket siap dijemput kurir", to: "/kiriman?tab=pickup", tone: "warn" },
+      { n: d.actions.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo", tone: "danger" },
+      { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala", tone: "danger" },
+    ] as const
+  ).filter((x) => x.n > 0)
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHeader title="Tugas Loket Hari Ini" description={`Halo, ${name}.`}>
@@ -300,7 +322,7 @@ function CounterHome({ name }: { name: string }) {
       </PageHeader>
       <MetricGrid cols={3}>
         <MetricCard label="Kiriman hari ini" value={`${nf.format(d.today.shipments)} paket`} footer="Semua INV yang dibuat hari ini (WIB)" />
-        <MetricCard label="Belum dibayar hari ini" value={`${nf.format(d.today.unpaid)} INV`} footer="Tagih sebelum resi diserahkan" tone={d.today.unpaid ? "warn" : undefined} />
+        <MetricCard label="Belum dibayar hari ini" value={`${nf.format(d.today.unpaid)} INV`} footer="Tagih sebelum resi diserahkan" to={d.today.unpaid ? "/kiriman?tab=belum-dibayar" : undefined} tone={d.today.unpaid ? "warn" : undefined} />
         <MetricCard label="Siap dijemput kurir" value={`${nf.format(d.actions.readyForPickup)} paket`} footer="Serahkan lewat Pickup & Surat Jalan" to="/kiriman?tab=pickup" />
       </MetricGrid>
       <SectionCard id="tugas" title="Perlu dikerjakan">
@@ -310,8 +332,8 @@ function CounterHome({ name }: { name: string }) {
           <ul className="flex flex-wrap gap-2">
             {tasks.map((x) => (
               <li key={x.label}>
-                <LinkButton variant="outline"  className="gap-2" {...(linkTo(x.to) as { to: string })}>
-                  <span aria-hidden className="size-2 rounded-full bg-warn" />
+                <LinkButton variant="outline" className="gap-2" {...(linkTo(x.to) as { to: string })}>
+                  <span aria-hidden className={`size-2 rounded-full ${x.tone === "danger" ? "bg-danger" : "bg-warn"}`} />
                   <span className="font-semibold tabular-nums">{nf.format(x.n)}</span> {x.label}
                 </LinkButton>
               </li>

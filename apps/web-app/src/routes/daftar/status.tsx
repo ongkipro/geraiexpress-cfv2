@@ -49,7 +49,15 @@ export function DaftarStatusPage() {
           <Link to="/daftar" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground">Perbaiki pengajuan</Link>
         </div>
       ) : a.onboarding_state === "existing_account_required" ? (
-        <FormAlert tone="warn">Email ini sudah punya akun Mengantar. Hubungkan dengan API key akun Anda di Pengaturan › Mengantar.</FormAlert>
+        <div className="flex flex-col gap-3">
+          <FormAlert tone="warn">Email ini sudah punya akun Mengantar. Hubungkan dengan API key akun Anda di Pengaturan › Mengantar.</FormAlert>
+          <Link to="/pengaturan/mengantar" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground">Hubungkan di Pengaturan › Mengantar</Link>
+        </div>
+      ) : a.state === "approved" && a.tenant_status === "active" ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-base md:text-sm text-muted-foreground">{connected ? "Gerai Anda sudah aktif dan terhubung ke Mengantar." : "Gerai Anda sudah disetujui dan siap digunakan sambil menyelesaikan koneksi Mengantar."}</p>
+          <Link to="/" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground">Masuk ke Ruang Kerja</Link>
+        </div>
       ) : (
         <p className="text-base md:text-sm text-muted-foreground">Kami kirim email saat ada keputusan. Butuh bantuan? Hubungi bantuan@geraiexpress.com.</p>
       )}

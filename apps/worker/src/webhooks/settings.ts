@@ -21,6 +21,7 @@ export interface MengantarSettingsView {
   lastSyncStatus: string | null
   onboardingState: string | null
   sellerId: string | null
+  sellerEmail: string | null
   environment: "sandbox" | "production" | null
 }
 
@@ -43,7 +44,10 @@ export async function mengantarSettings(env: Env, tenantId: string, requestUrl: 
       .run()
     url = `${hooksOrigin(env, requestUrl)}/webhooks/mengantar/${t.value.token}`
   }
-  const w = await vault.webhookStatus(tenantId)
+  const [w, app] = await Promise.all([
+    vault.webhookStatus(tenantId),
+    env.DB.prepare("SELECT seller_email FROM tenant_applications WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1").bind(tenantId).first<{ seller_email: string }>(),
+  ])
   if (!w.ok) return refusal(w)
   return {
     webhookUrl: url,
@@ -55,6 +59,7 @@ export async function mengantarSettings(env: Env, tenantId: string, requestUrl: 
     lastSyncStatus: w.value?.lastSyncStatus ?? null,
     onboardingState: conn.value?.onboardingState ?? null,
     sellerId: conn.value?.sellerId ?? null,
+    sellerEmail: app?.seller_email ?? null,
     environment: conn.value?.environment ?? null,
   }
 }

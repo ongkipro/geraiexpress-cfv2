@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react"
-import { CopyIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, ExternalLinkIcon, GlobeIcon } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table"
-import { AnchorButton } from "../../../components/admin/link-button"
+import { AnchorButton, LinkButton } from "../../../components/admin/link-button"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -28,9 +28,21 @@ const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { dat
 const label = (host: string, root: string) => (host === root ? "@" : host.endsWith(`.${root}`) ? host.slice(0, -root.length - 1) : host)
 
 function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
   return (
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={`Salin ${text}`} onClick={() => void navigator.clipboard?.writeText(text)}>
-      <CopyIcon aria-hidden />
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={done ? `Tersalin ${text}` : `Salin ${text}`}
+      onClick={() =>
+        void navigator.clipboard?.writeText(text).then(() => {
+          setDone(true)
+          setTimeout(() => setDone(false), 1800)
+        })
+      }
+    >
+      {done ? <CheckIcon aria-hidden className="text-safe" /> : <CopyIcon aria-hidden />}
     </Button>
   )
 }
@@ -77,6 +89,7 @@ export function MiniSitePage() {
   const [v, setV] = useState<View | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pending, setPending] = useState(false)
   const load = useCallback(() => {
     api<View>("/custom-domain")
@@ -89,13 +102,16 @@ export function MiniSitePage() {
   useEffect(load, [load])
   /** Returns the error message (null on success) so a dialog can show it in place (Sol R1 #1). */
   async function act(path: string, body: unknown, ok: string, inline = false): Promise<string | null> {
+    if (pending) return null
     setPending(true)
+    setFieldErrors({})
     try {
       setV(await api<View>(path, { body }))
       setMsg({ tone: "safe", text: ok })
       return null
     } catch (e) {
       const text = e instanceof ApiError ? e.body.message : "Permintaan gagal. Coba lagi."
+      if (e instanceof ApiError && e.body.field_errors) setFieldErrors(e.body.field_errors)
       if (!inline) setMsg({ tone: "danger", text })
       return text
     } finally {
@@ -120,11 +136,14 @@ export function MiniSitePage() {
         action={!v.pro ? <StatusBadge tone="muted">Paket Pro</StatusBadge> : primary ? <StatusBadge tone={tone(primary)}>{STATE[primary.state]?.label ?? primary.state}</StatusBadge> : null}
       >
         {!v.pro ? (
-          <p className="text-sm text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress lewat menu Bantuan untuk mengaktifkan.</p>
+            <LinkButton variant="outline" size="sm" to="/bantuan">Buka Bantuan</LinkButton>
+          </div>
         ) : primary ? (
           <DomainStatus v={v} pending={pending} tone={tone} onCheck={(method) => act("/custom-domain/check", method ? { method } : {}, method === "txt" ? "Verifikasi diganti ke TXT. Pasang record TXT di bawah." : "Pemeriksaan diulang.")} onRemove={(confirm) => act("/custom-domain/remove", { confirm }, "Domain dihapus. Mini-site kembali memakai alamat bawaan.", true)} />
         ) : (
-          <AddDomain pending={pending} onAdd={(hostname, rootChoice) => act("/custom-domain", { hostname, rootChoice }, "Domain didaftarkan. Pasang record DNS di bawah.")} />
+          <AddDomain pending={pending} hostnameError={fieldErrors.hostname} onAdd={(hostname, rootChoice) => act("/custom-domain", { hostname, rootChoice }, "Domain didaftarkan. Pasang record DNS di bawah.")} />
         )}
       </SectionCard>
       <Notice msg={msg} />
@@ -132,17 +151,17 @@ export function MiniSitePage() {
   )
 }
 
-function AddDomain({ pending, onAdd }: { pending: boolean; onAdd: (hostname: string, rootChoice: string) => void }) {
+function AddDomain({ pending, hostnameError, onAdd }: { pending: boolean; hostnameError?: string; onAdd: (hostname: string, rootChoice: string) => void }) {
   const [host, setHost] = useState("")
   const [root, setRoot] = useState<"root_primary" | "www_primary">("root_primary")
   const bare = host.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
   const isRoot = /^[a-z0-9-]+\.(co\.id|my\.id|web\.id|biz\.id|or\.id|ac\.id|sch\.id|net\.id|[a-z]{2,})$/.test(bare) && !bare.startsWith("www.")
   return (
     <form className="flex flex-col gap-4" noValidate onSubmit={(e: FormEvent) => (e.preventDefault(), onAdd(bare, root))}>
-      <Field>
+      <Field data-invalid={hostnameError ? true : undefined}>
         <FieldLabel htmlFor="cd-host">Domain</FieldLabel>
-        <Input id="cd-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="kirim.tokoanda.id" autoCapitalize="none" spellCheck={false} />
-        <FieldDescription>Disarankan subdomain (kirim.tokoanda.id): email dan website toko tetap aman.</FieldDescription>
+        <Input id="cd-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="kirim.tokoanda.id" autoCapitalize="none" spellCheck={false} aria-invalid={hostnameError ? true : undefined} />
+        {hostnameError ? <FieldError>{hostnameError}</FieldError> : <FieldDescription>Disarankan subdomain (kirim.tokoanda.id): email dan website toko tetap aman.</FieldDescription>}
       </Field>
       {isRoot ? (
         <div className="flex flex-col gap-2">

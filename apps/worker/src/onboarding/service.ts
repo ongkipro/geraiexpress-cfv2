@@ -169,6 +169,7 @@ interface AppRow {
   applicant_user_id: string
   state: string
   business_name: string
+  contact_whatsapp: string
   seller_email: string
   outlet_json: string
   slug: string
@@ -178,7 +179,7 @@ interface AppRow {
 
 async function loadApplication(env: Env, applicationId: string): Promise<AppRow> {
   const a = await env.DB.prepare(
-    `SELECT a.id, a.tenant_id, a.applicant_user_id, a.state, a.business_name, a.seller_email, a.outlet_json, a.submitted_at, t.slug, u.email AS applicant_email
+    `SELECT a.id, a.tenant_id, a.applicant_user_id, a.state, a.business_name, a.contact_whatsapp, a.seller_email, a.outlet_json, a.submitted_at, t.slug, u.email AS applicant_email
      FROM tenant_applications a JOIN tenants t ON t.id = a.tenant_id JOIN users u ON u.id = a.applicant_user_id WHERE a.id = ?`,
   )
     .bind(applicationId)
@@ -242,10 +243,10 @@ export async function approveApplication(env: Env, input: { applicationId: strin
   hostCache.clear()
   const migrated = await vaultFor(env, a.tenant_id).migrate(a.tenant_id)
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
-  // The application's pickup point becomes the default outlet (quote origin, labels, pickup).
+  // The application's pickup point becomes the default outlet (quote origin, labels, pickup, mini-site WhatsApp).
   const o = JSON.parse(a.outlet_json) as OutletInput
-  await vaultFor(env, a.tenant_id).upsertDefaultOutlet(a.tenant_id, { name: o.name, picName: o.picName, picPhone: o.picPhone, areaId: o.areaId, areaLabel: o.areaLabel, street: o.streetAddress, postalCode: o.postalCode ?? null, latitude: o.latitude ?? null, longitude: o.longitude ?? null }, input.now)
-  const provisioning = await provisionSeller(env, { tenantId: a.tenant_id, name: a.business_name, email: a.seller_email, outlet: JSON.parse(a.outlet_json) as OutletInput, now: input.now })
+  await vaultFor(env, a.tenant_id).upsertDefaultOutlet(a.tenant_id, { name: o.name, whatsapp: a.contact_whatsapp, picName: o.picName, picPhone: o.picPhone, areaId: o.areaId, areaLabel: o.areaLabel, street: o.streetAddress, postalCode: o.postalCode ?? null, latitude: o.latitude ?? null, longitude: o.longitude ?? null }, input.now)
+  const provisioning = await provisionSeller(env, { tenantId: a.tenant_id, name: a.business_name, email: a.seller_email, contactWhatsapp: a.contact_whatsapp, outlet: o, now: input.now })
   return { tenantId: a.tenant_id, slug: a.slug, provisioning }
 }
 
@@ -288,13 +289,13 @@ async function mirror(env: Env, tenantId: string, state: OnboardingState, seller
     .run()
 }
 
-export async function provisionSeller(env: Env, input: { tenantId: string; name: string; email: string; outlet: OutletInput; now: number }): Promise<{ state: OnboardingState; code?: string }> {
+export async function provisionSeller(env: Env, input: { tenantId: string; name: string; email: string; contactWhatsapp?: string | null; outlet: OutletInput; now: number }): Promise<{ state: OnboardingState; code?: string }> {
   const vault = vaultFor(env, input.tenantId)
   // Idempotent preparation (a retry after a crash between approval and provisioning finds an unprepared object).
   const migrated = await vault.migrate(input.tenantId)
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
   const hasOutlet = await vault.defaultOutlet(input.tenantId)
-  if (hasOutlet.ok && !hasOutlet.value) await vault.upsertDefaultOutlet(input.tenantId, { name: input.outlet.name, picName: input.outlet.picName, picPhone: input.outlet.picPhone, areaId: input.outlet.areaId, areaLabel: input.outlet.areaLabel, street: input.outlet.streetAddress, postalCode: input.outlet.postalCode ?? null, latitude: input.outlet.latitude ?? null, longitude: input.outlet.longitude ?? null }, input.now)
+  if (hasOutlet.ok && !hasOutlet.value) await vault.upsertDefaultOutlet(input.tenantId, { name: input.outlet.name, whatsapp: input.contactWhatsapp ?? null, picName: input.outlet.picName, picPhone: input.outlet.picPhone, areaId: input.outlet.areaId, areaLabel: input.outlet.areaLabel, street: input.outlet.streetAddress, postalCode: input.outlet.postalCode ?? null, latitude: input.outlet.latitude ?? null, longitude: input.outlet.longitude ?? null }, input.now)
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"
   const record = async (state: OnboardingState, extra: { sellerId?: string | null; apiKey?: string | null } = {}, code: string | null = null) => {
     const r = await vault.recordOnboarding(input.tenantId, { environment, state, externalUserId: input.tenantId, ...extra })

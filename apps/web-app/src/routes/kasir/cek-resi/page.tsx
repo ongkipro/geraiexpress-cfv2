@@ -1,7 +1,7 @@
-import { statusLabel } from "../../../lib/status"
-import { useState, type FormEvent } from "react"
-import { Link } from "@tanstack/react-router"
-import { SearchIcon } from "lucide-react"
+import { courierLabel, statusLabel } from "../../../lib/status"
+import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { Link, useRouterState } from "@tanstack/react-router"
+import { CheckIcon, CopyIcon, SearchIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -32,22 +32,69 @@ const COURIER_TRACK: Array<{ key: CourierKey; name: string; url: string }> = [
 const when = (ms: number) => new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms)
 
 export function CekResiPage() {
-  const [q, setQ] = useState("")
+  const qs = useRouterState({ select: (s) => { const v = (s.location.search as { q?: unknown }).q; return typeof v === "string" ? v : "" } })
+  const initialQ = qs.trim()
+  const [prevInitialQ, setPrevInitialQ] = useState(initialQ)
+  const [q, setQ] = useState(initialQ)
   const [res, setRes] = useState<Result | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  async function search(e: FormEvent) {
-    e.preventDefault()
+  const [copied, setCopied] = useState<string | null>(null)
+
+  if (prevInitialQ !== initialQ) {
+    setPrevInitialQ(initialQ)
+    setQ(initialQ)
+  }
+
+  const runSearch = useCallback(async (term: string) => {
+    const clean = term.trim()
+    if (clean.length < 4) return
     setPending(true)
     setMsg(null)
+    setRes(null)
     try {
-      setRes(await api<Result>(`/track?q=${encodeURIComponent(q.trim())}`))
+      setRes(await api<Result>(`/track?q=${encodeURIComponent(clean)}`))
     } catch (err) {
       setRes(null)
       setMsg(err instanceof ApiError ? err.body.message : "Pencarian gagal. Coba lagi.")
     } finally {
       setPending(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (initialQ.length < 4) return
+    let alive = true
+    api<Result>(`/track?q=${encodeURIComponent(initialQ)}`)
+      .then((r) => {
+        if (!alive) return
+        setMsg(null)
+        setRes(r)
+      })
+      .catch((err) => {
+        if (!alive) return
+        setRes(null)
+        setMsg(err instanceof ApiError ? err.body.message : "Pencarian gagal. Coba lagi.")
+      })
+    return () => {
+      alive = false
+    }
+  }, [initialQ])
+
+  function copyAwb(awb: string) {
+    navigator.clipboard?.writeText(awb).then(
+      () => {
+        setCopied(awb)
+        setTimeout(() => setCopied((c) => (c === awb ? null : c)), 2000)
+      },
+      () => undefined,
+    )
+  }
+
+  async function search(e: FormEvent) {
+    e.preventDefault()
+    if (pending) return
+    await runSearch(q)
   }
   return (
     <div className="pb-24 md:pb-0">
@@ -58,14 +105,20 @@ export function CekResiPage() {
           <Input id="cari-resi" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="INV 8K4M2P7 / JP1234567890 / 0857…" />
           {msg ? <FieldDescription className="text-danger">{msg}</FieldDescription> : null}
         </Field>
-        <Button type="submit" size="lg" disabled={pending || q.trim().length < 4}><SearchIcon aria-hidden /> Cari</Button>
+        <Button type="submit" size="lg" disabled={pending || q.trim().length < 4}><SearchIcon aria-hidden /> {pending ? "Mencari…" : "Cari"}</Button>
       </Panel>
       <div className="mt-6" aria-live="polite">
+        {pending ? <p className="text-base md:text-sm text-muted-foreground">Sedang melacak kiriman…</p> : null}
         {res?.kind === "none" ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada kiriman yang cocok.</p> : null}
         {res?.kind === "foreign" ? (
           <Panel>
-            <h2 className="text-sm font-semibold md:text-base">Resi ini bukan kiriman gerai Anda</h2>
-            <p className="mt-1 text-base md:text-sm text-muted-foreground">Lacak resi <span className="font-medium tabular-nums text-foreground">{res.awb}</span> di situs ekspedisinya:</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold md:text-base">Resi ini bukan kiriman gerai Anda</h2>
+              <Button type="button" variant="outline" size="sm" onClick={() => copyAwb(res.awb)}>
+                {copied === res.awb ? <><CheckIcon aria-hidden /> Tersalin</> : <><CopyIcon aria-hidden /> Salin Resi</>}
+              </Button>
+            </div>
+            <p className="mt-1 text-base md:text-sm text-muted-foreground">Salin resi <span className="font-medium tabular-nums text-foreground">{res.awb}</span> lalu tempel di situs ekspedisinya:</p>
             <ul className="mt-3 grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 lg:grid-cols-3">
               {COURIER_TRACK.map((c) => (
                 <li key={c.key}>
@@ -84,7 +137,15 @@ export function CekResiPage() {
               <Panel as="li" key={it.slug}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h2 className="text-sm font-semibold md:text-base">{res.items.length > 1 ? `Koli ${i + 1} · ` : ""}<Link to="/kiriman/$slug" params={{ slug: it.slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {it.slug.toUpperCase()}</Link></h2>
-                  <p className="flex items-center gap-2 text-base md:text-sm tabular-nums"><CourierLogo name={it.courier} decorative />{it.courier} · {it.awb ?? "belum ada resi"}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-base md:text-sm tabular-nums">
+                    <CourierLogo code={it.courier} name={courierLabel(it.courier)} decorative />
+                    <span>{courierLabel(it.courier)} · {it.awb ?? "belum ada resi"}</span>
+                    {it.awb ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => copyAwb(it.awb!)}>
+                        {copied === it.awb ? <><CheckIcon aria-hidden /> Tersalin</> : <><CopyIcon aria-hidden /> Salin</>}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="text-base md:text-sm text-muted-foreground">{it.recipient ?? "—"}{it.area ? ` · ${it.area}` : ""} · dibuat {when(it.createdAt)}</p>
                 <ol className="mt-3 flex flex-col gap-2 border-l-2 pl-4">

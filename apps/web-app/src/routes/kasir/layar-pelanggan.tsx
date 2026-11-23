@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { CheckCircle2Icon, MonitorOffIcon, PackageIcon, QrCodeIcon } from "lucide-react"
+import { CheckCircle2Icon, ClockIcon, MonitorOffIcon, PackageIcon, QrCodeIcon } from "lucide-react"
 import { CourierLogo } from "../../components/admin/courier-logo"
 import { createViewSync, DISPLAY_CHANNEL, isHintFor } from "./display-sync"
 
@@ -16,7 +16,7 @@ type State =
 interface View { pairId: string; state: State; updatedAt: number; outlet: { name: string; logoUrl: string | null; qrisUrl: string | null } }
 
 const POLL_MS = 2000
-const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`
+const rp = (n: number) => (n < 0 ? `-Rp ${(-n).toLocaleString("id-ID")}` : `Rp ${(n === 0 ? 0 : n).toLocaleString("id-ID")}`)
 const kg = (g: number) => `${g.toLocaleString("id-ID")} g · ${(g / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kg`
 const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer: "Transfer", later: "Bayar nanti", deposit: "Deposit" }
 const svgSrc = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
@@ -171,11 +171,15 @@ function Checkout({ s, qrisUrl }: { s: Extract<State, { kind: "checkout" }>; qri
 
 function Paid({ s }: { s: Extract<State, { kind: "paid" }> }) {
   const lunas = s.paymentStatus === "paid"
+  const unpaid = s.paymentStatus === "unpaid"
   return (
     <div className="grid flex-1 items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)] lg:gap-10">
       <div className="flex min-w-0 flex-col gap-4">
-        <p className="flex items-center gap-2 text-base font-semibold text-emerald-700"><CheckCircle2Icon aria-hidden className="size-6" />{lunas ? "Lunas" : s.paymentStatus === "unpaid" ? "Belum dibayar" : "Tercatat"}{lunas && s.method ? ` · ${METHOD[s.method] ?? s.method}` : ""}</p>
-        <h1 className="text-[40px] leading-none font-bold">Terima kasih!</h1>
+        <p className={`flex items-center gap-2 text-base font-semibold ${unpaid ? "text-amber-700" : "text-emerald-700"}`}>
+          {unpaid ? <ClockIcon aria-hidden className="size-6" /> : <CheckCircle2Icon aria-hidden className="size-6" />}
+          {lunas ? "Lunas" : unpaid ? "Belum dibayar" : "Tercatat"}{lunas && s.method ? ` · ${METHOD[s.method] ?? s.method}` : ""}
+        </p>
+        <h1 className="text-[40px] leading-none font-bold">{unpaid ? "Kiriman tercatat" : "Terima kasih!"}</h1>
         <dl className="flex flex-col gap-2 text-base tabular-nums sm:text-lg">
           <div className="flex justify-between gap-4"><dt className="text-slate-600">Nomor kiriman</dt><dd className="font-semibold">INV {s.inv}</dd></div>
           {s.courier ? <div className="flex justify-between gap-4"><dt className="text-slate-600">Ekspedisi</dt><dd className="flex items-center justify-end gap-2 text-right font-medium"><CourierLogo name={s.courier} decorative />{s.courier}</dd></div> : null}

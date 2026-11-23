@@ -1,7 +1,7 @@
 import { forwardRef, Fragment, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
 import { Link, useLinkProps, useNavigate } from "@tanstack/react-router"
 import { ArrowUpRightIcon, ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, GlobeIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
-import { applyTextSize, storedTextSize, TEXT_SIZES, type TextSize } from "../../shell/workspace"
+import { applyTextSize, storedTextSize, TEXT_SIZE_EVENT, TEXT_SIZES, type TextSize } from "../../shell/workspace"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog"
 import {
@@ -243,6 +243,7 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
   return (
     <Collapsible open={open} onOpenChange={setOpen} render={<SidebarMenuItem />}>
       {button}
+      {n.badge ? <SidebarMenuBadge className="right-7" aria-label={n.badge.label}>{n.badge.content}</SidebarMenuBadge> : null}
       <CollapsibleTrigger
         render={
           <SidebarMenuAction className="top-2! text-slate-400 transition-transform data-panel-open:rotate-90 md:top-1!" aria-label={`${open ? "Tutup" : "Buka"} submenu ${n.label}`}>
@@ -302,8 +303,18 @@ function CommandPalette({ open, onOpenChange, commands }: { open: boolean; onOpe
   const [q, setQ] = useState("")
   const [cursor, setCursor] = useState(0)
   const results = useMemo(() => {
-    const t = q.trim().toLowerCase()
-    return t ? commands.filter((c) => `${c.label} ${c.description ?? ""} ${c.keywords ?? ""} ${c.group}`.toLowerCase().includes(t)) : commands
+    const raw = q.trim()
+    const t = raw.toLowerCase()
+    const matched = t ? commands.filter((c) => `${c.label} ${c.description ?? ""} ${c.keywords ?? ""} ${c.group}`.toLowerCase().includes(t)) : commands
+    const hasTrack = commands.some((c) => c.to === "/kasir/cek-resi")
+    const looksLikeTracking = raw.length >= 4 && !/\s{2,}/.test(raw) && (/\d/.test(raw) || /^inv\s+\S+/i.test(raw))
+    if (hasTrack && looksLikeTracking) {
+      return [
+        ...matched,
+        { label: `Lacak “${raw}” di Cek Resi`, description: "Cari nomor INV, resi kurir, atau HP penerima", group: "Lacak Cepat", to: `/kasir/cek-resi?q=${encodeURIComponent(raw)}`, icon: SearchIcon },
+      ]
+    }
+    return matched
   }, [q, commands])
   const close = (o: boolean) => {
     onOpenChange(o)
@@ -427,6 +438,14 @@ const initials = (name: string) =>
 export function AccountMenu({ name, email, role, status, onLogout, profileTo, helpTo, externalLinks, labelFrom = "xl" }: NavUserProps) {
   const [textSize, setTextSize] = useState<TextSize>(storedTextSize)
   useEffect(() => applyTextSize(textSize), [textSize])
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const next = (e as CustomEvent<TextSize>).detail
+      if (next && next !== textSize) setTextSize(next)
+    }
+    window.addEventListener(TEXT_SIZE_EVENT, onSync)
+    return () => window.removeEventListener(TEXT_SIZE_EVENT, onSync)
+  }, [textSize])
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

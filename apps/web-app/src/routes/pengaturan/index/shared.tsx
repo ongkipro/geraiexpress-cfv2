@@ -172,7 +172,7 @@ export function SaveBar({ dirty, pending, onCancel, onSave }: { dirty: boolean; 
   }, [dirty])
   if (!dirty) return null
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-end gap-2 border-t bg-white p-3 shadow-[0_-1px_2px_rgba(15,23,42,0.04)] md:sticky md:bottom-4 md:rounded-xl md:border md:border-slate-200 md:px-4">
+    <div className="fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center justify-end gap-2 border-t bg-white p-3 shadow-[0_-1px_2px_rgba(15,23,42,0.04)] md:sticky md:bottom-4 md:rounded-xl md:border md:border-slate-200 md:px-4">
       <span className="mr-auto flex items-center gap-2 text-sm text-muted-foreground"><span aria-hidden className="size-2 rounded-full bg-warn" />Ada perubahan belum disimpan</span>
       <Button variant="outline" onClick={onCancel} disabled={pending}>Batal</Button>
       <Button onClick={onSave} disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>

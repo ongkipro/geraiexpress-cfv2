@@ -25,6 +25,9 @@ export function AnggotaPage() {
   const [inviteErr, setInviteErr] = useState<string | null>(null)
   const [confirm, setConfirmState] = useState<Member | null>(null)
   const [revokeErr, setRevokeErr] = useState<string | null>(null)
+  const [inviting, setInviting] = useState(false)
+  const [revoking, setRevoking] = useState(false)
+  const [toggling, setToggling] = useState(false)
   const setConfirm = (m: Member | null) => {
     setRevokeErr(null)
     setConfirmState(m)
@@ -41,6 +44,8 @@ export function AnggotaPage() {
   useEffect(load, [load])
   async function invite(e: FormEvent) {
     e.preventDefault()
+    if (inviting) return
+    setInviting(true)
     setInviteErr(null)
     try {
       await api("/members/invitations", { body: { email } })
@@ -49,9 +54,13 @@ export function AnggotaPage() {
       load()
     } catch (err) {
       setInviteErr(err instanceof ApiError ? err.body.message : "Gagal mengirim undangan.")
+    } finally {
+      setInviting(false)
     }
   }
   async function revoke(m: Member) {
+    if (revoking) return
+    setRevoking(true)
     try {
       await api(`/members/${m.id}/revoke`, { body: {} })
       setMsg({ tone: "safe", text: `Akses ${m.name} dicabut.` })
@@ -60,9 +69,13 @@ export function AnggotaPage() {
     } catch (err) {
       // Shown inside the still-open dialog (Sol R1 #1): the page notice would sit behind the modal.
       setRevokeErr(err instanceof ApiError ? err.body.message : "Gagal mencabut akses.")
+    } finally {
+      setRevoking(false)
     }
   }
   async function togglePay(v: boolean) {
+    if (toggling) return
+    setToggling(true)
     setMayPay(v)
     try {
       await api("/settings/cashier-payout", { body: { enabled: v } })
@@ -70,6 +83,8 @@ export function AnggotaPage() {
     } catch {
       setMayPay(!v)
       setMsg({ tone: "danger", text: "Gagal menyimpan." })
+    } finally {
+      setToggling(false)
     }
   }
   if (error) return <SettingsLayout title="Anggota"><ErrorState message={error} onRetry={load} /></SettingsLayout>
@@ -113,13 +128,13 @@ export function AnggotaPage() {
             <Input id="inv-email" type="email" placeholder="kasir@contoh.id" value={email} onChange={(e) => setEmail(e.target.value)} />
             {inviteErr ? <FieldError>{inviteErr}</FieldError> : null}
           </Field>
-          <Button type="submit" disabled={!email}><MailIcon aria-hidden /> Kirim Undangan</Button>
+          <Button type="submit" disabled={!email.trim() || inviting}><MailIcon aria-hidden /> {inviting ? "Mengirim…" : "Kirim Undangan"}</Button>
         </form>
       </SectionCard>
       <SectionCard title="Pembayaran COD ke pengirim" description="Perubahan langsung tersimpan.">
-        <ToggleRow id="cashier-pay" title="Kasir boleh bayar COD" description="Bila mati, hanya pemilik yang boleh mencairkan hak COD pengirim di loket." checked={!!mayPay} onCheckedChange={togglePay} />
+        <ToggleRow id="cashier-pay" title="Kasir boleh bayar COD" description="Bila mati, hanya pemilik yang boleh mencairkan hak COD pengirim di loket." checked={!!mayPay} disabled={toggling} onCheckedChange={togglePay} />
       </SectionCard>
-      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
+      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && !revoking && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cabut akses {confirm?.name}?</AlertDialogTitle>
@@ -127,8 +142,8 @@ export function AnggotaPage() {
           </AlertDialogHeader>
           {revokeErr ? <p role="alert" className="text-sm font-medium text-danger">{revokeErr}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => confirm && revoke(confirm)}>Ya, Cabut Akses</AlertDialogAction>
+            <AlertDialogCancel disabled={revoking}>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={revoking} onClick={() => confirm && revoke(confirm)}>{revoking ? "Mencabut…" : "Ya, Cabut Akses"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

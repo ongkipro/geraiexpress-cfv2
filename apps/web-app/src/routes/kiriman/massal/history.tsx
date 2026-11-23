@@ -13,7 +13,12 @@ export function RiwayatMassalPage() {
   const [items, setItems] = useState<Item[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const load = useCallback(() => {
-    api<{ items: Item[] }>("/bulk").then((d) => setItems(d.items)).catch((e) => setError(e instanceof ApiError ? e.body.message : "Riwayat tidak dapat dimuat."))
+    api<{ items: Item[] }>("/bulk")
+      .then((d) => {
+        setError(null)
+        setItems(d.items)
+      })
+      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Riwayat tidak dapat dimuat."))
   }, [])
   useEffect(load, [load])
   if (error) return <div><PageTitle title="Riwayat Massal" /><ErrorState message={error} onRetry={load} /></div>

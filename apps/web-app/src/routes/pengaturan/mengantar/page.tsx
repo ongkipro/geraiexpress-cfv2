@@ -1,12 +1,16 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { ExternalLinkIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
 import { CopyField, SectionCard, StatusBadge } from "../../../components/admin/page"
+import { AnchorButton } from "../../../components/admin/link-button"
 import { SettingsLayout } from "../index/shared"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { TextField } from "../../../components/auth/text-field"
 import { api, ApiError } from "../../../lib/api"
+import { ErrorState } from "../../../shell/states"
+import { refreshCounterStatus } from "../../../shell/workspace"
 
 // Pengaturan › Mengantar (PR-02b, visual 08 §2): copy the webhook URL into Mengantar Seller Settings, paste the
 // Webhook Secret back, see the status. Hourly polling keeps statuses current until the webhook is active.
@@ -20,6 +24,7 @@ interface Settings {
   lastSyncStatus: string | null
   onboardingState: string | null
   sellerId: string | null
+  sellerEmail?: string | null
   environment: "sandbox" | "production" | null
 }
 
@@ -40,18 +45,27 @@ export function PengaturanMengantarPage() {
   const [fieldError, setFieldError] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [byokKey, setByokKey] = useState("")
+  const [byokErr, setByokErr] = useState<string | undefined>()
+  const [byokSaving, setByokSaving] = useState(false)
+  const [byokDone, setByokDone] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<Settings>("/settings/mengantar")
-      .then(setData)
+      .then((d) => {
+        setError(null)
+        setData(d)
+      })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 401) window.location.assign("/masuk")
         else setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
       })
   }, [])
+  useEffect(load, [load])
 
   async function save(e: FormEvent) {
     e.preventDefault()
+    if (saving) return
     setFieldError(undefined)
     setSaved(false)
     setSaving(true)
@@ -59,6 +73,7 @@ export function PengaturanMengantarPage() {
       setData(await api<Settings>("/settings/mengantar/webhook-secret", { body: { secret } }))
       setSecret("")
       setSaved(true)
+      refreshCounterStatus()
     } catch (err) {
       if (err instanceof ApiError) setFieldError(err.body.field_errors.secret ?? err.body.message)
       else setFieldError("Gagal menyimpan. Coba lagi.")
@@ -67,10 +82,33 @@ export function PengaturanMengantarPage() {
     }
   }
 
+  async function connectByok(e: FormEvent) {
+    e.preventDefault()
+    if (byokSaving) return
+    setByokErr(undefined)
+    setByokDone(false)
+    setByokSaving(true)
+    try {
+      await api("/onboarding/byok", { body: { apiKey: byokKey.trim() } })
+      setByokKey("")
+      setByokDone(true)
+      refreshCounterStatus()
+      load()
+    } catch (err) {
+      if (err instanceof ApiError) setByokErr(err.body.field_errors.apiKey ?? err.body.message)
+      else setByokErr("Gagal menghubungkan API key. Coba lagi.")
+    } finally {
+      setByokSaving(false)
+    }
+  }
+
   const st = STATE[data?.webhookState ?? "unconfigured"]
+  const connected = Boolean(data && (data.onboardingState === "connected" || data.onboardingState === "byok_connected" || data.sellerId))
+  const canByok = Boolean(data && ["existing_account_required", "byok_connected", "registration_pending"].includes(data.onboardingState ?? ""))
+  const sellerWebUrl = data?.environment === "sandbox" ? "https://sandbox.mengantar.com" : "https://app.mengantar.com"
   return (
     <SettingsLayout title="Mengantar" description="Hubungkan kabar status kiriman dari Mengantar ke gerai Anda.">
-      {error ? <FormAlert>{error}</FormAlert> : null}
+      {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!data && !error ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat pengaturan">
           <Skeleton className="h-32 w-full" />
@@ -84,7 +122,10 @@ export function PengaturanMengantarPage() {
             <dl className="grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <div className="flex flex-col gap-1 px-4 py-3.5 md:px-5">
                 <dt className="text-xs text-muted-foreground">Akun Mengantar</dt>
-                <dd className="text-sm font-medium">{data.sellerId ? `Terhubung${data.environment === "sandbox" ? " (sandbox)" : ""}` : "Belum terhubung"}</dd>
+                <dd className="text-sm font-medium">
+                  {connected ? `${data.onboardingState === "byok_connected" ? "Terhubung (API key sendiri)" : "Terhubung"}${data.environment === "sandbox" ? " · sandbox" : ""}` : "Belum terhubung"}
+                </dd>
+                {data.sellerEmail ? <dd className="truncate text-xs text-muted-foreground">{data.sellerEmail}</dd> : null}
               </div>
               <div className="flex flex-col gap-1 px-4 py-3.5 md:px-5">
                 <dt className="text-xs text-muted-foreground">Kabar terakhir diterima</dt>
@@ -96,6 +137,53 @@ export function PengaturanMengantarPage() {
               </div>
             </dl>
           </SectionCard>
+
+          {canByok ? (
+            <Card className="gap-0 py-0 md:py-0">
+              <form onSubmit={connectByok} noValidate>
+                <CardHeader className="border-b border-slate-100 py-3.5 md:py-4">
+                  <CardTitle><h2 className="text-sm font-semibold text-slate-950 md:text-base">{data.onboardingState === "byok_connected" ? "Perbarui API Key Mengantar" : "Hubungkan Akun Mengantar Sendiri"}</h2></CardTitle>
+                  <CardDescription>
+                    {data.onboardingState === "existing_account_required"
+                      ? "Email Anda sudah terdaftar di Mengantar. Tempel API Key dari Seller Web Mengantar agar gerai langsung aktif."
+                      : "Gunakan API Key dari Pengaturan Akun › Integrasi Public API di Seller Web Mengantar."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4 py-4 md:py-5">
+                  <TextField
+                    label="API Key Mengantar"
+                    name="apiKey"
+                    type="password"
+                    value={byokKey}
+                    onChange={setByokKey}
+                    autoComplete="off"
+                    maxLength={128}
+                    required
+                    error={byokErr}
+                    hint="Salin dari Mengantar › Pengaturan › Akun › Integrasi Public API."
+                  />
+                  {byokDone ? <FormAlert tone="safe">API Key Mengantar terhubung. Gerai siap cek ongkir dan terbitkan resi.</FormAlert> : null}
+                </CardContent>
+                <CardFooter className="justify-end gap-2 bg-slate-50/70">
+                  <Button type="submit" className="w-full sm:w-auto" disabled={byokSaving || byokKey.trim().length < 8}>
+                    {byokSaving ? "Menghubungkan…" : data.onboardingState === "byok_connected" ? "Perbarui API Key" : "Hubungkan Akun"}
+                  </Button>
+                </CardFooter>
+              </form>
+            </Card>
+          ) : null}
+
+          {connected ? (
+            <SectionCard
+              title="Masuk Seller Web Mengantar & Top-up Saldo"
+              description="Saldo ongkir, pencairan COD, dan pengaturan webhook dikelola langsung di Seller Web Mengantar."
+              action={<AnchorButton variant="outline" size="sm" href={sellerWebUrl} target="_blank" rel="noopener noreferrer">Buka Mengantar <ExternalLinkIcon aria-hidden /></AnchorButton>}
+            >
+              <p className="text-sm text-slate-700">
+                Masuk menggunakan email {data.sellerEmail ? <strong className="font-semibold text-slate-950">{data.sellerEmail}</strong> : "akun Mengantar gerai Anda"}. Bila akun dibuat otomatis oleh GeraiExpress dan belum memiliki kata sandi, klik <strong className="font-semibold text-slate-950">Lupa Password</strong> di halaman masuk Mengantar untuk membuat kata sandi baru.
+              </p>
+            </SectionCard>
+          ) : null}
 
           {data.webhookUrl ? (
             <Card className="gap-0 py-0 md:py-0">
@@ -138,9 +226,9 @@ export function PengaturanMengantarPage() {
                 </CardFooter>
               </form>
             </Card>
-          ) : (
+          ) : !canByok ? (
             <FormAlert tone="warn">Gerai belum terhubung ke Mengantar. Pengaturan webhook tersedia setelah akun Mengantar aktif.</FormAlert>
-          )}
+          ) : null}
         </>
       ) : null}
     </SettingsLayout>

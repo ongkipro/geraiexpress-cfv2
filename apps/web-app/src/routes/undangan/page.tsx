@@ -23,6 +23,7 @@ export function UndanganPage() {
   const [password, setPassword] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let alive = true
@@ -39,11 +40,14 @@ export function UndanganPage() {
     if (pending) return
     setPending(true)
     setError(null)
+    setFieldErrors({})
     try {
       await api(`/auth/invitations/${encodeURIComponent(token)}/accept`, { body: { name, password } })
       await navigate({ to: "/" })
     } catch (err) {
-      setError(err instanceof ApiError ? err.body.message : "Terjadi kesalahan. Silakan coba lagi.")
+      const ae = err instanceof ApiError ? err : null
+      setError(ae?.body.message ?? "Terjadi kesalahan. Silakan coba lagi.")
+      setFieldErrors(ae?.body.field_errors ?? {})
     } finally {
       setPending(false)
     }
@@ -73,7 +77,7 @@ export function UndanganPage() {
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
         <p className="text-base md:text-sm">Email: <span className="font-medium">{inv.email}</span></p>
-        {inv.accountExists ? null : <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} required maxLength={80} />}
+        {inv.accountExists ? null : <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />}
         <TextField
           label={inv.accountExists ? "Kata sandi akun Anda" : "Buat kata sandi"}
           name="password"
@@ -81,9 +85,13 @@ export function UndanganPage() {
           autoComplete={inv.accountExists ? "current-password" : "new-password"}
           value={password}
           onChange={setPassword}
+          error={fieldErrors.password}
           hint={inv.accountExists ? "Email ini sudah punya akun; masukkan kata sandinya." : "Minimal 8 karakter."}
           required
         />
+        {inv.accountExists ? (
+          <Link to="/lupa-sandi" className="-mt-2 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline md:min-h-9">Lupa kata sandi?</Link>
+        ) : null}
         <Button type="submit" size="lg" disabled={pending}>{pending ? "Memproses…" : inv.accountExists ? "Gabung" : "Buat Akun"}</Button>
       </form>
     </AuthCard>

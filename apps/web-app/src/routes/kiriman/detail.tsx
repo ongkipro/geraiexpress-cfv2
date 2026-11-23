@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "@tanstack/react-router"
-import { CheckCircle2Icon, PrinterIcon } from "lucide-react"
+import { CheckCircle2Icon, CheckIcon, CopyIcon, PrinterIcon } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
 import { Button } from "../../components/ui/button"
-import { Field, FieldError, FieldLabel } from "../../components/ui/field"
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
+import { courierLabel } from "../../lib/status"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "../kasir/quote-panel"
@@ -72,7 +74,7 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
   return (
     <SectionCard id="ringkasan" title="Ringkasan (terkunci)">
       <dl className="flex flex-col gap-2 text-base md:text-sm tabular-nums">
-        <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Ekspedisi</dt><dd>{s.courier_code} · {d.quote?.service_code}</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Ekspedisi</dt><dd>{courierLabel(s.courier_code)} · {d.quote?.service_code}</dd></div>
         <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Berat ditagih</dt><dd>{((d.quote?.billable_weight_gram ?? 0) / 1000).toLocaleString("id-ID")} kg</dd></div>
         {Number(s.item_quantity ?? 1) > 1 ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Jumlah barang</dt><dd>{String(s.item_quantity)}</dd></div> : null}
         {d.quote && Number(d.quote.declared_value_idr ?? 0) > 0 ? <div className="flex justify-between gap-3"><dt className="text-xs text-muted-foreground">Nilai barang</dt><dd>{rp(Number(d.quote.declared_value_idr))}</dd></div> : null}
@@ -96,15 +98,29 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
 /** `limit`: how many recent/matching contacts to list (the POS cards show 4, DEC-251A). */
 export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void; limit?: number }) {
   const [q, setQ] = useState("")
-  const [items, setItems] = useState<Contact[]>([])
+  const key = `${kind}:${limit}:${q}`
+  const [res, setRes] = useState<{ key: string; items: Contact[]; err: string | null }>({ key: "", items: [], err: null })
+  const items = res.items
+  const loading = res.key !== key
+  const err = res.key === key ? res.err : null
   useEffect(() => {
     let alive = true
-    const t = setTimeout(() => api<{ items: Contact[] }>(`/contacts/${kind}?q=${encodeURIComponent(q)}`).then((r) => alive && setItems(r.items.slice(0, limit))).catch(() => undefined), 200)
+    const t = setTimeout(() => {
+      api<{ items: Contact[] }>(`/contacts/${kind}?q=${encodeURIComponent(q)}`)
+        .then((r) => {
+          if (!alive) return
+          setRes({ key, items: r.items.slice(0, limit), err: null })
+        })
+        .catch((e) => {
+          if (!alive) return
+          setRes({ key, items: [], err: e instanceof ApiError ? e.body.message : "Daftar kontak gagal dimuat." })
+        })
+    }, 200)
     return () => {
       alive = false
       clearTimeout(t)
     }
-  }, [q, kind, limit])
+  }, [q, kind, limit, key])
   const label = kind === "senders" ? "Pengirim" : "Penerima"
   return (
     <div className="flex flex-col gap-2">
@@ -118,7 +134,7 @@ export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders
             </button>
           </li>
         ))}
-        {items.length === 0 ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Tidak ada. Tambah lewat menu Kontak.</li> : null}
+        {err ? <li className="px-3 py-2 text-base md:text-sm text-danger">{err}</li> : loading ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Memuat {label.toLowerCase()}…</li> : items.length === 0 ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Tidak ada {label.toLowerCase()} cocok. Tambah baru di tombol + Baru atau menu Kontak.</li> : null}
       </ul>
     </div>
   )
@@ -139,6 +155,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
   const [pending, setPending] = useState(false)
   const [payKey] = useState(newKey)
   const due = s.counter_due_idr
+  const alreadyPaid = s.counter_payment_status === "paid"
   const needPay = s.counter_payment_status === "unpaid" && method !== "later"
   const cashNum = Number(cash.replace(/\D/g, ""))
 
@@ -151,8 +168,8 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
       await api(`/shipments/${s.slug}/parties`, { body: { senderId: sender?.id, recipientId: recipient?.id, content, prohibitedAck: ack, maskPreset: preset } })
       if (needPay) {
         const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": payKey }, body: JSON.stringify({ method, cashReceivedIdr: method === "tunai" ? cashNum : undefined }) })
-        const j = (await res.json()) as { ok: boolean; error?: { message: string; field_errors: Record<string, string> } }
-        if (!j.ok) throw new ApiError(res.status, { code: "PAYMENT", message: j.error!.message, field_errors: j.error!.field_errors })
+        const j = (await res.json().catch(() => null)) as { ok: boolean; error?: { message: string; field_errors: Record<string, string> } } | null
+        if (!j?.ok) throw new ApiError(res.status, { code: "PAYMENT", message: j?.error?.message ?? "Pembayaran gagal dicatat.", field_errors: j?.error?.field_errors ?? {} })
       }
       await api(`/shipments/${s.slug}/dispatch`, { body: {} })
       reload()
@@ -167,12 +184,13 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
     }
   }
 
-  const primary = needPay ? `Tandai Lunas & Cetak · ${rp(due)}` : s.counter_payment_status === "unpaid" ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
+  const primary = alreadyPaid ? "Terbitkan Resi & Cetak" : needPay ? `Tandai Lunas & Cetak · ${rp(due)}` : s.counter_payment_status === "unpaid" ? "Simpan & Cetak (belum dibayar)" : "Simpan & Cetak"
   const busy = s.dispatch_state === "issuing_in_flight" || s.dispatch_state === "reconciliation_needed"
+  const cashShort = needPay && method === "tunai" && cashNum < due
   return (
     <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">
       <div className="flex flex-col gap-4 md:gap-5">
-        <SectionCard id="pengirim" title="3. Pengirim">
+        <SectionCard id="pengirim" title="Pengirim">
           <div className="flex flex-col gap-3">
           <PartyPicker kind="senders" value={sender} onPick={setSender} />
           {errors.senderId ? <p role="alert" className="text-base md:text-sm text-danger">{errors.senderId}</p> : null}
@@ -180,7 +198,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           {errors.maskPreset ? <p role="alert" className="text-base md:text-sm text-danger">{errors.maskPreset}</p> : null}
         </div>
         </SectionCard>
-        <SectionCard id="penerima" title="4. Penerima & isi paket">
+        <SectionCard id="penerima" title="Penerima & isi paket">
           <div className="flex flex-col gap-3">
           <PartyPicker kind="recipients" value={recipient} onPick={setRecipient} />
           {errors.recipientId ? <p role="alert" className="text-base md:text-sm text-danger">{errors.recipientId}</p> : null}
@@ -198,9 +216,11 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
       </div>
       <div className="flex flex-col gap-4 md:gap-5">
         <Summary d={d} owner={owner} />
-        <SectionCard id="bayar" title="5. Catat pembayaran">
+        <SectionCard id="bayar" title="Pembayaran loket">
           <div className="flex flex-col gap-3">
-          {s.counter_payment_status === "not_required" ? (
+          {alreadyPaid ? (
+            <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">Pembayaran sudah tercatat lunas. Tekan tombol di bawah untuk menerbitkan resi.</p>
+          ) : s.counter_payment_status === "not_required" ? (
             <p className="text-base md:text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
           ) : (
             <>
@@ -214,7 +234,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
                 <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
                   <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
                   <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
-                  {cashNum >= due ? <p className="text-base md:text-sm tabular-nums">Kembalian {rp(cashNum - due)}</p> : null}
+                  {cashNum >= due ? <p className="text-base md:text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : <FieldDescription>Masukkan uang diterima minimal {rp(due)}.</FieldDescription>}
                 </Field>
               ) : null}
               {method === "qris" || method === "transfer" ? <p className="text-base md:text-sm text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
@@ -229,7 +249,7 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
           ) : null}
           {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
           {busy ? <p role="status" className="text-base md:text-sm text-warn">Status penerbitan sedang dipastikan ke Mengantar. Jangan buat ulang kiriman ini.</p> : null}
-          <Button className="hidden md:inline-flex" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>
+          <Button className="hidden md:inline-flex" size="lg" onClick={submit} disabled={pending || busy || cashShort}>
             <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
           </Button>
         </div>
@@ -237,8 +257,8 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
       </div>
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card p-3 md:hidden">
         <span className="flex flex-col text-base md:text-sm tabular-nums"><span className="text-muted-foreground">Total</span><strong>{rp(due)}</strong></span>
-        <Button className="flex-1" size="lg" onClick={submit} disabled={pending || busy || (method === "tunai" && cashNum < due)}>
-          {pending ? "Memproses…" : needPay ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
+        <Button className="flex-1" size="lg" onClick={submit} disabled={pending || busy || cashShort}>
+          {pending ? "Memproses…" : alreadyPaid ? "Terbitkan & Cetak" : needPay ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
         </Button>
       </div>
     </div>
@@ -251,11 +271,15 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
   const [msg, setMsg] = useState<string | null>(null)
   const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [confirmKind, setConfirmKind] = useState<"void" | "cancel" | null>(null)
   const act = async (fn: () => Promise<unknown>) => {
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {
       await fn()
+      setReason("")
       reload()
     } catch (err) {
       setMsg(err instanceof ApiError ? err.body.message : "Gagal. Coba lagi.")
@@ -263,13 +287,30 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
       setPending(false)
     }
   }
+  function copyAwb() {
+    if (!s.awb_number) return
+    navigator.clipboard?.writeText(s.awb_number).then(
+      () => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      },
+      () => undefined,
+    )
+  }
   return (
     <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">
       <Panel className="flex flex-col gap-4">
         {s.dispatch_state === "issued" ? (
           <>
             <p className="flex items-center gap-2 text-sm font-semibold md:text-base text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
-            <p className="text-base md:text-sm tabular-nums">{s.courier_code} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</p>
+            <div className="flex flex-wrap items-center gap-2 text-base md:text-sm tabular-nums">
+              <span>{courierLabel(s.courier_code)} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</span>
+              {s.awb_number ? (
+                <Button type="button" variant="outline" size="sm" onClick={copyAwb}>
+                  {copied ? <><CheckIcon aria-hidden /> Tersalin</> : <><CopyIcon aria-hidden /> Salin Resi</>}
+                </Button>
+              ) : null}
+            </div>
             <p className="text-base md:text-sm">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
             {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
             {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
@@ -280,7 +321,7 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
           <>
             <p className="text-sm font-semibold md:text-base text-warn">Menunggu saldo Mengantar</p>
             <p className="text-base md:text-sm">Kiriman sudah tercatat di Mengantar tetapi resi belum terbit karena saldo kurang. Isi saldo, lalu tekan tombol di bawah. Label belum bisa dicetak.</p>
-            <div><Button onClick={() => act(() => api(`/shipments/${s.slug}/pay-unpaid`, { body: {} }))} disabled={pending}>Bayar ke Mengantar & Terbitkan Resi</Button></div>
+            <div><Button onClick={() => act(() => api(`/shipments/${s.slug}/pay-unpaid`, { body: {} }))} disabled={pending}>{pending ? "Memproses…" : "Bayar ke Mengantar & Terbitkan Resi"}</Button></div>
           </>
         ) : (
           <p className="text-sm font-semibold md:text-base">Kiriman dibatalkan</p>
@@ -290,25 +331,54 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
           <div className="flex flex-col gap-2 border-t pt-4">
             <Field>
               <FieldLabel htmlFor="alasan-batal">Alasan pembatalan</FieldLabel>
-              <Input id="alasan-batal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
+              <Input id="alasan-batal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder="Contoh: pengirim batal kirim" />
+              <FieldDescription>Minimal 3 karakter untuk mengaktifkan tombol pembatalan.</FieldDescription>
             </Field>
             <div className="flex flex-wrap gap-2">
               {s.counter_payment_status === "paid" ? (
-                // Kasir may void within the paying shift; the server enforces it (spec 03 §1.1).
-                <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => act(async () => {
-                  const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": newKey() }, body: JSON.stringify({ op: "void_payment", reason }) })
-                  const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } } | null
-                  if (!j?.ok) throw new ApiError(res.status, j?.error ?? { code: "UNKNOWN", message: "Pembatalan pembayaran gagal.", field_errors: {} })
-                })}>
+                <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("void")}>
                   Batalkan Pembayaran
                 </Button>
               ) : null}
-              <Button variant="destructive" disabled={pending || reason.trim().length < 3} onClick={() => act(() => api(`/shipments/${s.slug}/cancel`, { body: { reason } }))}>Batalkan Kiriman</Button>
+              <Button variant="destructive" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("cancel")}>Batalkan Kiriman</Button>
             </div>
           </div>
         ) : null}
       </Panel>
       <Summary d={d} owner={owner} />
+      <AlertDialog open={confirmKind !== null} onOpenChange={(o) => !o && !pending && setConfirmKind(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmKind === "void" ? "Batalkan pembayaran loket?" : `Batalkan kiriman INV ${s.slug.toUpperCase()}?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmKind === "void"
+                ? `Pembayaran INV ${s.slug.toUpperCase()} akan di-void dengan alasan “${reason.trim()}”.`
+                : `Kiriman INV ${s.slug.toUpperCase()} akan dibatalkan di Mengantar dan tidak dapat diterbitkan ulang dengan resi yang sama. Alasan: “${reason.trim()}”.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Kembali</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={() => {
+                const kind = confirmKind
+                setConfirmKind(null)
+                if (kind === "void") {
+                  void act(async () => {
+                    const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": newKey() }, body: JSON.stringify({ op: "void_payment", reason }) })
+                    const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } } | null
+                    if (!j?.ok) throw new ApiError(res.status, j?.error ?? { code: "UNKNOWN", message: "Pembatalan pembayaran gagal.", field_errors: {} })
+                  })
+                } else if (kind === "cancel") {
+                  void act(() => api(`/shipments/${s.slug}/cancel`, { body: { reason } }))
+                }
+              }}
+            >
+              {confirmKind === "void" ? "Ya, Batalkan Pembayaran" : "Ya, Batalkan Kiriman"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -347,16 +417,33 @@ function Reveal({ slug, preset }: { slug: string; preset: MaskPreset }) {
   const [reason, setReason] = useState("")
   const [who, setWho] = useState<{ name: string; phone: string; brand: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   if (who) return <p className="rounded-lg bg-muted px-3 py-2 text-base md:text-sm">Pengirim asli: <strong>{who.name}</strong> · {who.phone}{who.brand ? ` (toko ${who.brand})` : ""}</p>
   if (!open) return <div><Button variant="outline" onClick={() => setOpen(true)}>Lihat Pengirim Asli</Button> <span className="text-base md:text-sm text-muted-foreground">Label: {PRESET_LABEL[preset]}</span></div>
   return (
-    <form onSubmit={async (e) => { e.preventDefault(); setError(null); try { setWho(await api(`/shipments/${slug}/reveal-sender`, { body: { reason } })) } catch (err) { setError(err instanceof ApiError ? err.body.message : "Gagal.") } }} className="flex flex-col gap-2 border-t pt-3" noValidate>
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (pending) return
+        setPending(true)
+        setError(null)
+        try {
+          setWho(await api(`/shipments/${slug}/reveal-sender`, { body: { reason } }))
+        } catch (err) {
+          setError(err instanceof ApiError ? err.body.message : "Gagal.")
+        } finally {
+          setPending(false)
+        }
+      }}
+      className="flex flex-col gap-2 border-t pt-3"
+      noValidate
+    >
       <Field data-invalid={error ? true : undefined}>
         <FieldLabel htmlFor="alasan-buka">Alasan membuka data pengirim asli (dicatat)</FieldLabel>
         <Input id="alasan-buka" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
-        {error ? <FieldError>{error}</FieldError> : null}
+        {error ? <FieldError>{error}</FieldError> : <FieldDescription>Minimal 5 karakter.</FieldDescription>}
       </Field>
-      <div className="flex gap-2"><Button type="submit" disabled={reason.trim().length < 5}>Buka</Button><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button></div>
+      <div className="flex gap-2"><Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Membuka…" : "Buka"}</Button><Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Batal</Button></div>
     </form>
   )
 }
@@ -370,18 +457,29 @@ function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: ()
   const [method, setMethod] = useState<"tunai" | "transfer">("tunai")
   const [override, setOverride] = useState("")
   const [msg, setMsg] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   const [key, setKey] = useState(newKey)
   const remaining = payable - paid
+  const canPay = settled || owner
   async function pay() {
+    if (pending || !canPay) return
+    setPending(true)
     setMsg(null)
-    const res = await fetch(`/api/app/shipments/${s.slug}/cod-payout`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ amountIdr: Number(amount.replace(/\D/g, "")), method, override: settled ? undefined : override }) })
-    const j = (await res.json()) as { ok: boolean; error?: { message: string } }
-    if (!j.ok) setMsg(j.error!.message)
-    else {
-      // A partial payout is done: the next one is a new money event with its own key.
-      setKey(newKey())
-      setAmount("")
-      reload()
+    try {
+      const res = await fetch(`/api/app/shipments/${s.slug}/cod-payout`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": key }, body: JSON.stringify({ amountIdr: Number(amount.replace(/\D/g, "")), method, override: settled ? undefined : override }) })
+      const j = (await res.json().catch(() => null)) as { ok: boolean; error?: { message: string } } | null
+      if (!j?.ok) setMsg(j?.error?.message ?? "Pencairan COD gagal dicatat.")
+      else {
+        // A partial payout is done: the next one is a new money event with its own key.
+        setKey(newKey())
+        setAmount("")
+        setOverride("")
+        reload()
+      }
+    } catch {
+      setMsg("Koneksi terputus saat mencatat pencairan COD. Coba lagi.")
+    } finally {
+      setPending(false)
     }
   }
   return (
@@ -389,16 +487,20 @@ function CodPayout({ d, owner, reload }: { d: Detail; owner: boolean; reload: ()
       <p className="text-base md:text-sm font-medium tabular-nums">Hak COD pengirim {rp(payable)} · sudah dibayar {rp(paid)} · sisa {rp(remaining)}</p>
       {remaining > 0 ? (
         <>
-          {!settled ? <p className="text-base md:text-sm text-muted-foreground">Dana COD belum masuk ke saldo Mengantar.{owner ? " Pemilik bisa bayar lebih dulu dengan alasan." : ""}</p> : null}
-          <div className="flex flex-wrap items-end gap-2">
-            <Field><FieldLabel htmlFor="cair">Nominal pencairan</FieldLabel><Input id="cair" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="w-40 tabular-nums" /></Field>
-            <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as "tunai" | "transfer")} variant="outline" aria-label="Cara pencairan">
-              <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
-              <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-          {!settled && owner ? <Field><FieldLabel htmlFor="lebih-dulu">Alasan bayar sebelum cair</FieldLabel><Input id="lebih-dulu" value={override} onChange={(e) => setOverride(e.target.value)} maxLength={200} /></Field> : null}
-          <div><Button variant="outline" onClick={pay} disabled={!amount}>Cairkan ke Pengirim</Button></div>
+          {!settled ? <p className="text-base md:text-sm text-muted-foreground">Dana COD belum masuk ke saldo Mengantar.{owner ? " Pemilik bisa bayar lebih dulu dengan alasan." : " Hanya pemilik gerai yang dapat mencairkan sebelum dana masuk."}</p> : null}
+          {canPay ? (
+            <>
+              <div className="flex flex-wrap items-end gap-2">
+                <Field><FieldLabel htmlFor="cair">Nominal pencairan</FieldLabel><Input id="cair" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="w-40 tabular-nums" /></Field>
+                <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as "tunai" | "transfer")} variant="outline" aria-label="Cara pencairan">
+                  <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
+                  <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+              {!settled && owner ? <Field><FieldLabel htmlFor="lebih-dulu">Alasan bayar sebelum cair</FieldLabel><Input id="lebih-dulu" value={override} onChange={(e) => setOverride(e.target.value)} maxLength={200} /></Field> : null}
+              <div><Button variant="outline" onClick={pay} disabled={pending || !amount || (!settled && override.trim().length < 5)}>{pending ? "Memproses…" : "Cairkan ke Pengirim"}</Button></div>
+            </>
+          ) : null}
         </>
       ) : null}
       {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}

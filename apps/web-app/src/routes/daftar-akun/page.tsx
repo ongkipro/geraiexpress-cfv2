@@ -20,6 +20,7 @@ export function DaftarAkunPage() {
   const [name, setName] = useState("")
   const [password, setPassword] = useState("")
   const [pending, setPending] = useState(false)
+  const [resent, setResent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -39,13 +40,18 @@ export function DaftarAkunPage() {
     }
   }
 
-  const sendCode = (e?: FormEvent) => {
+  const sendCode = (e?: FormEvent, isResend = false) => {
     e?.preventDefault()
+    if (!email.trim()) {
+      setFieldErrors({ email: "Email wajib diisi." })
+      return
+    }
     return run(async () => {
       try {
         const r = await api<{ otpId: string }>("/auth/signup/request", { body: { email, turnstileToken: ts.token } })
         setOtpId(r.otpId)
         setStep("otp")
+        setResent(isResend)
       } finally {
         ts.reset()
       }
@@ -56,6 +62,7 @@ export function DaftarAkunPage() {
     return run(async () => {
       const r = await api<{ ticket: string }>("/auth/signup/verify", { body: { otpId, code } })
       setTicket(r.ticket)
+      setResent(false)
       setStep("profile")
     })
   }
@@ -67,19 +74,20 @@ export function DaftarAkunPage() {
     })
   }
 
-  // DEC-250: Langkah 1 / 3 of the wizard; its three sub-states share one card, `← Kembali` returns from the OTP to the email.
+  // DEC-250: Langkah 1 / 3 of the wizard; its three sub-states share one card, `← Kembali` returns to email.
   const quiet = "inline-flex min-h-11 items-center text-sm font-medium text-[#64748B] underline-offset-4 hover:text-[#0F172A] hover:underline disabled:opacity-50 md:min-h-9"
-  const backToEmail = () => { setStep("email"); setCode(""); setError(null) }
+  const backToEmail = () => { setStep("email"); setCode(""); setTicket(""); setResent(false); setError(null); setFieldErrors({}) }
   return (
     <AuthCard
       switcher="daftar"
       title="Buat akun pemilik"
-      progress={<WizardBar current={1} onBack={step === "otp" && !pending ? backToEmail : undefined} />}
+      progress={<WizardBar current={1} onBack={step !== "email" && !pending ? backToEmail : undefined} />}
       description={
         step === "email" ? "Mulai dengan email pemilik. Kami kirim kode 6 digit." : step === "otp" ? `Kode dikirim ke ${email}. Berlaku 10 menit.` : "Nama dan kata sandi untuk masuk ke ruang kerja."
       }
     >
       {error ? <FormAlert>{error}</FormAlert> : null}
+      {resent && !error && step === "otp" ? <FormAlert tone="safe">Kode verifikasi baru telah dikirim ke {email}.</FormAlert> : null}
       {/* One form for the email and OTP sub-states (DEC-250 Sol R1): DOM order = screen order — field, the single
           Turnstile slot (never re-rendered between the two; `Kirim ulang` needs a fresh token) right above the action,
           the OTP links, then the security status. */}
@@ -100,7 +108,7 @@ export function DaftarAkunPage() {
           {step === "otp" ? (
             <div className="-mt-1 flex items-center justify-between">
               <button type="button" className={quiet} disabled={pending} onClick={backToEmail}>Ganti email</button>
-              <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode()}>Kirim ulang</button>
+              <button type="button" className={quiet} disabled={pending || !ts.ready} onClick={() => sendCode(undefined, true)}>Kirim ulang</button>
             </div>
           ) : null}
           <SecurityStatus ts={ts} />

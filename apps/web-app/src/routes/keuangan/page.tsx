@@ -130,7 +130,7 @@ export function KeuanganPage() {
       {tab === "mutasi" ? <Mutations rows={d.mutations} /> : null}
       {tab === "laba" ? <Profits rows={d.profits} /> : null}
       {tab === "cadangan" ? <ReserveList rows={d.reserve} /> : null}
-      {tab === "selisih" ? <Discrepancies rows={d.discrepancies} /> : null}
+      {tab === "selisih" ? <Discrepancies rows={d.discrepancies} onResolved={load} /> : null}
     </div>
   )
 }
@@ -157,15 +157,15 @@ function Mutations({ rows }: { rows: Mutation[] }) {
         empty={<EmptyState title="Belum ada mutasi" body="Tekan Sinkronkan Sekarang untuk menarik mutasi saldo dari Mengantar." />}
         columns={[
           { key: "waktu", header: "Waktu", cell: (m) => <span className="tabular-nums">{when(m.provider_created_at)}</span> },
-          { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span> },
+          { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{TYPE_LABEL[m.type] ?? "Mutasi lainnya"}</span> },
           { key: "ref", header: "Referensi", className: "whitespace-normal", cell: (m) => <span className="tabular-nums">{m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span> },
-          { key: "status", header: "Status", cell: (m) => <StatusBadge tone={m.link_state === "unlinked" || m.link_state === "partial" ? "warn" : m.status === "statusCleared" || !m.status ? "safe" : "muted"}>{m.link_state === "unlinked" || m.link_state === "partial" ? "Belum cocok semua" : (STATUS_TEXT[m.status ?? "statusCleared"] ?? m.status)}</StatusBadge> },
+          { key: "status", header: "Status", cell: (m) => <StatusBadge tone={m.link_state === "unlinked" || m.link_state === "partial" ? "warn" : m.status === "statusCleared" || !m.status ? "safe" : "muted"}>{m.link_state === "unlinked" || m.link_state === "partial" ? "Belum cocok semua" : (STATUS_TEXT[m.status ?? "statusCleared"] ?? "Diproses")}</StatusBadge> },
           { key: "jumlah", header: "Jumlah", align: "right", cell: (m) => <span className={(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span> },
           { key: "saldo", header: "Saldo", align: "right", wide: true, cell: (m) => (m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)) },
         ]}
         mobile={(m) => (
           <div className="flex flex-col gap-1 text-base md:text-sm">
-            <span className="flex justify-between gap-2"><span className="font-medium">{TYPE_LABEL[m.type] ?? `Tipe lain (${m.type})`}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
+            <span className="flex justify-between gap-2"><span className="font-medium">{TYPE_LABEL[m.type] ?? "Mutasi lainnya"}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
             <span className="text-muted-foreground tabular-nums">{when(m.provider_created_at)} · {m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span>
             <span className="text-muted-foreground tabular-nums">Saldo {m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)}{m.link_state === "unlinked" || m.link_state === "partial" ? " · belum cocok semua" : ""}</span>
           </div>
@@ -195,22 +195,28 @@ function Profits({ rows }: { rows: Profit[] }) {
   )
 }
 
-function Discrepancies({ rows }: { rows: Discrepancy[] }) {
+function Discrepancies({ rows, onResolved }: { rows: Discrepancy[]; onResolved: () => void }) {
   const [closing, setClosing] = useState<string | null>(null)
   const [reason, setReason] = useState("")
   const [done, setDone] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   const open = rows.filter((x) => !done.has(x.id))
   if (!open.length) return <EmptyState title="Tidak ada selisih" body="Semua mutasi Mengantar cocok dengan kiriman gerai." />
   async function resolve(id: string) {
+    if (pending) return
+    setPending(true)
     setError(null)
     try {
       await api(`/finance/discrepancies/${id}/resolve`, { body: { reason } })
       setDone((d) => new Set(d).add(id))
       setClosing(null)
       setReason("")
+      onResolved()
     } catch (e) {
       setError(e instanceof ApiError ? e.body.message : "Gagal menyelesaikan selisih.")
+    } finally {
+      setPending(false)
     }
   }
   return (
@@ -223,11 +229,11 @@ function Discrepancies({ rows }: { rows: Discrepancy[] }) {
           {closing === x.id ? (
             <div className="flex flex-wrap items-end gap-2">
               <Field className="min-w-0 flex-1">
-                <FieldLabel htmlFor={`alasan-${x.id}`}>Alasan (dicatat)</FieldLabel>
+                <FieldLabel htmlFor={`alasan-${x.id}`}>Alasan (dicatat, min. 5 karakter)</FieldLabel>
                 <Input id={`alasan-${x.id}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
               </Field>
-              <Button variant="outline" onClick={() => setClosing(null)}>Batal</Button>
-              <Button disabled={reason.trim().length < 5} onClick={() => resolve(x.id)}>Tandai Selesai</Button>
+              <Button variant="outline" disabled={pending} onClick={() => setClosing(null)}>Batal</Button>
+              <Button disabled={pending || reason.trim().length < 5} onClick={() => resolve(x.id)}>{pending ? "Menyimpan…" : "Tandai Selesai"}</Button>
             </div>
           ) : (
             <div><Button variant="outline" onClick={() => { setClosing(x.id); setReason("") }}>Tandai Selesai</Button></div>

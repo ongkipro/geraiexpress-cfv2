@@ -42,13 +42,16 @@ export function PengirimPage() {
   const [data, setData] = useState<{ items: Sender[]; counts: Record<Filter, number> } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Sender | "new" | null>(null)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ items: Sender[]; counts: Record<Filter, number> }>(`/contacts/senders?jenis=${filter}&q=${encodeURIComponent(q)}`)
       .then((d) => {
+        if (mine !== gen.current) return
         setError(null)
         setData(d)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Daftar pengirim tidak dapat dimuat."))
+      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar pengirim tidak dapat dimuat."))
   }, [filter, q])
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0)
@@ -130,14 +133,14 @@ export function PengirimPage() {
           <SheetHeader>
             <SheetTitle>{editing === "new" ? "Tambah Pengirim" : "Ubah Pengirim"}</SheetTitle>
           </SheetHeader>
-          {editing ? <SenderForm key={editing === "new" ? "new" : editing.id} sender={editing === "new" ? null : editing} owner={owner} onSaved={() => { setEditing(null); load() }} /> : null}
+          {editing ? <SenderForm key={editing === "new" ? "new" : editing.id} sender={editing === "new" ? null : editing} owner={owner} onSaved={() => { setEditing(null); load() }} onVerified={load} /> : null}
         </SheetContent>
       </Sheet>
     </div>
   )
 }
 
-export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; owner: boolean; onSaved: (saved?: Sender) => void }) {
+export function SenderForm({ sender, owner, onSaved, onVerified }: { sender: Sender | null; owner: boolean; onSaved: (saved?: Sender) => void; onVerified?: () => void }) {
   const [kind, setKind] = useState<Sender["sender_kind"]>(sender?.sender_kind ?? "walk_in")
   const [name, setName] = useState(sender?.true_name ?? "")
   const [phone, setPhone] = useState(sender?.true_phone ?? "")
@@ -177,16 +180,35 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
     }
   }
   async function verify() {
-    if (!sender) return
-    const r = await api<{ item: Sender }>(`/contacts/senders/${sender.id}/verify-wa`, { body: {} })
-    setVerified(r.item.wa_verified_at)
+    if (!sender || pending) return
+    setPending(true)
+    setMsg(null)
+    try {
+      const r = await api<{ item: Sender }>(`/contacts/senders/${sender.id}/verify-wa`, { body: {} })
+      setVerified(r.item.wa_verified_at)
+      onVerified?.()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.body.message : "Gagal memverifikasi WhatsApp.")
+    } finally {
+      setPending(false)
+    }
   }
   async function archive() {
-    if (!sender) return
-    await api(`/contacts/senders/${sender.id}/archive`, { body: {} })
-    onSaved()
+    if (!sender || pending) return
+    if (!window.confirm(`Arsipkan pengirim “${sender.display_brand_name ?? sender.true_name}”?`)) return
+    setPending(true)
+    setMsg(null)
+    try {
+      await api(`/contacts/senders/${sender.id}/archive`, { body: {} })
+      onSaved()
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.body.message : "Gagal mengarsipkan pengirim.")
+    } finally {
+      setPending(false)
+    }
   }
-  const wa = phone.replace(/\D/g, "").replace(/^0/, "62")
+  const waDigits = phone.replace(/\D/g, "")
+  const wa = waDigits ? `62${waDigits.replace(/^(62|0)/, "")}` : ""
   return (
     <form onSubmit={submit} className="flex flex-col gap-4 px-4 pb-6" noValidate>
       <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as Sender["sender_kind"])} aria-label="Jenis pengirim" variant="outline">
@@ -203,11 +225,14 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
             <>
               <p className="text-base md:text-sm text-muted-foreground">Kirim pesan uji, lalu tanyakan ke pengirim apakah pesan sudah diterima.</p>
               <div className="flex flex-wrap gap-2">
-                <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium md:h-10">
-                  <MessageCircleIcon aria-hidden className="size-5" /> Kirim pesan uji
-                </a>
-                <Button type="button" variant="outline" onClick={verify} disabled={phone !== sender.true_phone}>Pengirim sudah menerima</Button>
+                {wa ? (
+                  <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium md:h-10">
+                    <MessageCircleIcon aria-hidden className="size-5" /> Kirim pesan uji
+                  </a>
+                ) : null}
+                <Button type="button" variant="outline" onClick={verify} disabled={pending || phone !== sender.true_phone}>{pending ? "Memverifikasi…" : "Pengirim sudah menerima"}</Button>
               </div>
+              {phone !== sender.true_phone ? <p className="text-xs text-muted-foreground">Simpan perubahan nomor dulu sebelum memverifikasi.</p> : null}
             </>
           )}
         </div>
@@ -227,7 +252,7 @@ export function SenderForm({ sender, owner, onSaved }: { sender: Sender | null; 
       {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
-        {sender && owner ? <Button type="button" variant="outline" onClick={archive}>Arsipkan</Button> : null}
+        {sender && owner ? <Button type="button" variant="outline" disabled={pending} onClick={archive}>Arsipkan</Button> : null}
       </div>
     </form>
   )

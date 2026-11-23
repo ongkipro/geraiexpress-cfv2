@@ -53,6 +53,7 @@ export function ApiMcpPage() {
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null)
   const [confirm, setConfirmState] = useState<string | null>(null)
   const [revokeErr, setRevokeErr] = useState<string | null>(null)
+  const [revoking, setRevoking] = useState(false)
   const setConfirm = (id: string | null) => {
     setRevokeErr(null)
     setConfirmState(id)
@@ -67,6 +68,8 @@ export function ApiMcpPage() {
   }, [])
   useEffect(load, [load])
   async function revoke(k: Key) {
+    if (revoking) return
+    setRevoking(true)
     try {
       await api(`/api-keys/${k.id}/revoke`, { body: {} })
       setMsg({ tone: "safe", text: `Kunci ${k.name} dicabut. Integrasi yang memakainya langsung berhenti.` })
@@ -75,6 +78,8 @@ export function ApiMcpPage() {
     } catch (e) {
       // Shown inside the still-open dialog (Sol R1 #1): the page notice would sit behind the modal.
       setRevokeErr(e instanceof ApiError ? e.body.message : "Gagal mencabut kunci.")
+    } finally {
+      setRevoking(false)
     }
   }
   const origin = typeof window !== "undefined" ? window.location.origin : ""
@@ -128,7 +133,7 @@ export function ApiMcpPage() {
           />
         )}
       </SectionCard>
-      <AlertDialog open={!!confirmed} onOpenChange={(o) => !o && setConfirm(null)}>
+      <AlertDialog open={!!confirmed} onOpenChange={(o) => !o && !revoking && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cabut kunci {confirmed?.name}?</AlertDialogTitle>
@@ -136,8 +141,8 @@ export function ApiMcpPage() {
           </AlertDialogHeader>
           {revokeErr ? <p role="alert" className="text-sm font-medium text-danger">{revokeErr}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => confirmed && revoke(confirmed)}>Ya, Cabut Kunci</AlertDialogAction>
+            <AlertDialogCancel disabled={revoking}>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={revoking} onClick={() => confirmed && revoke(confirmed)}>{revoking ? "Mencabut…" : "Ya, Cabut Kunci"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

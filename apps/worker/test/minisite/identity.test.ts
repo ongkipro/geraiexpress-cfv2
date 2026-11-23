@@ -52,6 +52,9 @@ describe("mini-site identity (DEC-247)", () => {
     const home = await (await get(`${a.base}/`)).text()
     expect(home).toContain(`<img class="mark" src="/logo?v=${logoId.slice(0, 8)}" alt="Logo Gerai Berkah Jaya"`)
     expect(home).not.toContain(logoId)
+    // Saving Profil Gerai without `logoMediaId` preserves the uploaded logo (regression guard).
+    expect((await post("/settings/profile", a.cookie, { ...PROFILE, openingHours: "09.00–20.00" })).status).toBe(200)
+    expect((await get(`${a.base}/logo`)).status).toBe(200)
 
     // Another gerai: no logo → 404 + monogram; pointing its outlet at gerai A's media id still 404 (not in its object).
     expect((await get(`${b.base}/logo`)).status).toBe(404)

@@ -25,3 +25,26 @@ export const STATUS_LABEL: Record<string, string> = {
 }
 
 export const statusLabel = (s: string | null | undefined): string => (s ? STATUS_LABEL[s] ?? "Status lain" : "—")
+
+const COURIER_LABEL: Record<string, string> = {
+  jne: "JNE",
+  jt: "J&T Express",
+  sicepat: "SiCepat",
+  sap: "SAP Express",
+  lion: "Lion Parcel",
+  anteraja: "Anteraja",
+  idexpress: "iDexpress",
+  pos: "Pos Indonesia",
+  spx: "SPX Express",
+}
+
+export const courierLabel = (code: string | null | undefined): string => (code ? COURIER_LABEL[code.toLowerCase()] ?? code : "—")
+
+const CLAIM_KIND_LABEL: Record<string, string> = {
+  rusak: "rusak",
+  hilang: "hilang",
+  isi_kurang: "isi kurang",
+  terlambat: "terlambat",
+}
+
+export const claimKindLabel = (kind: string | null | undefined): string => (kind ? CLAIM_KIND_LABEL[kind] ?? "lainnya" : "—")

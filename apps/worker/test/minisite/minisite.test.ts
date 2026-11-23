@@ -177,4 +177,22 @@ describe("mini-site", () => {
     expect((await get(`${t.base}/api/app/workspace`)).status).toBe(404)
     void appGet
   })
+
+  it("invalid /kirim form submissions do not consume the 5/hour IP pre-booking quota", async () => {
+    const t = await site("msquota")
+    const sameIpPost = (body: Record<string, string>) =>
+      exports.default.fetch(`${t.base}/kirim`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "cf-connecting-ip": "198.51.100.250" },
+        body: form(body),
+        redirect: "manual",
+      })
+    for (let i = 0; i < 6; i++) {
+      const r = await sameIpPost({ ...DRAFT, recipientId: "" })
+      expect(r.status).toBe(422)
+      expect(await r.text()).not.toContain("Terlalu banyak pengajuan")
+    }
+    const ok = await sameIpPost(DRAFT)
+    expect(ok.status).toBe(303)
+  })
 })

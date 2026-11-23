@@ -22,26 +22,46 @@ export function PickupQueue() {
   const navigate = useNavigate()
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    api<{ groups: Group[] }>("/pickup").then((d) => setGroups(d.groups)).catch((e) => setError(e instanceof ApiError ? e.body.message : "Antrean pickup tidak dapat dimuat."))
+  const [starting, setStarting] = useState<string | null>(null)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const load = useCallback(() => {
+    api<{ groups: Group[] }>("/pickup")
+      .then((d) => {
+        setError(null)
+        setGroups(d.groups)
+      })
+      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Antrean pickup tidak dapat dimuat."))
   }, [])
+  useEffect(load, [load])
   async function start(courier: string) {
-    const r = await api<{ batch: { id: string } }>("/pickup/open", { body: { courier } })
-    await navigate({ to: "/kiriman/pickup/$batch", params: { batch: r.batch.id } })
+    if (starting) return
+    setStarting(courier)
+    setActErr(null)
+    try {
+      const r = await api<{ batch: { id: string } }>("/pickup/open", { body: { courier } })
+      await navigate({ to: "/kiriman/pickup/$batch", params: { batch: r.batch.id } })
+    } catch (e) {
+      setActErr(e instanceof ApiError ? e.body.message : "Gagal membuka manifest pickup.")
+    } finally {
+      setStarting(null)
+    }
   }
-  if (error) return <ErrorState message={error} />
+  if (error) return <ErrorState message={error} onRetry={load} />
   if (!groups) return <LoadingState label="Memuat antrean pickup" />
   if (!groups.length) return <EmptyState title="Tidak ada paket menunggu kurir" body="Paket yang resinya terbit dan belum diserahkan akan muncul di sini per ekspedisi." />
   return (
-    <ul className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {groups.map((g) => (
-        <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
-          <p className="flex items-center justify-between gap-2 text-sm font-semibold md:text-base">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base md:text-sm font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
-          <p className="flex items-center gap-2 text-base md:text-sm text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
-          <div><Button onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
-        </Panel>
-      ))}
-    </ul>
+    <div className="mb-6 flex flex-col gap-3">
+      {actErr ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{actErr}</p> : null}
+      <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {groups.map((g) => (
+          <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
+            <p className="flex items-center justify-between gap-2 text-sm font-semibold md:text-base">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base md:text-sm font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
+            <p className="flex items-center gap-2 text-base md:text-sm text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
+            <div><Button disabled={starting !== null} onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {starting === g.courier_code ? "Membuka…" : g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
+          </Panel>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -71,6 +91,9 @@ export function ManifestPage() {
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState("")
   const [last, setLast] = useState<ScanRes | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [unscanning, setUnscanning] = useState<string | null>(null)
+  const scanGen = useRef(0)
   const input = useRef<HTMLInputElement>(null)
   const load = useCallback(() => {
     api<{ batch: Batch }>(`/pickup/${batch}`)
@@ -84,27 +107,49 @@ export function ManifestPage() {
   async function scan(e: FormEvent) {
     e.preventDefault()
     const c = code.trim()
-    if (!c) return
+    if (!c || scanning) return
     setCode("")
+    setScanning(true)
+    const mine = ++scanGen.current
     try {
       const r = await api<{ scan: ScanRes; batch: Batch }>(`/pickup/${batch}/scan`, { body: { code: c } })
-      setLast(r.scan)
-      setB(r.batch)
+      if (mine === scanGen.current) {
+        setLast(r.scan)
+        setB(r.batch)
+      }
       beep(r.scan.result !== "blocked")
     } catch (err) {
-      setLast({ result: "blocked", code: "ERROR", message: err instanceof ApiError ? err.body.message : "Gagal memindai.", slug: null })
+      if (mine === scanGen.current) setLast({ result: "blocked", code: "ERROR", message: err instanceof ApiError ? err.body.message : "Gagal memindai.", slug: null })
       beep(false)
+    } finally {
+      if (mine === scanGen.current) setScanning(false)
     }
     input.current?.focus()
+  }
+  async function unscan(slug: string) {
+    if (unscanning) return
+    setUnscanning(slug)
+    try {
+      const r = await api<{ batch: Batch }>(`/pickup/${batch}/unscan`, { body: { slug } })
+      setB(r.batch)
+    } catch (err) {
+      setLast({ result: "blocked", code: "ERROR", message: err instanceof ApiError ? err.body.message : "Gagal mengeluarkan paket dari manifest.", slug })
+    } finally {
+      setUnscanning(null)
+    }
   }
   if (error) return <div><PageTitle title="Manifest" /><ErrorState message={error} onRetry={load} /></div>
   if (!b) return <LoadingState label="Memuat manifest" />
   const name = COURIER[b.courier_code] ?? b.courier_code
   const open = b.status === "open"
+  const handedTime = b.handed_over_at ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(b.handed_over_at) : null
   return (
     <div className="min-w-0 pb-24 md:pb-0">
-      <PageTitle title={`Manifest ${name}`} description={open ? `${b.scanned_count} paket dipindai` : `Diserahkan · ${b.scanned_count} paket`}>
-        {!open ? <a href={`/api/app/pickup/${b.id}/surat-jalan.pdf`} target="_blank" rel="noopener" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground md:h-10">Cetak Surat Jalan</a> : null}
+      <PageTitle
+        title={`Manifest ${name}`}
+        description={open ? `${b.scanned_count} paket dipindai` : `Diserahkan · ${b.scanned_count} paket${b.driver_name ? ` · Kurir: ${b.driver_name}` : ""}${handedTime ? ` · ${handedTime} WIB` : ""}`}
+      >
+        {!open ? <a href={`/api/app/pickup/${b.id}/surat-jalan.pdf`} target="_blank" rel="noopener" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground md:h-9">Cetak Surat Jalan</a> : null}
       </PageTitle>
       {open ? (
         <Panel as="form" onSubmit={scan} className="mb-4 flex flex-wrap items-end gap-2 md:p-4">
@@ -112,7 +157,7 @@ export function ManifestPage() {
             <FieldLabel htmlFor="scan">Pindai barcode resi atau QR INV</FieldLabel>
             <Input id="scan" ref={input} autoFocus autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Arahkan pemindai ke barcode" />
           </Field>
-          <Button type="submit" size="lg">Tambah</Button>
+          <Button type="submit" size="lg" disabled={scanning || !code.trim()}>{scanning ? "Memindai…" : "Tambah"}</Button>
         </Panel>
       ) : null}
       {last ? (
@@ -130,8 +175,13 @@ export function ManifestPage() {
             <ul className="divide-y">
               {b.items.map((i) => (
                 <li key={i.slug} className="flex flex-wrap items-center justify-between gap-2 py-2 text-base md:text-sm">
-                  <span className="tabular-nums"><span className="font-medium">{i.awb}</span> · INV {i.slug.toUpperCase()}{i.unpaid_warning ? <span className="font-medium text-warn"> · belum dibayar</span> : null}</span>
-                  {open ? <Button variant="ghost" onClick={async () => { const r = await api<{ batch: Batch }>(`/pickup/${b.id}/unscan`, { body: { slug: i.slug } }); setB(r.batch) }}>Keluarkan</Button> : null}
+                  <span className="tabular-nums">
+                    <span className="font-medium">{i.awb}</span> · INV {i.slug.toUpperCase()}
+                    {i.recipient ? <span className="text-muted-foreground"> · {i.recipient}</span> : null}
+                    {i.weight_gram ? <span className="text-muted-foreground"> · {kg(i.weight_gram)}</span> : null}
+                    {i.unpaid_warning ? <span className="font-medium text-warn"> · belum dibayar</span> : null}
+                  </span>
+                  {open ? <Button variant="ghost" disabled={unscanning === i.slug} onClick={() => unscan(i.slug)}>{unscanning === i.slug ? "Mengeluarkan…" : "Keluarkan"}</Button> : null}
                 </li>
               ))}
             </ul>
@@ -141,7 +191,7 @@ export function ManifestPage() {
           <SectionCard id="belum" title={<>Belum dipindai ({b.missing.length})</>}>
             {b.missing.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Semua paket {name} sudah dipindai.</p> : (
               <ul className="divide-y">
-                {b.missing.map((i) => <li key={i.slug} className="py-2 text-base md:text-sm tabular-nums">{i.awb} · INV {i.slug.toUpperCase()}</li>)}
+                {b.missing.map((i) => <li key={i.slug} className="py-2 text-base md:text-sm tabular-nums">{i.awb} · INV {i.slug.toUpperCase()}{i.recipient ? <span className="text-muted-foreground"> · {i.recipient}</span> : null}</li>)}
               </ul>
             )}
           </SectionCard>
@@ -167,6 +217,7 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
     return [((e.clientX - r.left) * e.currentTarget.width) / r.width, ((e.clientY - r.top) * e.currentTarget.height) / r.height] as const
   }
   const down = (e: PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId)
     drawing.current = true
     const c = e.currentTarget.getContext("2d")!
     c.lineWidth = 3
@@ -222,14 +273,14 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
       </div>
       <div className="flex flex-col gap-2">
         <p className="text-base md:text-sm font-medium">Tanda tangan kurir</p>
-        <canvas ref={canvas} width={600} height={200} aria-label="Area tanda tangan kurir" className="h-40 w-full max-w-xl touch-none rounded-lg border border-input bg-white" onPointerDown={down} onPointerMove={move} onPointerUp={() => (drawing.current = false)} onPointerLeave={() => (drawing.current = false)} />
+        <canvas ref={canvas} width={600} height={200} aria-label="Area tanda tangan kurir" className="h-40 w-full max-w-xl touch-none rounded-lg border border-input bg-white" onPointerDown={down} onPointerMove={move} onPointerUp={() => (drawing.current = false)} onPointerCancel={() => (drawing.current = false)} />
         {fields.signature ? <FieldError>{fields.signature}</FieldError> : null}
         <div><Button variant="ghost" onClick={clear}>Hapus tanda tangan</Button></div>
       </div>
       {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button size="lg" disabled={pending} onClick={() => submit("handed_over")}>Selesai & Tanda Tangan</Button>
-        <Button variant="outline" disabled={pending} onClick={() => submit("dropped_at_branch")}>Diantar Mandiri ke Cabang</Button>
+        <Button size="lg" disabled={pending} onClick={() => submit("handed_over")}>{pending ? "Menyimpan…" : "Selesai & Tanda Tangan"}</Button>
+        <Button variant="outline" disabled={pending} onClick={() => submit("dropped_at_branch")}>{pending ? "Menyimpan…" : "Diantar Mandiri ke Cabang"}</Button>
       </div>
     </div>
     </SectionCard>
