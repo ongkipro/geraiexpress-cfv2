@@ -179,8 +179,9 @@
         "PLATFORM_APEX": "geraiexpress.com",
         "TENANT_ZONE": "geraimitra.com",
         "MENGANTAR_PUBLIC_ORIGIN": "https://api-public.mengantar.com",
-        // Official production Mengantar Partner API base URL (docs/partner/en/get-started.md v2.0.0).
-        "MENGANTAR_PARTNER_ORIGIN": "https://api-public.mengantar.com",
+        // Production Partner API (/api/partner/v1/*) on api-public.mengantar.com currently 301-redirects
+        // to app.mengantar.com; our relay enforces redirect:"manual" (spec 10 §4.3), so target app.mengantar.com directly.
+        "MENGANTAR_PARTNER_ORIGIN": "https://app.mengantar.com",
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@geraiexpress.com",

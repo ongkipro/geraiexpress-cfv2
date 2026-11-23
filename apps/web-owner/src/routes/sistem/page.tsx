@@ -476,7 +476,7 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
             </Field>
             <Field data-invalid={errors.partnerOrigin ? true : undefined}>
               <FieldLabel htmlFor="mg-partner-origin">Partner API Origin</FieldLabel>
-              <Input id="mg-partner-origin" value={partnerOrigin} onChange={(e) => setPartnerOrigin(e.target.value)} placeholder="https://api-public.mengantar.com" autoComplete="off" />
+              <Input id="mg-partner-origin" value={partnerOrigin} onChange={(e) => setPartnerOrigin(e.target.value)} placeholder="https://app.mengantar.com" autoComplete="off" />
               {errors.partnerOrigin ? <FieldError>{errors.partnerOrigin}</FieldError> : <FieldDescription>{data.transport === "relay" ? "Origin HTTPS Partner API (tanpa path). Pada mode relay, upstream utama tetap dikunci di server relay." : "Origin HTTPS Partner API (tanpa path)."}</FieldDescription>}
             </Field>
             <Field data-invalid={errors.publicOrigin ? true : undefined}>

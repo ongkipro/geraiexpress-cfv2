@@ -164,6 +164,7 @@ export function registerMengantarAdmin(app: Hono<any>): void {
       else if (res.code === "PARTNER_DEACTIVATED") message = "Akses Partner API dinonaktifkan oleh Mengantar (PARTNER_DEACTIVATED). Hubungi tim Mengantar."
       else if (res.code === "INVALID_TIMESTAMP") message = "Timestamp ditolak Mengantar (INVALID_TIMESTAMP). Periksa sinkronisasi jam server."
       else if (res.code === "RATE_LIMITED") message = `Batas panggilan tercapai (RATE_LIMITED). Coba lagi dalam ${res.retryAfterSeconds ?? 60} detik.`
+      else if (res.status >= 300 && res.status < 400) message = `Upstream Mengantar mengembalikan redirect (${res.code}). Pastikan origin relay mengarah ke host tujuan langsung (contoh: https://app.mengantar.com).`
       else if (res.status === 401 || res.status === 403) message = `Kredensial Partner ID / Secret ditolak Mengantar (${res.code}). Periksa kembali isian Anda.`
       else message = `Mengantar mengembalikan error ${res.status} (${res.code}).`
     } else if (res.kind === "relay_refused") {
