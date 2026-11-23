@@ -1465,3 +1465,24 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Still open for TASK-109: `ALERT_WEBHOOK_URL` in `staging-deploy` with a synthetic failing-probe alert receipt, and
   the first owner dispatch (hosted gate attempt, deployed SHA, green staging probes).
 
+## 2026-11-23 — Production cutover to dedicated Cloudflare account, auth/email guards, Super Admin Mengantar config, and Partner API v2.0.0 alignment
+
+- **Cloudflare account migration (owner-authorized, `1b1c508`)**:
+  - Migrated staging and production infrastructure to dedicated Cloudflare account `GeraiExpress` (`f235ecdb5517054b386c6d413569a103`), APAC D1/KV/R2/Queues, zones `geraiexpress.com` (`e9b6e8c50ba4f48f0de04be064f578ce`) and `geraimitra.com` (`b7f7b727dd2c0a81dce48509f25e7fcd`, Cloudflare for SaaS enabled), Turnstile widget `0x4AAAAAAGOkYvbfRzshNuOg`, and Cloudflare Email Sending on apex `noreply@geraiexpress.com` (SPF/DKIM/DMARC PASS).
+  - Cleaned up all `geraiexpress-cfv2` Workers (2), Queues (8), D1 (2), KV (2), R2 media buckets (2), and Turnstile widget from the old personal account.
+  - Updated GitHub Actions `CLOUDFLARE_ACCOUNT_ID` on `staging-deploy` and `production`; bootstrapped first Super Admin on staging and production (production TOTP active); rolled `CF_SAAS_API_TOKEN`.
+- **Auth/email guards, Super Admin Mengantar config, and Partner API v2.0.0 (`3912dd5`, `6106b91`)**:
+  - Control migration `0020_partner_api_and_notifications.sql` (`platform_partner_config` singleton + widened `email_outbox.template_id` CHECK for `application_submitted` and `admin_new_application`) applied `--remote` to staging and production D1.
+  - Added Turnstile guard to `POST /api/app/auth/password/forgot` and `POST /api/owner/auth/login` (with `GET /api/owner/auth/config` allowlisted); `resetPassword` now clears login lockout keys; registration enqueues applicant receipt + Super Admin alert emails with immediate `waitUntil(dispatchDue)`; fixed NPWP payload nesting in Super Admin company profile editor.
+  - Added Super Admin `Sistem & Audit › Integrasi Mengantar` (`/sistem?tab=mengantar`, `GET/POST /sistem/mengantar`, `POST /sistem/mengantar/uji`) with AES-256-GCM encrypted D1 secret overrides, masked tails, anti-SSRF origin validation, field-only audit logs, and live connection test.
+  - Aligned `@gx/mengantar-sdk` and `infra/partner-relay/relay.mjs` with Mengantar Partner API v2.0.0 (`alreadyRegistered`, `Retry-After` forwarding on `429 RATE_LIMITED`, `SELLER_DEACTIVATED`/`API_KEY_DISABLED`/`active === false` → `provider_restricted`, `403 PARTNER_DEACTIVATED` alert).
+  - Live probe finding: `https://api-public.mengantar.com/api/partner/v1/*` currently returns `HTTP 301` → `https://app.mengantar.com/api/partner/v1/*` while the relay enforces `redirect: "manual"` (spec 10 §4.3); production `MENGANTAR_PARTNER_ORIGIN` on both `wrangler.jsonc` and Coolify `partner-relay` (`99ribu-prod`, `149.28.129.53`) targets `https://app.mengantar.com` directly, while Public API remains `https://api-public.mengantar.com` (verified 403, no redirect).
+- **Live edge & email routing verification**:
+  - Email Routing destination `geraiexpressmail@gmail.com` verified and forwarding rule `bantuan@geraiexpress.com → geraiexpressmail@gmail.com` enabled.
+  - SSL/TLS hardened on Dashboard: `http://geraiexpress.com/` → `301` HTTPS, TLS 1.1 rejected on both `geraiexpress.com` and `probe.geraimitra.com`.
+  - Deployed Workers: staging `daebcae9-b0a5-4d9f-8f8a-f1723e1c0582` (5/5 probes PASS), production `9c469926-6a71-4f7c-a986-b6e8c8242d01` (6/6 probes PASS); Coolify `partner-relay` `9maiherkno8bw6hd5wszt59a` finished with `RELAY VERIFY PASS (6 checks)`.
+  - Verification: `pnpm check` green (unit 30/30, Workers 65/65 files / 477/477 tests, `bundle-audit: PASS — 65 file(s), 0 source maps, 0 secret literals`), Playwright `e2e/auth.spec.ts` + `e2e/super-admin.spec.ts` 4/4 PASS, hosted CI green on `3912dd5` (run `4516372...`; `6106b91` passed all 477/477 tests with one Vitest RPC `onUserConsoleLog` teardown flake).
+- **Remaining owner checks**:
+  - Run **Uji Koneksi Partner API** on `https://owner.geraiexpress.com/sistem?tab=mengantar` once ready (Partner ID `geraiexpress` + encrypted Partner Secret already saved in production D1; `https://relay.geraiexpress.com/healthz` 200).
+  - Switch `ongkipro/geraiexpress-cfv2` back to Private when public CI minutes are no longer needed.
+
