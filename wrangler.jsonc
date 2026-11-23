@@ -179,8 +179,8 @@
         "PLATFORM_APEX": "geraiexpress.com",
         "TENANT_ZONE": "geraimitra.com",
         "MENGANTAR_PUBLIC_ORIGIN": "https://api-public.mengantar.com",
-        // [verify] production Partner origin with the Mengantar contact (TASK-601).
-        "MENGANTAR_PARTNER_ORIGIN": "https://app.mengantar.com",
+        // Official production Mengantar Partner API base URL (docs/partner/en/get-started.md v2.0.0).
+        "MENGANTAR_PARTNER_ORIGIN": "https://api-public.mengantar.com",
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
         "MAIL_FROM": "noreply@geraiexpress.com",

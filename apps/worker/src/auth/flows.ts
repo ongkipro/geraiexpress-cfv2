@@ -266,12 +266,15 @@ export async function resetPassword(env: AuthEnv, input: { token: unknown; passw
     .first<{ user_id: string; expires_at: number; consumed_at: number | null; email: string }>()
   if (!row || row.consumed_at !== null || input.now >= row.expires_at) throw invalid()
   const password = validPassword(input.password, row.email)
+  const eh = await emailHash(env.AUTH_SESSION_PEPPER, row.email)
   const results = await env.DB.batch([
     env.DB.prepare("UPDATE password_resets SET consumed_at = ? WHERE token_hash = ? AND consumed_at IS NULL").bind(input.now, th),
     env.DB.prepare("UPDATE users SET password_hash = ?1, password_changed_at = ?2, updated_at = ?2 WHERE id = ?3 AND changes() = 1").bind(await hashPassword(password, env.AUTH_SESSION_PEPPER), input.now, row.user_id),
     revokeOtherSessions(env.DB, row.user_id, null, input.now),
-    // Outstanding reset links die with the password change.
+    // Outstanding reset links die with the password change, and any prior login lockout clears.
     env.DB.prepare("UPDATE password_resets SET consumed_at = ? WHERE user_id = ? AND consumed_at IS NULL").bind(input.now, row.user_id),
+    throttle.clear(env.DB, `login-fail:${eh}`),
+    throttle.clear(env.DB, `login-lock:${eh}`),
   ])
   if ((results[0]?.meta.changes ?? 0) !== 1) throw invalid()
 }

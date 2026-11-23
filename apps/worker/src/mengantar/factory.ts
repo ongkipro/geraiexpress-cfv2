@@ -1,9 +1,101 @@
-// Builds Mengantar clients from environment configuration (spec 07 §3.2). Local development uses an in-process mock
-// (MENGANTAR_*_ORIGIN = "mock"); staging calls the sandbox; production calls the Partner API through the relay only.
+// Builds Mengantar clients from environment configuration with optional Super Admin D1 overrides (spec 07 §3.2).
+// Local development uses an in-process mock (MENGANTAR_*_ORIGIN = "mock"); staging calls the sandbox; production
+// always calls the Partner API through the relay (spec 10 §4.3).
 import { MengantarPublicClient, PartnerClient } from "@gx/mengantar-sdk"
 import { emit, ipNotAllowedAlert, publicApiOutcome } from "@gx/telemetry"
+import { decryptString } from "../crypto/aead"
 import { sendAlert } from "../telemetry/alerts"
 import { mockFetch } from "./mock"
+
+export const PARTNER_SECRET_AAD = "partner-api"
+export const isPlaceholderSecret = (v: string | null | undefined): boolean => !v || /^placeholder/i.test(v.trim())
+
+export interface ResolvedMengantarConfig {
+  partnerId: string
+  partnerOrigin: string
+  publicOrigin: string
+  partnerSecret: string
+  partnerSecretSource: "database" | "env" | "placeholder"
+  partnerSecretTail: string | null
+  relayUrl: string
+  relaySecret: string
+  relaySecretSource: "database" | "env" | "placeholder"
+  relaySecretTail: string | null
+  transport: "relay" | "direct"
+  updatedAt: number | null
+}
+
+interface PartnerConfigRow {
+  partner_id: string | null
+  partner_origin: string | null
+  public_origin: string | null
+  partner_secret_encrypted: string | null
+  partner_secret_tail: string | null
+  relay_url: string | null
+  relay_secret_encrypted: string | null
+  relay_secret_tail: string | null
+  updated_at: number | null
+}
+
+// 30 s in-isolate cache for the singleton D1 override row; cleared immediately on Super Admin save.
+let cached: { at: number; row: PartnerConfigRow | null } | null = null
+const CACHE_TTL_MS = 30_000
+export function clearMengantarConfigCache(): void {
+  cached = null
+}
+
+async function readConfigRow(env: Env): Promise<PartnerConfigRow | null> {
+  const now = Date.now()
+  if (cached && now - cached.at < CACHE_TTL_MS) return cached.row
+  try {
+    const row = await env.DB.prepare(
+      "SELECT partner_id, partner_origin, public_origin, partner_secret_encrypted, partner_secret_tail, relay_url, relay_secret_encrypted, relay_secret_tail, updated_at FROM platform_partner_config WHERE id = 1",
+    ).first<PartnerConfigRow>()
+    cached = { at: now, row: row ?? null }
+    return cached.row
+  } catch {
+    return null
+  }
+}
+
+export async function loadMengantarConfig(env: Env, opts: { bypassCache?: boolean } = {}): Promise<ResolvedMengantarConfig> {
+  if (opts.bypassCache) clearMengantarConfigCache()
+  const row = await readConfigRow(env)
+  const mock = env.MENGANTAR_PARTNER_ORIGIN === "mock"
+  if (env.GX_ENV === "production" && env.PARTNER_TRANSPORT !== "relay") throw new Error("production requires PARTNER_TRANSPORT=relay (spec 10 §4.3)")
+  const dbPartnerSecret = row?.partner_secret_encrypted ? await decryptString(env.KEK_SECRET, row.partner_secret_encrypted, PARTNER_SECRET_AAD).catch(() => null) : null
+  const dbRelaySecret = row?.relay_secret_encrypted ? await decryptString(env.KEK_SECRET, row.relay_secret_encrypted, PARTNER_SECRET_AAD).catch(() => null) : null
+  const partnerSecret = dbPartnerSecret || env.MENGANTAR_PARTNER_SECRET
+  const relaySecret = dbRelaySecret || env.PARTNER_RELAY_SECRET
+  return {
+    partnerId: row?.partner_id?.trim() || env.MENGANTAR_PARTNER_ID,
+    partnerOrigin: mock ? "https://mock.mengantar.local" : row?.partner_origin?.trim() || env.MENGANTAR_PARTNER_ORIGIN,
+    publicOrigin: env.MENGANTAR_PUBLIC_ORIGIN === "mock" ? "https://mock.mengantar.local" : row?.public_origin?.trim() || env.MENGANTAR_PUBLIC_ORIGIN,
+    partnerSecret,
+    partnerSecretSource: dbPartnerSecret ? "database" : isPlaceholderSecret(env.MENGANTAR_PARTNER_SECRET) ? "placeholder" : "env",
+    partnerSecretTail: dbPartnerSecret ? row?.partner_secret_tail ?? null : isPlaceholderSecret(env.MENGANTAR_PARTNER_SECRET) ? null : env.MENGANTAR_PARTNER_SECRET.slice(-4),
+    relayUrl: row?.relay_url?.trim() || env.PARTNER_RELAY_URL,
+    relaySecret,
+    relaySecretSource: dbRelaySecret ? "database" : isPlaceholderSecret(env.PARTNER_RELAY_SECRET) ? "placeholder" : "env",
+    relaySecretTail: dbRelaySecret ? row?.relay_secret_tail ?? null : isPlaceholderSecret(env.PARTNER_RELAY_SECRET) ? null : env.PARTNER_RELAY_SECRET.slice(-4),
+    transport: mock ? "direct" : env.PARTNER_TRANSPORT === "relay" ? "relay" : "direct",
+    updatedAt: row?.updated_at ?? null,
+  }
+}
+
+export async function resolvePartnerClient(env: Env, opts: { bypassCache?: boolean } = {}): Promise<PartnerClient> {
+  const mock = env.MENGANTAR_PARTNER_ORIGIN === "mock"
+  const cfg = await loadMengantarConfig(env, opts)
+  return new PartnerClient({
+    transport: cfg.transport,
+    partnerId: cfg.partnerId,
+    partnerSecret: cfg.partnerSecret,
+    partnerOrigin: cfg.partnerOrigin,
+    relayUrl: cfg.relayUrl,
+    relaySecret: cfg.relaySecret,
+    fetchImpl: partnerObserved(env, mock ? mockFetch : fetch),
+  })
+}
 
 export function partnerClient(env: Env): PartnerClient {
   const mock = env.MENGANTAR_PARTNER_ORIGIN === "mock"
@@ -19,14 +111,17 @@ export function partnerClient(env: Env): PartnerClient {
   })
 }
 
-/** Any Partner `403 IP_NOT_ALLOWED` (relay egress IP not on Mengantar's allowlist) alerts the owner at once. */
+/** Any Partner `403 IP_NOT_ALLOWED` or `403 PARTNER_DEACTIVATED` alerts the owner at once. */
 function partnerObserved(env: Env, inner: typeof fetch): typeof fetch {
   return async (input, init) => {
     const res = await inner(input, init)
     if (res.status === 403) {
       const body = (await res.clone().json().catch(() => null)) as { code?: string; errorCode?: string } | null
-      if ((body?.code ?? body?.errorCode) === "IP_NOT_ALLOWED") {
+      const code = body?.code ?? body?.errorCode
+      if (code === "IP_NOT_ALLOWED") {
         await sendAlert(env, { key: "partner_api_ip_not_allowed", severity: "error", text: "Mengantar menolak panggilan Partner API dengan IP_NOT_ALLOWED. Periksa IP relay dan allowlist Mengantar (spec 10 §6)." }).catch(() => undefined)
+      } else if (code === "PARTNER_DEACTIVATED") {
+        await sendAlert(env, { key: "partner_api_deactivated", severity: "error", text: "Akses Mengantar Partner API dinonaktifkan (PARTNER_DEACTIVATED). Hubungi tim Mengantar segera; gerai yang sudah terhubung tetap dapat mengirim." }).catch(() => undefined)
       }
     }
     return res

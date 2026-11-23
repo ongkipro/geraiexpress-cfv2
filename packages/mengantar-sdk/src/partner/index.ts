@@ -30,8 +30,8 @@ export async function relaySignature(secret: string, ts: string, id: string, tar
 }
 
 export type PartnerOutcome<T> =
-  | { kind: "ok"; status: number; data: T }
-  | { kind: "error"; status: number; code: string; message: string; field?: string }
+  | { kind: "ok"; status: number; data: T; alreadyRegistered?: boolean }
+  | { kind: "error"; status: number; code: string; message: string; field?: string; retryAfterSeconds?: number }
   /** The request may have reached Mengantar (timeout after send, relay duplicate, 5xx): reconcile per route. */
   | { kind: "maybe_sent"; reason: "timeout" | "network" | "relay_duplicate" | "upstream_5xx" }
   /** The relay refused before Mengantar was called (never a Mengantar answer). */
@@ -66,14 +66,20 @@ export class PartnerClient {
     return this.call<{ sellerId: string; email: string; apiKey: string | null }>("register", { name: input.name, email: input.email, phone: input.phone, externalUserId: input.externalUserId })
   }
   list(filter: { externalUserId?: string; page?: number; size?: number } = {}) {
-    return this.call<{ sellers: Array<{ sellerId: string; externalUserId: string; active: boolean }>; total: number }>("list", filter)
+    return this.call<{
+      sellers: Array<{ sellerId: string; externalUserId: string | null; name?: string; email?: string; phone?: string; registeredAt?: string; active: boolean }>
+      page?: number
+      size?: number
+      total: number
+      totalPages?: number
+    }>("list", filter)
   }
   apiKey(sellerId: string) {
     return this.call<{ sellerId: string; apiKey: string }>("apiKey", { sellerId })
   }
   /** Rotates the key AND the webhook secret. Called exactly once per decision; never auto-retried. */
   regenerate(sellerId: string) {
-    return this.call<{ sellerId: string; apiKey: string; callbackSecret: string | null }>("regenerate", { sellerId })
+    return this.call<{ sellerId: string; apiKey: string; callbackSecret?: string | null }>("regenerate", { sellerId })
   }
 
   private async call<T>(route: PartnerRoute, payload: Record<string, unknown>, relayId: string = crypto.randomUUID()): Promise<PartnerOutcome<T>> {
@@ -103,7 +109,7 @@ export class PartnerClient {
       const name = (err as { name?: string })?.name
       return { kind: "maybe_sent", reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : "network" }
     }
-    let json: { success?: boolean; data?: T; code?: string; message?: string; field?: string } | null
+    let json: { success?: boolean; alreadyRegistered?: boolean; data?: T; code?: string; message?: string; field?: string } | null
     try {
       json = JSON.parse(await res.text()) as typeof json
     } catch (err) {
@@ -120,10 +126,21 @@ export class PartnerClient {
       if (code === "relay_upstream_timeout") return { kind: "maybe_sent", reason: "timeout" }
       return { kind: "relay_refused", status: res.status, code }
     }
-    if (res.ok && json?.success && json.data !== undefined) return { kind: "ok", status: res.status, data: json.data }
+    if (res.ok && json?.success && json.data !== undefined) {
+      return { kind: "ok", status: res.status, data: json.data, ...(typeof json.alreadyRegistered === "boolean" ? { alreadyRegistered: json.alreadyRegistered } : {}) }
+    }
     if (res.status >= 500 && code !== "KEY_PROVISIONING_FAILED") return { kind: "maybe_sent", reason: "upstream_5xx" }
     // A 2xx without a readable success/error envelope (`{}`, `null`, success without data) proves nothing: unknown.
     if (res.ok && !(json && typeof json === "object" && json.success === false && code)) return { kind: "maybe_sent", reason: "network" }
-    return { kind: "error", status: res.status, code: code || `HTTP_${res.status}`, message: typeof json?.message === "string" ? json.message : "", field: json?.field }
+    const raRaw = res.headers.get("retry-after")
+    const ra = raRaw && /^\d+$/.test(raRaw.trim()) ? Number(raRaw.trim()) : undefined
+    return {
+      kind: "error",
+      status: res.status,
+      code: code || `HTTP_${res.status}`,
+      message: typeof json?.message === "string" ? json.message : "",
+      field: json?.field,
+      ...(ra !== undefined ? { retryAfterSeconds: ra } : {}),
+    }
   }
 }

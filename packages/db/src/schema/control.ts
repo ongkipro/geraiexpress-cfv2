@@ -121,7 +121,9 @@ export const emailOutbox = sqliteTable(
   "email_outbox",
   {
     id: text("id").primaryKey(),
-    templateId: text("template_id", { enum: ["signup_otp", "password_reset", "kasir_invite", "email_change_otp", "application_status", "security_alert"] }).notNull(),
+    templateId: text("template_id", {
+      enum: ["signup_otp", "password_reset", "kasir_invite", "email_change_otp", "application_status", "security_alert", "application_submitted", "admin_new_application"],
+    }).notNull(),
     toEmailHash: text("to_email_hash").notNull(),
     toEmailEncrypted: text("to_email_encrypted"),
     payloadEncrypted: text("payload_encrypted"),
@@ -471,3 +473,18 @@ export const publicApiEvents = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.minute, t.outcome, t.route] }), index("public_api_events_minute").on(t.minute)],
 )
+
+// Super Admin Mengantar Partner API runtime configuration (secrets encrypted under KEK_SECRET; fallback to Worker env).
+export const platformPartnerConfig = sqliteTable("platform_partner_config", {
+  id: integer("id").primaryKey(),
+  partnerId: text("partner_id"),
+  partnerOrigin: text("partner_origin"),
+  publicOrigin: text("public_origin"),
+  partnerSecretEncrypted: text("partner_secret_encrypted"),
+  partnerSecretTail: text("partner_secret_tail"),
+  relayUrl: text("relay_url"),
+  relaySecretEncrypted: text("relay_secret_encrypted"),
+  relaySecretTail: text("relay_secret_tail"),
+  updatedBy: text("updated_by"),
+  updatedAt: integer("updated_at"),
+})

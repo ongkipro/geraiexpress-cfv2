@@ -10,6 +10,7 @@ import { hit } from "../../auth/throttle"
 import { runChecks } from "../../telemetry/checks"
 import { dispatchDue } from "../../email/mailer"
 import { checkQuota } from "../../hostnames/service"
+import { loadMengantarConfig } from "../../mengantar/factory"
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
   try {
@@ -39,8 +40,9 @@ type SignalState = "healthy" | "degraded" | "unknown"
  * for the console topbar. `problem` = a real fault; there is no `setup` tone on the platform.
  */
 export async function platformHealth(env: Env, now: number) {
+  const cfg = await loadMengantarConfig(env)
   const [relay, quota, onboarding, email, recovery, rotations, mismatch, queues, hostQuota, financeLag] = await Promise.all([
-    relayHealth(env),
+    relayHealth({ PARTNER_RELAY_URL: cfg.relayUrl, PARTNER_TRANSPORT: cfg.transport, GX_ENV: env.GX_ENV }),
     quotaFor(env).usage(now).catch(() => null),
     env.DB.prepare("SELECT onboarding_state, COUNT(*) AS n FROM tenant_onboarding GROUP BY onboarding_state").all<{ onboarding_state: string; n: number }>(),
     env.DB.prepare("SELECT state, COUNT(*) AS n FROM email_outbox WHERE created_at >= ? GROUP BY state").bind(now - 7 * 24 * 3600_000).all<{ state: string; n: number }>(),
@@ -59,12 +61,21 @@ export async function platformHealth(env: Env, now: number) {
   const recoveryN = recovery?.n ?? 0
   const mismatchN = mismatch?.n ?? 0
   const quotaPct = hostQuota && hostQuota.allocated > 0 ? Math.round((hostQuota.used * 100) / hostQuota.allocated) : null
+  const secretMissing = cfg.partnerSecretSource === "placeholder"
   const signals: Array<{ id: string; title: string; state: SignalState; detail: string; lastAt: number | null }> = [
     {
       id: "partner",
       title: "Mengantar Partner API & Relay",
-      state: relay.reachable === false ? "degraded" : relay.reachable === null ? (relay.transport === "relay" ? "unknown" : "healthy") : "healthy",
-      detail: relay.reachable === false ? "Relay tidak terjangkau." : relay.reachable ? `Relay terjangkau (${relay.latencyMs} ms).` : relay.transport === "relay" ? "Relay belum diperiksa." : "Jalur langsung (tanpa relay).",
+      state: relay.reachable === false || secretMissing ? "degraded" : relay.reachable === null ? (relay.transport === "relay" ? "unknown" : "healthy") : "healthy",
+      detail: secretMissing
+        ? "Partner Secret belum diisi. Atur di tab Integrasi Mengantar."
+        : relay.reachable === false
+          ? "Relay tidak terjangkau."
+          : relay.reachable
+            ? `Relay terjangkau (${relay.latencyMs} ms).`
+            : relay.transport === "relay"
+              ? "Relay belum diperiksa."
+              : "Jalur langsung (tanpa relay).",
       lastAt: now,
     },
     { id: "diskon", title: "Keselarasan Diskon & Antrean Kiriman", state: mismatchN > 0 || stuck > 0 ? "degraded" : "healthy", detail: [mismatchN ? `${mismatchN} diskon belum sesuai di Mengantar` : null, stuck ? `${stuck} kiriman tertahan lintas gerai` : null, financeLag?.at ? "Sinkron keuangan sempat terlambat (24 jam)" : null].filter(Boolean).join(" · ") || "Diskon sesuai dan antrean kiriman bersih.", lastAt: null },

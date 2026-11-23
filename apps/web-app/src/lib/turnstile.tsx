@@ -32,7 +32,9 @@ function loadScript(): Promise<void> {
  * Returns the widget container ref, the current token (null until solved) and `reset()` for after a failed submit.
  * `ready` is false while the config loads or the widget has no token yet; forms disable submit until then.
  */
-export function useTurnstile() {
+const defaultConfig = () => api<{ turnstileSiteKey: string | null }>("/auth/config")
+
+export function useTurnstile(loadConfig: () => Promise<{ turnstileSiteKey: string | null }> = defaultConfig) {
   // Callback ref: the container element lives in state, so render never reads a ref object.
   const [el, setContainer] = useState<HTMLDivElement | null>(null)
   const [siteKey, setSiteKey] = useState<string | null | undefined>(undefined)
@@ -49,10 +51,10 @@ export function useTurnstile() {
   }, [el])
 
   useEffect(() => {
-    api<{ turnstileSiteKey: string | null }>("/auth/config")
+    loadConfig()
       .then((c) => setSiteKey(c.turnstileSiteKey))
       .catch(() => setFailed(true))
-  }, [])
+  }, [loadConfig])
 
   useEffect(() => {
     if (!siteKey || !el) return

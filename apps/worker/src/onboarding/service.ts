@@ -10,7 +10,7 @@ import { coordinate } from "../do/gerai-vault/settings"
 import { enqueueEmailStatement } from "../email/outbox"
 import { hostCache, platformHostOf } from "../host/lookup"
 import { AppError } from "../http/envelope"
-import { partnerClient } from "../mengantar/factory"
+import { resolvePartnerClient } from "../mengantar/factory"
 import { quotaFor } from "../do/partner-quota"
 import { platformPolicy, seedRulesOnApproval } from "../pricing/rules"
 
@@ -102,7 +102,7 @@ export function validateApplication(input: ApplicationInput): { slug: string; bu
 }
 
 /** Owner submits (or re-submits after a rejection) the application; creates the tenant in `pending_review`. */
-export async function submitApplication(env: Env, userId: string, input: ApplicationInput, now: number): Promise<{ tenantId: string; applicationId: string }> {
+export async function submitApplication(env: Env, userId: string, input: ApplicationInput, now: number, origin?: string): Promise<{ tenantId: string; applicationId: string }> {
   const v = validateApplication(input)
   const own = await env.DB.prepare("SELECT a.id, a.tenant_id, a.state FROM tenant_applications a WHERE a.applicant_user_id = ? ORDER BY a.created_at DESC LIMIT 1").bind(userId).first<{ id: string; tenant_id: string; state: string }>()
   if (own && (own.state === "submitted" || own.state === "approved")) throw new AppError(409, "APPLICATION_EXISTS", "Pengajuan Anda sudah dikirim. Pantau statusnya di halaman Status Pengajuan.")
@@ -130,6 +130,35 @@ export async function submitApplication(env: Env, userId: string, input: Applica
   }
   // The owner's session now works for this tenant (status page).
   stmts.push(env.DB.prepare("UPDATE sessions SET active_tenant_id = ? WHERE user_id = ? AND host_context = 'app' AND revoked_at IS NULL").bind(tenantId, userId))
+
+  // Confirmation email to applicant + notification email to active Super Admins in the same D1 batch.
+  const baseAppOrigin = origin ?? (env.GX_ENV === "staging" ? `https://app-staging.${env.PLATFORM_APEX}` : env.GX_ENV === "production" ? `https://app.${env.PLATFORM_APEX}` : `http://app.${env.PLATFORM_APEX}:8787`)
+  const baseOwnerOrigin = baseAppOrigin.replace("://app-staging.", "://owner-staging.").replace("://app.", "://owner.")
+  const applicant = await env.DB.prepare("SELECT email FROM users WHERE id = ? AND status = 'active'").bind(userId).first<{ email: string }>()
+  if (applicant?.email) {
+    const receiptMail = await enqueueEmailStatement(env, {
+      id: `app-submit:${applicationId}:${now}`,
+      templateId: "application_submitted",
+      toEmail: applicant.email,
+      vars: { outletName: v.businessName, slug: v.slug, link: `${baseAppOrigin}/daftar/status` },
+      expiresAt: now + 7 * 24 * 3600_000,
+      now,
+    })
+    stmts.push(receiptMail.statement)
+  }
+  const admins = await env.DB.prepare("SELECT u.email FROM super_admins s JOIN users u ON u.id = s.user_id WHERE s.status = 'active' AND u.status = 'active' LIMIT 10").all<{ email: string }>()
+  for (const [idx, adm] of admins.results.entries()) {
+    const adminMail = await enqueueEmailStatement(env, {
+      id: `admin-new-app:${applicationId}:${now}:${idx}`,
+      templateId: "admin_new_application",
+      toEmail: adm.email,
+      vars: { outletName: v.businessName, slug: v.slug, areaLabel: v.outlet.areaLabel, link: `${baseOwnerOrigin}/gerai/pengajuan/${applicationId}` },
+      expiresAt: now + 7 * 24 * 3600_000,
+      now,
+    })
+    stmts.push(adminMail.statement)
+  }
+
   await env.DB.batch(stmts)
   return { tenantId, applicationId }
 }
@@ -278,7 +307,7 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
     await mirror(env, input.tenantId, "registration_pending", null, quota.reason === "day" ? "DAILY_REGISTRATION_LIMIT" : "RATE_LIMITED", input.now)
     return { state: "registration_pending", code: quota.reason === "day" ? "DAILY_REGISTRATION_LIMIT" : "RATE_LIMITED" }
   }
-  const client = partnerClient(env)
+  const client = await resolvePartnerClient(env)
   const out = await client.register({ name: input.name.slice(0, 100).replace(/[^\p{L}\p{N} '\-_.@]/gu, " "), email: input.email, phone: input.outlet.picPhone, externalUserId: input.tenantId })
   emit("mengantar.partner_api", { route: "/sellers", status: "status" in out ? out.status : 0, outcome: out.kind }, { tenantId: input.tenantId }, { env: env.GX_ENV })
   if (out.kind === "ok" && out.data.apiKey) {
@@ -295,6 +324,10 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
     if (out.code === "EMAIL_ALREADY_REGISTERED") {
       await record("existing_account_required", {}, out.code)
       return { state: "existing_account_required", code: out.code }
+    }
+    if (out.code === "SELLER_DEACTIVATED" || out.code === "API_KEY_DISABLED") {
+      await record("provider_restricted", {}, out.code)
+      return { state: "provider_restricted", code: out.code }
     }
     if (out.code === "KEY_PROVISIONING_FAILED") {
       await record("registration_unknown", {}, out.code)
@@ -316,7 +349,7 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
 
 /** `registration_unknown` → `sellers/list { externalUserId }` → fetch the key → `connected`, or stay unknown. */
 export async function reconcileRegistration(env: Env, tenantId: string, now: number): Promise<{ state: OnboardingState; code?: string }> {
-  const client = partnerClient(env)
+  const client = await resolvePartnerClient(env)
   const vault = vaultFor(env, tenantId)
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"
   const record = async (state: OnboardingState, extra: { sellerId?: string | null; apiKey?: string | null }, code: string | null) => {
@@ -335,12 +368,18 @@ export async function reconcileRegistration(env: Env, tenantId: string, now: num
     await record("registration_pending", {}, "NOT_FOUND_ON_READBACK")
     return { state: "registration_pending", code: "NOT_FOUND_ON_READBACK" }
   }
+  if (seller.active === false) {
+    await record("provider_restricted", { sellerId: seller.sellerId }, "SELLER_DEACTIVATED")
+    return { state: "provider_restricted", code: "SELLER_DEACTIVATED" }
+  }
   const q2 = await quotaFor(env).reserve("call", now)
   if (!q2.ok) return { state: "registration_unknown", code: "RATE_LIMITED" }
   const key = await client.apiKey(seller.sellerId)
   if (key.kind !== "ok") {
-    await record("registration_unknown", { sellerId: seller.sellerId }, key.kind === "error" ? key.code : key.kind)
-    return { state: "registration_unknown", code: key.kind === "error" ? key.code : key.kind }
+    const errCode = key.kind === "error" ? key.code : key.kind
+    const nextState: OnboardingState = errCode === "SELLER_DEACTIVATED" || errCode === "API_KEY_DISABLED" ? "provider_restricted" : "registration_unknown"
+    await record(nextState, { sellerId: seller.sellerId }, errCode)
+    return { state: nextState, code: errCode }
   }
   if (!key.data.apiKey) {
     await record("provider_restricted", { sellerId: seller.sellerId }, "API_KEY_DISABLED")

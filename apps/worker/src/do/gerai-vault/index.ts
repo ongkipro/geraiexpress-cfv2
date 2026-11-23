@@ -9,7 +9,7 @@ import { decryptString, encryptString } from "../../crypto/aead"
 import { backoffMs, d1UpsertStatement, dueOutbox, enqueueOutbox, nextOutboxAt, type OutboxTopic } from "./core/outbox"
 import { mapMengantarCategory, parseJakartaMinute } from "@gx/domain/status"
 import { sha256Hex, timingSafeEqualStr } from "../../crypto"
-import { partnerClient, publicClient } from "../../mengantar/factory"
+import { publicClient, resolvePartnerClient } from "../../mengantar/factory"
 import { quotaFor } from "../partner-quota"
 import { CAP_REACHED, releaseApiSpend, reserveApiSpend, spendAmount, type ApiSpend } from "./api-spend"
 import { nextPickupSlot, pickupVolume, posCodRefusal, type Courier, type CourierRate, type OrderItem } from "@gx/mengantar-sdk"
@@ -2714,7 +2714,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       await this.armOutbox()
       return { ok: true, value: { state: "unknown", keyVersion, code: "RATE_LIMITED" } }
     }
-    const key = await partnerClient(this.env).apiKey(sellerId)
+    const key = await (await resolvePartnerClient(this.env)).apiKey(sellerId)
     if (key.kind !== "ok") {
       setTimer(this.ctx.storage.sql, "key_rotation_check", now + 15 * 60_000)
       await this.armOutbox()

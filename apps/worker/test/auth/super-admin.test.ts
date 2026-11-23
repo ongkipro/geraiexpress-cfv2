@@ -25,7 +25,7 @@ async function makeUser(email: string, password = "admin-kuat-123") {
 
 /** Logs in on owner., enrols TOTP and returns an aal2 cookie plus the secret. */
 async function adminSession(email: string) {
-  const login = await post("/auth/login", { email, password: "admin-kuat-123" })
+  const login = await post("/auth/login", { email, password: "admin-kuat-123", turnstileToken: "ok" })
   expect(login.status).toBe(200)
   const cookie = cookieOf(login)
   expect(cookie.startsWith("dev_ge_owner=")).toBe(true)
@@ -54,13 +54,14 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
     const req = new Request(`${OWNER}/internal/ops/bootstrap-admin`, { method: "POST", headers: { authorization: "Bearer test-ops-token" }, body: JSON.stringify({ email: "kedua@contoh.test" }) })
     expect((await handleBootstrapAdmin(req, staging)).status).toBe(409)
     await makeUser("biasa@contoh.test")
-    expect((await post("/auth/login", { email: "biasa@contoh.test", password: "admin-kuat-123" })).status).toBe(401)
+    expect((await post("/auth/login", { email: "biasa@contoh.test", password: "admin-kuat-123" })).status).toBe(400)
+    expect((await post("/auth/login", { email: "biasa@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" })).status).toBe(401)
   })
 
   it("aal1 can only complete TOTP; aal2 opens the console; a wrong or replayed code is refused", async () => {
     await makeUser("a1@contoh.test")
     await env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, status, created_at, updated_at) SELECT id, 'pending', 'active', 1, 1 FROM users WHERE email = 'a1@contoh.test'").run()
-    const login = await post("/auth/login", { email: "a1@contoh.test", password: "admin-kuat-123" })
+    const login = await post("/auth/login", { email: "a1@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" })
     const cookie = cookieOf(login)
     expect(await login.json()).toMatchObject({ data: { totp: "enrol" } })
     const me = await get("/auth/me", cookie)
@@ -73,7 +74,7 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
     expect((await post("/auth/totp/verify", { code }, cookie)).status).toBe(200)
     expect((await get("/auth/me", cookie)).status).toBe(200)
     // Replay of the same code on a new session is refused.
-    const login2 = cookieOf(await post("/auth/login", { email: "a1@contoh.test", password: "admin-kuat-123" }))
+    const login2 = cookieOf(await post("/auth/login", { email: "a1@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" }))
     expect((await post("/auth/totp/verify", { code }, login2)).status).toBe(400)
     // Secret is stored encrypted only.
     const row = await env.DB.prepare("SELECT totp_secret_encrypted FROM super_admins WHERE user_id = (SELECT id FROM users WHERE email = 'a1@contoh.test')").first<{ totp_secret_encrypted: string }>()
@@ -85,7 +86,7 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
   it("5 wrong TOTP codes lock TOTP for 15 minutes", async () => {
     await makeUser("a2@contoh.test")
     await env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, status, created_at, updated_at) SELECT id, 'pending', 'active', 1, 1 FROM users WHERE email = 'a2@contoh.test'").run()
-    const cookie = cookieOf(await post("/auth/login", { email: "a2@contoh.test", password: "admin-kuat-123" }))
+    const cookie = cookieOf(await post("/auth/login", { email: "a2@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" }))
     await post("/auth/totp/enrol", {}, cookie)
     for (let i = 0; i < 5; i++) await post("/auth/totp/verify", { code: "000001" }, cookie)
     expect((await post("/auth/totp/verify", { code: "000001" }, cookie)).status).toBe(429)
@@ -125,14 +126,14 @@ describe("Super Admin TOTP and aal2 (TASK-106, DEC-209)", () => {
     const audit = await env.DB.prepare("SELECT actor_id, action, target_id, reason FROM audit_logs WHERE action = 'super_admin.totp_reset' AND target_id = ?").bind(targetId).first()
     expect(audit).toEqual({ actor_id: actorId, action: "super_admin.totp_reset", target_id: targetId, reason: "HP admin hilang" })
     // The reset admin enrols again on next login (QR shown once more).
-    const relog = cookieOf(await post("/auth/login", { email: "a5@contoh.test", password: "admin-kuat-123" }))
+    const relog = cookieOf(await post("/auth/login", { email: "a5@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" }))
     expect((await post("/auth/totp/enrol", {}, relog)).status).toBe(200)
   })
 
   it("owner session is 12 h absolute and host-only; it is never accepted on app.", async () => {
     await makeUser("a7@contoh.test")
     await env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, status, created_at, updated_at) SELECT id, 'pending', 'active', 1, 1 FROM users WHERE email = 'a7@contoh.test'").run()
-    const login = await post("/auth/login", { email: "a7@contoh.test", password: "admin-kuat-123" })
+    const login = await post("/auth/login", { email: "a7@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" })
     expect(login.headers.get("set-cookie")).toMatch(/^dev_ge_owner=[^;]+; Path=\/; HttpOnly; SameSite=Lax; Max-Age=43200$/)
     const cookie = cookieOf(login)
     const onApp = await exports.default.fetch(`${APP}/api/app/auth/me`, { headers: { cookie } })
@@ -150,9 +151,9 @@ describe("non-impersonation route scan (DEC-209)", () => {
     }
     expect(scanOwnerRoutes(ROUTES)).toEqual([])
   })
-  it("every /api/owner route except login requires aal1+ and every non-auth route requires aal2+", () => {
+  it("every /api/owner route except login and auth config requires aal1+ and every non-auth route requires aal2+", () => {
     for (const r of ROUTES.filter((x) => x.context === "owner")) {
-      if (r.path === "/auth/login") expect(r.auth).toBe("public")
+      if (r.path === "/auth/login" || r.path === "/auth/config") expect(r.auth).toBe("public")
       else if (r.path.startsWith("/auth/")) expect(["owner_aal1", "owner_aal2"]).toContain(r.auth)
       else expect(["owner_aal2", "owner_recent"]).toContain(r.auth)
     }

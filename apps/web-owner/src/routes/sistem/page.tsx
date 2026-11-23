@@ -12,8 +12,8 @@ import { api, ApiError } from "../../lib/api"
 import { useApi } from "../../lib/use-api"
 import { Textarea } from "@shared/components/ui/textarea"
 
-// Super Admin `Sistem & Audit` (visual 07 §3.3): integration & relay health, audit log, admin access, company profile.
-type Tab = "kesehatan" | "audit" | "admin" | "profil"
+// Super Admin `Sistem & Audit` (visual 07 §3.3): integration & relay health, Mengantar Partner API config, audit log, admin access, company profile.
+type Tab = "kesehatan" | "mengantar" | "audit" | "admin" | "profil"
 
 const EMAIL_STATE: Record<string, string> = { queued: "antre", sending: "sedang dikirim", sent: "terkirim", failed: "gagal", expired: "kedaluwarsa", suppressed: "diblokir penerima" }
 
@@ -25,18 +25,19 @@ export function SistemPage() {
   const current: Tab = tab ?? "kesehatan"
   return (
     <div className="flex flex-col gap-4 md:gap-5">
-      <PageHead title="Sistem & Audit" description="Kesehatan integrasi, log audit, akses admin, dan profil perusahaan." />
+      <PageHead title="Sistem & Audit" description="Kesehatan integrasi, konfigurasi Mengantar API, log audit, akses admin, dan profil perusahaan." />
       <Tabs value={current} onValueChange={(v) => navigate({ to: "/sistem", search: { tab: v as Tab } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList aria-label="Bagian sistem">
             <TabsTrigger value="kesehatan">Kesehatan & Relay</TabsTrigger>
+            <TabsTrigger value="mengantar">Integrasi Mengantar</TabsTrigger>
             <TabsTrigger value="audit">Log Audit</TabsTrigger>
             <TabsTrigger value="admin">Akses Admin</TabsTrigger>
             <TabsTrigger value="profil">Profil Perusahaan</TabsTrigger>
           </TabsList>
         </div>
       </Tabs>
-      {current === "kesehatan" ? <Health /> : current === "audit" ? <AuditLog /> : current === "admin" ? <Admins /> : <Profile />}
+      {current === "kesehatan" ? <Health /> : current === "mengantar" ? <MengantarConfig /> : current === "audit" ? <AuditLog /> : current === "admin" ? <Admins /> : <Profile />}
     </div>
   )
 }
@@ -274,7 +275,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
     setMsg(null)
     const changed = Object.fromEntries(Object.entries(v).filter(([k, x]) => x !== (data.fields[k] ?? "")))
     try {
-      await api("/sistem/profil-perusahaan", { body: { fields: changed, ...(npwp ? { npwp } : {}), reason } })
+      await api("/sistem/profil-perusahaan", { body: { fields: { ...changed, ...(npwp ? { npwp } : {}) }, reason } })
       setMsg("Profil perusahaan tersimpan.")
       onSaved()
     } catch (err) {
@@ -317,5 +318,202 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
         {msg ? <p role="status" className="text-sm">{msg}</p> : null}
       </form>
     </Section>
+  )
+}
+
+interface MengantarConfigData {
+  environment: "production" | "staging" | "local"
+  transport: "relay" | "direct"
+  partnerId: string
+  partnerOrigin: string
+  publicOrigin: string
+  relayUrl: string
+  hasPartnerSecret: boolean
+  partnerSecretSource: "database" | "env" | "placeholder"
+  partnerSecretMasked: string | null
+  hasRelaySecret: boolean
+  relaySecretSource: "database" | "env" | "placeholder"
+  relaySecretMasked: string | null
+  updatedAt: number | null
+}
+
+const SOURCE_LABEL: Record<MengantarConfigData["partnerSecretSource"], string> = {
+  database: "Disimpan terenkripsi di database",
+  env: "Dari Worker secret (default)",
+  placeholder: "Belum diisi (masih placeholder)",
+}
+
+function MengantarConfig() {
+  const { data, error, loading, reload } = useApi<MengantarConfigData>("/sistem/mengantar")
+  if (loading) return <LoadingBlock />
+  if (error || !data) return <ErrorBlock message={error ?? "Gagal memuat konfigurasi Mengantar."} onRetry={reload} />
+  return <MengantarConfigForm key={data.updatedAt ?? 0} data={data} onSaved={reload} />
+}
+
+function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onSaved: () => void }) {
+  const [partnerId, setPartnerId] = useState(data.partnerId)
+  const [partnerOrigin, setPartnerOrigin] = useState(data.partnerOrigin === "mock" ? "" : data.partnerOrigin)
+  const [publicOrigin, setPublicOrigin] = useState(data.publicOrigin === "mock" ? "" : data.publicOrigin)
+  const [relayUrl, setRelayUrl] = useState(data.relayUrl)
+  const [partnerSecret, setPartnerSecret] = useState("")
+  const [relaySecret, setRelaySecret] = useState("")
+  const [reason, setReason] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
+  const [pending, setPending] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testOut, setTestOut] = useState<{ ok: boolean; message: string; latencyMs: number } | null>(null)
+
+  const envLabel = data.environment === "production" ? "Produksi" : data.environment === "staging" ? "Staging / Sandbox" : "Lokal"
+  const dirty =
+    partnerId.trim() !== data.partnerId ||
+    partnerOrigin.trim() !== (data.partnerOrigin === "mock" ? "" : data.partnerOrigin) ||
+    publicOrigin.trim() !== (data.publicOrigin === "mock" ? "" : data.publicOrigin) ||
+    relayUrl.trim() !== data.relayUrl ||
+    partnerSecret.trim().length > 0 ||
+    relaySecret.trim().length > 0
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (pending) return
+    setPending(true)
+    setErrors({})
+    setMsg(null)
+    const payload: Record<string, unknown> = { reason }
+    if (partnerId.trim() !== data.partnerId) payload.partnerId = partnerId.trim()
+    if (partnerOrigin.trim() !== (data.partnerOrigin === "mock" ? "" : data.partnerOrigin)) payload.partnerOrigin = partnerOrigin.trim()
+    if (publicOrigin.trim() !== (data.publicOrigin === "mock" ? "" : data.publicOrigin)) payload.publicOrigin = publicOrigin.trim()
+    if (relayUrl.trim() !== data.relayUrl) payload.relayUrl = relayUrl.trim()
+    if (partnerSecret.trim()) payload.partnerSecret = partnerSecret.trim()
+    if (relaySecret.trim()) payload.relaySecret = relaySecret.trim()
+    try {
+      await api("/sistem/mengantar", { body: payload })
+      setPartnerSecret("")
+      setRelaySecret("")
+      setReason("")
+      setMsg({ tone: "safe", text: "Konfigurasi Mengantar Partner API tersimpan terenkripsi dan langsung aktif." })
+      onSaved()
+    } catch (err) {
+      if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return totpRedirect("/sistem?tab=mengantar")
+      if (err instanceof ApiError) {
+        setErrors(err.body.field_errors)
+        setMsg({ tone: "danger", text: err.body.message })
+      } else {
+        setMsg({ tone: "danger", text: "Gagal menyimpan konfigurasi." })
+      }
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function testConnection() {
+    if (testing) return
+    setTesting(true)
+    setTestOut(null)
+    try {
+      const r = await api<{ ok: boolean; message: string; latencyMs: number }>("/sistem/mengantar/uji", { body: {} })
+      setTestOut(r)
+    } catch (err) {
+      if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return totpRedirect("/sistem?tab=mengantar")
+      setTestOut({ ok: false, message: err instanceof ApiError ? err.body.message : "Gagal menguji koneksi.", latencyMs: 0 })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 md:gap-5">
+      <section className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-4 md:p-5 ${data.hasPartnerSecret ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+        <div className="flex min-w-0 items-start gap-3">
+          <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-full ${data.hasPartnerSecret ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+            {data.hasPartnerSecret ? <CircleCheckIcon className="size-5" /> : <TriangleAlertIcon className="size-5" />}
+          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-slate-950">Mengantar Partner API ({envLabel})</h2>
+              <StatusChip tone={data.hasPartnerSecret ? "safe" : "warn"}>{data.hasPartnerSecret ? "Secret terpasang" : "Perlu diisi"}</StatusChip>
+            </div>
+            <p className="text-xs text-slate-700">
+              Jalur egress: <strong>{data.transport === "relay" ? "Partner Relay (IP statis 149.28.129.53)" : "Langsung (sandbox)"}</strong>
+              {" · "}Sumber secret: {SOURCE_LABEL[data.partnerSecretSource]}
+              {data.updatedAt ? ` · Diperbarui ${formatDate(data.updatedAt)}` : ""}
+            </p>
+          </div>
+        </div>
+        <Button type="button" variant="outline" onClick={testConnection} disabled={testing}>
+          {testing ? "Menguji…" : "Uji Koneksi Partner API"}
+        </Button>
+      </section>
+
+      {testOut ? (
+        <p role="status" className={`rounded-lg border px-4 py-3 text-sm font-medium ${testOut.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>
+          {testOut.message}
+        </p>
+      ) : null}
+
+      <Section title="Kredensial & Endpoint Mengantar">
+        <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <p className="text-sm text-muted-foreground">
+            Semua secret dienkripsi AES-256-GCM sebelum disimpan dan tidak pernah ditampilkan ulang. Kosongkan kolom secret jika tidak ingin mengganti nilai yang sudah tersimpan.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field data-invalid={errors.partnerId ? true : undefined}>
+              <FieldLabel htmlFor="mg-partner-id">Partner ID</FieldLabel>
+              <Input id="mg-partner-id" value={partnerId} onChange={(e) => setPartnerId(e.target.value)} placeholder="ongkirich" autoComplete="off" />
+              {errors.partnerId ? <FieldError>{errors.partnerId}</FieldError> : <FieldDescription>ID partner resmi dari tim Mengantar.</FieldDescription>}
+            </Field>
+            <Field data-invalid={errors.partnerSecret ? true : undefined}>
+              <FieldLabel htmlFor="mg-partner-secret">Partner Secret</FieldLabel>
+              <Input
+                id="mg-partner-secret"
+                type="password"
+                value={partnerSecret}
+                onChange={(e) => setPartnerSecret(e.target.value)}
+                placeholder={data.partnerSecretMasked ? `Tersimpan (${data.partnerSecretMasked}) — isi untuk mengganti` : "Masukkan Partner Secret dari Mengantar"}
+                autoComplete="new-password"
+              />
+              {errors.partnerSecret ? <FieldError>{errors.partnerSecret}</FieldError> : <FieldDescription>{SOURCE_LABEL[data.partnerSecretSource]}.</FieldDescription>}
+            </Field>
+            <Field data-invalid={errors.partnerOrigin ? true : undefined}>
+              <FieldLabel htmlFor="mg-partner-origin">Partner API Origin</FieldLabel>
+              <Input id="mg-partner-origin" value={partnerOrigin} onChange={(e) => setPartnerOrigin(e.target.value)} placeholder="https://api-public.mengantar.com" autoComplete="off" />
+              {errors.partnerOrigin ? <FieldError>{errors.partnerOrigin}</FieldError> : <FieldDescription>{data.transport === "relay" ? "Origin HTTPS Partner API (tanpa path). Pada mode relay, upstream utama tetap dikunci di server relay." : "Origin HTTPS Partner API (tanpa path)."}</FieldDescription>}
+            </Field>
+            <Field data-invalid={errors.publicOrigin ? true : undefined}>
+              <FieldLabel htmlFor="mg-public-origin">Public API Origin</FieldLabel>
+              <Input id="mg-public-origin" value={publicOrigin} onChange={(e) => setPublicOrigin(e.target.value)} placeholder="https://api-public.mengantar.com" autoComplete="off" />
+              {errors.publicOrigin ? <FieldError>{errors.publicOrigin}</FieldError> : <FieldDescription>Origin HTTPS Public API untuk cek ongkir & resi.</FieldDescription>}
+            </Field>
+            <Field data-invalid={errors.relayUrl ? true : undefined}>
+              <FieldLabel htmlFor="mg-relay-url">URL Partner Relay</FieldLabel>
+              <Input id="mg-relay-url" value={relayUrl} onChange={(e) => setRelayUrl(e.target.value)} placeholder="https://relay.geraiexpress.com" autoComplete="off" />
+              {errors.relayUrl ? <FieldError>{errors.relayUrl}</FieldError> : <FieldDescription>Di produksi, semua panggilan Partner API wajib lewat relay ini.</FieldDescription>}
+            </Field>
+            <Field data-invalid={errors.relaySecret ? true : undefined}>
+              <FieldLabel htmlFor="mg-relay-secret">Relay Secret (opsional)</FieldLabel>
+              <Input
+                id="mg-relay-secret"
+                type="password"
+                value={relaySecret}
+                onChange={(e) => setRelaySecret(e.target.value)}
+                placeholder={data.relaySecretMasked ? `Tersimpan (${data.relaySecretMasked}) — biarkan kosong jika tetap` : "Biarkan kosong untuk memakai Worker secret"}
+                autoComplete="new-password"
+              />
+              {errors.relaySecret ? <FieldError>{errors.relaySecret}</FieldError> : <FieldDescription>{SOURCE_LABEL[data.relaySecretSource]}.</FieldDescription>}
+            </Field>
+          </div>
+          {dirty ? (
+            <div className="sticky bottom-0 flex flex-col gap-3 border-t bg-card pt-4 sm:flex-row sm:items-end">
+              <Field className="flex-1">
+                <FieldLabel htmlFor="mg-reason">Alasan perubahan (wajib, dicatat di log audit)</FieldLabel>
+                <Textarea id="mg-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} placeholder="Contoh: Isi Partner Secret produksi resmi dari Mengantar" />
+              </Field>
+              <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan Konfigurasi"}</Button>
+            </div>
+          ) : null}
+          {msg ? <p role="status" className={`text-sm font-medium ${msg.tone === "safe" ? "text-emerald-700" : "text-rose-700"}`}>{msg.text}</p> : null}
+        </form>
+      </Section>
+    </div>
   )
 }

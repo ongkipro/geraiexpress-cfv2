@@ -15,7 +15,7 @@ export const PUBLIC_ALLOWLIST = {
     "GET /customer-display/view",
     "GET /customer-display/media/:kind",
   ],
-  owner: ["POST /auth/login"],
+  owner: ["GET /auth/config", "POST /auth/login"],
 }
 const LEVELS = new Set(["public", "app_session", "app_member", "app_owner", "owner_aal1", "owner_aal2", "owner_recent"])
 

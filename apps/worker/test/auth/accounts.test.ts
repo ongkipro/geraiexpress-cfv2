@@ -171,10 +171,17 @@ describe("login, sessions and cookies", () => {
 })
 
 describe("password reset", () => {
-  it("single use, revokes every session, and the old password stops working", async () => {
+  it("Turnstile token is required on forgot password", async () => {
+    expect((await post("/auth/password/forgot", { email: "lupa@contoh.test" })).status).toBe(400)
+  })
+
+  it("single use, revokes every session, clears login lockout, and the old password stops working", async () => {
     const s = await signup("lupa@contoh.test", "sandi-lama-kuat-1")
     const login2 = cookieOf(await post("/auth/login", { email: "lupa@contoh.test", password: "sandi-lama-kuat-1", turnstileToken: "ok" }))
-    expect((await post("/auth/password/forgot", { email: "lupa@contoh.test" })).status).toBe(200)
+    // Lock the account via 11 failed logins first (11th sets the lock, 12th returns 429).
+    for (let i = 0; i < 11; i++) await post("/auth/login", { email: "lupa@contoh.test", password: "salah-password-1", turnstileToken: "ok" })
+    expect((await post("/auth/login", { email: "lupa@contoh.test", password: "sandi-lama-kuat-1", turnstileToken: "ok" })).status).toBe(429)
+    expect((await post("/auth/password/forgot", { email: "lupa@contoh.test", turnstileToken: "ok" })).status).toBe(200)
     const { link } = await lastMailVars("password_reset")
     const token = link.split("/atur-sandi/")[1]!
     expect((await post("/auth/password/reset", { token, password: "sandi-baru-kuat-2" })).status).toBe(200)
@@ -187,10 +194,10 @@ describe("password reset", () => {
 
   it("unknown email answers the same and sends nothing; an expired link is refused", async () => {
     const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'password_reset'").first<{ n: number }>()
-    expect((await post("/auth/password/forgot", { email: "hantu@contoh.test" })).status).toBe(200)
+    expect((await post("/auth/password/forgot", { email: "hantu@contoh.test", turnstileToken: "ok" })).status).toBe(200)
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE template_id = 'password_reset'").first<{ n: number }>())!.n).toBe(before!.n)
     await signup("basi2@contoh.test")
-    await post("/auth/password/forgot", { email: "basi2@contoh.test" })
+    await post("/auth/password/forgot", { email: "basi2@contoh.test", turnstileToken: "ok" })
     const token = (await lastMailVars("password_reset")).link.split("/atur-sandi/")[1]!
     await env.DB.prepare("UPDATE password_resets SET expires_at = 1").run()
     expect((await post("/auth/password/reset", { token, password: "sandi-baru-kuat-9" })).status).toBe(400)

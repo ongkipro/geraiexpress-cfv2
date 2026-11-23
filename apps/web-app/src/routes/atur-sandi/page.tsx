@@ -16,6 +16,10 @@ export function AturSandiPage() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (pending) return
+    if (password.length < 8) {
+      setError("Kata sandi minimal 8 karakter.")
+      return
+    }
     if (password !== confirm) {
       setError("Konfirmasi kata sandi tidak sama.")
       return
@@ -45,6 +49,10 @@ export function AturSandiPage() {
           <TextField label="Kata sandi baru" name="password" type="password" autoComplete="new-password" value={password} onChange={setPassword} hint="Minimal 8 karakter." required />
           <TextField label="Ulangi kata sandi baru" name="confirm" type="password" autoComplete="new-password" value={confirm} onChange={setConfirm} required />
           <Button type="submit" size="lg" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
+          <p className="text-center text-xs text-[#64748B]">
+            Tautan kedaluwarsa?{" "}
+            <Link to="/lupa-sandi" className="font-medium text-primary underline-offset-4 hover:underline">Minta tautan baru</Link>
+          </p>
         </form>
       )}
     </AuthCard>

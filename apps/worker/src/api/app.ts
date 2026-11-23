@@ -5,10 +5,10 @@ import { acceptInvitation, completeSignup, createInvitation, login, requestPassw
 import { clearSessionCookie, isSecureRequest, setSessionCookie } from "../auth/cookies"
 import { sameOriginOk } from "../auth/csrf"
 import { readSession, revokeSession, type Session } from "../auth/session"
-import { verifyTurnstile } from "../auth/turnstile"
+import { checkTurnstile, turnstileDev } from "../auth/turnstile"
 import { sha256Hex } from "../crypto"
 import { AppError, fail, fromError, ok } from "../http/envelope"
-import { clientIp, hostOrigin, ipHash } from "../http/request"
+import { hostOrigin, ipHash } from "../http/request"
 import { ALLOWED_MIDDLEWARE, register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
@@ -16,7 +16,7 @@ import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
 import { escposBytes, initials, labelsPdf, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
-import { partnerClient } from "../mengantar/factory"
+import { resolvePartnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
 import { publicationSeq, type DisplayState } from "../do/gerai-vault/customer-display"
@@ -47,18 +47,7 @@ export interface Membership {
 type Vars = { session: Session; membership: Membership | null; rolledCookie: string | null }
 export type AppCtx = Context<{ Bindings: Env; Variables: Vars }>
 
-// Cloudflare's documented Turnstile test secrets look like "1x" + zeros + two letters.
-const isTurnstileTestKey = (k: string) => /^[123]x0{20,}[A-Za-z]{2}$/.test(k)
-
-const turnstileDev = (env: Env) => env.GX_ENV === "local" && isTurnstileTestKey(env.TURNSTILE_SECRET_KEY)
-
-async function turnstileOk(c: AppCtx, token: unknown): Promise<boolean> {
-  // Cloudflare's documented test secrets locally: accept any non-empty token without a network call.
-  if (turnstileDev(c.env)) return typeof token === "string" && token.length > 0
-  // No widget configured: fail closed (the page shows no widget, so nothing could pass Siteverify anyway).
-  if (!c.env.TURNSTILE_SITE_KEY) return false
-  return verifyTurnstile(c.env.TURNSTILE_SECRET_KEY, typeof token === "string" ? token : undefined, clientIp(c.req.raw))
-}
+const turnstileOk = (c: AppCtx, token: unknown) => checkTurnstile(c.env, token, c.req.raw)
 
 async function deviceHash(c: AppCtx): Promise<string | null> {
   const ua = c.req.header("user-agent")
@@ -194,6 +183,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   // Password reset.
   r("POST", "/auth/password/forgot", "public", "none", async (c) => {
     const b = await body(c)
+    if (!(await turnstileOk(c, b.turnstileToken))) throw new AppError(400, "TURNSTILE_FAILED", "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.")
     await requestPasswordReset(c.env, { email: b.email, ipHash: await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), origin: hostOrigin(c.req.raw), now: now() })
     c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
     return ok({ sent: true })
@@ -224,7 +214,8 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("GET", "/onboarding/areas", "app_session", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
   r("POST", "/onboarding/application", "app_session", "self", async (c) => {
     const b = await body(c)
-    const res = await submitApplication(c.env, c.get("session").user.id, b as never, now())
+    const res = await submitApplication(c.env, c.get("session").user.id, b as never, now(), hostOrigin(c.req.raw))
+    c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
     return ok(res, 201)
   })
   r("GET", "/onboarding/status", "app_session", "self", async (c) => {
@@ -1236,7 +1227,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (b.pro === true) await c.env.DB.prepare("UPDATE tenants SET custom_domain_enabled = 1 WHERE id = ?").bind(id).run()
     if (b.connect === true) {
       // Local only: a connected seller on the offline Mengantar mock, a pickup outlet and 20 % rules.
-      const reg = await partnerClient(c.env).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })
+      const reg = await (await resolvePartnerClient(c.env)).register({ name: slug, email: `${slug}@seller.localhost`, phone: "081200000000", externalUserId: id })
       if (reg.kind === "ok" && reg.data.apiKey) await vault.recordOnboarding(id, { environment: "sandbox", state: "connected", sellerId: reg.data.sellerId, externalUserId: id, apiKey: reg.data.apiKey })
       await vault.upsertDefaultOutlet(id, { name: typeof b.name === "string" ? b.name.slice(0, 80) : "Gerai Contoh", picName: "Pemilik Contoh", picPhone: "081200000000", street: "Jl. Dago No. 1", areaId: "5fc62f5df8f44b34aa4c0d8c", areaLabel: "Dago, Coblong, Kota Bandung" })
       await c.env.DB.prepare(

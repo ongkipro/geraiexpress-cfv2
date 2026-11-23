@@ -10,7 +10,7 @@
 import { emit } from "@gx/telemetry"
 import { sha256Hex } from "../../../crypto"
 import { AppError } from "../../../http/envelope"
-import { partnerClient } from "../../../mengantar/factory"
+import { resolvePartnerClient } from "../../../mengantar/factory"
 import { quotaFor } from "../../partner-quota"
 import { vaultFor } from "../stub"
 
@@ -42,7 +42,7 @@ export async function rotateSellerKey(env: Env, input: { tenantId: string; actor
     await vault.abortKeyRotation(input.tenantId, keyVersion, "RATE_LIMITED")
     return { state: "failed", keyVersion, code: "RATE_LIMITED" }
   }
-  const out = await partnerClient(env).regenerate(sellerId)
+  const out = await (await resolvePartnerClient(env)).regenerate(sellerId)
   emit("mengantar.partner_api", { route: "/sellers/api-key/regenerate", status: "status" in out ? out.status : 0, outcome: out.kind }, { tenantId: input.tenantId }, { env: env.GX_ENV })
   if (out.kind === "ok") {
     const done = await vault.completeKeyRotation(input.tenantId, keyVersion, { apiKey: out.data.apiKey, callbackSecret: out.data.callbackSecret ?? null }, Date.now())

@@ -41,7 +41,7 @@ async function makeAdmin(email: string) {
   return id
 }
 
-const login = async (email: string, password = PASSWORD) => cookieOf(await post("/auth/login", { email, password }))
+const login = async (email: string, password = PASSWORD) => cookieOf(await post("/auth/login", { email, password, turnstileToken: "ok" }))
 
 /** First login: enrol + confirm TOTP. Returns the aal2 cookie, the secret and the codes issued with the first confirmation. */
 async function enrolled(email: string) {
@@ -286,8 +286,8 @@ describe("Profil & Keamanan Akun (DEC-246 §2.3)", () => {
     expect((await get("/auth/me", other)).status).toBe(401)
     expect((await get("/auth/me", a.cookie)).status).toBe(200)
     expect((await env.DB.prepare("SELECT revoked_at FROM sessions WHERE token_hash = ?").bind(appHash).first<{ revoked_at: number | null }>())!.revoked_at).not.toBeNull()
-    expect((await post("/auth/login", { email: "akun3@contoh.test", password: PASSWORD })).status).toBe(401)
-    expect((await post("/auth/login", { email: "akun3@contoh.test", password: "sandi-baru-kuat-456" })).status).toBe(200)
+    expect((await post("/auth/login", { email: "akun3@contoh.test", password: PASSWORD, turnstileToken: "ok" })).status).toBe(401)
+    expect((await post("/auth/login", { email: "akun3@contoh.test", password: "sandi-baru-kuat-456", turnstileToken: "ok" })).status).toBe(200)
     expect((await audits(a.userId, "super_admin.password_changed")).length).toBe(1)
   })
 

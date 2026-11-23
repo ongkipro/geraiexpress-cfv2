@@ -29,7 +29,7 @@ export async function adminSession() {
     env.DB.prepare("INSERT INTO super_admins (user_id, totp_state, status, created_at, updated_at) VALUES (?, 'pending', 'active', 1, 1)").bind(id),
   ])
   const h = { "content-type": "application/json", origin: OWNER }
-  const login = await exports.default.fetch(`${OWNER}/api/owner/auth/login`, { method: "POST", headers: h, body: JSON.stringify({ email: "sa-onb@contoh.test", password: "admin-kuat-123" }) })
+  const login = await exports.default.fetch(`${OWNER}/api/owner/auth/login`, { method: "POST", headers: h, body: JSON.stringify({ email: "sa-onb@contoh.test", password: "admin-kuat-123", turnstileToken: "ok" }) })
   const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!
   const { secret } = ((await (await exports.default.fetch(`${OWNER}/api/owner/auth/totp/enrol`, { method: "POST", headers: { ...h, cookie }, body: "{}" })).json()) as { data: { secret: string } }).data
   await exports.default.fetch(`${OWNER}/api/owner/auth/totp/verify`, { method: "POST", headers: { ...h, cookie }, body: JSON.stringify({ code: await hotp(secret, stepAt(Date.now())) }) })

@@ -13,6 +13,7 @@ import { dispatchDue } from "../email/mailer"
 import { readSession, revokeSession, type Session } from "../auth/session"
 import * as throttle from "../auth/throttle"
 import { newTotpSecret, otpauthUri, verifyTotp } from "../auth/totp"
+import { checkTurnstile, turnstileDev } from "../auth/turnstile"
 import { decryptString, encryptString } from "../crypto/aead"
 import { sha256Hex } from "../crypto"
 import { AppError, fail, fromError, ok } from "../http/envelope"
@@ -24,6 +25,7 @@ import { registerOverview } from "../admin/overview"
 import { registerMonitor } from "../admin/monitor"
 import { registerSystem } from "../admin/audit"
 import { registerLegal } from "../admin/legal"
+import { registerMengantarAdmin } from "../admin/mengantar"
 
 export const RECENT_TOTP_MS = 15 * 60_000
 const TOTP_MAX_WRONG = 5
@@ -152,8 +154,11 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     register(app, { context: "owner", method, path, auth, projection }, ownerGuard, (c) => handler(c as OwnerCtx))
   const now = () => Date.now()
 
+  r("GET", "/auth/config", "public", "none", async (c) => ok({ turnstileSiteKey: turnstileDev(c.env) ? null : c.env.TURNSTILE_SITE_KEY || null }))
+
   r("POST", "/auth/login", "public", "self", async (c) => {
     const b = await body(c)
+    if (!(await checkTurnstile(c.env, b.turnstileToken, c.req.raw))) throw new AppError(400, "TURNSTILE_FAILED", "Verifikasi keamanan gagal. Muat ulang halaman lalu coba lagi.")
     const res = await login(c.env, {
       email: b.email,
       password: b.password,
@@ -320,7 +325,9 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
 
   r("POST", "/account/email/request", "owner_recent", "self", async (c) => {
-    return ok(await requestEmailChange(c.env, c.get("session").user.id, await body(c), await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), now()))
+    const res = await requestEmailChange(c.env, c.get("session").user.id, await body(c), await ipHash(c.env.AUTH_SESSION_PEPPER, c.req.raw), now())
+    c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
+    return ok(res)
   })
 
   r("POST", "/account/email/confirm", "owner_recent", "self", async (c) => {
@@ -392,6 +399,7 @@ export function ownerApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   registerMonitor(app)
   registerSystem(app)
   registerLegal(app)
+  registerMengantarAdmin(app)
 
   return app
 }

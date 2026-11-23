@@ -53,7 +53,10 @@ export function createRelay({ secret, previousSecret = "", upstreamOrigin, fetch
       const buf = Buffer.from(await res.arrayBuffer())
       if (buf.length > MAX_RESPONSE) return json(502, "relay_response_too_large")
       log(JSON.stringify({ relay_id: id, target, status: res.status, ms: now() - started }))
-      return { status: res.status, body: buf, headers: { "content-type": res.headers.get("content-type") ?? "application/json" } }
+      const outHeaders = { "content-type": res.headers.get("content-type") ?? "application/json" }
+      const retryAfter = res.headers.get("retry-after")
+      if (retryAfter) outHeaders["retry-after"] = retryAfter
+      return { status: res.status, body: buf, headers: outHeaders }
     } catch (e) {
       const timeout = e?.name === "TimeoutError" || e?.name === "AbortError"
       log(JSON.stringify({ relay_id: id, target, status: timeout ? "timeout" : "error", ms: now() - started }))

@@ -48,6 +48,7 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
     icon: ShieldCheckIcon,
     children: [
       { to: "/sistem", label: "Kesehatan Integrasi" },
+      { to: "/sistem?tab=mengantar", label: "Integrasi Mengantar" },
       { to: "/sistem?tab=audit", label: "Log Audit" },
       { to: "/sistem?tab=admin", label: "Akses Admin" },
       { to: "/sistem?tab=profil", label: "Profil Perusahaan" },
@@ -95,6 +96,7 @@ const KEYWORDS: Record<string, string> = {
   "/gerai?tab=direktori": "cari gerai tenant",
   "/gerai?tab=domain": "custom domain ssl",
   "/pengawasan?tab=risiko": "rts retur risiko",
+  "/sistem?tab=mengantar": "mengantar partner api secret relay produksi sandbox",
   "/sistem?tab=audit": "audit log riwayat",
 }
 const COMMANDS: ShellCommand[] = NAV.flatMap((n): ShellCommand[] => {

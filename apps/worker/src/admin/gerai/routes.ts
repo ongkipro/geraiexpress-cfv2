@@ -15,6 +15,7 @@ import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
 import { hostOrigin } from "../../http/request"
 import { approveApplication, provisionSeller, reconcileRegistration, rejectApplication, type OutletInput } from "../../onboarding/service"
+import { dispatchDue } from "../../email/mailer"
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
   try {
@@ -66,12 +67,15 @@ export function registerGeraiAdmin(app: Hono<any>): void {
   r("POST", "/gerai/applications/:id/approve", "owner_recent", async (c) => {
     const b = await body(c)
     const res = await approveApplication(c.env, { applicationId: c.req.param("id") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), origin: hostOrigin(c.req.raw), now: Date.now() })
+    c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
     return ok(res)
   })
 
   r("POST", "/gerai/applications/:id/reject", "owner_recent", async (c) => {
     const b = await body(c)
-    return ok(await rejectApplication(c.env, { applicationId: c.req.param("id") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), origin: hostOrigin(c.req.raw), now: Date.now() }))
+    const res = await rejectApplication(c.env, { applicationId: c.req.param("id") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), origin: hostOrigin(c.req.raw), now: Date.now() })
+    c.executionCtx.waitUntil(dispatchDue(c.env).then(() => undefined))
+    return ok(res)
   })
 
   r("GET", "/gerai", "owner_aal2", async (c) => {
