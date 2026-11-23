@@ -1,7 +1,8 @@
 // GeraiExpress v2 — one Worker for every host (ARCHITECTURE §3, spec 07 §3).
 // Top-level resource identifiers are placeholders for local development. `env.staging` and `env.production` carry the
-// real APAC resources created 2026-11-18 (owner-approved, docs/runbooks/production-zones.md §1); both pin the Worker to
-// Singapore (`aws:ap-southeast-1`) so D1 and Durable Object round trips stay in APAC.
+// real APAC resources on the dedicated GeraiExpress Cloudflare account (`f235ecdb5517054b386c6d413569a103`, migrated
+// 2026-11-23, docs/runbooks/production-zones.md §5); both pin the Worker to Singapore (`aws:ap-southeast-1`) so D1 and
+// Durable Object round trips stay in APAC.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "geraiexpress-cfv2",
@@ -43,7 +44,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GeraiVaultDO", "PartnerQuotaDO"] }],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media" }],
   "kv_namespaces": [{ "binding": "CACHE_KV", "id": "00000000000000000000000000000001" }],
-  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@geraiexpress.com"] }],
   "queues": {
     "producers": [
       { "binding": "WEBHOOK_QUEUE", "queue": "gx-mengantar-webhooks" },
@@ -73,7 +74,7 @@
     "MENGANTAR_PARTNER_ORIGIN": "mock",
     "PARTNER_TRANSPORT": "direct",
     "MENGANTAR_PARTNER_ID": "ongkirich",
-    "MAIL_FROM": "noreply@mail.geraiexpress.com",
+    "MAIL_FROM": "noreply@geraiexpress.com",
     // Public Turnstile site key for mini-site forms (Cloudflare's documented always-pass test key locally).
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     // Cloudflare for SaaS zone id (spec 11 §2). "mock" = in-process fake, honoured only when GX_ENV = local.
@@ -84,8 +85,9 @@
     "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
   },
   "env": {
-    // Staging: separate Worker, D1, DO namespace and buckets (spec 07 §7). Resources created 2026-11-18 (TASK-109).
+    // Staging: separate Worker, D1, DO namespace and buckets (spec 07 §7). Resources provisioned 2026-11-23 on GeraiExpress account.
     "staging": {
+      "account_id": "f235ecdb5517054b386c6d413569a103",
       "name": "geraiexpress-cfv2-staging",
       "workers_dev": false,
       "placement": { "mode": "targeted", "region": "aws:ap-southeast-1" },
@@ -109,11 +111,11 @@
         "MENGANTAR_PARTNER_ORIGIN": "https://sandbox.mengantar.com",
         "PARTNER_TRANSPORT": "direct",
         "MENGANTAR_PARTNER_ID": "ongkirich",
-        "MAIL_FROM": "noreply@mail.geraiexpress.com",
+        "MAIL_FROM": "noreply@geraiexpress.com",
         // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAF6YLggBbRId8AR2",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAGOkYvbfRzshNuOg",
         // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
-        "CF_SAAS_ZONE_ID": "d07b150f9b2180da692c5787ce1d954a"
+        "CF_SAAS_ZONE_ID": "b7f7b727dd2c0a81dce48509f25e7fcd"
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
@@ -122,7 +124,7 @@
         {
           "binding": "DB",
           "database_name": "geraiexpress-control-staging",
-          "database_id": "c25337ba-21be-4ae7-ab55-7c7a8df89bbb",
+          "database_id": "6add120b-deef-471b-850a-1b055d5deb28",
           "migrations_dir": "packages/db/migrations/control"
         }
       ],
@@ -133,8 +135,8 @@
         ]
       },
       "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media-staging" }],
-      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "ca9f844f1d7845cfb71de035884502cb" }],
-      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
+      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "0575628f368b499ba752bf6050f9866b" }],
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@geraiexpress.com"] }],
       "queues": {
         "producers": [
           { "binding": "WEBHOOK_QUEUE", "queue": "gx-mengantar-webhooks-staging" },
@@ -156,8 +158,9 @@
     },
     // Production: routes per spec 11 §1–2 and spec 10 §5 (TASK-602). Platform hosts are explicit Custom Domains (never
     // `*.geraiexpress.com/*`, so a Worker fetch to `relay.` reaches the VPS); the tenant zone takes `*/*` plus an explicit
-    // `cname.geraimitra.com/*` (O2O safety). Resources created 2026-11-18 (runbook: docs/runbooks/production-zones.md).
+    // `cname.geraimitra.com/*` (O2O safety). Resources provisioned 2026-11-23 on GeraiExpress account.
     "production": {
+      "account_id": "f235ecdb5517054b386c6d413569a103",
       "name": "geraiexpress-cfv2-production",
       "workers_dev": false,
       "placement": { "mode": "targeted", "region": "aws:ap-southeast-1" },
@@ -180,11 +183,11 @@
         "MENGANTAR_PARTNER_ORIGIN": "https://app.mengantar.com",
         "PARTNER_TRANSPORT": "relay",
         "MENGANTAR_PARTNER_ID": "ongkirich",
-        "MAIL_FROM": "noreply@mail.geraiexpress.com",
+        "MAIL_FROM": "noreply@geraiexpress.com",
         // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAF6YLggBbRId8AR2",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAGOkYvbfRzshNuOg",
         // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
-        "CF_SAAS_ZONE_ID": "d07b150f9b2180da692c5787ce1d954a"
+        "CF_SAAS_ZONE_ID": "b7f7b727dd2c0a81dce48509f25e7fcd"
       },
       "secrets": {
         "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
@@ -193,7 +196,7 @@
         {
           "binding": "DB",
           "database_name": "geraiexpress-control-production",
-          "database_id": "e845e4b8-0c24-422d-8b92-0f31d1408ae9",
+          "database_id": "73848f4d-1dc1-4166-a5e6-abb2cf10f71f",
           "migrations_dir": "packages/db/migrations/control"
         }
       ],
@@ -204,8 +207,8 @@
         ]
       },
       "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "geraiexpress-media-production" }],
-      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "b560e2279c45431e87620ad52dccb01f" }],
-      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }],
+      "kv_namespaces": [{ "binding": "CACHE_KV", "id": "0cf240046c744eee948131f8220d05c9" }],
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@geraiexpress.com"] }],
       "queues": {
         "producers": [
           { "binding": "WEBHOOK_QUEUE", "queue": "gx-mengantar-webhooks-production" },

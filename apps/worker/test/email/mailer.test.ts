@@ -51,7 +51,7 @@ describe("email outbox + sendMail (TASK-104, spec 12 §3)", () => {
     expect(await decryptString(env.KEK_SECRET, String(raw?.payload_encrypted), "email")).toContain("482915")
     const { sent, binding } = fakeEmail()
     expect(await dispatchDue(mailEnv(binding), T0)).toMatchObject({ sent: 1 })
-    expect(sent[0]).toMatchObject({ to: "ani@contoh.test", subject: "Kode verifikasi GeraiExpress: 482915", from: { email: "noreply@mail.geraiexpress.com", name: "GeraiExpress" }, replyTo: "bantuan@geraiexpress.com" })
+    expect(sent[0]).toMatchObject({ to: "ani@contoh.test", subject: "Kode verifikasi GeraiExpress: 482915", from: { email: "noreply@geraiexpress.com", name: "GeraiExpress" }, replyTo: "bantuan@geraiexpress.com" })
     expect(sent[0]?.text).toContain("482915")
     expect(sent[0]?.html).toContain("482915")
     expect(await row("e1")).toMatchObject({ state: "sent", attempts: 1, payload_encrypted: null, to_email_encrypted: null, provider_message_id: "msg-1" })

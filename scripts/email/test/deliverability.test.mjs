@@ -12,9 +12,9 @@ describe("TASK-112 deliverability helpers (spec 12 §6)", () => {
     const raw = [
       "Received: from mx.example by mx.google.com; Mon, 16 Nov 2026 09:00:20 +0700",
       "Authentication-Results: mx.google.com;",
-      "       dkim=pass header.i=@mail.geraiexpress.com;",
-      "       spf=pass smtp.mailfrom=mail.geraiexpress.com;",
-      "       dmarc=pass (p=NONE) header.from=mail.geraiexpress.com",
+      "       dkim=pass header.i=@geraiexpress.com;",
+      "       spf=pass smtp.mailfrom=geraiexpress.com;",
+      "       dmarc=pass (p=NONE) header.from=geraiexpress.com",
       "Date: Mon, 16 Nov 2026 09:00:05 +0700",
     ].join("\n")
     expect(evaluateHeaders(raw)).toEqual({ spf: "pass", dkim: "pass", dmarc: "pass", pass: true })

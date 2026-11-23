@@ -12,7 +12,7 @@ explicit authorization (record in §5). Order: TASK-109 staging first, then prod
 | KV | cache namespace | `kv_namespaces[0].id` |
 | Queues | `gx-mengantar-webhooks-production`, `gx-mengantar-finance-sync-production`, `gx-bulk-production`, `gx-hostnames-production` | — (names) |
 | Rate limiter | namespace `3001` | — |
-| Email Sending | `mail.geraiexpress.com` onboarded (TASK-112) | `send_email` |
+| Email Sending | `geraiexpress.com` onboarded (`noreply@geraiexpress.com`, TASK-112) | `send_email` |
 
 Secrets (`wrangler secret put <NAME> --env production`, values from the owner's vault, never in Git):
 `AUTH_SESSION_PEPPER`, `KEK_SECRET`, `PROBE_SECRET`, `TURNSTILE_SECRET_KEY`, `MENGANTAR_PARTNER_SECRET`,
@@ -106,3 +106,31 @@ so a rollback means `wrangler delete` of the env Worker after owner approval.
 | 2026-11-19 | DEC-248 minimalist auth stage, `1 · 2 · 3` register, quiet brand closing (`3548b48`, Sol R3 APPROVE) | — | `60497461-9857-4b18-bc21-a0fb8aa15591` | `c7fb0d25-6e2b-45a3-b4cd-6c363dde5eaf` |
 | 2026-11-19 | DEC-249 slim home, Raka 3D counter, courier marquee, geometric `GE` logo, dev velocity (`6d79d70`, Sol R5 APPROVE) | — | `26bc21eb-d95c-4939-bd13-e7b49ee5a63f` | `ff3d1957-6c5b-42df-adef-61c006b424a5` |
 | 2026-11-19 | DEC-250 split-studio auth (app + owner), stacked semantic tables + bento track at 390, mini-site unit toggle (`cd28823`, Sol R5 APPROVE) | — | `4777f25b-9760-4407-aa0d-f7ef7577e5b5` | `c2b8b772-ce20-40af-9684-a74024748e2c` |
+| 2026-11-23 | Dedicated Cloudflare account migration (`f235ecdb5517054b386c6d413569a103`), DEC-251/253 live, apex Email Sending `noreply@geraiexpress.com` | `0000`–`0019` (fresh APAC D1 + probe DO v24) | `605615b7-6212-42c1-92d9-57ee2e2af93d` | `c94b8ae9-455f-4f06-8bb1-d6e6cac4f654` |
+
+## 6. Live record — 2026-11-23 (dedicated `GeraiExpress` account `f235ecdb5517054b386c6d413569a103`)
+
+Migrated from the shared personal account (`ca58f2ac62b7c66e46e6ce654f585034`) to the dedicated `GeraiExpress` account
+with owner authorization. Zones `geraiexpress.com` (`e9b6e8c50ba4f48f0de04be064f578ce`) and `geraimitra.com`
+(`b7f7b727dd2c0a81dce48509f25e7fcd`) active on `elliot`/`marjory.ns.cloudflare.com`.
+
+| Resource | Staging | Production |
+|---|---|---|
+| D1 (`--location apac`) | `geraiexpress-control-staging` `6add120b-deef-471b-850a-1b055d5deb28` | `geraiexpress-control-production` `73848f4d-1dc1-4166-a5e6-abb2cf10f71f` |
+| R2 (`--location apac`) | `geraiexpress-media-staging` | `geraiexpress-media-production` |
+| KV | `geraiexpress-cache-staging` `0575628f368b499ba752bf6050f9866b` | `geraiexpress-cache-production` `0cf240046c744eee948131f8220d05c9` |
+| Queues | `gx-{mengantar-webhooks,mengantar-finance-sync,bulk,hostnames}-staging` | `gx-{mengantar-webhooks,mengantar-finance-sync,bulk,hostnames}-production` |
+| Placement | `aws:ap-southeast-1` (`cf-placement: local-SIN`) | `aws:ap-southeast-1` (`cf-placement: local-SIN`) |
+| Email Sending | `geraiexpress.com` (`noreply@geraiexpress.com`, selector `cf-bounce`, DNS SPF/DKIM/DMARC PASS) | `geraiexpress.com` (`noreply@geraiexpress.com`, selector `cf-bounce`, DNS SPF/DKIM/DMARC PASS) |
+| Turnstile widget | `geraiexpress` `0x4AAAAAAGOkYvbfRzshNuOg` | `geraiexpress` `0x4AAAAAAGOkYvbfRzshNuOg` |
+| Control migrations | `0000`–`0019` applied | `0000`–`0019` applied |
+| Probe tenant (D1 + DO v24) | `probe-stg.geraimitra.com` | `probe.geraimitra.com` |
+| Worker version | `605615b7-6212-42c1-92d9-57ee2e2af93d` | `c94b8ae9-455f-4f06-8bb1-d6e6cac4f654` |
+
+Legacy `geraiexpress-cfv2-*` resources (2 Workers, 8 Queues, 2 D1, 2 KV, 2 R2 `geraiexpress-media-*`, Turnstile widget)
+on account `ca58f2ac62b7c66e46e6ce654f585034` were deleted on 2026-11-23. Both staging and production have 10/10
+secrets set (including the zone-scoped `CF_SAAS_API_TOKEN`, quota endpoint verified 200 `allocated: 50000`), and live
+probes pass (`pnpm probes --env staging` **5/5 PASS**, `pnpm probes --env production` **6/6 PASS**, including
+`relay-health`). GitHub environments `staging-deploy` + `production` have
+`CLOUDFLARE_ACCOUNT_ID=f235ecdb5517054b386c6d413569a103`; confirm `CLOUDFLARE_API_TOKEN` in both GitHub environments is
+rotated to the new `GeraiExpress` account deploy token before the next CI dispatch.

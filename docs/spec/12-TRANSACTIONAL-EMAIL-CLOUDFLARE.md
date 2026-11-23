@@ -25,11 +25,11 @@ No receipts, shipment updates or promotions by email (receipts go to WhatsApp li
 
 - **Plan:** Workers Paid (required for sending to arbitrary recipients). 3,000 emails per month included, then
   USD 0.35 per 1,000 (Pricing page). New accounts start with a conservative daily quota that grows with good sending.
-- **Sending domain:** `mail.geraiexpress.com` onboarded to Email Sending (Cloudflare DNS; Cloudflare configures SPF and
+- **Sending domain:** `geraiexpress.com` onboarded to Email Sending (Cloudflare DNS; Cloudflare configures SPF and
   DKIM records). Add DMARC on `geraiexpress.com`: start `p=none` with `rua` reports for 2 weeks, then `p=quarantine`.
-- **From:** `GeraiExpress <noreply@mail.geraiexpress.com>`; `Reply-To: bantuan@geraiexpress.com` (Email Routing to the
+- **From:** `GeraiExpress <noreply@geraiexpress.com>`; `Reply-To: bantuan@geraiexpress.com` (Email Routing to the
   support inbox).
-- **Binding:** `"send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@mail.geraiexpress.com"] }]`.
+- **Binding:** `"send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@geraiexpress.com"] }]`.
   No API key exists for email.
 - **Never** send from `geraimitra.com` or a tenant custom domain (tenant domains are customer-controlled; DEC-202).
 

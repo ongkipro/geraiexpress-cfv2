@@ -14,11 +14,11 @@ Owner-approved live steps. Production sign-up stays closed until every check bel
 
 ## Steps (owner, each one approved at the time)
 
-1. Cloudflare dashboard → Email Service → Email Sending → onboard `mail.geraiexpress.com` (Cloudflare adds SPF + DKIM
-   on the zone). Note the DKIM selector.
+1. Cloudflare dashboard or `wrangler email sending enable geraiexpress.com` (Cloudflare adds SPF + DKIM on the zone).
+   Note the DKIM selector.
 2. Decide the DMARC record for `geraiexpress.com` (keep `p=reject` or move to `p=none; rua=mailto:<owned inbox>` for
    two weeks, then `p=quarantine`).
-3. `pnpm email:deliverability --domain mail.geraiexpress.com --dkim-selector <selector>` → all `dns.*` PASS.
+3. `pnpm email:deliverability --domain geraiexpress.com --dkim-selector <selector>` → all `dns.*` PASS.
 4. Deploy staging (TASK-109) and send, from staging, two `signup_otp` and two `password_reset` to an owned Gmail,
    Outlook.com and Yahoo address (12 sends). For each message save "Show original" headers to a file and run
    `pnpm email:deliverability --dkim-selector <selector> --headers <file> ...` → every file PASS (SPF, DKIM,

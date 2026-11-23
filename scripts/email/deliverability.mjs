@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// `pnpm email:deliverability [--domain mail.geraiexpress.com] [--dkim-selector <sel>] [--headers <file>...]`
+// `pnpm email:deliverability [--domain geraiexpress.com] [--dkim-selector <sel>] [--headers <file>...]`
 // Read-only gate for TASK-112 (spec 12 §6): checks SPF/DKIM/DMARC DNS and, for each pasted header file, SPF/DKIM/DMARC
 // pass and delivery time < 60 s. Prints the 12-send inbox matrix the owner completes. Exit 1 on any failure.
 import { readFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 import { deliverySeconds, dohTxt, evaluateDns, evaluateHeaders, INBOX_MATRIX } from "./deliverability-lib.mjs"
 
-const { values } = parseArgs({ options: { domain: { type: "string", default: "mail.geraiexpress.com" }, "dkim-selector": { type: "string" }, headers: { type: "string", multiple: true, default: [] } } })
+const { values } = parseArgs({ options: { domain: { type: "string", default: "geraiexpress.com" }, "dkim-selector": { type: "string" }, headers: { type: "string", multiple: true, default: [] } } })
 const domain = values.domain
 const org = domain.split(".").slice(-2).join(".")
 const [spf, dmarc, dkim] = await Promise.all([
