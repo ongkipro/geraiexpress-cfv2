@@ -1,4 +1,5 @@
 import { AreaPicker, type Area } from "../../../components/area-picker"
+import { LocationPinPicker } from "../../../components/location-pin-picker"
 import { SectionCard } from "../../../components/admin/page"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -17,7 +18,7 @@ const pick = (s: SettingsView): Form => ({
   latitude: s.profile?.latitude == null ? "" : String(s.profile.latitude),
   longitude: s.profile?.longitude == null ? "" : String(s.profile.longitude),
 })
-const toBody = (f: Form) => ({ name: f.name, whatsapp: f.whatsapp, openingHours: f.openingHours, areaId: f.area?.id ?? "", areaLabel: f.area?.label ?? "", street: f.street, postalCode: f.postalCode, latitude: f.latitude, longitude: f.longitude })
+const toBody = (f: Form) => ({ name: f.name, whatsapp: f.whatsapp, openingHours: f.openingHours, areaId: f.area?.id ?? "", areaLabel: f.area?.label ?? "", street: f.street, postalCode: f.postalCode, latitude: f.latitude.trim(), longitude: f.longitude.trim() })
 
 export function ProfilGeraiPage() {
   const s = useSettingsForm(pick, "profile", toBody)
@@ -48,11 +49,14 @@ export function ProfilGeraiPage() {
             {field("postalCode", "Kode pos", undefined, { inputMode: "numeric", className: "tabular-nums" })}
           </div>
           {field("street", "Alamat lengkap")}
-          <div className="grid gap-4 sm:grid-cols-2">
-            {field("latitude", "Latitude", "Contoh: -6.9456", { inputMode: "decimal", className: "tabular-nums" })}
-            {field("longitude", "Longitude", "Contoh: 107.5703", { inputMode: "decimal", className: "tabular-nums" })}
-          </div>
-          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-muted-foreground">Titik koordinat wajib untuk penjemputan Pos Indonesia. Buka Google Maps, tekan lama lokasi gerai, lalu salin dua angka yang muncul.</p>
+          <LocationPinPicker
+            latitude={f.latitude}
+            longitude={f.longitude}
+            onChange={(latitude, longitude) => set({ latitude, longitude })}
+            latError={s.fields.latitude}
+            lngError={s.fields.longitude}
+            areaHint={f.area?.label ?? null}
+          />
         </div>
       </SectionCard>
       <Notice msg={s.msg} />

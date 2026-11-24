@@ -2,6 +2,7 @@
 // returns Indonesian field errors; callers write inside `transactionSync` and audit. NPWP is stored encrypted by the
 // caller and never returned in plain text (only a masked tail).
 import { cleanText, normalizePhone08, validStreet } from "@gx/domain/contacts"
+import { parseCoordinate, validatePinpoint } from "@gx/domain/geo"
 
 export type FieldErrors = Record<string, string>
 export type FormResult<T> = { ok: true; value: T } | { ok: false; errors: FieldErrors }
@@ -26,12 +27,7 @@ export interface ProfileForm {
 }
 
 /** Parses an optional decimal coordinate (`-6.9456` or `-6,9456`); `undefined` = invalid, null = empty. */
-export function coordinate(v: unknown, limit: number): number | null | undefined {
-  if (v === "" || v == null) return null
-  const n = typeof v === "number" ? v : Number(String(v).trim().replace(",", "."))
-  if (!Number.isFinite(n) || Math.abs(n) > limit) return undefined
-  return Math.round(n * 1e6) / 1e6
-}
+export const coordinate = parseCoordinate
 
 export function parseProfile(b: Record<string, unknown>): FormResult<ProfileForm> {
   const e: FieldErrors = {}
@@ -47,13 +43,10 @@ export function parseProfile(b: Record<string, unknown>): FormResult<ProfileForm
   const postal = b.postalCode === "" || b.postalCode == null ? null : /^\d{5}$/.test(String(b.postalCode)) ? String(b.postalCode) : undefined
   if (postal === undefined) e.postalCode = "Kode pos 5 angka."
   const logo = b.logoMediaId === undefined ? undefined : typeof b.logoMediaId === "string" && /^[0-9a-f-]{36}$/.test(b.logoMediaId) ? b.logoMediaId : null
-  const lat = coordinate(b.latitude, 90)
-  const lng = coordinate(b.longitude, 180)
-  if (lat === undefined) e.latitude = "Latitude angka -90 sampai 90, contoh -6.9456."
-  if (lng === undefined) e.longitude = "Longitude angka -180 sampai 180, contoh 107.5703."
-  if (lat !== undefined && lng !== undefined && (lat === null) !== (lng === null)) e[lat === null ? "latitude" : "longitude"] = "Isi latitude dan longitude sekaligus, atau kosongkan keduanya."
+  const pin = validatePinpoint(b.latitude, b.longitude)
+  if (!pin.ok) Object.assign(e, pin.errors)
   if (Object.keys(e).length) return { ok: false, errors: e }
-  return { ok: true, value: { name: name!, whatsapp: wa, openingHours: hours, areaId, areaLabel: cleanText(b.areaLabel, 160), street: street!, postalCode: postal ?? null, logoMediaId: logo, latitude: lat ?? null, longitude: lng ?? null } }
+  return { ok: true, value: { name: name!, whatsapp: wa, openingHours: hours, areaId, areaLabel: cleanText(b.areaLabel, 160), street: street!, postalCode: postal ?? null, logoMediaId: logo, latitude: pin.ok ? pin.latitude : null, longitude: pin.ok ? pin.longitude : null } }
 }
 
 export interface BusinessForm {

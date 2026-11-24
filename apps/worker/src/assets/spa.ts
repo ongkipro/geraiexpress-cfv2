@@ -6,13 +6,18 @@ const BASE_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "DENY",
-  "permissions-policy": "camera=(self), bluetooth=(self), geolocation=(), microphone=()",
 }
 
-// `app` needs `frame-src blob:` and `object-src blob:` for the PrintDrawer PDF preview iframe and system print dialog;
-// `owner` never renders PDF blobs in an iframe and stays stricter.
+// `app` allows geolocation=(self) for the outlet map pin picker ("Lokasi Saya"); `owner` stays strictly disabled.
+const PERMISSIONS_POLICY: Record<SpaName, string> = {
+  app: "camera=(self), bluetooth=(self), geolocation=(self), microphone=()",
+  owner: "camera=(self), bluetooth=(self), geolocation=(), microphone=()",
+}
+
+// `app` needs `frame-src blob:` and `object-src blob:` for the PrintDrawer PDF print iframe, and OpenStreetMap raster
+// tiles for the interactive outlet LocationPinPicker; `owner` stays stricter.
 const CSP: Record<SpaName, string> = {
-  app: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src blob: https://challenges.cloudflare.com; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  app: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self'; frame-src blob: https://challenges.cloudflare.com; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   owner: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 }
 
@@ -22,6 +27,7 @@ const STATIC_FILE = /^\/(?:assets\/[A-Za-z0-9._-]+|[A-Za-z0-9._-]+\.(?:ico|png|s
 function withHeaders(res: Response, cache: string, spa: SpaName): Response {
   const out = new Response(res.body, res)
   for (const [k, v] of Object.entries(BASE_HEADERS)) out.headers.set(k, v)
+  out.headers.set("permissions-policy", PERMISSIONS_POLICY[spa])
   out.headers.set("content-security-policy", CSP[spa])
   out.headers.set("cache-control", cache)
   return out

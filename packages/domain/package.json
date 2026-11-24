@@ -13,7 +13,8 @@
     "./masking": "./src/masking/index.ts",
     "./bulk": "./src/bulk/index.ts",
     "./period": "./src/period/index.ts",
-    "./claims": "./src/claims/index.ts"
+    "./claims": "./src/claims/index.ts",
+    "./geo": "./src/geo.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

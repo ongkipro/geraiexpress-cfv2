@@ -1,4 +1,5 @@
 import { useParams } from "@tanstack/react-router"
+import { ExternalLinkIcon } from "lucide-react"
 import { ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
 import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
@@ -17,7 +18,7 @@ interface Detail {
   decision_reason: string | null
   slugReady: boolean
   partnerTransport: string
-  outlet: { name: string; picName: string; picPhone: string; areaLabel: string; streetAddress: string; areaId: string }
+  outlet: { name: string; picName: string; picPhone: string; areaLabel: string; streetAddress: string; areaId: string; latitude?: number | null; longitude?: number | null }
 }
 
 const maskPhone = (p: string) => (p.length > 4 ? `${p.slice(0, 4)}-xxxx-${p.slice(-4)}` : p)
@@ -49,7 +50,26 @@ export function PengajuanPage() {
             <Row label="WhatsApp gerai"><span className="tabular-nums">{maskPhone(data.contact_whatsapp)}</span></Row>
             <Row label="Email akun Mengantar">{data.seller_email}</Row>
             <Row label="Alamat gerai"><span className="font-mono">{data.slug}.geraimitra.com</span></Row>
-            <Row label="Titik jemput">{data.outlet.streetAddress}, {data.outlet.areaLabel}</Row>
+            <Row label="Titik jemput">
+              <div className="flex flex-col gap-1.5">
+                <span>{data.outlet.streetAddress}, {data.outlet.areaLabel}</span>
+                {typeof data.outlet.latitude === "number" && typeof data.outlet.longitude === "number" && Number.isFinite(data.outlet.latitude) && Number.isFinite(data.outlet.longitude) && !(data.outlet.latitude === 0 && data.outlet.longitude === 0) ? (
+                  <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                    <span>Pin: {data.outlet.latitude}, {data.outlet.longitude}</span>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${data.outlet.latitude},${data.outlet.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Buka di Google Maps <ExternalLinkIcon aria-hidden className="size-3" />
+                    </a>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Titik koordinat peta belum diisi (opsional, wajib untuk Pos Indonesia).</span>
+                )}
+              </div>
+            </Row>
             <Row label="Penanggung jawab">{data.outlet.picName} · <span className="tabular-nums">{maskPhone(data.outlet.picPhone)}</span></Row>
             <Row label="Diajukan">{formatDate(data.submitted_at)}</Row>
             {data.decision_reason ? <Row label="Alasan keputusan">{data.decision_reason}</Row> : null}

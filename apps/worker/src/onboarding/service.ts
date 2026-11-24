@@ -6,7 +6,7 @@
 import { emit } from "@gx/telemetry"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { OnboardingState } from "../do/gerai-vault/connection"
-import { coordinate } from "../do/gerai-vault/settings"
+import { validatePinpoint } from "@gx/domain/geo"
 import { enqueueEmailStatement } from "../email/outbox"
 import { hostCache, platformHostOf } from "../host/lookup"
 import { AppError } from "../http/envelope"
@@ -79,9 +79,8 @@ export function validateApplication(input: ApplicationInput): { slug: string; bu
   if (input.consentMengantar !== true) {
     throw new AppError(422, "CONSENT_REQUIRED", "Setujui pembuatan akun Mengantar atas nama gerai Anda.", { consentMengantar: "Wajib disetujui." })
   }
-  const lat = coordinate(o.latitude, 90)
-  const lng = coordinate(o.longitude, 180)
-  if (lat === undefined || lng === undefined || (lat === null) !== (lng === null)) throw new AppError(422, "INVALID_PINPOINT", "Titik koordinat tidak valid. Isi latitude dan longitude sekaligus, atau kosongkan keduanya.", { [lat === undefined || (lat === null && lng !== null) ? "latitude" : "longitude"]: "Contoh: -6.9456 dan 107.5703." })
+  const pin = validatePinpoint(o.latitude, o.longitude)
+  if (!pin.ok) throw new AppError(422, "INVALID_PINPOINT", pin.message, pin.errors)
   return {
     slug,
     businessName,
@@ -95,8 +94,8 @@ export function validateApplication(input: ApplicationInput): { slug: string; bu
       areaLabel: str(o.areaLabel, "areaLabel", 200, "Wilayah"),
       streetAddress: str(o.streetAddress, "streetAddress", 300, "Alamat lengkap"),
       postalCode: typeof o.postalCode === "string" ? o.postalCode.slice(0, 10) : null,
-      latitude: lat ?? null,
-      longitude: lng ?? null,
+      latitude: pin.latitude,
+      longitude: pin.longitude,
     },
   }
 }

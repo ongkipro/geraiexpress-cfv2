@@ -132,10 +132,12 @@ export function favicon(name: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
-/** `Buka Peta`: the outlet pin when both coordinates are set, else a street + area search, else nothing. */
+/** `Buka Peta`: the outlet pin when both coordinates are valid (never Null Island 0,0), else a street + area search. */
 export function mapUrl(o: Pick<Outlet, "latitude" | "longitude" | "address" | "area">): string | null {
   const base = "https://www.google.com/maps/search/?api=1&query="
-  if (typeof o.latitude === "number" && typeof o.longitude === "number" && Number.isFinite(o.latitude) && Number.isFinite(o.longitude)) return `${base}${o.latitude},${o.longitude}`
+  if (typeof o.latitude === "number" && typeof o.longitude === "number" && Number.isFinite(o.latitude) && Number.isFinite(o.longitude) && !(o.latitude === 0 && o.longitude === 0)) {
+    return `${base}${o.latitude},${o.longitude}`
+  }
   const q = [o.address, o.area].filter(Boolean).join(", ")
   return q ? `${base}${encodeURIComponent(q)}` : null
 }

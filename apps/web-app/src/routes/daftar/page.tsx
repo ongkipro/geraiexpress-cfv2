@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type FormEvent } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { AuthCard, FormAlert, WizardBar } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
+import { LocationPinPicker } from "../../components/location-pin-picker"
 import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
@@ -105,6 +106,7 @@ export function DaftarPage() {
           }
           if (o.latitude != null) setLat((cur) => cur || String(o.latitude))
           if (o.longitude != null) setLng((cur) => cur || String(o.longitude))
+          if (o.latitude != null || o.longitude != null) setCoords(true)
         }
       })
       .catch(() => undefined)
@@ -306,11 +308,20 @@ export function DaftarPage() {
             <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-medium text-[#64748B] hover:text-[#0F172A] md:min-h-9 [&::-webkit-details-marker]:hidden">
               <span aria-hidden className="mr-1 group-open:hidden">+</span><span aria-hidden className="mr-1 hidden group-open:inline">−</span>Titik koordinat peta (opsional)
             </summary>
-            <div className="mt-2 grid gap-4 sm:grid-cols-2">
-              <TextField label="Latitude" name="latitude" inputMode="decimal" placeholder="-6.9456" value={lat} onChange={setLat} error={fieldErrors.latitude} />
-              <TextField label="Longitude" name="longitude" inputMode="decimal" placeholder="107.5703" value={lng} onChange={setLng} error={fieldErrors.longitude} />
+            <div className="mt-2">
+              <LocationPinPicker
+                compact
+                latitude={lat}
+                longitude={lng}
+                onChange={(nextLat, nextLng) => {
+                  setLat(nextLat)
+                  setLng(nextLng)
+                }}
+                latError={fieldErrors.latitude}
+                lngError={fieldErrors.longitude}
+                areaHint={area?.label ?? null}
+              />
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">Dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           </details>
           <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
             <span className="text-sm leading-snug">Saya setuju GeraiExpress membuatkan akun seller Mengantar untuk gerai ini dengan email <strong className="font-semibold [overflow-wrap:anywhere] text-[#0F172A]" data-seller-email>{sellerEmail}</strong>, serta menyetujui Syarat & Ketentuan dan Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun tersebut.</span>

@@ -210,8 +210,34 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     return ok({ userId: res.userId }, 201, { "set-cookie": setSessionCookie("app", isSecureRequest(c.req.raw, c.env.GX_ENV), res.sessionToken, res.maxAgeSeconds) })
   })
 
-  // Outlet application (PR-01): pickup area search, submit, status.
+  // Outlet application (PR-01): pickup area search, geocode helper (KV-cached Nominatim ID proxy), submit, status.
   r("GET", "/onboarding/areas", "app_session", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
+  r("GET", "/geocode", "app_session", "none", async (c) => {
+    const q = (c.req.query("q") ?? "").trim().replace(/\s+/g, " ").slice(0, 160)
+    if (q.length < 3) return ok({ point: null })
+    if (c.env.GX_ENV === "local") {
+      // Deterministic local response (no external network in dev/test): Bandung for Bandung/Coblong/Dago, Jakarta otherwise.
+      const point = /bandung|coblong|dago/i.test(q) ? { lat: -6.8915, lng: 107.6107, label: q } : { lat: -6.2297, lng: 106.8576, label: q }
+      return ok({ point })
+    }
+    const key = `geocode:v1:${q.toLowerCase()}`
+    const cached = await c.env.CACHE_KV.get<{ lat: number; lng: number; label: string } | null>(key, "json").catch(() => undefined)
+    if (cached !== undefined) return ok({ point: cached })
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=id&limit=1&q=${encodeURIComponent(q)}`
+      const res = await fetch(url, { headers: { "user-agent": "GeraiExpress/2.0 (https://geraiexpress.com)", accept: "application/json" } })
+      if (!res.ok) return ok({ point: null })
+      const arr = (await res.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>
+      const first = arr[0]
+      const lat = first?.lat ? Math.round(Number(first.lat) * 1e6) / 1e6 : NaN
+      const lng = first?.lon ? Math.round(Number(first.lon) * 1e6) / 1e6 : NaN
+      const point = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng, label: first?.display_name ?? q } : null
+      c.executionCtx.waitUntil(c.env.CACHE_KV.put(key, JSON.stringify(point), { expirationTtl: 7 * 86_400 }).catch(() => undefined))
+      return ok({ point })
+    } catch {
+      return ok({ point: null })
+    }
+  })
   r("POST", "/onboarding/application", "app_session", "self", async (c) => {
     const b = await body(c)
     const res = await submitApplication(c.env, c.get("session").user.id, b as never, now(), hostOrigin(c.req.raw))
@@ -294,10 +320,10 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!o.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     if (o.value?.areaId) return o.value.areaId
     // Gerai approved before the default outlet existed: take the pickup point from the approved application once.
-    const a = await c.env.DB.prepare("SELECT outlet_json FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY decided_at DESC LIMIT 1").bind(m.tenantId).first<{ outlet_json: string }>()
-    const out = a ? (JSON.parse(a.outlet_json) as { name?: string; picName?: string; picPhone?: string; areaId?: string; areaLabel?: string; streetAddress?: string; postalCode?: string | null }) : null
+    const a = await c.env.DB.prepare("SELECT outlet_json, contact_whatsapp FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY decided_at DESC LIMIT 1").bind(m.tenantId).first<{ outlet_json: string; contact_whatsapp: string | null }>()
+    const out = a ? (JSON.parse(a.outlet_json) as { name?: string; picName?: string; picPhone?: string; areaId?: string; areaLabel?: string; streetAddress?: string; postalCode?: string | null; latitude?: number | null; longitude?: number | null }) : null
     if (!out?.areaId) throw new AppError(409, "NO_PICKUP_AREA", "Titik jemput gerai belum diatur.")
-    await vault.upsertDefaultOutlet(m.tenantId, { name: out.name ?? m.tenantName, picName: out.picName, picPhone: out.picPhone, areaId: out.areaId, areaLabel: out.areaLabel, street: out.streetAddress, postalCode: out.postalCode ?? null })
+    await vault.upsertDefaultOutlet(m.tenantId, { name: out.name ?? m.tenantName, picName: out.picName, picPhone: out.picPhone, whatsapp: a?.contact_whatsapp ?? null, areaId: out.areaId, areaLabel: out.areaLabel, street: out.streetAddress, postalCode: out.postalCode ?? null, latitude: out.latitude ?? null, longitude: out.longitude ?? null })
     return out.areaId
   }
   r("POST", "/quotes", "app_member", "role", async (c) => {
@@ -822,7 +848,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
       packingItems: v.packing.items.filter((i) => i.active).map((i) => ({ name: i.name, priceIdr: i.priceIdr })),
       serviceFeeIdr: v.packing.serviceFeeEnabled ? v.packing.serviceFeeIdr : null,
       showCommission: v.receipt.showCommission,
-      outlet: v.profile ? { name: v.profile.name, streetAddress: v.profile.street, areaLabel: v.profile.areaLabel } : null,
+      outlet: v.profile ? { name: v.profile.name, streetAddress: v.profile.street, areaLabel: v.profile.areaLabel, hasCoordinates: v.profile.latitude != null && v.profile.longitude != null } : null,
     })
   })
   for (const form of ["profile", "business", "receipt", "packing", "cashier_payout"] as const) {
