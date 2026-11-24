@@ -7,6 +7,7 @@ import { decryptString, encryptString } from "../crypto/aead"
 import { enqueueEmailStatement, emailHash, normalizeEmail } from "../email/outbox"
 import { AppError } from "../http/envelope"
 import { DUMMY_HASH, hashPassword, passwordProblem, verifyPassword } from "./password"
+import { DEMO_READ_ONLY_MESSAGE, isDemoEmail } from "../demo/constants"
 import { createSession, revokeOtherSessions } from "./session"
 import * as throttle from "./throttle"
 import { newOtp, newToken, tokenHash, TOKEN_RE } from "./tokens"
@@ -180,19 +181,24 @@ export async function login(
   input: { email: unknown; password: unknown; ctx: HostContextName; ipHash: string; deviceHash: string | null; userAgent: string | null; origin: string; now: number; isSuperAdmin?: (userId: string) => Promise<boolean> },
 ): Promise<LoginResult> {
   const email = validEmail(input.email)
+  const demo = isDemoEmail(email)
   const password = typeof input.password === "string" ? input.password : ""
   const eh = await emailHash(env.AUTH_SESSION_PEPPER, email)
   const lockKey = `login-lock:${eh}`
-  const locked = await throttle.lockedUntil(env.DB, lockKey, input.now)
-  if (locked) throw tooMany(locked - input.now)
+  if (!demo) {
+    const locked = await throttle.lockedUntil(env.DB, lockKey, input.now)
+    if (locked) throw tooMany(locked - input.now)
+  }
   const ipLimit = await throttle.hit(env.DB, `login-ip:${input.ipHash}`, 50, 15 * 60_000, input.now)
   if (!ipLimit.allowed) throw tooMany(ipLimit.retryAfterMs)
   const user = await env.DB.prepare("SELECT id, name, password_hash, status FROM users WHERE email = ?").bind(email).first<{ id: string; name: string; password_hash: string; status: string }>()
   const ok = await verifyPassword(password, env.AUTH_SESSION_PEPPER, user?.password_hash ?? DUMMY_HASH)
   const allowedHere = user && ok && user.status === "active" && (input.ctx === "app" || (input.isSuperAdmin ? await input.isSuperAdmin(user.id) : false))
   if (!user || !allowedHere) {
-    const fails = await throttle.hit(env.DB, `login-fail:${eh}`, LOGIN_MAX_FAILS, LOGIN_LOCK_MS, input.now)
-    if (!fails.allowed) await throttle.lock(env.DB, lockKey, input.now + LOGIN_LOCK_MS, input.now).run()
+    if (!demo) {
+      const fails = await throttle.hit(env.DB, `login-fail:${eh}`, LOGIN_MAX_FAILS, LOGIN_LOCK_MS, input.now)
+      if (!fails.allowed) await throttle.lock(env.DB, lockKey, input.now + LOGIN_LOCK_MS, input.now).run()
+    }
     emit("auth.otp", { outcome: "login_failed" }, {}, { env: env.GX_ENV, now: input.now })
     throw new AppError(401, "LOGIN_FAILED", "Email atau kata sandi salah.")
   }
@@ -208,9 +214,9 @@ export async function login(
     throttle.clear(env.DB, `login-fail:${eh}`),
     env.DB.prepare("INSERT INTO known_devices (user_id, device_hash, first_seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(user.id, device, input.now),
   ]
-  const newDevice = !known
-  // security_alert on a new device for gerai owners (app) and Super Admins (owner) — spec 12 §1.
-  const isOwnerRole = input.ctx === "owner" || (await env.DB.prepare("SELECT 1 FROM tenant_members WHERE user_id = ? AND role = 'gerai_admin' AND status = 'active'").bind(user.id).first())
+  const newDevice = !known && !demo
+  // security_alert on a new device for gerai owners (app) and Super Admins (owner) — spec 12 §1 (suppressed for demo).
+  const isOwnerRole = !demo && (input.ctx === "owner" || (await env.DB.prepare("SELECT 1 FROM tenant_members WHERE user_id = ? AND role = 'gerai_admin' AND status = 'active'").bind(user.id).first()))
   if (newDevice && isOwnerRole) {
     const when = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(input.now) + " WIB"
     const mail = await enqueueEmailStatement(env, {
@@ -240,6 +246,7 @@ export function describeDevice(ua: string | null): string {
 /** Always answers the same way (no account enumeration). */
 export async function requestPasswordReset(env: AuthEnv, input: { email: unknown; ipHash: string; origin: string; now: number }): Promise<void> {
   const email = validEmail(input.email)
+  if (isDemoEmail(email)) throw new AppError(403, "DEMO_READ_ONLY", DEMO_READ_ONLY_MESSAGE)
   const eh = await emailHash(env.AUTH_SESSION_PEPPER, email)
   const perEmail = await throttle.hit(env.DB, `reset-send:${eh}`, OTP_PER_EMAIL.limit, OTP_PER_EMAIL.windowMs, input.now)
   const perIp = await throttle.hit(env.DB, `otp-send-ip:${input.ipHash}`, OTP_PER_IP.limit, OTP_PER_IP.windowMs, input.now)

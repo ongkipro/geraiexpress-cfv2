@@ -334,6 +334,18 @@ export function AppShell() {
       toolbar={toolbar}
       bottomBar={commitFlow ? undefined : <BottomBar path={path} kiriman={w.badges.kiriman} />}
     >
+      {w.demo ? (
+        <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200/90 bg-blue-50/80 px-3.5 py-2.5 text-sm text-slate-800">
+          <div className="min-w-0">
+            <span className="font-semibold text-slate-950">Mode Demo (Hanya Baca)</span>
+            <span className="mx-1.5 text-slate-400">·</span>
+            <span className="text-xs text-slate-700 sm:text-sm">Data simulasi gerai aktif. Cek Ongkir &amp; Pratinjau Cetak bisa dicoba; simpan data dan kirim paket dinonaktifkan.</span>
+          </div>
+          <LinkButton variant="outline" size="sm" to="/daftar" className="shrink-0 bg-white">
+            Daftar Gerai Gratis
+          </LinkButton>
+        </div>
+      ) : null}
       {w.hints.mengantarWebhook && path === "/" ? (
         <div className="mb-5">
           <CalloutAlert title="Webhook Mengantar belum aktif" action={<LinkButton variant="outline" size="sm" to="/pengaturan/mengantar">Atur sekarang</LinkButton>}>

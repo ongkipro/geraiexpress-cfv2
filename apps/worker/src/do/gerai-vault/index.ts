@@ -23,6 +23,7 @@ import { displayStatus, packingNameOf, pairDisplay, paidState, parseCheckout, re
 import { applyCheck, BatchPaymentAbort, createBatch, editRow, listBatches, payBatch, readBatch, refreshCounts, removeRow, totalsOf, type BatchRow, type BulkError, type BulkRow, type RowCheck } from "./bulk"
 import type { ValidRow } from "@gx/domain/bulk"
 import { normalizePhone08 } from "@gx/domain/contacts"
+import { seedDemoVault, type SeededShipmentIndexRow } from "../../demo/seed-vault"
 import { QUOTE_TTL_MS } from "../../pricing/quote/engine"
 import { posCodMessage } from "../../pricing/quote/messages"
 import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type OwnerDashboard } from "../../analytics/queries"
@@ -3272,5 +3273,13 @@ export class GeraiVaultDO extends DurableObject<Env> {
     })
     await this.armOutbox()
     return { ok: true, value: { polled, changed, failed } }
+  }
+
+  /** Idempotently populates the isolated demo tenant with synthetic 45-day operational data. */
+  async seedDemo(tenantId: string, actorId: string, now: number): Promise<VaultResult<{ shipments: SeededShipmentIndexRow[]; senders: number; recipients: number }>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const result = await seedDemoVault(this.ctx.storage.sql, this.env, tenantId, actorId, now)
+    return { ok: true, value: result }
   }
 }

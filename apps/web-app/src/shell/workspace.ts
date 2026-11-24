@@ -8,6 +8,7 @@ export interface Workspace {
   menus: string[]
   badges: { kiriman: number; notifications: number }
   hints: { mengantarWebhook: string | null; sandboxTools?: boolean }
+  demo?: boolean
   tenants: Array<{ id: string; name: string; slug: string }>
 }
 

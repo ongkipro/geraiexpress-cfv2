@@ -8,6 +8,7 @@ import { handleDevLastMail } from "./ops/dev-mail"
 import { handleDevPreview } from "./ops/dev-preview"
 import { handleDoMigrate } from "./ops/do-migrate"
 import { handleBootstrapAdmin } from "./ops/bootstrap-admin"
+import { handleSeedDemo } from "./ops/seed-demo"
 import { dispatchDue } from "./email/mailer"
 import { runChecks } from "./telemetry/checks"
 import { runDiscountVerifier } from "./pricing/rules"
@@ -95,6 +96,7 @@ export default {
         if (path === "/internal/ops/do-migrate" && request.method === "POST") return handleDoMigrate(request, env)
         if (path === "/internal/dev/last-mail" && request.method === "GET") return handleDevLastMail(request, env)
         if (path === "/internal/ops/bootstrap-admin" && request.method === "POST") return handleBootstrapAdmin(request, env)
+        if (path === "/internal/ops/seed-demo" && request.method === "POST") return handleSeedDemo(request, env)
         if (path === "/internal/ops/alert-drill" && request.method === "POST") return handleAlertDrill(request, env)
         if ((path === "/internal/ops/backup-export" || path === "/internal/ops/backup-restore") && request.method === "POST") return handleBackupOps(request, env, path)
         if (path === "/internal/dev/preview") return handleDevPreview(request, env, "owner")

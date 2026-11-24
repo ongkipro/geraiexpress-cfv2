@@ -26,7 +26,7 @@ import {
 // thermal density toggle, duplicate-print guard (`Cetak Ulang Label (sudah dicetak n×)` + reason), and instant PDF fallback.
 const FORMATS: Format[] = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"]
 
-function RollPaperPreview({ lines, density }: { lines: RollPreviewLine[]; density: "normal" | "tebal" }) {
+export function RollPaperPreview({ lines, density }: { lines: RollPreviewLine[]; density: "normal" | "tebal" }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-100/90 p-4">
       <div

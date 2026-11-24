@@ -65,7 +65,7 @@ export interface QuoteResult {
 }
 
 /** Runs a quote for a tenant. Throws `AppError` 429 when the per-tenant quote limit is exceeded. */
-export async function runQuote(env: Env, tenantId: string, input: QuoteInput, now: number, opts: { rateKey?: string; perMinute?: number; serviceCode?: string | null } = {}): Promise<QuoteResult> {
+export async function runQuote(env: Env, tenantId: string, input: QuoteInput, now: number, opts: { rateKey?: string; perMinute?: number; serviceCode?: string | null; skipObserve?: boolean } = {}): Promise<QuoteResult> {
   const limit = await hit(env.DB, opts.rateKey ?? `quote:${tenantId}`, opts.perMinute ?? QUOTES_PER_MINUTE, 60_000, now)
   if (!limit.allowed) throw new AppError(429, "QUOTE_RATE_LIMITED", "Terlalu banyak cek ongkir. Coba lagi sebentar lagi.", {}, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) })
   const vault = vaultFor(env, tenantId)
@@ -155,8 +155,8 @@ export async function runQuote(env: Env, tenantId: string, input: QuoteInput, no
       }
     }),
   )
-  // Every quote feeds the discount verifier (spec 02 §2.1); best effort, never blocks the counter.
-  await Promise.allSettled(observations.map((o) => recordObservation(env, { tenantId, serviceCode: o.serviceCode, observedBps: o.bps, now, scheduled: false })))
+  // Every quote feeds the discount verifier (spec 02 §2.1); best effort, never blocks the counter (skipped for demo).
+  if (!opts.skipObserve) await Promise.allSettled(observations.map((o) => recordObservation(env, { tenantId, serviceCode: o.serviceCode, observedBps: o.bps, now, scheduled: false })))
   const order = new Map(catalog.results.map((c, i) => [c.service_code, i]))
   cards.sort((a, b) => Number(b.available) - Number(a.available) || (order.get(a.serviceCode) ?? 0) - (order.get(b.serviceCode) ?? 0))
   return { input, cards, medals: medals(cards, input.mode), quotedAt: now, expiresAt: now + QUOTE_TTL_MS }

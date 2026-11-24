@@ -4,6 +4,7 @@
 import { MengantarPublicClient, PartnerClient } from "@gx/mengantar-sdk"
 import { emit, ipNotAllowedAlert, publicApiOutcome } from "@gx/telemetry"
 import { decryptString } from "../crypto/aead"
+import { DEMO_SELLER_API_KEY } from "../demo/constants"
 import { sendAlert } from "../telemetry/alerts"
 import { mockFetch } from "./mock"
 
@@ -134,9 +135,10 @@ function partnerObserved(env: Env, inner: typeof fetch): typeof fetch {
  * (OBSERVABILITY.md "Is a seller key being misused?"). Counting never blocks or fails the call.
  */
 export function publicClient(env: Env, apiKey: string, tenantId?: string): MengantarPublicClient {
-  const mock = env.MENGANTAR_PUBLIC_ORIGIN === "mock"
-  // Always observed (telemetry + IP_NOT_ALLOWED alert); per-tenant D1 counters only when the tenant is known.
-  return new MengantarPublicClient({ origin: mock ? "https://mock.mengantar.local" : env.MENGANTAR_PUBLIC_ORIGIN, apiKey, fetchImpl: observed(env, tenantId ?? null, mock ? mockFetch : fetch) })
+  const demo = apiKey === DEMO_SELLER_API_KEY
+  const mock = env.MENGANTAR_PUBLIC_ORIGIN === "mock" || demo
+  // Always observed (telemetry + IP_NOT_ALLOWED alert); per-tenant D1 counters only for real tenants.
+  return new MengantarPublicClient({ origin: mock ? "https://mock.mengantar.local" : env.MENGANTAR_PUBLIC_ORIGIN, apiKey, fetchImpl: observed(env, demo ? null : (tenantId ?? null), mock ? mockFetch : fetch) })
 }
 
 /** Route label without the key: `/api/public/{KEY}/order/estimate` → `/order/estimate`. */

@@ -36,6 +36,7 @@ import { changePassword, confirmEmailChange, listSessions, requestEmailChange, r
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
 import { vaultFor } from "../do/gerai-vault/stub"
+import { DEMO_READ_ONLY_MESSAGE, isDemoAllowedAppPost, isDemoEmail, isDemoTenantSlug } from "../demo/constants"
 
 export interface Membership {
   tenantId: string
@@ -73,11 +74,18 @@ export function guard(level: AuthLevel): MiddlewareHandler<{ Bindings: Env; Vari
     if (!s) return fail(401, "UNAUTHENTICATED", "Sesi Anda berakhir. Silakan masuk lagi.")
     c.set("session", s.session)
     if (s.setCookie) c.set("rolledCookie", s.setCookie)
-    if (level === "app_session") return next()
+    const demoUser = isDemoEmail(s.session.user.email)
+    if (level === "app_session") {
+      if (demoUser && c.req.method !== "GET" && !isDemoAllowedAppPost(c.req.path)) return fail(403, "DEMO_READ_ONLY", DEMO_READ_ONLY_MESSAGE)
+      return next()
+    }
     const m = await loadMembership(c.env, s.session)
     if (!m) return fail(403, "NO_MEMBERSHIP", "Akun Anda belum terhubung ke gerai mana pun.")
     if (level === "app_owner" && m.role !== "gerai_admin") return fail(403, "FORBIDDEN", "Menu ini hanya untuk pemilik gerai.")
     if (level !== "app_member" && level !== "app_owner") return fail(403, "FORBIDDEN", "Akses ditolak.")
+    if ((demoUser || isDemoTenantSlug(m.tenantSlug)) && c.req.method !== "GET" && !isDemoAllowedAppPost(c.req.path)) {
+      return fail(403, "DEMO_READ_ONLY", DEMO_READ_ONLY_MESSAGE)
+    }
     c.set("membership", m)
     return next()
   }
@@ -291,6 +299,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
         menus,
         badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
         hints: { mengantarWebhook: webhook && webhook.ok && webhook.value && webhook.value.webhookState !== "active" ? webhook.value.webhookState : null, sandboxTools: c.env.GX_ENV !== "production" && m.role === "gerai_admin" },
+        demo: isDemoTenantSlug(m.tenantSlug) || isDemoEmail(s.user.email),
         tenants: memberships.results,
       }),
     )
@@ -329,7 +338,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   r("POST", "/quotes", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const input = parseQuoteInput(await body(c), await quoteOrigin(c))
-    const q = await runQuote(c.env, m.tenantId, input, now())
+    const q = await runQuote(c.env, m.tenantId, input, now(), { skipObserve: isDemoTenantSlug(m.tenantSlug) })
     const view = m.role === "gerai_admin" ? q.cards.map(ownerCard) : q.cards.map(cashierCard)
     return ok(projectFor(m.role, { cards: view, medals: q.medals, quotedAt: q.quotedAt, expiresAt: q.expiresAt }))
   })
@@ -935,7 +944,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const slugs = Array.isArray(b.slugs) ? [...new Set((b.slugs as unknown[]).filter((x): x is string => typeof x === "string" && /^[0-9a-hjkmnp-tv-z]{7}$/.test(x)))] : []
     const format = (FORMATS as readonly string[]).includes(String(b.format)) ? (b.format as (typeof FORMATS)[number]) : "label_10x15_with_stub"
     const preview = b.preview === true
-    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: await trackingHost(c), record: !preview })
+    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: await trackingHost(c), record: !preview && !isDemoTenantSlug(m.tenantSlug) })
     if (!r.ok) return vaultErr(r)
     if (r.value.items.length === 0) throw new AppError(409, r.value.refused[0]?.code ?? "NOTHING_TO_PRINT", r.value.refused[0]?.message ?? "Tidak ada label yang bisa dicetak.")
     if (format === "roll_58mm") {

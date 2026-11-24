@@ -11,24 +11,30 @@ import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, readSettingsCache, SaveBar, SettingsLayout, useSettingsForm, writeSettingsCache, type SettingsView } from "../index/shared"
 import { ChoiceGroup, SectionCard, ToggleRow } from "../../../components/admin/page"
+import { LabelPreview } from "./preview"
 
-// Pengaturan › Printer & Struk (visual 08 §2.3, DEC-224/225): this device's density (instant, local, Kasir allowed)
-// in its own card; outlet label format + receipt content (owner, Save bar). Instant and Save never share a card.
+// Pengaturan › Printer & Struk (visual 08 §2.3, DEC-224/225): outlet label format + live thermal preview + receipt
+// remark (owner, Save bar); this device's density (instant, local, Kasir allowed) in its own card so instant and Save
+// never share a card.
 const FORMATS: Format[] = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"]
 
 export function PrinterPage() {
   const w = useWorkspace()
+  const [density, setDensity] = useState<"normal" | "tebal">(deviceDensity)
+  const changeDensity = (d: "normal" | "tebal") => {
+    setDensity(d)
+    setDeviceDensity(d)
+  }
   return (
-    <SettingsLayout title="Printer & Struk" description="Atur printer di perangkat ini dan isi struk pelanggan.">
-      <DeviceCard />
+    <SettingsLayout title="Printer & Struk" description="Atur format label, lihat pratinjau cetak langsung, dan atur printer di perangkat ini.">
+      {isOwner(w) ? <ReceiptForm density={density} /> : <KasirFormatInfo density={density} />}
+      <DeviceCard density={density} onChange={changeDensity} />
       <QrisCard owner={isOwner(w)} />
-      {isOwner(w) ? <ReceiptForm /> : <KasirFormatInfo />}
     </SettingsLayout>
   )
 }
 
-function DeviceCard() {
-  const [density, setDensity] = useState(deviceDensity)
+function DeviceCard({ density, onChange }: { density: "normal" | "tebal"; onChange: (d: "normal" | "tebal") => void }) {
   return (
     <SectionCard title="Printer di perangkat ini" description="Langsung tersimpan di perangkat ini saja.">
       <div className="flex flex-col gap-4">
@@ -39,8 +45,7 @@ function DeviceCard() {
           </div>
           <ToggleGroup value={[density]} onValueChange={(v) => {
             const d = (v[0] as "normal" | "tebal") ?? density
-            setDensity(d)
-            setDeviceDensity(d)
+            onChange(d)
           }} variant="outline" aria-labelledby="density-t">
             <ToggleGroupItem value="normal" className="min-w-20">Normal</ToggleGroupItem>
             <ToggleGroupItem value="tebal" className="min-w-20">Tebal</ToggleGroupItem>
@@ -52,7 +57,7 @@ function DeviceCard() {
   )
 }
 
-function KasirFormatInfo() {
+function KasirFormatInfo({ density }: { density: "normal" | "tebal" }) {
   const w = useWorkspace()
   const cacheKey = `print-format:${w.tenant.id}`
   const [fmt, setFmt] = useState<Format | null>(() => readSettingsCache<Format>(cacheKey))
@@ -76,8 +81,23 @@ function KasirFormatInfo() {
           <span>{err}</span>
           <Button type="button" variant="outline" size="sm" onClick={load}>Coba Lagi</Button>
         </div>
+      ) : fmt ? (
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_308px]">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm"><span className="font-medium text-slate-950">{FORMAT_LABEL[fmt]}</span> — {PAPER_HINT[fmt]}.</p>
+            <p className="text-xs text-muted-foreground">Gunakan tombol Cetak Uji Contoh di samping untuk memastikan ukuran kertas dan skala 100% printer loket sudah pas sebelum mulai shift.</p>
+          </div>
+          <LabelPreview
+            format={fmt}
+            remark="Rekam video saat buka paket untuk klaim"
+            density={density}
+            outletName={w.tenant.name}
+            outletWhatsapp={null}
+            miniSiteHost={w.tenant.miniSiteHost}
+          />
+        </div>
       ) : (
-        <p className="text-sm">{fmt ? <><span className="font-medium">{FORMAT_LABEL[fmt]}</span> — {PAPER_HINT[fmt]}.</> : "Memuat…"}</p>
+        <p className="text-sm text-muted-foreground">Memuat…</p>
       )}
     </SectionCard>
   )
@@ -86,29 +106,62 @@ function KasirFormatInfo() {
 type Form = SettingsView["receipt"]
 const pick = (s: SettingsView): Form => s.receipt
 
-function ReceiptForm() {
+function ReceiptForm({ density }: { density: "normal" | "tebal" }) {
+  const w = useWorkspace()
   const s = useSettingsForm(pick, "receipt")
   if (s.error) return <ErrorState message={s.error} onRetry={s.load} />
   if (!s.form) return <LoadingState label="Memuat pengaturan struk" />
   const f = s.form
+  const cached = readSettingsCache<SettingsView>(`settings:${w.tenant.id}`)
+  const activeFormat: Format = FORMATS.includes(f.defaultLabelFormat as Format) ? (f.defaultLabelFormat as Format) : "label_10x15_with_stub"
   const set = (p: Partial<Form>) => s.setForm({ ...f, ...p })
   return (
     <>
-      <SectionCard title="Format label bawaan" description="Dipakai setiap kali kasir mencetak label; bisa diganti per cetakan.">
-        <ChoiceGroup label="Format label bawaan" layout="grid" value={f.defaultLabelFormat} onValueChange={(x) => set({ defaultLabelFormat: x })} choices={FORMATS.map((x) => ({ value: x, label: FORMAT_LABEL[x], description: PAPER_HINT[x] }))} />
-      </SectionCard>
-      <SectionCard title="Isi struk" description="Baris tambahan di struk pelanggan.">
-        <div className="flex flex-col divide-y divide-slate-100">
-          <Field className="pb-4" data-invalid={s.fields.unboxingRemark ? true : undefined}>
-            <div className="flex items-baseline justify-between gap-3">
-              <FieldLabel htmlFor="remark">Catatan video unboxing</FieldLabel>
-              <span className="text-xs text-muted-foreground tabular-nums" aria-hidden>{f.unboxingRemark.length}/50</span>
+      <SectionCard title="Format label & isi struk" description="Dipakai setiap kali kasir mencetak label; pratinjau di samping berubah langsung sesuai pilihan Anda.">
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_308px]">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-slate-950">Format label bawaan</span>
+              <ChoiceGroup
+                label="Format label bawaan"
+                layout="grid"
+                className="xl:grid-cols-1"
+                value={activeFormat}
+                onValueChange={(x) => set({ defaultLabelFormat: x })}
+                choices={FORMATS.map((x) => ({ value: x, label: FORMAT_LABEL[x], description: PAPER_HINT[x] }))}
+              />
             </div>
-            <Input id="remark" value={f.unboxingRemark} maxLength={50} onChange={(e) => set({ unboxingRemark: e.target.value })} />
-            {s.fields.unboxingRemark ? <FieldError>{s.fields.unboxingRemark}</FieldError> : <FieldDescription>Maksimal 50 karakter. Kosongkan untuk menyembunyikan baris ini.</FieldDescription>}
-          </Field>
-          <ToggleRow className="pt-3" id="show-commission" title="Tampilkan komisi di Cek Ongkir Cepat" description="Khusus pemilik; kasir tidak pernah melihat komisi." checked={f.showCommission} onCheckedChange={(v) => set({ showCommission: v })} />
+            <div className="border-t border-slate-100 pt-4">
+              <Field data-invalid={s.fields.unboxingRemark ? true : undefined}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <FieldLabel htmlFor="remark">Catatan video unboxing (di label)</FieldLabel>
+                  <span className="text-xs text-muted-foreground tabular-nums" aria-hidden>{f.unboxingRemark.length}/50</span>
+                </div>
+                <Input id="remark" value={f.unboxingRemark} maxLength={50} onChange={(e) => set({ unboxingRemark: e.target.value })} />
+                {s.fields.unboxingRemark ? <FieldError>{s.fields.unboxingRemark}</FieldError> : <FieldDescription>Maksimal 50 karakter. Kosongkan untuk menyembunyikan baris ini di label paket.</FieldDescription>}
+              </Field>
+            </div>
+          </div>
+          <div className="xl:sticky xl:top-24">
+            <LabelPreview
+              format={activeFormat}
+              remark={f.unboxingRemark}
+              density={density}
+              outletName={cached?.profile?.name ?? w.tenant.name}
+              outletWhatsapp={cached?.profile?.whatsapp ?? null}
+              miniSiteHost={w.tenant.miniSiteHost}
+            />
+          </div>
         </div>
+      </SectionCard>
+      <SectionCard title="Tampilan layar kasir" description="Hanya tampil di layar pemilik; tidak pernah dicetak di struk pelanggan maupun terlihat oleh kasir.">
+        <ToggleRow
+          id="show-commission"
+          title="Tampilkan Modal & Laba saat cek ongkir"
+          description="Menampilkan harga modal Mengantar dan estimasi laba gerai secara otomatis di layar Kasir & Cek Ongkir Cepat. Tidak dicetak di struk; khusus pemilik."
+          checked={f.showCommission}
+          onCheckedChange={(v) => set({ showCommission: v })}
+        />
       </SectionCard>
       <Notice msg={s.msg} />
       <SaveBar dirty={s.dirty} pending={s.pending} onCancel={s.cancel} onSave={s.save} />

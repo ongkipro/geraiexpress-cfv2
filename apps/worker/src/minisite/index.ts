@@ -9,6 +9,7 @@
 //   GET  /robots.txt, /sitemap.xml
 // Tenant comes only from the classified host (never from the request). No cookies are set or read here.
 import { qrSvg } from "@gx/thermal-print"
+import { DEMO_READ_ONLY_MESSAGE, isDemoTenantSlug } from "../demo/constants"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { PublicTrack } from "../do/gerai-vault"
 import { parseDraft } from "../do/gerai-vault/minisite"
@@ -196,6 +197,9 @@ async function kirimForm(env: Env, c: Ctx, request: Request, url: URL): Promise<
   if (request.method === "POST") {
     const f = await request.formData()
     v = Object.fromEntries([...f.entries()].map(([k, x]) => [k, String(x).slice(0, 300)]))
+    if (isDemoTenantSlug(c.tenantSlug)) {
+      errors.form = DEMO_READ_ONLY_MESSAGE
+    } else {
     const draftInput = {
       cod: v.cod === "1",
       senderName: v.senderName,
@@ -225,6 +229,7 @@ async function kirimForm(env: Env, c: Ctx, request: Request, url: URL): Promise<
           errors = r.errors ?? { form: "Gerai sedang tidak bisa menerima pengajuan. Coba lagi nanti." }
         }
       }
+    }
     }
   }
   const body = `<div class="stage"><div class="card"><form method="post" action="/kirim">
