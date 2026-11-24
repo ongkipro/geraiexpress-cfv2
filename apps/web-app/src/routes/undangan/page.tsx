@@ -77,12 +77,13 @@ export function UndanganPage() {
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
         <p className="text-base md:text-sm">Email: <span className="font-medium">{inv.email}</span></p>
-        {inv.accountExists ? null : <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />}
+        {inv.accountExists ? null : <TextField label="Nama lengkap" name="name" autoComplete="name" placeholder="Contoh: Siti Aminah" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />}
         <TextField
           label={inv.accountExists ? "Kata sandi akun Anda" : "Buat kata sandi"}
           name="password"
           type="password"
           autoComplete={inv.accountExists ? "current-password" : "new-password"}
+          placeholder={inv.accountExists ? "Masukkan kata sandi" : "Buat kata sandi"}
           value={password}
           onChange={setPassword}
           error={fieldErrors.password}

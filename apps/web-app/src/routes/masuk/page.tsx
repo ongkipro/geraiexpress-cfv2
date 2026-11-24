@@ -12,6 +12,7 @@ export function MasukPage() {
   const [password, setPassword] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [locked, setLocked] = useState(false)
 
   const { setContainer: turnstileBox, ...ts } = useTurnstile()
@@ -19,10 +20,19 @@ export function MasukPage() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (pending || !ts.token) return
+    const fe: Record<string, string> = {}
+    if (!email.trim()) fe.email = "Email wajib diisi."
+    if (!password) fe.password = "Kata sandi wajib diisi."
+    if (Object.keys(fe).length) {
+      setFieldErrors(fe)
+      setError(null)
+      return
+    }
     setPending(true)
     setError(null)
+    setFieldErrors({})
     try {
-      await api("/auth/login", { body: { email, password, turnstileToken: ts.token } })
+      await api("/auth/login", { body: { email: email.trim(), password, turnstileToken: ts.token } })
       await navigate({ to: "/" })
     } catch (err) {
       ts.reset()
@@ -38,8 +48,8 @@ export function MasukPage() {
     <AuthCard switcher="masuk" title="Masuk ke ruang kerja gerai" description="Email Pemilik atau Kasir gerai Anda.">
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         {error ? <FormAlert tone={locked ? "warn" : "danger"}>{error}</FormAlert> : null}
-        <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} required />
-        <TextField label="Kata sandi" name="password" type="password" autoComplete="current-password" value={password} onChange={setPassword} required />
+        <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" placeholder="nama@gmail.com" value={email} onChange={setEmail} error={fieldErrors.email} required />
+        <TextField label="Kata sandi" name="password" type="password" autoComplete="current-password" placeholder="Masukkan kata sandi" value={password} onChange={setPassword} error={fieldErrors.password} required />
         <div className="-mt-1 flex justify-end">
           <Link to="/lupa-sandi" className="inline-flex min-h-11 items-center text-sm font-medium text-[#64748B] underline-offset-4 hover:text-[#0F172A] hover:underline md:min-h-9">
             Lupa kata sandi?

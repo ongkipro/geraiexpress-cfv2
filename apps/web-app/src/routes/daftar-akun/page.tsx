@@ -94,9 +94,9 @@ export function DaftarAkunPage() {
       {step === "email" || step === "otp" ? (
         <form className="flex flex-col gap-4" onSubmit={step === "email" ? sendCode : verify} noValidate>
           {step === "email" ? (
-            <TextField key="email" label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} error={fieldErrors.email} required />
+            <TextField key="email" label="Email" name="email" type="email" inputMode="email" autoComplete="email" placeholder="nama@gmail.com" value={email} onChange={setEmail} error={fieldErrors.email} required />
           ) : (
-            <TextField key="code" label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
+            <TextField key="code" label="Kode verifikasi" name="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6 digit" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} error={fieldErrors.code} required otp />
           )}
           <TurnstileAction slot={turnstileBox} visible={ts.visible}>
             {step === "email" ? (
@@ -117,8 +117,8 @@ export function DaftarAkunPage() {
       {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
       {step === "profile" ? (
         <form className="flex flex-col gap-4" onSubmit={complete} noValidate>
-          <TextField label="Nama lengkap" name="name" autoComplete="name" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />
-          <TextField label="Kata sandi" name="password" type="password" autoComplete="new-password" value={password} onChange={setPassword} error={fieldErrors.password} hint="Minimal 8 karakter." required />
+          <TextField label="Nama lengkap" name="name" autoComplete="name" placeholder="Contoh: Budi Santoso" value={name} onChange={setName} error={fieldErrors.name} required maxLength={80} />
+          <TextField label="Kata sandi" name="password" type="password" autoComplete="new-password" placeholder="Buat kata sandi" value={password} onChange={setPassword} error={fieldErrors.password} hint="Minimal 8 karakter." required />
           <Button type="submit" size="lg" disabled={pending}>{pending ? "Menyimpan…" : "Buat Akun"}</Button>
         </form>
       ) : null}

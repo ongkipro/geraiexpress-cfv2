@@ -113,7 +113,7 @@ export function TotpPage() {
         <AuthenticatorQr otpauthUri={rotation.otpauthUri} secret={rotation.secret} label="Kode QR autentikator baru" />
         <form className="flex flex-col gap-5" onSubmit={confirmRotation} noValidate>
           {error ? <FormAlert>{error}</FormAlert> : null}
-          <TextField label="Kode dari autentikator baru" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required />
+          <TextField label="Kode dari autentikator baru" name="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6 digit" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required otp />
           <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Aktifkan Autentikator Baru"}</Button>
           <Button type="button" variant="ghost" onClick={() => void proceed()} disabled={pending}>Lewati, pakai autentikator lama</Button>
         </form>
@@ -126,7 +126,7 @@ export function TotpPage() {
       <AuthCard variant="owner" title="Kode Pemulihan Cadangan" description="Masukkan salah satu dari 8 kode pemulihan yang Anda simpan saat mengaktifkan TOTP. Setiap kode hanya bisa dipakai sekali.">
         <form className="flex flex-col gap-5" onSubmit={useRecovery} noValidate>
           {error ? <FormAlert>{error}</FormAlert> : null}
-          <TextField label="Kode pemulihan" name="recovery" autoComplete="off" maxLength={11} hint="Format XXXX-XXXX, huruf besar atau kecil sama saja." value={recovery} onChange={(v) => setRecovery(v.toUpperCase().slice(0, 11))} required />
+          <TextField label="Kode pemulihan" name="recovery" autoComplete="off" placeholder="XXXX-XXXX" maxLength={11} hint="Format XXXX-XXXX, huruf besar atau kecil sama saja." value={recovery} onChange={(v) => setRecovery(v.toUpperCase().slice(0, 11))} required />
           <CheckboxField id="reset-totp" checked={resetTotp} onCheckedChange={setResetTotp} align="start">
             Sekaligus daftarkan perangkat autentikator (TOTP) baru
             <span className="block text-xs text-muted-foreground">Pilih ini bila HP lama hilang atau diganti. Perangkat lain yang masuk ke konsol akan dikeluarkan.</span>
@@ -147,7 +147,7 @@ export function TotpPage() {
       {mode === "enrol" && enrol ? <AuthenticatorQr otpauthUri={enrol.otpauthUri} secret={enrol.secret} /> : null}
       <form className="flex flex-col gap-5" onSubmit={verify} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
-        <TextField label="Kode TOTP" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required />
+        <TextField label="Kode TOTP" name="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6 digit" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required otp />
         <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
         {mode !== "enrol" ? (
           <Button type="button" variant="link" className="h-auto whitespace-normal" onClick={() => { setError(null); setStep("recovery") }}>

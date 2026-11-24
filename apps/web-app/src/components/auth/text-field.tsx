@@ -10,6 +10,7 @@ export function TextField(props: {
   onChange: (v: string) => void
   autoComplete?: string
   inputMode?: "text" | "email" | "numeric" | "decimal"
+  placeholder?: string
   error?: string
   hint?: string
   required?: boolean
@@ -32,6 +33,7 @@ export function TextField(props: {
       onChange={(e) => props.onChange(e.target.value)}
       autoComplete={props.autoComplete}
       inputMode={props.inputMode}
+      placeholder={props.placeholder}
       required={props.required}
       maxLength={props.maxLength}
       aria-invalid={props.error ? true : undefined}

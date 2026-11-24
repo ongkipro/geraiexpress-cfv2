@@ -200,7 +200,7 @@ export function DaftarPage() {
       {step === 2 ? (
         <form className="flex flex-col gap-4" onSubmit={toPickup} noValidate>
           <div className="flex flex-col gap-2">
-            <TextField label="Nama gerai" name="businessName" value={businessName} onChange={(v) => { setBusinessName(v); if (!slugEdited) setSlug(slugify(v)) }} error={fieldErrors.businessName} required maxLength={80} />
+            <TextField label="Nama gerai" name="businessName" placeholder="Contoh: Gerai Berkah Jaya" value={businessName} onChange={(v) => { setBusinessName(v); if (!slugEdited) setSlug(slugify(v)) }} error={fieldErrors.businessName} required maxLength={80} />
             {/* DEC-250: the live address pill; `Ubah` (or a server slug error) opens the editor. */}
             <div data-domain-pill className="flex items-center gap-2 rounded-2xl bg-[#F4F6FA] py-1.5 pr-1.5 pl-3 sm:gap-3 sm:pl-3.5">
               <span className="flex min-w-0 flex-1 flex-col">
@@ -213,13 +213,13 @@ export function DaftarPage() {
             </div>
             {slugOpen || fieldErrors.slug ? (
               <div id="slug-editor">
-                <TextField label="Alamat gerai" name="slug" value={slug} onChange={(v) => { setSlug(v.toLowerCase()); setSlugEdited(true) }} error={fieldErrors.slug} suffix=".geraimitra.com" required maxLength={30} />
+                <TextField label="Alamat gerai" name="slug" placeholder="gerai-berkah-jaya" value={slug} onChange={(v) => { setSlug(v.toLowerCase()); setSlugEdited(true) }} error={fieldErrors.slug} suffix=".geraimitra.com" required maxLength={30} />
               </div>
             ) : null}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
-            <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
+            <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
+            <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" placeholder="gerai@gmail.com" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
           </div>
           <Button type="submit" size="lg">Lanjut ke Titik Jemput →</Button>
         </form>
@@ -261,6 +261,7 @@ export function DaftarPage() {
                   }
                 }}
                 autoComplete="off"
+                placeholder="Ketik kecamatan atau kode pos, mis. Coblong"
                 aria-describedby="area-help"
               />
               {showList ? (
@@ -296,18 +297,18 @@ export function DaftarPage() {
                         : "Ketik minimal 3 huruf, lalu pilih dari daftar."}
             </FieldDescription>
           </Field>
-          <TextField label="Alamat lengkap titik jemput" name="street" value={street} onChange={setStreet} error={fieldErrors.streetAddress} required maxLength={300} />
+          <TextField label="Alamat lengkap titik jemput" name="street" placeholder="Jl. Merdeka No. 12, RT 02/RW 05 (dekat patokan)" value={street} onChange={setStreet} error={fieldErrors.streetAddress} required maxLength={300} />
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <TextField label="PIC penjemputan" name="picName" value={picName} onChange={setPicName} error={fieldErrors.picName} required maxLength={80} />
-            <TextField label="HP PIC" name="picPhone" inputMode="numeric" value={picPhone} onChange={(v) => { setPicPhone(v); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
+            <TextField label="PIC penjemputan" name="picName" placeholder="Nama penanggung jawab" value={picName} onChange={setPicName} error={fieldErrors.picName} required maxLength={80} />
+            <TextField label="HP PIC" name="picPhone" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={picPhone} onChange={(v) => { setPicPhone(v); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
           </div>
           <details open={coords} onToggle={(e) => setCoords((e.target as HTMLDetailsElement).open)} className="group">
             <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-medium text-[#64748B] hover:text-[#0F172A] md:min-h-9 [&::-webkit-details-marker]:hidden">
               <span aria-hidden className="mr-1 group-open:hidden">+</span><span aria-hidden className="mr-1 hidden group-open:inline">−</span>Titik koordinat peta (opsional)
             </summary>
             <div className="mt-2 grid gap-4 sm:grid-cols-2">
-              <TextField label="Latitude" name="latitude" inputMode="decimal" value={lat} onChange={setLat} error={fieldErrors.latitude} hint="Contoh: -6.9456" />
-              <TextField label="Longitude" name="longitude" inputMode="decimal" value={lng} onChange={setLng} error={fieldErrors.longitude} hint="Contoh: 107.5703" />
+              <TextField label="Latitude" name="latitude" inputMode="decimal" placeholder="-6.9456" value={lat} onChange={setLat} error={fieldErrors.latitude} />
+              <TextField label="Longitude" name="longitude" inputMode="decimal" placeholder="107.5703" value={lng} onChange={setLng} error={fieldErrors.longitude} />
             </div>
             <p className="mt-2 text-sm text-muted-foreground">Dibutuhkan untuk penjemputan Pos Indonesia; bisa diisi nanti di Pengaturan › Profil Gerai.</p>
           </details>

@@ -48,7 +48,7 @@ export function LupaSandiPage() {
       ) : (
         <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
           {error ? <FormAlert tone={locked ? "warn" : "danger"}>{error}</FormAlert> : null}
-          <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={setEmail} required />
+          <TextField label="Email" name="email" type="email" inputMode="email" autoComplete="email" placeholder="nama@gmail.com" value={email} onChange={setEmail} required />
           {ts.failed ? <FormAlert tone="warn">Pemeriksaan keamanan tidak dapat dimuat. Muat ulang halaman lalu coba lagi.</FormAlert> : null}
           <TurnstileAction slot={turnstileBox} visible={ts.visible}>
             <Button type="submit" size="lg" disabled={pending || !ts.ready}>{pending ? "Mengirim…" : "Kirim Tautan"}</Button>

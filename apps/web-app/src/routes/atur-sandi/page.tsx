@@ -46,8 +46,8 @@ export function AturSandiPage() {
       ) : (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
           {error ? <FormAlert>{error}</FormAlert> : null}
-          <TextField label="Kata sandi baru" name="password" type="password" autoComplete="new-password" value={password} onChange={setPassword} hint="Minimal 8 karakter." required />
-          <TextField label="Ulangi kata sandi baru" name="confirm" type="password" autoComplete="new-password" value={confirm} onChange={setConfirm} required />
+          <TextField label="Kata sandi baru" name="password" type="password" autoComplete="new-password" placeholder="Masukkan kata sandi baru" value={password} onChange={setPassword} hint="Minimal 8 karakter." required />
+          <TextField label="Ulangi kata sandi baru" name="confirm" type="password" autoComplete="new-password" placeholder="Ketik ulang kata sandi baru" value={confirm} onChange={setConfirm} required />
           <Button type="submit" size="lg" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           <p className="text-center text-xs text-[#64748B]">
             Tautan kedaluwarsa?{" "}
