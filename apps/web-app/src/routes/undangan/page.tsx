@@ -57,7 +57,7 @@ export function UndanganPage() {
     return (
       <AuthCard title="Gabung sebagai Kasir">
         <FormAlert>{loadError}</FormAlert>
-        <Link to="/masuk" className="text-base md:text-sm font-medium text-primary underline-offset-4 hover:underline">Kembali ke Masuk</Link>
+        <Link to="/masuk" className="inline-flex min-h-11 items-center text-base font-medium text-primary underline-offset-4 hover:underline md:min-h-9 md:text-sm">Kembali ke Masuk</Link>
       </AuthCard>
     )
   }

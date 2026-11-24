@@ -35,12 +35,14 @@ export function GeraiPage() {
         <MetricCard label="Onboarding tertunda" value={s ? nf.format(s.onboarding) : "—"} footer="Pendaftaran seller belum pasti" tone={s?.onboarding ? "warn" : undefined} />
         <MetricCard label="Gerai dibekukan" value={s ? nf.format(s.suspended) : "—"} footer="Mini-site menjawab 403" />
       </MetricGrid>
-      <Tabs value={current} onValueChange={(v) => navigate({ to: "/gerai", search: { tab: v as Tab } })}>
-        <TabsList aria-label="Bagian gerai">
-          <TabsTrigger value="pengajuan">Pengajuan Baru</TabsTrigger>
-          <TabsTrigger value="direktori">Direktori Gerai</TabsTrigger>
-          <TabsTrigger value="domain">Domain Mitra</TabsTrigger>
-        </TabsList>
+      <Tabs value={current} onValueChange={(v) => navigate({ to: "/gerai", search: { tab: v as Tab } })} className="min-w-0">
+        <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <TabsList aria-label="Bagian gerai" className="w-max">
+            <TabsTrigger value="pengajuan">Pengajuan Baru</TabsTrigger>
+            <TabsTrigger value="direktori">Direktori Gerai</TabsTrigger>
+            <TabsTrigger value="domain">Domain Mitra</TabsTrigger>
+          </TabsList>
+        </div>
       </Tabs>
       {current === "pengajuan" ? <Applications /> : current === "direktori" ? <Directory /> : <Domains />}
     </div>

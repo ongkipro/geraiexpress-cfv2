@@ -90,21 +90,22 @@ interface RequestRow { tenant_id: string; tenant_name: string; slug: string; ser
 function RequestList() {
   const { data, error, loading, reload } = useApi<{ items: RequestRow[] }>("/tarif/permintaan")
   const [reason, setReason] = useState("")
-  const [msg, setMsg] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
   const open = data?.items.filter((r) => !r.request_sent_at) ?? []
   async function mark(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {
       const r = await api<{ marked: number }>("/tarif/permintaan/tandai", { body: { keys: open.map((x) => ({ tenantId: x.tenant_id, serviceCode: x.service_code })), reason } })
-      setMsg(`${r.marked} aturan ditandai sudah diminta.`)
+      setMsg({ tone: "safe", text: `${r.marked} aturan ditandai sudah diminta.` })
       setReason("")
       reload()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent("/tarif?tab=permintaan")}`)
-      setMsg(err instanceof ApiError ? err.body.message : "Gagal menandai.")
+      setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal menandai." })
     } finally {
       setPending(false)
     }
@@ -149,11 +150,11 @@ function RequestList() {
                 <FieldDescription>Tandai {open.length} aturan sebagai sudah dikirim ke tim Mengantar.</FieldDescription>
               </Field>
               <div>
-                <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Memproses…" : "Tandai sudah diminta ke Mengantar"}</Button>
+                <Button type="submit" className="h-auto min-h-11 py-2 text-center whitespace-normal md:h-9 md:py-0" disabled={pending || reason.trim().length < 5}>{pending ? "Memproses…" : "Tandai sudah diminta ke Mengantar"}</Button>
               </div>
             </form>
           ) : null}
-          {msg ? <p role="status" className="text-sm">{msg}</p> : null}
+          {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
         </div>
       )}
     </Section>
@@ -196,15 +197,27 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
   const [v, setV] = useState({ min: String(initial.minBps / 100), def: String(initial.defaultBps / 100), max: String(initial.maxBps / 100), sla: sla === undefined ? "" : String(sla) })
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const [pending, setPending] = useState(false)
   const toBps = (s: string) => Math.round(Number(s.replace(",", ".")) * 100)
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
+    const minBps = toBps(v.min)
+    const defaultBps = toBps(v.def)
+    const maxBps = toBps(v.max)
+    const slaNum = sla === undefined ? undefined : Number(v.sla)
+    if (!Number.isFinite(minBps) || !Number.isFinite(defaultBps) || !Number.isFinite(maxBps) || (slaNum !== undefined && !Number.isFinite(slaNum))) {
+      setError("Masukkan angka persentase yang valid.")
+      return
+    }
     setPending(true)
     setError(null)
+    setSaved(false)
     try {
-      await api(path, { body: { band: { minBps: toBps(v.min), defaultBps: toBps(v.def), maxBps: toBps(v.max) }, ...(sla === undefined ? {} : { applySlaMinutes: Number(v.sla) }), reason } })
+      await api(path, { body: { band: { minBps, defaultBps, maxBps }, ...(slaNum === undefined ? {} : { applySlaMinutes: slaNum }), reason } })
       setReason("")
+      setSaved(true)
       onDone()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent("/tarif?tab=kebijakan")}`)
@@ -235,8 +248,9 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
         <Textarea id={`${path}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
         {error ? <FieldError>{error}</FieldError> : <FieldDescription>Perubahan batas tidak mengubah aturan gerai yang sudah ada.</FieldDescription>}
       </Field>
-      <div>
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan Perubahan"}</Button>
+        {saved ? <span role="status" className="text-sm font-medium text-safe">Batas kebijakan tersimpan.</span> : null}
       </div>
     </form>
   )

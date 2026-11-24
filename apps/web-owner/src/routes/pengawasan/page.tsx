@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Button } from "@shared/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, PageHead, RecheckButton, ReloadButton, Section, StatusChip } from "../../components/page"
@@ -95,13 +95,18 @@ function ShipmentSearch() {
   const [q, setQ] = useState("")
   const [items, setItems] = useState<Hit[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   async function search(e: FormEvent) {
     e.preventDefault()
+    if (pending || q.trim().length < 4) return
+    setPending(true)
     setError(null)
     try {
-      setItems((await api<{ items: Hit[] }>(`/pengawasan/kiriman?q=${encodeURIComponent(q)}`)).items)
+      setItems((await api<{ items: Hit[] }>(`/pengawasan/kiriman?q=${encodeURIComponent(q.trim())}`)).items)
     } catch (err) {
       setError(err instanceof ApiError ? err.body.message : "Pencarian gagal.")
+    } finally {
+      setPending(false)
     }
   }
   return (
@@ -111,7 +116,7 @@ function ShipmentSearch() {
           <FieldLabel htmlFor="cari-kiriman">INV atau nomor resi</FieldLabel>
           <Input id="cari-kiriman" value={q} onChange={(e) => setQ(e.target.value)} placeholder="INV 8K4M2P7 atau JNE0001" autoComplete="off" />
         </Field>
-        <Button type="submit" disabled={q.trim().length < 4}>Cari</Button>
+        <Button type="submit" disabled={pending || q.trim().length < 4}>{pending ? "Mencari…" : "Cari"}</Button>
       </form>
       {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
       {items === null ? null : items.length === 0 ? (
@@ -162,10 +167,9 @@ function RiskRadar() {
       <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
         <p className="text-sm text-muted-foreground">Nomor diubah menjadi kode acak di server; setiap pencarian dicatat di log audit beserta alasannya.</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field data-invalid={error ? true : undefined}>
+          <Field>
             <FieldLabel htmlFor="hp-risiko">Nomor HP penerima</FieldLabel>
-            <Input id="hp-risiko" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
-            {error ? <FieldError>{error}</FieldError> : null}
+            <Input id="hp-risiko" inputMode="tel" placeholder="08xx-xxxx-xxxx" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
           </Field>
           <Field>
             <FieldLabel htmlFor="alasan-risiko">Alasan (wajib)</FieldLabel>
@@ -173,6 +177,7 @@ function RiskRadar() {
             <FieldDescription>Misalnya: laporan gerai tentang penerima COD.</FieldDescription>
           </Field>
         </div>
+        {error ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-sm font-medium text-danger">{error}</p> : null}
         <div><Button type="submit" disabled={pending || phone.trim().length < 8 || reason.trim().length < 5}>{pending ? "Mencari…" : "Cari riwayat"}</Button></div>
       </form>
       {result ? (

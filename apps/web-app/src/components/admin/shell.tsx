@@ -106,6 +106,7 @@ export function AdminShell({
   user,
   crumbs,
   commands,
+  searchPlaceholder = "Cari menu, INV, resi, atau HP…",
   toolbar,
   children,
   bottomBar,
@@ -120,6 +121,7 @@ export function AdminShell({
   user: NavUserProps
   crumbs: Crumb[]
   commands: ShellCommand[]
+  searchPlaceholder?: string
   toolbar?: ReactNode
   children: ReactNode
   /** Optional phone bottom bar (Gerai counter shortcuts); the main area reserves room for it. */
@@ -180,14 +182,14 @@ export function AdminShell({
               className="group hidden h-9 w-full items-center gap-2.5 rounded-lg border border-slate-200/90 bg-slate-50/80 px-3 text-left text-sm text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition-colors hover:border-slate-300 hover:bg-slate-100/70 hover:text-slate-800 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:flex"
             >
               <SearchIcon aria-hidden className="size-4 shrink-0 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate">Cari menu, INV, resi, atau HP…</span>
+              <span className="min-w-0 flex-1 truncate">{searchPlaceholder}</span>
               <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-xs font-medium text-slate-500">{shortcutLabel()}</kbd>
             </button>
             <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1 md:gap-1.5 lg:ml-0">
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                aria-label="Cari menu, INV, resi, atau HP"
+                aria-label={searchPlaceholder.replace(/…$/, "")}
                 className="grid size-11 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:size-9 lg:hidden"
               >
                 <SearchIcon aria-hidden className="size-[18px]" />
@@ -201,7 +203,7 @@ export function AdminShell({
           {bottomBar}
         </SidebarInset>
       </SidebarProvider>
-      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} commands={commands} />
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} commands={commands} placeholder={searchPlaceholder} />
       <Toaster position="bottom-center" />
     </TooltipProvider>
   )
@@ -298,7 +300,7 @@ function SiteBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
 }
 
 /** ⌘K command palette (AdsBookCMS pattern on base-nova Dialog): filter as you type, arrows + Enter, Esc closes. */
-function CommandPalette({ open, onOpenChange, commands }: { open: boolean; onOpenChange: (o: boolean) => void; commands: ShellCommand[] }) {
+function CommandPalette({ open, onOpenChange, commands, placeholder }: { open: boolean; onOpenChange: (o: boolean) => void; commands: ShellCommand[]; placeholder: string }) {
   const navigate = useNavigate()
   const [q, setQ] = useState("")
   const [cursor, setCursor] = useState(0)
@@ -365,8 +367,8 @@ function CommandPalette({ open, onOpenChange, commands }: { open: boolean; onOpe
             aria-controls="cmdk-list"
             aria-activedescendant={results[cursor] ? `cmdk-${cursor}` : undefined}
             aria-label="Cari menu atau tugas"
-            placeholder="Ketik menu atau tugas, misalnya “cek resi”…"
-            className="h-12 w-full bg-transparent text-base md:text-sm outline-none placeholder:text-muted-foreground md:text-sm"
+            placeholder={placeholder}
+            className="h-12 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
           />
         </div>
         <div id="cmdk-list" role="listbox" aria-label="Hasil" className="max-h-[min(60vh,26rem)] overflow-y-auto p-2">
@@ -541,11 +543,16 @@ export function ShellBrand({ title, subtitle, mark, logoSrc }: { title: string; 
 
 /** Compact status card for the sidebar foot: label/value rows with a status dot each. */
 export function SidebarStatusCard({ title, rows, link }: { title: string; rows: Array<{ label: string; value: ReactNode; tone: "safe" | "warn" | "muted" }>; link?: { to: string; label: string } }) {
+  const { isMobile, setOpenMobile } = useSidebar()
   return (
     <div className="border-t border-slate-200/80 px-2 pt-3">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{title}</p>
-        {link ? <Link to={link.to} className="inline-flex min-h-11 items-center text-xs font-medium text-primary underline-offset-4 hover:underline md:min-h-6">{link.label}</Link> : null}
+        {link ? (
+          <Link to={link.to} onClick={() => isMobile && setOpenMobile(false)} className="inline-flex min-h-11 items-center text-xs font-medium text-primary underline-offset-4 hover:underline md:min-h-6">
+            {link.label}
+          </Link>
+        ) : null}
       </div>
       <ul className="flex flex-col gap-1">
         {rows.map((r) => (

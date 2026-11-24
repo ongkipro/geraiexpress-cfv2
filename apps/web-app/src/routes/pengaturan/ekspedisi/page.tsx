@@ -43,7 +43,7 @@ export function serviceLabel(r: Pick<CourierRow, "name" | "courierCode">, s: Cou
 export function PengaturanEkspedisiPage() {
   const [rows, setRows] = useState<CourierRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState<string | null>(null)
+  const [pendingCodes, setPendingCodes] = useState<Set<string>>(() => new Set())
 
   const load = useCallback(() => {
     api<{ items: CourierRow[] }>("/settings/couriers")
@@ -62,7 +62,7 @@ export function PengaturanEkspedisiPage() {
   const show = (text: string, tone: "safe" | "danger" = "safe") => void (tone === "safe" ? toast.success(text) : toast.error(text))
 
   async function update(row: CourierRow, patch: { enabled?: boolean; pickupMode?: PickupMode }) {
-    setPending(row.courierCode)
+    setPendingCodes((prev) => { const n = new Set(prev); n.add(row.courierCode); return n })
     try {
       const next = await api<CourierRow>(`/settings/couriers/${encodeURIComponent(row.courierCode)}`, { body: patch })
       setRows((rs) => rs?.map((r) => (r.courierCode === next.courierCode ? next : r)) ?? null)
@@ -71,7 +71,7 @@ export function PengaturanEkspedisiPage() {
     } catch (e) {
       show(e instanceof ApiError ? e.body.message : "Gagal menyimpan. Coba lagi.", "danger")
     } finally {
-      setPending(null)
+      setPendingCodes((prev) => { const n = new Set(prev); n.delete(row.courierCode); return n })
     }
   }
 
@@ -120,7 +120,7 @@ export function PengaturanEkspedisiPage() {
                         className="w-full sm:w-auto"
                         value={r.pickupMode}
                         onValueChange={(m) => r.pickupMode !== m && update(r, { pickupMode: m })}
-                        choices={r.pickupOptions.map((m) => ({ value: m, label: MODE_LABEL[m], disabled: pending === r.courierCode }))}
+                        choices={r.pickupOptions.map((m) => ({ value: m, label: MODE_LABEL[m], disabled: pendingCodes.has(r.courierCode) }))}
                       />
                     ) : r.enabled ? (
                       <span className="text-xs text-muted-foreground">{MODE_LABEL[r.pickupMode]}</span>
@@ -130,7 +130,7 @@ export function PengaturanEkspedisiPage() {
                   </div>
                   {/* The label is the ≥ 44 px hit area around the 28 px switch (phones). */}
                   <label htmlFor={id} className="-m-2 flex min-h-11 min-w-11 cursor-pointer items-center justify-center p-2 sm:pt-2">
-                    <Switch id={id} checked={r.enabled} disabled={pending === r.courierCode} onCheckedChange={(v) => update(r, { enabled: v })} aria-label={`Aktifkan ${r.name}`} />
+                    <Switch id={id} checked={r.enabled} disabled={pendingCodes.has(r.courierCode)} onCheckedChange={(v) => update(r, { enabled: v })} aria-label={`Aktifkan ${r.name}`} />
                   </label>
                 </li>
               )

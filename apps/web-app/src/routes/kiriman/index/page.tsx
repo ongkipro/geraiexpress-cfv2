@@ -219,7 +219,7 @@ export function KirimanPage() {
           <Button type="submit" variant="outline">Cari</Button>
         </form>
         <PeriodFilter value={period} onChange={(p: Period) => go({ periode: undefined, dari: undefined, sampai: undefined, ...paramsOf(p) })} />
-        <ToggleGroup aria-label="Status cetak" variant="outline" value={[search.cetak ?? "semua"]} onValueChange={(v) => v[0] && go({ cetak: v[0] === "semua" ? undefined : (v[0] as "belum" | "sudah") })}>
+        <ToggleGroup aria-label="Status cetak" variant="outline" className="flex-wrap" value={[search.cetak ?? "semua"]} onValueChange={(v) => v[0] && go({ cetak: v[0] === "semua" ? undefined : (v[0] as "belum" | "sudah") })}>
           {(["semua", "belum", "sudah"] as const).map((c) => (
             <ToggleGroupItem key={c} value={c}>{c === "semua" ? "Semua" : c === "belum" ? "Belum Cetak" : "Sudah Cetak"}</ToggleGroupItem>
           ))}
@@ -295,7 +295,7 @@ export function KirimanPage() {
                   <Input id="pay-dialog-cash" inputMode="numeric" className="tabular-nums" value={payCash} onChange={(e) => setPayCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} />
                   <div className="flex flex-wrap gap-1.5">
                     {[payRow.counter_due_idr, Math.ceil(payRow.counter_due_idr / 50000) * 50000, 100000].filter((v, i, a) => v >= payRow.counter_due_idr && a.indexOf(v) === i).slice(0, 3).map((v) => (
-                      <button key={v} type="button" onClick={() => setPayCash(v.toLocaleString("id-ID"))} className="h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-600 tabular-nums hover:bg-slate-50">
+                      <button key={v} type="button" onClick={() => setPayCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-9 md:px-2.5 md:text-xs">
                         {v === payRow.counter_due_idr ? "Uang pas" : rp(v)}
                       </button>
                     ))}

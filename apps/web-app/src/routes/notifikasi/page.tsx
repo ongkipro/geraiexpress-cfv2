@@ -27,6 +27,7 @@ export function NotifikasiPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [openingId, setOpeningId] = useState<string | null>(null)
   const load = useCallback(() => {
     api<{ items: Item[]; unread: number }>("/notifications")
       .then((d) => {
@@ -51,10 +52,19 @@ export function NotifikasiPage() {
       setPending(false)
     }
   }
-  async function open(item: Item) {
-    if (!item.readAt) {
-      await api("/notifications/read", { body: { ids: [item.id] } }).catch(() => undefined)
+  async function open(item: Item, reloadAfter = false) {
+    if (item.readAt) return
+    if (openingId === item.id) return
+    setOpeningId(item.id)
+    setActionError(null)
+    try {
+      await api("/notifications/read", { body: { ids: [item.id] } })
+      if (reloadAfter) load()
       void router.invalidate()
+    } catch (e) {
+      if (reloadAfter) setActionError(e instanceof ApiError ? e.body.message : "Gagal menandai notifikasi. Coba lagi.")
+    } finally {
+      setOpeningId((cur) => (cur === item.id ? null : cur))
     }
   }
 
@@ -94,7 +104,7 @@ export function NotifikasiPage() {
                       {i.link ? (
                         <Link {...(linkTo(i.link) as { to: string })} onClick={() => void open(i)} className="block min-h-11 px-4 py-3 hover:bg-muted">{inner}</Link>
                       ) : (
-                        <button type="button" onClick={async () => { await open(i); load() }} className="block min-h-11 w-full px-4 py-3 text-left hover:bg-muted">{inner}</button>
+                        <button type="button" disabled={openingId === i.id} onClick={() => void open(i, true)} className="block min-h-11 w-full px-4 py-3 text-left hover:bg-muted disabled:opacity-60">{inner}</button>
                       )}
                     </li>
                   )

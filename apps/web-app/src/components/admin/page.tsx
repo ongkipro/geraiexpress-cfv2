@@ -89,7 +89,7 @@ export function MetricCard({ label, value, trend, footer, to, tone, icon: Icon }
         </span>
         {trend ? <TrendBadge trend={trend} /> : null}
       </div>
-      <div className={cn("mt-3 text-2xl leading-none font-bold tracking-[-0.02em] whitespace-nowrap text-slate-950 tabular-nums", tone === "warn" && "text-warn")}>{value}</div>
+      <div className={cn("mt-3 truncate text-xl leading-none font-bold tracking-[-0.02em] text-slate-950 tabular-nums sm:text-2xl", tone === "warn" && "text-warn")}>{value}</div>
       {footer ? <div className="mt-1.5 line-clamp-2 text-xs text-muted-foreground tabular-nums">{footer}</div> : null}
     </Card>
   )
@@ -122,9 +122,9 @@ export function TrendBadge({ trend }: { trend: Trend }) {
   )
 }
 
-/** Grid for MetricCards: 1 column on phones, 2 on tablets, `cols` on wide screens. */
+/** Grid for MetricCards: 2 columns on phones (with an odd 3rd tile spanning full width), `cols` on wide screens. */
 export function MetricGrid({ children, cols = 4 }: { children: ReactNode; cols?: 3 | 4 }) {
-  return <div className={cn("grid grid-cols-2 gap-2.5 sm:gap-3", cols === 4 ? "xl:grid-cols-4" : "lg:grid-cols-3")}>{children}</div>
+  return <div className={cn("grid grid-cols-2 gap-2.5 sm:gap-3", cols === 4 ? "xl:grid-cols-4" : "lg:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1")}>{children}</div>
 }
 
 const DOT = { safe: "bg-safe", warn: "bg-warn", danger: "bg-danger", muted: "bg-muted-foreground", primary: "bg-primary" } as const

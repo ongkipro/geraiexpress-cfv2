@@ -102,7 +102,7 @@ export function TotpPage() {
     return (
       <AuthCard variant="owner" title="Simpan 8 Kode Pemulihan Cadangan Anda" description="Pakai salah satu kode ini untuk masuk bila HP atau aplikasi autentikator hilang, rusak, atau diganti. Simpan sekarang — kode tidak akan ditampilkan lagi.">
         <RecoveryCodesBox codes={codes} />
-        <Button size="lg" onClick={() => void proceed()}>Saya Sudah Menyimpan, Lanjut ke Konsol</Button>
+        <Button size="lg" className="h-auto min-h-11 py-2.5 text-center whitespace-normal" onClick={() => void proceed()}>Saya Sudah Menyimpan, Lanjut ke Konsol</Button>
       </AuthCard>
     )
   }
@@ -132,7 +132,7 @@ export function TotpPage() {
             <span className="block text-xs text-muted-foreground">Pilih ini bila HP lama hilang atau diganti. Perangkat lain yang masuk ke konsol akan dikeluarkan.</span>
           </CheckboxField>
           <Button type="submit" size="lg" disabled={pending || recovery.replace(/[\s-]/g, "").length !== 8}>{pending ? "Memeriksa…" : "Masuk dengan Kode Pemulihan"}</Button>
-          <Button type="button" variant="link" onClick={() => { setError(null); setStep("code") }}>Kembali ke kode autentikator</Button>
+          <Button type="button" variant="link" disabled={pending} onClick={() => { setError(null); setStep("code") }}>Kembali ke kode autentikator</Button>
         </form>
       </AuthCard>
     )
@@ -150,7 +150,7 @@ export function TotpPage() {
         <TextField label="Kode TOTP" name="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6 digit" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required otp />
         <Button type="submit" size="lg" disabled={pending || code.length !== 6}>{pending ? "Memeriksa…" : "Verifikasi"}</Button>
         {mode !== "enrol" ? (
-          <Button type="button" variant="link" className="h-auto whitespace-normal" onClick={() => { setError(null); setStep("recovery") }}>
+          <Button type="button" variant="link" disabled={pending} className="h-auto min-h-11 py-2 whitespace-normal" onClick={() => { setError(null); setStep("recovery") }}>
             Tidak bisa akses autentikator? Gunakan kode pemulihan cadangan
           </Button>
         ) : null}

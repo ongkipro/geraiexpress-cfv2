@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router"
+import { createRootRoute, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router"
 import { api, ApiError } from "./lib/api"
 import { OwnerMasukPage } from "./routes/masuk/page"
 import { TotpPage } from "./routes/totp/page"
@@ -26,9 +26,12 @@ const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFou
 function NotFound() {
   return (
     <main className="flex min-h-svh items-center justify-center p-4">
-      <div className="flex w-full max-w-[440px] flex-col gap-2 text-center">
+      <div className="flex w-full max-w-[440px] flex-col items-center gap-3 text-center">
         <h1 className="text-[28px] leading-tight font-semibold">Halaman tidak ditemukan</h1>
         <p className="text-base md:text-sm text-muted-foreground">Alamat yang Anda buka tidak tersedia.</p>
+        <Link to="/" className="mt-1 inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground hover:bg-primary/90 md:h-9 md:text-sm">
+          Kembali ke Ringkasan
+        </Link>
       </div>
     </main>
   )

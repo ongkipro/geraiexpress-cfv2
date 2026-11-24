@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
@@ -93,11 +94,12 @@ export function Kendala() {
 
 function KendalaRow({ r, bucket, owner, busy, act }: { r: Row; bucket: Bucket; owner: boolean; busy: boolean; act: (fn: () => Promise<unknown>, ok: string) => Promise<void> }) {
   const [note, setNote] = useState(r.conflict_note ?? "")
+  const [confirmDecision, setConfirmDecision] = useState<"approved" | "rejected" | null>(null)
   const bandLabel = r.band ? BAND[r.band] ?? r.band : null
   return (
     <Panel as="li" className="flex flex-col gap-2 md:p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link>
+        <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums md:min-h-0">INV {r.slug.toUpperCase()}</Link>
         <span className="text-base md:text-sm text-muted-foreground tabular-nums">{courierLabel(r.courier)} · {r.awb ?? "—"} · {r.recipient ?? "—"}</span>
       </div>
       <p className="text-base md:text-sm">
@@ -110,12 +112,12 @@ function KendalaRow({ r, bucket, owner, busy, act }: { r: Row; bucket: Bucket; o
           {r.claim ? (
             <>
               <span className="text-base md:text-sm">Klaim {claimKindLabel(r.claim_kind)}: {CLAIM_STATUS[r.claim.status] ?? r.claim.status}</span>
-              <a href={`/api/app/claims/${r.claim.id}/packet`} target="_blank" rel="noopener" className="text-base md:text-sm text-primary underline-offset-4 hover:underline">Paket klaim</a>
+              <a href={`/api/app/claims/${r.claim.id}/packet`} target="_blank" rel="noopener" className="inline-flex min-h-11 items-center text-base text-primary underline-offset-4 hover:underline md:min-h-9 md:text-sm">Paket klaim</a>
               {r.claim.status === "draft" ? <Button variant="outline" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "submitted" } }), "Klaim ditandai sudah diajukan ke Mengantar.")}>Tandai Sudah Diajukan</Button> : null}
               {owner && r.claim.status === "submitted" ? (
                 <>
-                  <Button variant="outline" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "approved" } }), "Klaim disetujui.")}>Disetujui</Button>
-                  <Button variant="ghost" disabled={busy} onClick={() => act(() => api(`/claims/${r.claim!.id}/status`, { body: { status: "rejected" } }), "Klaim ditolak.")}>Ditolak</Button>
+                  <Button variant="outline" disabled={busy} onClick={() => setConfirmDecision("approved")}>Disetujui</Button>
+                  <Button variant="ghost" disabled={busy} onClick={() => setConfirmDecision("rejected")}>Ditolak</Button>
                 </>
               ) : null}
             </>
@@ -124,6 +126,30 @@ function KendalaRow({ r, bucket, owner, busy, act }: { r: Row; bucket: Bucket; o
           ) : null}
         </div>
       ) : null}
+      <AlertDialog open={confirmDecision !== null} onOpenChange={(o) => !o && !busy && setConfirmDecision(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDecision === "approved" ? "Tandai klaim disetujui?" : "Tandai klaim ditolak?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Status klaim <strong className="text-foreground">INV {r.slug.toUpperCase()}</strong> akan dicatat sebagai {confirmDecision === "approved" ? "Disetujui" : "Ditolak"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              variant={confirmDecision === "rejected" ? "destructive" : "default"}
+              disabled={busy}
+              onClick={() => {
+                const status = confirmDecision
+                setConfirmDecision(null)
+                if (status && r.claim) void act(() => api(`/claims/${r.claim!.id}/status`, { body: { status } }), status === "approved" ? "Klaim disetujui." : "Klaim ditolak.")
+              }}
+            >
+              {confirmDecision === "approved" ? "Ya, Disetujui" : "Ya, Ditolak"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {bucket === "bertentangan" && owner ? (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-base md:text-sm">Catatan pengecekan (min. 3 karakter)<Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Contoh: sudah dikonfirmasi ke pengirim" /></label>

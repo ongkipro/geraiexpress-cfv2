@@ -113,6 +113,14 @@ html[data-text="sangat-besar"] { font-size: 125%; }
   html { @apply font-sans; font-size: 16px; }
   body { @apply bg-background text-sm text-foreground; }
   .num { font-variant-numeric: tabular-nums; }
+  /* Mobile anti-zoom guard (iOS Safari auto-zooms any focused form control below 16px). Scales up cleanly with Ukuran Teks. */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    textarea,
+    select {
+      font-size: max(1rem, 16px);
+    }
+  }
 }
 
 /* DEC-242: quiet scrollbar for independently scrolling rails (settings rail, POS summary). 5 px, transparent track,

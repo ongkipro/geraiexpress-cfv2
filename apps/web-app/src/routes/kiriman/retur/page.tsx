@@ -58,7 +58,7 @@ export function MejaRetur() {
         <section aria-labelledby="dalam-jalan">
           <h2 id="dalam-jalan" className="mb-3 text-sm font-semibold md:text-base">Retur dalam perjalanan ({d.incoming.length})</h2>
           <ItemList>
-            {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">{i.courier_code} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
+            {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">{courierLabel(i.courier_code)} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
           </ItemList>
         </section>
       ) : null}

@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react"
+import { toast } from "@shared/components/ui/sonner"
 import { Button } from "@shared/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@shared/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
@@ -34,10 +35,11 @@ export function ReasonAction(props: {
       const data = await api(props.path, { body: { ...props.extra, reason } })
       setOpen(false)
       setReason("")
+      toast.success(`${props.label} berhasil dicatat.`)
       props.onDone(data)
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") {
-        window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent(window.location.pathname)}`)
+        window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent(window.location.pathname + window.location.search)}`)
         return
       }
       setError(err instanceof ApiError ? err.body.message : "Terjadi kesalahan. Silakan coba lagi.")
@@ -55,7 +57,7 @@ export function ReasonAction(props: {
         if (!o) setError(null)
       }}
     >
-      <DialogTrigger render={<Button variant={props.variant ?? "default"} />}>{props.label}</DialogTrigger>
+      <DialogTrigger render={<Button variant={props.variant ?? "default"} className="h-auto min-h-11 py-2 text-center whitespace-normal md:h-9 md:py-0" />}>{props.label}</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           <DialogHeader>

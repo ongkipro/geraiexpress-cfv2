@@ -379,9 +379,9 @@ export function PackageFields({ f, disclosure, children, extra, extraFilled = fa
           </Field>
           <Field>
             <FieldLabel>Biaya COD</FieldLabel>
-            <ToggleGroup value={[f.feeMode]} onValueChange={(v) => v[0] && f.setFeeMode(v[0] as Mode)} variant="outline" spacing={0} aria-label="Biaya COD" className="grid w-full grid-cols-3">
+            <ToggleGroup value={[f.feeMode]} onValueChange={(v) => v[0] && f.setFeeMode(v[0] as Mode)} variant="outline" spacing={0} aria-label="Biaya COD" className="grid w-full grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-0">
               {COD_FEE_MODES.map((m) => (
-                <ToggleGroupItem key={m.id} value={m.id} className="w-full px-1.5">{m.label}</ToggleGroupItem>
+                <ToggleGroupItem key={m.id} value={m.id} className="w-full px-2 text-center whitespace-normal">{m.label}</ToggleGroupItem>
               ))}
             </ToggleGroup>
           </Field>

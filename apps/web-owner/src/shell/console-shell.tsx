@@ -128,6 +128,7 @@ export function ConsoleShell({ environment, userName, userEmail, pending }: { en
       navLabel="Menu Super Admin"
       groups={groups}
       commands={COMMANDS}
+      searchPlaceholder="Cari menu atau halaman konsol…"
       sidebarStatus={
         <SidebarStatusCard
           title="Lingkungan"

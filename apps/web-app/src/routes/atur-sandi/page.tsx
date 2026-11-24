@@ -51,7 +51,7 @@ export function AturSandiPage() {
           <Button type="submit" size="lg" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           <p className="text-center text-xs text-[#64748B]">
             Tautan kedaluwarsa?{" "}
-            <Link to="/lupa-sandi" className="font-medium text-primary underline-offset-4 hover:underline">Minta tautan baru</Link>
+            <Link to="/lupa-sandi" className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline md:min-h-9">Minta tautan baru</Link>
           </p>
         </form>
       )}

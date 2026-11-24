@@ -50,7 +50,7 @@ export function OwnerAkunPage() {
     <div className="flex w-full max-w-4xl flex-col gap-4 md:gap-5">
       <PageHeader title="Profil & Keamanan Akun" description={`Masuk sebagai ${a.profile.email} · Super Admin. Perubahan di sini hanya untuk akun Anda sendiri dan tercatat di log audit.`} />
       <ProfileCard p={a.profile} onSaved={load} />
-      <PasswordCard />
+      <PasswordCard onChanged={load} />
       <SecondFactorCard a={a} onChanged={load} />
       <EmailCard current={a.profile.email} onChanged={load} />
       <SessionsCard sessions={a.sessions} onChanged={load} />
@@ -107,7 +107,7 @@ function ProfileCard({ p, onSaved }: { p: Account["profile"]; onSaved: () => voi
   )
 }
 
-function PasswordCard() {
+function PasswordCard({ onChanged }: { onChanged: () => void }) {
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirm, setConfirm] = useState("")
@@ -126,6 +126,7 @@ function PasswordCard() {
       setNext("")
       setConfirm("")
       setMsg({ tone: "safe", text: "Kata sandi diganti. Semua perangkat lain sudah dikeluarkan." })
+      onChanged()
     } catch (err) {
       const x = handle(err, "Gagal mengganti kata sandi.")
       if (!x) return
@@ -395,7 +396,7 @@ function EmailCard({ current, onChanged }: { current: string; onChanged: () => v
         <form onSubmit={confirm} className="flex flex-col gap-4" noValidate>
           <TextInput id="em-code" label="Kode dari email baru" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="w-40 tabular-nums" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} error={fields.code} />
           {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-          <div className="flex justify-end gap-2"><Button variant="ghost" type="button" onClick={() => setOtpId(null)}>Batal</Button><Button type="submit" disabled={code.length !== 6 || pending}>{pending ? "Memeriksa…" : "Konfirmasi"}</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="ghost" type="button" disabled={pending} onClick={() => { setOtpId(null); setCode(""); setMsg(null) }}>Batal</Button><Button type="submit" disabled={code.length !== 6 || pending}>{pending ? "Memeriksa…" : "Konfirmasi"}</Button></div>
         </form>
       ) : (
         <form onSubmit={request} className="flex flex-col gap-4" noValidate>
@@ -454,7 +455,7 @@ function SessionsCard({ sessions, onChanged }: { sessions: Session[]; onChanged:
       {others.length || msg ? (
         <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5">
           {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : <span />}
-          {others.length ? <Button variant="outline" disabled={pending} onClick={() => void revoke({ allOthers: true })}>Keluarkan Semua Perangkat Lain</Button> : null}
+          {others.length ? <Button variant="outline" className="h-auto min-h-11 py-2 text-center whitespace-normal md:h-9 md:py-0" disabled={pending} onClick={() => void revoke({ allOthers: true })}>{pending ? "Memproses…" : "Keluarkan Semua Perangkat Lain"}</Button> : null}
         </div>
       ) : null}
     </SectionCard>

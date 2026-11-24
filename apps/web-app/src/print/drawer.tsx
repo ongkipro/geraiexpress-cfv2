@@ -253,8 +253,8 @@ export function PrintDrawer({ slug, printCount, firstPrintedAt, onPrinted }: { s
                   aria-label="Ketebalan tinta"
                   className="bg-white"
                 >
-                  <ToggleGroupItem value="normal" className="h-8 px-2.5 text-xs">Normal</ToggleGroupItem>
-                  <ToggleGroupItem value="tebal" className="h-8 px-2.5 text-xs">Tebal</ToggleGroupItem>
+                  <ToggleGroupItem value="normal" className="h-11 px-3 text-sm md:h-8 md:px-2.5 md:text-xs">Normal</ToggleGroupItem>
+                  <ToggleGroupItem value="tebal" className="h-11 px-3 text-sm md:h-8 md:px-2.5 md:text-xs">Tebal</ToggleGroupItem>
                 </ToggleGroup>
               ) : null}
             </div>

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { AuthCard, FormAlert } from "../../components/auth/auth-card"
+import { Button } from "../../components/ui/button"
 import { Skeleton } from "../../components/ui/skeleton"
 import { api, ApiError } from "../../lib/api"
 
@@ -24,10 +25,16 @@ const LogoutLink = () => (
 export function DaftarStatusPage() {
   const [data, setData] = useState<StatusData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    api<StatusData>("/onboarding/status").then(setData).catch((e) => setError(e instanceof ApiError ? e.body.message : "Status tidak dapat dimuat."))
+  const load = useCallback(() => {
+    api<StatusData>("/onboarding/status")
+      .then((d) => {
+        setError(null)
+        setData(d)
+      })
+      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Status tidak dapat dimuat."))
   }, [])
-  if (error) return <AuthCard title="Status Pengajuan"><FormAlert>{error}</FormAlert></AuthCard>
+  useEffect(load, [load])
+  if (error) return <AuthCard title="Status Pengajuan" corner={<LogoutLink />}><FormAlert>{error}</FormAlert><Button variant="outline" onClick={() => { setError(null); load() }}>Coba lagi</Button></AuthCard>
   if (!data) return <AuthCard title="Status Pengajuan"><div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat status"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-11 w-full" /></div></AuthCard>
   const a = data.application
   if (!a) return <AuthCard title="Status Pengajuan" description="Anda belum mengirim pengajuan gerai." corner={<LogoutLink />}><Link to="/daftar" className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-base md:text-sm font-medium text-primary-foreground">Isi pengajuan</Link></AuthCard>

@@ -39,7 +39,7 @@ function Copy({ text }: { text: string }) {
         void navigator.clipboard?.writeText(text).then(() => {
           setDone(true)
           setTimeout(() => setDone(false), 1800)
-        })
+        }).catch(() => undefined)
       }
     >
       {done ? <CheckIcon aria-hidden className="text-safe" /> : <CopyIcon aria-hidden />}

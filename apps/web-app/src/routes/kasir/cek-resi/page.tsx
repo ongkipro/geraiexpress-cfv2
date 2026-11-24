@@ -39,6 +39,7 @@ export function CekResiPage() {
   const [res, setRes] = useState<Result | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [loadedInitialQ, setLoadedInitialQ] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
   if (prevInitialQ !== initialQ) {
@@ -70,16 +71,20 @@ export function CekResiPage() {
         if (!alive) return
         setMsg(null)
         setRes(r)
+        setLoadedInitialQ(initialQ)
       })
       .catch((err) => {
         if (!alive) return
         setRes(null)
         setMsg(err instanceof ApiError ? err.body.message : "Pencarian gagal. Coba lagi.")
+        setLoadedInitialQ(initialQ)
       })
     return () => {
       alive = false
     }
   }, [initialQ])
+
+  const busy = pending || (initialQ.length >= 4 && loadedInitialQ !== initialQ)
 
   function copyAwb(awb: string) {
     navigator.clipboard?.writeText(awb).then(
@@ -105,10 +110,10 @@ export function CekResiPage() {
           <Input id="cari-resi" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="INV 8K4M2P7 / JP1234567890 / 0857…" />
           {msg ? <FieldDescription className="text-danger">{msg}</FieldDescription> : null}
         </Field>
-        <Button type="submit" size="lg" disabled={pending || q.trim().length < 4}><SearchIcon aria-hidden /> {pending ? "Mencari…" : "Cari"}</Button>
+        <Button type="submit" size="lg" disabled={busy || q.trim().length < 4}><SearchIcon aria-hidden /> {busy ? "Mencari…" : "Cari"}</Button>
       </Panel>
       <div className="mt-6" aria-live="polite">
-        {pending ? <p className="text-base md:text-sm text-muted-foreground">Sedang melacak kiriman…</p> : null}
+        {busy ? <p className="text-base md:text-sm text-muted-foreground">Sedang melacak kiriman…</p> : null}
         {res?.kind === "none" ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada kiriman yang cocok.</p> : null}
         {res?.kind === "foreign" ? (
           <Panel>

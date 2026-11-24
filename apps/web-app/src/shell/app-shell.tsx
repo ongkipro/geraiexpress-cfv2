@@ -250,8 +250,8 @@ export function AppShell() {
   const tab = useRouterState({ select: (s) => (s.location.search as { tab?: unknown }).tab })
   const tabStr = typeof tab === "string" ? tab : undefined
   const navigate = useNavigate()
-  // Commit flows own the bottom of the phone screen (their checkout bar); the menu stays in the header Sheet.
-  const commitFlow = path === "/kasir" || /^\/kiriman\/[a-z0-9]{7}$/.test(path) || /^\/kasir\/(multi|shift)/.test(path) || /^\/kiriman\/(pickup|retur)\//.test(path)
+  // Commit flows own the bottom of the phone screen (their checkout / bulk print bar); the menu stays in the header Sheet.
+  const commitFlow = path === "/kasir" || path === "/kiriman/cetak-massal" || /^\/kiriman\/[a-z0-9]{7}$/.test(path) || /^\/kasir\/(multi|shift)/.test(path) || /^\/kiriman\/(pickup|retur)\//.test(path)
   const section = sectionOf(path)
   const item = (n: NavDef): ShellNavItem => ({
     key: n.key,
@@ -305,18 +305,7 @@ export function AppShell() {
           subtitle={w.tenant.miniSiteHost}
         />
       }
-      quickActions={
-        !/^\/kiriman\/[a-z0-9]{7}$/.test(path) ? (
-          <div className="flex items-center gap-1.5">
-            <Button variant={primaryCta(path) ? "default" : "outline"} className="flex-1" onClick={() => navigate({ to: "/kasir" })}>
-              <PlusIcon aria-hidden data-icon="inline-start" /> Kiriman Baru
-            </Button>
-            <Button variant="outline" size="icon" aria-label="Scan QR" onClick={() => navigate({ to: "/kasir", search: { scan: "1" } })}>
-              <QrCodeIcon aria-hidden />
-            </Button>
-          </div>
-        ) : null
-      }
+      quickActions={!/^\/kiriman\/[a-z0-9]{7}$/.test(path) ? <SidebarQuickActions path={path} /> : null}
       sidebarStatus={<CounterStatus owner={w.role === "gerai_admin"} />}
       navLabel="Menu utama"
       groups={groups}
@@ -347,13 +336,32 @@ export function AppShell() {
   )
 }
 
-/** Phone counter bar (visual 07 §1.2): Beranda · Buat · + · Kiriman · Lainnya (opens the sidebar Sheet). */
+function SidebarQuickActions({ path }: { path: string }) {
+  const navigate = useNavigate()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const go = (opts: { to: "/kasir"; search?: { scan: "1" } }) => {
+    if (isMobile) setOpenMobile(false)
+    void navigate(opts)
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button variant={primaryCta(path) ? "default" : "outline"} className="flex-1" onClick={() => go({ to: "/kasir" })}>
+        <PlusIcon aria-hidden data-icon="inline-start" /> Kiriman Baru
+      </Button>
+      <Button variant="outline" size="icon" aria-label="Scan QR" onClick={() => go({ to: "/kasir", search: { scan: "1" } })}>
+        <QrCodeIcon aria-hidden />
+      </Button>
+    </div>
+  )
+}
+
+/** Phone counter bar (visual 07 §1.2): Beranda · Cek Ongkir · + · Kiriman · Lainnya (opens the sidebar Sheet). */
 function BottomBar({ path, kiriman }: { path: string; kiriman: number }) {
   const { setOpenMobile, openMobile } = useSidebar()
   return (
     <nav aria-label="Menu bawah" className="fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-5 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden">
       <BottomLink to="/" label="Beranda" icon={HomeIcon} active={path === "/"} />
-      <BottomLink to="/kasir" label="Buat" icon={PackageIcon} active={sectionOf(path) === "buat-pengiriman"} />
+      <BottomLink to="/kasir/cek-cepat" label="Cek Ongkir" icon={CalculatorIcon} active={sectionOf(path) === "cek"} />
       <Link to="/kasir" aria-label="Kiriman Baru" className="flex items-center justify-center">
         <span className={`flex size-12 items-center justify-center rounded-full ${primaryCta(path) ? "bg-primary text-primary-foreground" : "border-2 border-primary bg-card text-primary"}`}>
           <PlusIcon aria-hidden className="size-6" />

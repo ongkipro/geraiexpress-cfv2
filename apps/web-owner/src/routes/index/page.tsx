@@ -56,6 +56,14 @@ interface Attention {
   action?: string
 }
 
+function alertTarget(key: string): { to: string; search?: Record<string, string>; action: string } {
+  const base = (key.startsWith("drill.") ? key.slice(6) : key).split(".")[0]!
+  if (base.startsWith("discount_")) return { to: "/tarif", search: { tab: "permintaan" }, action: "Buka Tarif" }
+  if (base.startsWith("hostname_")) return { to: "/gerai", search: { tab: "domain" }, action: "Buka Domain" }
+  if (base === "relay_down" || base.startsWith("partner_api_") || base.startsWith("public_api_")) return { to: "/sistem", search: { tab: "mengantar" }, action: "Buka Integrasi" }
+  return { to: "/sistem", action: "Buka Sistem" }
+}
+
 export function RingkasanPage() {
   const { data, error, loading, reload } = useApi<Overview>("/overview")
   const header = (
@@ -69,12 +77,13 @@ export function RingkasanPage() {
   const total14 = data.series.reduce((a, s) => a + s.shipments, 0)
   const rows: Attention[] = [
     k.tenants_in_recovery ? { key: "recovery", tone: "danger", label: `${nf.format(k.tenants_in_recovery)} gerai dalam pemulihan data`, to: "/sistem", action: "Buka Sistem" } : null,
-    k.onboarding_stuck ? { key: "onboarding", tone: "warn", label: `${nf.format(k.onboarding_stuck)} pendaftaran Mengantar tertunda`, to: "/gerai", action: "Buka Gerai" } : null,
+    k.onboarding_stuck ? { key: "onboarding", tone: "warn", label: `${nf.format(k.onboarding_stuck)} pendaftaran Mengantar tertunda`, to: "/gerai", search: { tab: "direktori" }, action: "Buka Direktori" } : null,
     k.discount_mismatch ? { key: "discount", tone: "warn", label: `${nf.format(k.discount_mismatch)} diskon belum sesuai di Mengantar`, to: "/tarif", search: { tab: "permintaan" }, action: "Buka Tarif" } : null,
     k.email_failed_7d ? { key: "email", tone: "warn", label: `${nf.format(k.email_failed_7d)} email gagal terkirim (7 hari)`, to: "/sistem", action: "Buka Sistem" } : null,
     ...data.alerts.map((a): Attention => {
       const t = alertText(a.alert_key)
-      return { key: a.alert_key, tone: t.drill ? "muted" : "warn", label: t.drill ? `Uji alert: ${t.label}` : t.label, detail: `Terakhir ${formatDate(a.last_sent_at)}`, to: "/sistem", action: "Buka Sistem" }
+      const dest = alertTarget(a.alert_key)
+      return { key: a.alert_key, tone: t.drill ? "muted" : "warn", label: t.drill ? `Uji alert: ${t.label}` : t.label, detail: `Terakhir ${formatDate(a.last_sent_at)}`, ...dest }
     }),
   ].filter((x): x is Attention => x !== null)
   return (
@@ -82,7 +91,7 @@ export function RingkasanPage() {
       {header}
       <MetricGrid>
         <MetricCard icon={StoreIcon} label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
-        <MetricCard icon={PackageIcon} label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" />
+        <MetricCard icon={PackageIcon} label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" to="/pengawasan" />
         <MetricCard icon={InboxIcon} label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
         <MetricCard
           icon={ActivityIcon}
@@ -125,7 +134,7 @@ export function RingkasanPage() {
                   <Link to={r.to} search={r.search as never} aria-label={`${r.label} — ${r.action}`} className="group flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-slate-50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:px-5">
                     <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${r.tone === "danger" ? "bg-danger" : r.tone === "warn" ? "bg-warn" : "bg-slate-400"}`} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate text-sm text-slate-800">{r.label}</span>
+                      <span className="line-clamp-2 text-sm text-slate-800">{r.label}</span>
                       <span className="truncate text-xs text-muted-foreground tabular-nums">{r.tone === "danger" ? "Kritis" : r.tone === "warn" ? "Perlu dicek" : "Uji"}{r.detail ? ` · ${r.detail}` : ""}</span>
                     </span>
                     <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-slate-300 group-hover:text-muted-foreground" />

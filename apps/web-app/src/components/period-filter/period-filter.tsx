@@ -37,9 +37,9 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
   const [open, setOpen] = useState(false)
   const preset = PRESETS.find((x) => x.id === value.preset)
   const aria = `Periode: ${preset ? `${preset.label}, ` : ""}${rangeLabel(value, true)}`
-  const trigger = (
-    <Button variant="outline" aria-label={aria} className="h-11 justify-between gap-2 px-3 text-base font-medium md:h-9 md:text-sm">
-      <CalendarIcon aria-hidden /> <span className="tabular-nums">{triggerLabel(value)}</span> <ChevronDownIcon aria-hidden />
+  const trigger = (onClick?: () => void) => (
+    <Button type="button" variant="outline" aria-label={aria} onClick={onClick} className="h-11 justify-between gap-2 px-3 text-base font-medium md:h-9 md:text-sm">
+      <CalendarIcon aria-hidden /> <span className="truncate tabular-nums">{triggerLabel(value)}</span> <ChevronDownIcon aria-hidden />
     </Button>
   )
   const pick = (p: Period) => {
@@ -49,7 +49,7 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
   if (mobile) {
     return (
       <>
-        <span onClick={() => setOpen(true)}>{trigger}</span>
+        {trigger(() => setOpen(true))}
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
             <SheetHeader><SheetTitle>Pilih periode</SheetTitle></SheetHeader>
@@ -61,7 +61,7 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={trigger} />
+      <PopoverTrigger render={trigger()} />
       <PopoverContent align="end" className="w-auto max-w-[calc(100vw-2rem)] p-0">
         <Body value={value} onPick={pick} onCancel={() => setOpen(false)} months={2} chips={false} />
       </PopoverContent>

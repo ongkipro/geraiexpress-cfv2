@@ -100,7 +100,7 @@ export function ApiMcpPage() {
           <div className="flex flex-col gap-3">
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm break-all" aria-label="Kunci API baru">{created.token}</p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(created.token).then(() => setMsg({ tone: "safe", text: "Kunci disalin." }))}><CopyIcon aria-hidden /> Salin Kunci</Button>
+              <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(created.token).then(() => setMsg({ tone: "safe", text: "Kunci disalin." })).catch(() => setMsg({ tone: "danger", text: "Gagal menyalin kunci. Salin manual dari kotak di atas." }))}><CopyIcon aria-hidden /> Salin Kunci</Button>
               <Button variant="ghost" onClick={() => setCreated(null)}>Sudah Saya Simpan</Button>
             </div>
           </div>
@@ -160,6 +160,7 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
   const issue = picked.has("shipments:issue")
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setFields({})
     try {
@@ -191,7 +192,7 @@ function CreateKey({ scopes, onCreated }: { scopes: string[]; onCreated: (x: { n
             <Field data-invalid={fields.dailyIssueCapIdr ? true : undefined}><FieldLabel htmlFor="key-cap">Batas nilai kiriman per hari (Rp)</FieldLabel><Input id="key-cap" inputMode="numeric" className="w-48 tabular-nums" value={cap} onChange={(e) => setCap(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} />{fields.dailyIssueCapIdr ? <FieldError>{fields.dailyIssueCapIdr}</FieldError> : <FieldDescription>Wajib untuk izin terbitkan resi.</FieldDescription>}</Field>
           ) : null}
           {fields.form && !Object.keys(fields).some((k) => k !== "form") ? <p role="alert" className="text-base md:text-sm text-danger">{fields.form}</p> : null}
-          <div><Button type="submit" disabled={pending || !name.trim()}>Buat Kunci</Button></div>
+          <div><Button type="submit" disabled={pending || !name.trim()}>{pending ? "Membuat…" : "Buat Kunci"}</Button></div>
         </form>
     </SectionCard>
   )

@@ -4,8 +4,10 @@ import { DataTableShell } from "@shared/components/admin/data-table"
 import { rememberOpsStatus, type OpsIcon } from "@shared/components/admin/operational-status"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Button } from "@shared/components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@shared/components/ui/alert-dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
+import { toast } from "@shared/components/ui/sonner"
 import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
 import { EmptyBlock, ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, RecheckButton, ReloadButton, Section, StatusChip } from "../../components/page"
 import { api, ApiError } from "../../lib/api"
@@ -131,10 +133,11 @@ function Health() {
 function RotateKey() {
   const [slug, setSlug] = useState("")
   const [reason, setReason] = useState("")
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger" | "warn"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function executeRotate() {
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {
@@ -147,12 +150,19 @@ function RotateKey() {
             : { tone: "danger", text: `Rotasi ditolak Mengantar (${r.code}). Kunci lama tetap berlaku.` },
       )
       setReason("")
+      setConfirmOpen(false)
     } catch (err) {
+      setConfirmOpen(false)
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return totpRedirect("/sistem")
       setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal merotasi kunci." })
     } finally {
       setPending(false)
     }
+  }
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (pending || slug.trim().length < 3 || reason.trim().length < 5) return
+    setConfirmOpen(true)
   }
   return (
     <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
@@ -167,6 +177,18 @@ function RotateKey() {
       </Field>
       <div><Button type="submit" variant="destructive" disabled={pending || slug.trim().length < 3 || reason.trim().length < 5}>{pending ? "Memproses…" : "Rotasi Kunci Seller"}</Button></div>
       {msg ? <p role="status" className={`border-l-4 py-1 pl-3 text-sm font-medium ${msg.tone === "safe" ? "border-safe text-safe" : msg.tone === "warn" ? "border-warn text-warn" : "border-danger text-danger"}`}>{msg.text}</p> : null}
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => !o && !pending && setConfirmOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rotasi kunci seller {slug.trim()}?</AlertDialogTitle>
+            <AlertDialogDescription>Kunci lama gerai <strong className="text-foreground">{slug.trim()}.geraimitra.com</strong> akan diganti dan pengiriman dijeda sebentar selama rotasi.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={pending} onClick={() => void executeRotate()}>{pending ? "Memproses…" : "Ya, Rotasi Kunci"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }
@@ -276,6 +298,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
     const changed = Object.fromEntries(Object.entries(v).filter(([k, x]) => x !== (data.fields[k] ?? "")))
     try {
       await api("/sistem/profil-perusahaan", { body: { fields: { ...changed, ...(npwp ? { npwp } : {}) }, reason } })
+      toast.success("Profil perusahaan tersimpan.")
       setMsg("Profil perusahaan tersimpan.")
       onSaved()
     } catch (err) {
@@ -391,6 +414,7 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
       setPartnerSecret("")
       setRelaySecret("")
       setReason("")
+      toast.success("Konfigurasi Mengantar Partner API tersimpan dan langsung aktif.")
       setMsg({ tone: "safe", text: "Konfigurasi Mengantar Partner API tersimpan terenkripsi dan langsung aktif." })
       onSaved()
     } catch (err) {
