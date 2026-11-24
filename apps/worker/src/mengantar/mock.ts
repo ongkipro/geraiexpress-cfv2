@@ -372,12 +372,20 @@ export const mockFetch: typeof fetch = async (input, init) => {
       delete mockFaults.areaSearchGate
       await gate
     }
-    const kw = (url.searchParams.get("keyword") ?? "").toLowerCase()
+    const tokens = (url.searchParams.get("keyword") ?? "").toLowerCase().trim().split(/\s+/).filter(Boolean)
     const areas = [
       { _id: "5fc62f5df8f44b34aa4c0d8c", PROVINCE_NAME: "Jawa Barat", CITY_NAME: "Kota Bandung", DISTRICT_NAME: "Coblong", SUBDISTRICT_NAME: "Dago", ZIP_CODE: "40135" },
       { _id: "5fc64714f8f44b34aa4cdd60", PROVINCE_NAME: "DKI Jakarta", CITY_NAME: "Jakarta Selatan", DISTRICT_NAME: "Tebet", SUBDISTRICT_NAME: "Tebet Barat", ZIP_CODE: "12810" },
       { _id: "5fc63038f8f44b34aa4c1cc4", PROVINCE_NAME: "Jawa Timur", CITY_NAME: "Kota Surabaya", DISTRICT_NAME: "Gubeng", SUBDISTRICT_NAME: "Airlangga", ZIP_CODE: "60286" },
-    ].filter((a) => kw.length >= 3 && Object.values(a).some((v) => String(v).toLowerCase().includes(kw)))
+      { _id: "5fc6474ff8f44b34aa4cdea5", PROVINCE_NAME: "JAWA TIMUR", CITY_NAME: "SIDOARJO", DISTRICT_NAME: "SUKODONO", SUBDISTRICT_NAME: "PANJUNAN", ZIP_CODE: "61216" },
+      { _id: "5fc6474df8f44b34aa4cde9b", PROVINCE_NAME: "JAWA TIMUR", CITY_NAME: "SIDOARJO", DISTRICT_NAME: "SUKODONO", SUBDISTRICT_NAME: "BANGSRI", ZIP_CODE: "61258" },
+      { _id: "5fc641c1f8f44b34aa4cbe15", PROVINCE_NAME: "JAWA TENGAH", CITY_NAME: "SRAGEN", DISTRICT_NAME: "SUKODONO", SUBDISTRICT_NAME: "BALEHARJO", ZIP_CODE: "57263" },
+    ].filter((a) => {
+      const joined = tokens.join(" ")
+      if (joined.length < 3) return false
+      const hay = Object.values(a).map((v) => String(v).toLowerCase()).join(" ")
+      return tokens.every((t) => hay.includes(t))
+    })
     return json(200, { success: true, data: areas })
   }
   return json(404, { success: false, message: "mock: route not implemented" })

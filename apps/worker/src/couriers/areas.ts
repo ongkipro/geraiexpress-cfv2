@@ -9,6 +9,10 @@ export interface AreaItem {
   id: string
   label: string
   postalCode: string | null
+  subdistrict?: string | null
+  district?: string | null
+  city?: string | null
+  province?: string | null
 }
 
 const TTL_SECONDS = 7 * 24 * 3600
@@ -18,7 +22,7 @@ export const normaliseKeyword = (q: string) => q.trim().toLowerCase().replace(/\
 export async function searchAreas(env: Env, q: string): Promise<{ items: AreaItem[]; cache: "hit" | "miss" | "skip" }> {
   const kw = normaliseKeyword(q)
   if (kw.length < 3) return { items: [], cache: "skip" }
-  const key = `area:v1:${kw}`
+  const key = `area:v2:${kw}`
   const cached = await env.CACHE_KV.get<AreaItem[]>(key, "json")
   if (cached) return { items: cached, cache: "hit" }
 
@@ -42,10 +46,14 @@ export async function searchAreas(env: Env, q: string): Promise<{ items: AreaIte
     }
     throw err
   }
-  const items = raw.slice(0, 25).map((a) => ({
+  const items = raw.slice(0, 50).map((a) => ({
     id: a._id,
     label: [a.SUBDISTRICT_NAME, a.DISTRICT_NAME, a.CITY_NAME, a.PROVINCE_NAME].filter(Boolean).join(", "),
     postalCode: a.ZIP_CODE ? String(a.ZIP_CODE) : null,
+    subdistrict: a.SUBDISTRICT_NAME?.trim() || null,
+    district: a.DISTRICT_NAME?.trim() || null,
+    city: a.CITY_NAME?.trim() || null,
+    province: a.PROVINCE_NAME?.trim() || null,
   }))
   await env.CACHE_KV.put(key, JSON.stringify(items), { expirationTtl: items.length > 0 ? TTL_SECONDS : EMPTY_TTL_SECONDS })
   return { items, cache: "miss" }

@@ -166,8 +166,12 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
     await fits(page, `tahap 3 ${size.width}x${size.height}`)
   }
   // The area results float over the form: they never grow the page. Sol R1: a keyboard-operable combobox.
-  const area = page.getByRole("combobox", { name: "Cari kelurahan / kecamatan / kode pos" })
-  const list = page.getByRole("listbox", { name: "Hasil pencarian wilayah" })
+  const area = page.getByRole("combobox", { name: "Kecamatan" })
+  const list = page.getByRole("listbox", { name: "Hasil pencarian kecamatan" })
+  const subdistrict = page.getByRole("combobox", { name: "Kelurahan / Desa" })
+  const subList = page.getByRole("listbox", { name: "Daftar kelurahan" })
+  const postal = page.getByLabel("Kode pos")
+  await expect(subdistrict).toHaveCount(0)
   await area.fill("coblong")
   await expect(list).toBeVisible()
   await fits(page, "tahap 3 with area results 390x844")
@@ -180,7 +184,27 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
   await expect(list.getByRole("option").first()).toHaveAttribute("aria-selected", "true")
   await area.press("Enter")
   await expect(list).toBeHidden()
+  await expect(subdistrict).toContainText("Dago")
+  await expect(postal).toHaveValue("40135")
   await expect(page.getByText(/^Dipilih: Dago, Coblong/)).toBeVisible()
+  // Multi-district & multi-kelurahan flow: typing `sukodono` groups by kecamatan; picking a kelurahan auto-fills kode pos.
+  await area.fill("sukodono")
+  await expect(list.getByRole("option", { name: /Sukodono.*Sidoarjo/i })).toBeVisible()
+  await list.getByRole("option", { name: /Sukodono.*Sidoarjo/i }).click()
+  await expect(list).toBeHidden()
+  await expect(subdistrict).toBeEnabled()
+  await expect(subdistrict).toContainText("Pilih kelurahan")
+  await expect(postal).toHaveValue("")
+  await subdistrict.click()
+  await expect(subList).toBeVisible()
+  await subList.getByRole("option", { name: /Panjunan/ }).click()
+  await expect(subList).toBeHidden()
+  await expect(subdistrict).toContainText("Panjunan")
+  await expect(postal).toHaveValue("61216")
+  await subdistrict.click()
+  await subList.getByRole("option", { name: /Bangsri/ }).click()
+  await expect(subdistrict).toContainText("Bangsri")
+  await expect(postal).toHaveValue("61258")
   // Focus leaving the picker without a choice closes the overlay.
   await area.fill("coblong")
   await expect(list).toBeVisible()
@@ -250,11 +274,10 @@ test("DEC-250: split-studio masuk (app + owner), daftar Langkah 1 / 3 — tanpa 
   await expect(page.locator("#area-opt-9")).toBeInViewport()
   await area.press("Escape")
   await page.unroute("**/api/app/onboarding/areas?q=zona*")
-  // Sol R1 (supervisor pre-review): a short viewport with the coordinates open scrolls inside the centre only;
-  // Latitude, Longitude and `Ajukan Gerai` stay reachable, and the page itself never scrolls.
+  // Sol R1 (supervisor pre-review): on a short viewport (`1280×560`), the form scrolls inside the centre column only;
+  // Kecamatan, Alamat lengkap, and `Ajukan Gerai` stay reachable, and the page itself never scrolls.
   await page.setViewportSize({ width: 1280, height: 560 })
-  await page.getByText("Titik koordinat peta (opsional)").click()
-  for (const target of [page.getByLabel("Latitude"), page.getByLabel("Longitude"), page.getByRole("button", { name: "Ajukan Gerai" })]) {
+  for (const target of [area, page.getByLabel("Alamat lengkap titik jemput"), page.getByRole("button", { name: "Ajukan Gerai" })]) {
     await target.scrollIntoViewIfNeeded()
     await expect(target).toBeInViewport()
   }

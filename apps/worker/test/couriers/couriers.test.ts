@@ -75,18 +75,18 @@ describe("Ekspedisi Aktif (instant save)", () => {
 
 describe("area search cache (KV only caches area search)", () => {
   it("miss then hit for the same normalised keyword; short keywords skip both", async () => {
-    await env.CACHE_KV.delete("area:v1:dago")
+    await env.CACHE_KV.delete("area:v2:dago")
     expect((await searchAreas(env, "  DAGO ")).cache).toBe("miss")
     const hit = await searchAreas(env, "dago")
     expect(hit.cache).toBe("hit")
-    expect(hit.items[0]).toMatchObject({ id: "5fc62f5df8f44b34aa4c0d8c", postalCode: "40135" })
+    expect(hit.items[0]).toMatchObject({ id: "5fc62f5df8f44b34aa4c0d8c", postalCode: "40135", district: "Coblong", subdistrict: "Dago", city: "Kota Bandung" })
     expect((await searchAreas(env, "da")).cache).toBe("skip")
   })
 
   it("refuses unconfigured non-mock area search with clean 503 instead of calling Mengantar with a fake key", async () => {
-    await env.CACHE_KV.delete("area:v1:coblong")
+    await env.CACHE_KV.delete("area:v2:coblong")
     const liveEnv = { ...env, GX_ENV: "production" as const, MENGANTAR_PUBLIC_ORIGIN: "https://api-public.mengantar.com" as const, MENGANTAR_PUBLIC_READ_KEY: undefined }
     await expect(searchAreas(liveEnv, "coblong")).rejects.toMatchObject({ status: 503, code: "AREA_SEARCH_UNAVAILABLE" })
-    expect(await env.CACHE_KV.get("area:v1:coblong")).toBeNull()
+    expect(await env.CACHE_KV.get("area:v2:coblong")).toBeNull()
   })
 })
