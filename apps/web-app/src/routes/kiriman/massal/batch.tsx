@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useParams } from "@tanstack/react-router"
 import { PrinterIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -25,26 +25,46 @@ export function BatchPage() {
   const w = useWorkspace()
   const owner = isOwner(w)
   const [v, setV] = useState<BulkView | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadedBatch, setLoadedBatch] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ batch: string; msg: string } | null>(null)
   const [tabChoice, setTabChoice] = useState<"ready" | "fix" | null>(null)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<BulkView>(`/bulk/${batch}`)
       .then((d) => {
-        setError(null)
+        if (mine !== gen.current) return
+        setErrState(null)
         setV(d)
+        setLoadedBatch(batch)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Batch tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setErrState({ batch, msg: e instanceof ApiError ? e.body.message : "Batch tidak dapat dimuat." })
+        setLoadedBatch(batch)
+      })
   }, [batch])
-  useEffect(load, [load])
+  const updateView = useCallback((next: BulkView) => {
+    // Invalidate any in-flight poll so stale rows never overwrite a freshly applied local mutation.
+    gen.current++
+    setV(next)
+    setLoadedBatch(batch)
+  }, [batch])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
   // Checking and dispatch run in the background queue: refresh while they are in progress.
-  const busy = v && (v.batch.state === "checking" || v.batch.state === "dispatching")
+  const busy = v && loadedBatch === batch && (v.batch.state === "checking" || v.batch.state === "dispatching")
   useEffect(() => {
     if (!busy) return
     const t = setInterval(load, 2500)
     return () => clearInterval(t)
   }, [busy, load])
+  const error = errState?.batch === batch ? errState.msg : null
   if (error) return <div><PageTitle title="Paket Massal" /><ErrorState message={error} onRetry={load} /></div>
-  if (!v) return <LoadingState label="Memuat batch" />
+  if (!v || loadedBatch !== batch) return <div><PageTitle title="Paket Massal" /><LoadingState label="Memuat batch" /></div>
   const ready = v.rows.filter((r) => r.state === "ready")
   const fix = v.rows.filter((r) => r.state === "needs_fix" || r.state === "pending")
   const created = v.rows.filter((r) => r.state === "created")
@@ -61,7 +81,7 @@ export function BatchPage() {
             <TabsTrigger value="fix">Perlu Diperbaiki ({fix.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="ready"><ReadyList rows={ready} owner={owner} /></TabsContent>
-          <TabsContent value="fix"><FixList batch={batch} rows={fix} onChange={setV} /></TabsContent>
+          <TabsContent value="fix"><FixList batch={batch} rows={fix} onChange={updateView} /></TabsContent>
         </Tabs>
       ) : (
         <CreatedList rows={created} />
@@ -284,7 +304,7 @@ function AfterCreate({ v, reload }: { v: BulkView; reload: () => void }) {
         <p className="text-base md:text-sm font-medium">Tidak ada pembayaran di loket untuk batch ini (semua COD).</p>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
-          <ToggleGroup value={[method]} onValueChange={(x) => x[0] && setMethod(x[0] as typeof method)} variant="outline" aria-label="Cara bayar">
+          <ToggleGroup value={[method]} onValueChange={(x) => x[0] && setMethod(x[0] as typeof method)} variant="outline" aria-label="Cara bayar" className="flex-wrap">
             <ToggleGroupItem value="qris">QRIS gerai</ToggleGroupItem>
             <ToggleGroupItem value="tunai">Tunai</ToggleGroupItem>
             <ToggleGroupItem value="transfer">Transfer</ToggleGroupItem>

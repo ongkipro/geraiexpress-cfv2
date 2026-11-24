@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "cn"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { Switch } from "../../../components/ui/switch"
@@ -6,7 +6,8 @@ import { api, ApiError } from "../../../lib/api"
 import { ChoiceGroup, SectionCard } from "../../../components/admin/page"
 import { CourierLogo } from "../../../components/admin/courier-logo"
 import { ErrorState } from "../../../shell/states"
-import { SettingsLayout } from "../index/shared"
+import { useWorkspace } from "../../../shell/workspace"
+import { readSettingsCache, SettingsLayout, writeSettingsCache } from "../index/shared"
 import { toast } from "sonner"
 
 // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223, visual 08 §2): one full-row switch per courier that saves at once
@@ -41,22 +42,33 @@ export function serviceLabel(r: Pick<CourierRow, "name" | "courierCode">, s: Cou
 }
 
 export function PengaturanEkspedisiPage() {
-  const [rows, setRows] = useState<CourierRow[] | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `couriers:${w.tenant.id}`
+  const [rows, setRows] = useState<CourierRow[] | null>(() => readSettingsCache<CourierRow[]>(cacheKey))
   const [error, setError] = useState<string | null>(null)
   const [pendingCodes, setPendingCodes] = useState<Set<string>>(() => new Set())
+  const gen = useRef(0)
 
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ items: CourierRow[] }>("/settings/couriers")
       .then((d) => {
+        if (mine !== gen.current) return
+        writeSettingsCache(cacheKey, d.items)
         setError(null)
         setRows(d.items)
       })
       .catch((e) => {
+        if (mine !== gen.current) return
         if (e instanceof ApiError && e.status === 401) window.location.assign("/masuk")
-        else setError(e instanceof ApiError ? e.body.message : "Daftar ekspedisi tidak dapat dimuat.")
+        else if (!readSettingsCache<CourierRow[]>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Daftar ekspedisi tidak dapat dimuat.")
       })
-  }, [])
-  useEffect(load, [load])
+  }, [cacheKey])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
 
   // DEC-236: one toast system (shadcn Sonner in the shell), announced politely to screen readers.
   const show = (text: string, tone: "safe" | "danger" = "safe") => void (tone === "safe" ? toast.success(text) : toast.error(text))
@@ -65,7 +77,12 @@ export function PengaturanEkspedisiPage() {
     setPendingCodes((prev) => { const n = new Set(prev); n.add(row.courierCode); return n })
     try {
       const next = await api<CourierRow>(`/settings/couriers/${encodeURIComponent(row.courierCode)}`, { body: patch })
-      setRows((rs) => rs?.map((r) => (r.courierCode === next.courierCode ? next : r)) ?? null)
+      gen.current++
+      setRows((rs) => {
+        const updated = rs?.map((r) => (r.courierCode === next.courierCode ? next : r)) ?? null
+        if (updated) writeSettingsCache(cacheKey, updated)
+        return updated
+      })
       if (patch.enabled !== undefined) show(`${next.name} ${next.enabled ? "diaktifkan" : "dinonaktifkan"}`)
       else show(`${next.name}: ${MODE_LABEL[next.pickupMode].toLowerCase()}`)
     } catch (e) {

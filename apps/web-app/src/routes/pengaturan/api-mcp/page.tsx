@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { CopyIcon, ExternalLinkIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
@@ -9,7 +9,8 @@ import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { rp } from "../../kasir/quote-panel"
 import { ErrorState, LoadingState } from "../../../shell/states"
-import { Notice, SettingsLayout } from "../index/shared"
+import { useWorkspace } from "../../../shell/workspace"
+import { Notice, readSettingsCache, SettingsLayout, writeSettingsCache } from "../index/shared"
 import { CheckboxField, CopyField, SectionCard } from "../../../components/admin/page"
 
 // Pengaturan › API & MCP (spec 08 §2, visual 08 §2.3): keys table, `Buat Kunci` (the token is shown once), revoke with
@@ -47,26 +48,39 @@ const SCOPE_HINT: Record<string, string> = {
 const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms) : "Belum pernah")
 
 export function ApiMcpPage() {
-  const [d, setD] = useState<{ items: Key[]; scopes: string[] } | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `api-keys:${w.tenant.id}`
+  const [d, setD] = useState<{ items: Key[]; scopes: string[] } | null>(() => readSettingsCache<{ items: Key[]; scopes: string[] }>(cacheKey))
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null)
   const [confirm, setConfirmState] = useState<string | null>(null)
   const [revokeErr, setRevokeErr] = useState<string | null>(null)
   const [revoking, setRevoking] = useState(false)
+  const gen = useRef(0)
   const setConfirm = (id: string | null) => {
     setRevokeErr(null)
     setConfirmState(id)
   }
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<{ items: Key[]; scopes: string[] }>("/api-keys")
       .then((x) => {
+        if (mine !== gen.current) return
+        writeSettingsCache(cacheKey, x)
         setError(null)
         setD(x)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Kunci API tidak dapat dimuat."))
-  }, [])
-  useEffect(load, [load])
+      .catch((e) => {
+        if (mine !== gen.current) return
+        if (!readSettingsCache(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Kunci API tidak dapat dimuat.")
+      })
+  }, [cacheKey])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
   async function revoke(k: Key) {
     if (revoking) return
     setRevoking(true)

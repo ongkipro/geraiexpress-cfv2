@@ -1,3 +1,4 @@
 @import "tailwindcss";
 @import "../../web-app/src/styles/theme.css";
 @source "../../web-app/src/components";
+@source "../../web-app/src/lib/turnstile.tsx";

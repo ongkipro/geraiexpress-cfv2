@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import { toast } from "@shared/components/ui/sonner"
 import { Button } from "@shared/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@shared/components/ui/field"
 import { Input } from "@shared/components/ui/input"
@@ -35,9 +36,9 @@ export function TarifPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Tarif & Kurir" description="Diskon dan cashback per gerai, permintaan ke tim Mengantar, dan batas diskon." />
-      <Tabs value={current} onValueChange={(v) => navigate({ to: "/tarif", search: { tab: v as Tab } })} className="min-w-0">
+      <Tabs value={current} onValueChange={(v) => navigate({ to: "/tarif", search: { tab: v === "gerai" ? undefined : (v as "permintaan" | "kebijakan") } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <TabsList aria-label="Bagian tarif">
+          <TabsList aria-label="Bagian tarif" className="w-max max-w-none">
             <TabsTrigger value="gerai">Diskon & Cashback</TabsTrigger>
             <TabsTrigger value="permintaan">Permintaan</TabsTrigger>
             <TabsTrigger value="kebijakan">Kebijakan Diskon</TabsTrigger>
@@ -199,14 +200,17 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [pending, setPending] = useState(false)
-  const toBps = (s: string) => Math.round(Number(s.replace(",", ".")) * 100)
+  const toBps = (s: string) => {
+    const clean = s.trim().replace(",", ".")
+    return clean === "" ? NaN : Math.round(Number(clean) * 100)
+  }
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (pending) return
     const minBps = toBps(v.min)
     const defaultBps = toBps(v.def)
     const maxBps = toBps(v.max)
-    const slaNum = sla === undefined ? undefined : Number(v.sla)
+    const slaNum = sla === undefined ? undefined : v.sla.trim() === "" ? NaN : Number(v.sla.trim())
     if (!Number.isFinite(minBps) || !Number.isFinite(defaultBps) || !Number.isFinite(maxBps) || (slaNum !== undefined && !Number.isFinite(slaNum))) {
       setError("Masukkan angka persentase yang valid.")
       return
@@ -218,6 +222,7 @@ function BandForm({ initial, sla, path, onDone }: { initial: Band; sla?: number;
       await api(path, { body: { band: { minBps, defaultBps, maxBps }, ...(slaNum === undefined ? {} : { applySlaMinutes: slaNum }), reason } })
       setReason("")
       setSaved(true)
+      toast.success("Batas kebijakan tersimpan.")
       onDone()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent("/tarif?tab=kebijakan")}`)

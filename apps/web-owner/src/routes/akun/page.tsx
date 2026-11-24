@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useState, type ComponentProps, type FormEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react"
+import { useRouter } from "@tanstack/react-router"
 import { KeyRoundIcon, MonitorSmartphoneIcon, ShieldCheckIcon, SmartphoneIcon } from "lucide-react"
 import { FormAlert } from "@shared/components/auth/auth-card"
 import { ErrorState, LoadingState, PageHeader, SectionCard, StatusBadge } from "@shared/components/admin/page"
@@ -33,26 +34,46 @@ function handle(err: unknown, fallback: string): { msg: string; fields: Record<s
 }
 
 export function OwnerAkunPage() {
+  const router = useRouter()
   const [a, setA] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const id = ++gen.current
     api<Account>("/account")
       .then((d) => {
+        if (gen.current !== id) return
         setError(null)
         setA(d)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Akun tidak dapat dimuat."))
+      .catch((e) => {
+        if (gen.current !== id) return
+        setError(e instanceof ApiError ? e.body.message : "Akun tidak dapat dimuat.")
+      })
   }, [])
-  useEffect(load, [load])
-  if (error) return <div className="flex flex-col gap-4"><PageHeader title="Profil & Keamanan Akun" /><ErrorState message={error} onRetry={load} /></div>
-  if (!a) return <LoadingState label="Memuat akun" />
+  useEffect(() => {
+    load()
+    return () => {
+      gen.current += 1
+    }
+  }, [load])
+  const retryLoad = useCallback(() => {
+    setError(null)
+    load()
+  }, [load])
+  const refreshAll = useCallback(() => {
+    load()
+    void router.invalidate()
+  }, [load, router])
+  if (error) return <div className="flex flex-col gap-4"><PageHeader title="Profil & Keamanan Akun" /><ErrorState message={error} onRetry={retryLoad} /></div>
+  if (!a) return <div className="flex flex-col gap-4"><PageHeader title="Profil & Keamanan Akun" /><LoadingState label="Memuat akun" /></div>
   return (
     <div className="flex w-full max-w-4xl flex-col gap-4 md:gap-5">
       <PageHeader title="Profil & Keamanan Akun" description={`Masuk sebagai ${a.profile.email} · Super Admin. Perubahan di sini hanya untuk akun Anda sendiri dan tercatat di log audit.`} />
-      <ProfileCard p={a.profile} onSaved={load} />
+      <ProfileCard p={a.profile} onSaved={refreshAll} />
       <PasswordCard onChanged={load} />
       <SecondFactorCard a={a} onChanged={load} />
-      <EmailCard current={a.profile.email} onChanged={load} />
+      <EmailCard current={a.profile.email} onChanged={refreshAll} />
       <SessionsCard sessions={a.sessions} onChanged={load} />
     </div>
   )
@@ -69,11 +90,17 @@ function TextInput({ id, label, error, hint, ...rest }: { id: string; label: str
 }
 
 function ProfileCard({ p, onSaved }: { p: Account["profile"]; onSaved: () => void }) {
+  const [prev, setPrev] = useState({ name: p.name, phone: p.phone ?? "" })
   const [name, setName] = useState(p.name)
   const [phone, setPhone] = useState(p.phone ?? "")
   const [fields, setFields] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<Msg>(null)
   const [pending, setPending] = useState(false)
+  if (prev.name !== p.name || prev.phone !== (p.phone ?? "")) {
+    setPrev({ name: p.name, phone: p.phone ?? "" })
+    setName(p.name)
+    setPhone(p.phone ?? "")
+  }
   const dirty = name !== p.name || phone !== (p.phone ?? "")
   async function save(e: FormEvent) {
     e.preventDefault()

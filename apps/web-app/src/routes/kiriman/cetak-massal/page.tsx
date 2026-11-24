@@ -18,7 +18,7 @@ const when = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", 
 export function CetakMassalPage() {
   const [status, setStatus] = useState<"belum" | "sudah">("belum")
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ status: string; msg: string } | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [format, setFormat] = useState<Format>("label_10x15_with_stub")
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null)
@@ -32,18 +32,23 @@ export function CetakMassalPage() {
     api<{ items: Row[] }>(`/print/list?status=${status}`)
       .then((d) => {
         if (mine !== gen.current) return
-        setError(null)
+        setErrState(null)
         setRows(d.items)
         setSel(new Set())
         setLoadedStatus(status)
       })
       .catch((e) => {
         if (mine !== gen.current) return
-        setError(e instanceof ApiError ? e.body.message : "Daftar tidak dapat dimuat.")
+        setErrState({ status, msg: e instanceof ApiError ? e.body.message : "Daftar tidak dapat dimuat." })
         setLoadedStatus(status)
       })
   }, [status])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
+  const error = errState?.status === status ? errState.msg : null
   const loading = loadedStatus !== status && !error
   const toggle = (slug: string) => setSel((s) => {
     const n = new Set(s)

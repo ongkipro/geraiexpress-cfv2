@@ -44,8 +44,9 @@ async function loadMe() {
     return { me, pending: summary.pending }
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      if (err.body.code === "TOTP_REQUIRED") throw redirect({ to: "/totp", search: { mode: "required" } })
-      if (err.body.code === "TOTP_ENROL_REQUIRED") throw redirect({ to: "/totp", search: { mode: "enrol" } })
+      const kembali = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/"
+      if (err.body.code === "TOTP_REQUIRED") throw redirect({ to: "/totp", search: { mode: "required", kembali } })
+      if (err.body.code === "TOTP_ENROL_REQUIRED") throw redirect({ to: "/totp", search: { mode: "enrol", kembali } })
       throw redirect({ to: "/masuk" })
     }
     throw err
@@ -74,10 +75,27 @@ const geraiRoute = createRoute({
 })
 const pengajuanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/gerai/pengajuan/$id", component: PengajuanPage })
 const geraiDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/gerai/$slug", component: GeraiDetailPage })
-const tarifRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif", component: TarifPage })
+const tarifRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/tarif",
+  validateSearch: (s: Record<string, unknown>): { tab?: "permintaan" | "kebijakan" } => ({ tab: s.tab === "permintaan" || s.tab === "kebijakan" ? s.tab : undefined }),
+  component: TarifPage,
+})
 const tarifGeraiRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/tarif/$tenantId", component: TarifGeraiPage })
-const pengawasanRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/pengawasan", component: PengawasanPage })
-const sistemRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/sistem", component: SistemPage })
+const pengawasanRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/pengawasan",
+  validateSearch: (s: Record<string, unknown>): { tab?: "risiko" } => ({ tab: s.tab === "risiko" ? "risiko" : undefined }),
+  component: PengawasanPage,
+})
+const sistemRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/sistem",
+  validateSearch: (s: Record<string, unknown>): { tab?: "mengantar" | "audit" | "admin" | "profil" } => ({
+    tab: s.tab === "mengantar" || s.tab === "audit" || s.tab === "admin" || s.tab === "profil" ? s.tab : undefined,
+  }),
+  component: SistemPage,
+})
 const akunRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/akun", component: OwnerAkunPage })
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: OwnerMasukPage })

@@ -122,10 +122,11 @@ const SECTIONS: Array<[RegExp, Crumb[]]> = [
   [/^\/kasir\/shift/, [{ label: "Shift Loket" }]],
   [/^\/kasir$/, [{ label: "Buat Pengiriman", to: "/kasir" }, { label: "Kiriman Satuan" }]],
   [/^\/kasir/, [{ label: "Buat Pengiriman" }]],
+  [/^\/kiriman\/massal\/.+/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Riwayat Massal", to: "/kiriman/massal" }, { label: "Detail Batch" }]],
   [/^\/kiriman\/massal/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Riwayat Massal" }]],
   [/^\/kiriman\/cetak-massal/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Cetak Resi Massal" }]],
   [/^\/kiriman\/pickup/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Pickup & Surat Jalan", to: "/kiriman?tab=pickup" }, { label: "Surat Jalan" }]],
-  [/^\/kiriman\/[a-z0-9]{7}$/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Detail Kiriman" }]],
+  [/^\/kiriman\/[a-z0-9]{7}$/i, [{ label: "Kiriman", to: "/kiriman" }, { label: "Detail Kiriman" }]],
   [/^\/kiriman/, [{ label: "Kiriman" }]],
   [/^\/kontak\/pengirim/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Pengirim" }]],
   [/^\/kontak\/penerima/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Penerima" }]],
@@ -221,14 +222,23 @@ function CounterStatus({ owner }: { owner: boolean }) {
   const [format, setFormat] = useState<Format | null>(null)
   const [hook, setHook] = useState<{ sellerId: string | null; onboardingState: string | null; webhookState: string | null } | null>(null)
   useEffect(() => {
+    let gen = 0
     const load = () => {
-      api<{ format: Format }>("/print/settings").then((s) => setFormat(s.format)).catch(() => setFormat(null))
-      if (owner) api<{ sellerId: string | null; onboardingState: string | null; webhookState: string | null }>("/settings/mengantar").then(setHook).catch(() => setHook(null))
+      const mine = ++gen
+      api<{ format: Format }>("/print/settings")
+        .then((s) => { if (mine === gen) setFormat(s.format) })
+        .catch(() => { if (mine === gen) setFormat(null) })
+      if (owner) api<{ sellerId: string | null; onboardingState: string | null; webhookState: string | null }>("/settings/mengantar")
+        .then((h) => { if (mine === gen) setHook(h) })
+        .catch(() => { if (mine === gen) setHook(null) })
     }
     load()
     // Saving the label format (or a settings page) refreshes this block.
     window.addEventListener(COUNTER_STATUS_EVENT, load)
-    return () => window.removeEventListener(COUNTER_STATUS_EVENT, load)
+    return () => {
+      gen++
+      window.removeEventListener(COUNTER_STATUS_EVENT, load)
+    }
   }, [owner])
   const connected = Boolean(hook && (hook.onboardingState === "connected" || hook.onboardingState === "byok_connected" || hook.sellerId))
   const mengantar = !hook ? { value: "—", tone: "muted" as const } : !connected ? { value: "Belum terhubung", tone: "warn" as const } : hook.webhookState === "active" ? { value: "Terhubung", tone: "safe" as const } : { value: "Webhook belum aktif", tone: "warn" as const }
@@ -251,7 +261,7 @@ export function AppShell() {
   const tabStr = typeof tab === "string" ? tab : undefined
   const navigate = useNavigate()
   // Commit flows own the bottom of the phone screen (their checkout / bulk print bar); the menu stays in the header Sheet.
-  const commitFlow = path === "/kasir" || path === "/kiriman/cetak-massal" || /^\/kiriman\/[a-z0-9]{7}$/.test(path) || /^\/kasir\/(multi|shift)/.test(path) || /^\/kiriman\/(pickup|retur)\//.test(path)
+  const commitFlow = path === "/kasir" || path === "/kiriman/cetak-massal" || /^\/kiriman\/[a-z0-9]{7}$/i.test(path) || /^\/kasir\/(multi|shift)/.test(path) || /^\/kiriman\/(pickup|retur)\//.test(path)
   const section = sectionOf(path)
   const item = (n: NavDef): ShellNavItem => ({
     key: n.key,
@@ -305,7 +315,7 @@ export function AppShell() {
           subtitle={w.tenant.miniSiteHost}
         />
       }
-      quickActions={!/^\/kiriman\/[a-z0-9]{7}$/.test(path) ? <SidebarQuickActions path={path} /> : null}
+      quickActions={!/^\/kiriman\/[a-z0-9]{7}$/i.test(path) ? <SidebarQuickActions path={path} /> : null}
       sidebarStatus={<CounterStatus owner={w.role === "gerai_admin"} />}
       navLabel="Menu utama"
       groups={groups}
@@ -341,6 +351,15 @@ function SidebarQuickActions({ path }: { path: string }) {
   const { isMobile, setOpenMobile } = useSidebar()
   const go = (opts: { to: "/kasir"; search?: { scan: "1" } }) => {
     if (isMobile) setOpenMobile(false)
+    if (path === "/kasir") {
+      if (opts.search?.scan === "1") {
+        void navigate(opts)
+        window.dispatchEvent(new Event("gx:kasir-scan"))
+      } else {
+        window.dispatchEvent(new Event("gx:kasir-reset"))
+      }
+      return
+    }
     void navigate(opts)
   }
   return (
@@ -378,10 +397,10 @@ function BottomBar({ path, kiriman }: { path: string; kiriman: number }) {
 
 function BottomLink({ to, label, icon: Icon, active, badge }: { to: string; label: string; icon: typeof HomeIcon; active: boolean; badge?: number }) {
   return (
-    <Link to={to} aria-current={active ? "page" : undefined} className={`relative flex flex-col items-center justify-center gap-0.5 text-xs ${active ? "font-medium text-primary" : "text-muted-foreground"}`}>
+    <Link to={to} aria-current={active ? "page" : undefined} aria-label={badge ? `${label}, ${badge} perlu tindakan` : undefined} className={`relative flex flex-col items-center justify-center gap-0.5 text-xs ${active ? "font-medium text-primary" : "text-muted-foreground"}`}>
       <Icon aria-hidden className="size-5" />
       {label}
-      {badge ? <span className="absolute top-1.5 right-[24%] grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-xs leading-none font-semibold text-white tabular-nums ring-2 ring-white">{badge}</span> : null}
+      {badge ? <span aria-hidden className="absolute top-1.5 right-[24%] grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-xs leading-none font-semibold text-white tabular-nums ring-2 ring-white">{badge > 99 ? "99+" : badge}</span> : null}
     </Link>
   )
 }

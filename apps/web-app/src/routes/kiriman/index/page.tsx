@@ -82,7 +82,9 @@ export function KirimanPage() {
   const search = useSearch({ strict: false }) as Search
   const navigate = useNavigate()
   const [mountedAt] = useState(() => Date.now())
-  const tab: Tab = search.tab ?? "semua"
+  const rawTab = search.tab
+  const validTab = rawTab && (TABS.some((t) => t.id === rawTab) || rawTab in STATION) ? rawTab : "semua"
+  const tab: Tab = validTab
   const period = useMemo(() => (search.periode || (search.dari && search.sampai) ? periodFromParams(search, mountedAt) : resolvePreset("30d", mountedAt)), [search, mountedAt])
   const searchQ = search.q ?? ""
   const [prevSearchQ, setPrevSearchQ] = useState(searchQ)
@@ -92,10 +94,11 @@ export function KirimanPage() {
     setQ(searchQ)
   }
   const [data, setData] = useState<ListResp | null>(null)
+  const [loadedQs, setLoadedQs] = useState<string | null>(null)
   const [more, setMore] = useState<Row[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ qs: string; msg: string } | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [payRow, setPayRow] = useState<Row | null>(null)
   const [payMethod, setPayMethod] = useState<"qris" | "tunai" | "transfer">("qris")
@@ -110,19 +113,30 @@ export function KirimanPage() {
   // overwrite the filtered list.
   const gen = useRef(0)
   const load = useCallback(() => {
-    if (station) return
     const mine = ++gen.current
+    if (station) return
     api<ListResp>(`/shipments?${qs}`)
       .then((d) => {
         if (mine !== gen.current) return
-        setError(null)
+        setErrState(null)
         setData(d)
+        setLoadedQs(qs)
         setMore([])
         setCursor(d.nextCursor)
       })
-      .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar kiriman tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setErrState({ qs, msg: e instanceof ApiError ? e.body.message : "Daftar kiriman tidak dapat dimuat." })
+        setLoadedQs(qs)
+      })
   }, [qs, station])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
+  const error = errState?.qs === qs ? errState.msg : null
+  const refreshing = !station && data !== null && loadedQs !== qs && !error
   const go = (p: Partial<Search>) => void navigate({ to: "/kiriman", search: { ...search, ...p } as never })
   async function loadMore() {
     if (!cursor || loadingMore) return
@@ -187,7 +201,7 @@ export function KirimanPage() {
     )
   }
   return (
-    <div className="min-w-0">
+    <div className={`min-w-0 ${refreshing ? "opacity-75 transition-opacity" : ""}`}>
       <PageTitle title="Kiriman">
         <LinkButton variant="outline" to="/kasir/multi">Paket Massal</LinkButton>
         <LinkButton variant="outline" to="/kiriman/cetak-massal"><PrinterIcon aria-hidden data-icon="inline-start" /> Cetak Resi Massal</LinkButton>

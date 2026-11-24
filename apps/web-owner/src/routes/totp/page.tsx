@@ -34,13 +34,21 @@ export function TotpPage() {
   const [resetTotp, setResetTotp] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const backUrl = safeReturnPath(kembali, window.location.origin)
 
   useEffect(() => {
     if (mode !== "enrol") return
     let alive = true
     api<Enrolment>("/auth/totp/enrol", { body: {} })
       .then((e) => alive && setEnrol(e))
-      .catch((err) => alive && setError(err instanceof ApiError ? err.body.message : "Pendaftaran TOTP gagal dimuat."))
+      .catch((err) => {
+        if (!alive) return
+        if (err instanceof ApiError && err.status === 401 && err.body.code === "UNAUTHENTICATED") {
+          window.location.assign("/masuk")
+          return
+        }
+        setError(err instanceof ApiError ? err.body.message : "Pendaftaran TOTP gagal dimuat.")
+      })
     return () => {
       alive = false
     }
@@ -48,8 +56,7 @@ export function TotpPage() {
 
   // Back to where the step-up started (same-origin console path, re-checked here), else the console home.
   async function proceed() {
-    const back = safeReturnPath(kembali, window.location.origin)
-    if (back) window.location.assign(back)
+    if (backUrl) window.location.assign(backUrl)
     else await navigate({ to: "/" })
   }
 
@@ -60,6 +67,10 @@ export function TotpPage() {
     try {
       await fn()
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401 && err.body.code === "UNAUTHENTICATED") {
+        window.location.assign("/masuk")
+        return
+      }
       setError(err instanceof ApiError ? err.body.message : "Terjadi kesalahan. Silakan coba lagi.")
     } finally {
       setPending(false)
@@ -144,7 +155,13 @@ export function TotpPage() {
       title={mode === "enrol" ? "Aktifkan TOTP" : "Kode TOTP"}
       description={mode === "enrol" ? "Pindai kode QR dengan aplikasi autentikator (Google Authenticator, Authy, 1Password). Kode QR hanya ditampilkan sekali." : "Masukkan 6 digit kode dari aplikasi autentikator Anda."}
     >
-      {mode === "enrol" && enrol ? <AuthenticatorQr otpauthUri={enrol.otpauthUri} secret={enrol.secret} /> : null}
+      {mode === "enrol" ? (
+        enrol ? (
+          <AuthenticatorQr otpauthUri={enrol.otpauthUri} secret={enrol.secret} />
+        ) : !error ? (
+          <div className="h-44 animate-pulse rounded-xl bg-slate-100" aria-busy="true" aria-label="Memuat kode QR" />
+        ) : null
+      ) : null}
       <form className="flex flex-col gap-5" onSubmit={verify} noValidate>
         {error ? <FormAlert>{error}</FormAlert> : null}
         <TextField label="Kode TOTP" name="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6 digit" maxLength={6} value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} required otp />
@@ -153,6 +170,11 @@ export function TotpPage() {
           <Button type="button" variant="link" disabled={pending} className="h-auto min-h-11 py-2 whitespace-normal" onClick={() => { setError(null); setStep("recovery") }}>
             Tidak bisa akses autentikator? Gunakan kode pemulihan cadangan
           </Button>
+        ) : null}
+        {mode !== "enrol" && backUrl ? (
+          <a href={backUrl} className="text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            ← Kembali ke halaman sebelumnya
+          </a>
         ) : null}
       </form>
     </AuthCard>

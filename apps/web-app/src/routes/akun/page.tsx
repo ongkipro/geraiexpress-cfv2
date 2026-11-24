@@ -37,7 +37,7 @@ export function AkunPage() {
     void router.invalidate()
   }, [load, router])
   if (error) return <div><PageTitle title="Akun Saya" /><ErrorState message={error} onRetry={load} /></div>
-  if (!a) return <LoadingState label="Memuat akun" />
+  if (!a) return <div><PageTitle title="Akun Saya" /><LoadingState label="Memuat akun" /></div>
   return (
     <div className="flex w-full max-w-4xl flex-col gap-4 pb-24 md:gap-5 md:pb-0">
       <PageTitle title="Akun Saya" description={`Masuk sebagai ${a.profile.email}. Pengaturan ini milik Anda pribadi, bukan gerai.`} />

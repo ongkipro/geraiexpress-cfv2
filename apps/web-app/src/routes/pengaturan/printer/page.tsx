@@ -9,7 +9,7 @@ import { api, ApiError } from "../../../lib/api"
 import { deviceDensity, FORMAT_LABEL, PAPER_HINT, setDeviceDensity, type Format } from "../../../print/print"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
-import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
+import { Notice, readSettingsCache, SaveBar, SettingsLayout, useSettingsForm, writeSettingsCache, type SettingsView } from "../index/shared"
 import { ChoiceGroup, SectionCard, ToggleRow } from "../../../components/admin/page"
 
 // Pengaturan › Printer & Struk (visual 08 §2.3, DEC-224/225): this device's density (instant, local, Kasir allowed)
@@ -53,16 +53,21 @@ function DeviceCard() {
 }
 
 function KasirFormatInfo() {
-  const [fmt, setFmt] = useState<Format | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `print-format:${w.tenant.id}`
+  const [fmt, setFmt] = useState<Format | null>(() => readSettingsCache<Format>(cacheKey))
   const [err, setErr] = useState<string | null>(null)
   const load = useCallback(() => {
     api<{ format: Format }>("/print/settings")
       .then((s) => {
+        writeSettingsCache(cacheKey, s.format)
         setErr(null)
         setFmt(s.format)
       })
-      .catch((e) => setErr(e instanceof ApiError ? e.body.message : "Format label tidak dapat dimuat."))
-  }, [])
+      .catch((e) => {
+        if (!readSettingsCache<Format>(cacheKey)) setErr(e instanceof ApiError ? e.body.message : "Format label tidak dapat dimuat.")
+      })
+  }, [cacheKey])
   useEffect(load, [load])
   return (
     <SectionCard title="Format label gerai" description="Format bawaan diatur oleh pemilik gerai.">
@@ -118,7 +123,9 @@ function ReceiptForm() {
 const QRIS_UPLOAD_FAILED = "Gagal mengunggah gambar QRIS. Periksa koneksi lalu coba lagi."
 
 function QrisCard({ owner }: { owner: boolean }) {
-  const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `qris:${w.tenant.id}`
+  const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(() => readSettingsCache<{ hasQris: boolean; url: string | null }>(cacheKey))
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -127,11 +134,14 @@ function QrisCard({ owner }: { owner: boolean }) {
   const load = useCallback(() => {
     api<{ hasQris: boolean; url: string | null }>("/settings/qris")
       .then((d) => {
+        writeSettingsCache(cacheKey, d)
         setLoadErr(null)
         setQ(d)
       })
-      .catch((e) => setLoadErr(e instanceof ApiError ? e.body.message : "Status QRIS tidak dapat dimuat."))
-  }, [])
+      .catch((e) => {
+        if (!readSettingsCache(cacheKey)) setLoadErr(e instanceof ApiError ? e.body.message : "Status QRIS tidak dapat dimuat.")
+      })
+  }, [cacheKey])
   useEffect(load, [load])
   async function pick(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -145,7 +155,9 @@ function QrisCard({ owner }: { owner: boolean }) {
       const j = (await up.json().catch(() => null)) as { ok: boolean; data?: { id: string }; error?: { code?: string; message: string } } | null
       // A server refusal (size, type, role) keeps its own Indonesian message; an unreadable answer gets the fallback.
       if (!j?.ok) throw new ApiError(up.status, { code: j?.error?.code ?? "UPLOAD_FAILED", message: j?.error?.message ?? QRIS_UPLOAD_FAILED, field_errors: {} })
-      setQ(await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: j.data!.id } }))
+      const next = await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: j.data!.id } })
+      writeSettingsCache(cacheKey, next)
+      setQ(next)
     } catch (err) {
       // Sol R1 F7: only the server's own (Indonesian) message is shown; a browser/network error never leaks its English text.
       setMsg(err instanceof ApiError ? err.body.message : QRIS_UPLOAD_FAILED)
@@ -157,7 +169,9 @@ function QrisCard({ owner }: { owner: boolean }) {
     setPending(true)
     setMsg(null)
     try {
-      setQ(await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: null } }))
+      const next = await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: null } })
+      writeSettingsCache(cacheKey, next)
+      setQ(next)
       setConfirm(false)
     } catch (err) {
       setMsg(err instanceof ApiError ? err.body.message : "Gagal menghapus. Coba lagi.")

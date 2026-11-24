@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import { useRouter } from "@tanstack/react-router"
 import { ExternalLinkIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
 import { CopyField, SectionCard, StatusBadge } from "../../../components/admin/page"
 import { AnchorButton } from "../../../components/admin/link-button"
-import { SettingsLayout } from "../index/shared"
+import { readSettingsCache, SettingsLayout, writeSettingsCache } from "../index/shared"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { TextField } from "../../../components/auth/text-field"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState } from "../../../shell/states"
-import { refreshCounterStatus } from "../../../shell/workspace"
+import { refreshCounterStatus, useWorkspace } from "../../../shell/workspace"
 
 // Pengaturan › Mengantar (PR-02b, visual 08 §2): copy the webhook URL into Mengantar Seller Settings, paste the
 // Webhook Secret back, see the status. Hourly polling keeps statuses current until the webhook is active.
@@ -39,7 +40,10 @@ const STATE: Record<NonNullable<Settings["webhookState"]>, { label: string; tone
 const fmt = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(ms) + " WIB" : "—")
 
 export function PengaturanMengantarPage() {
-  const [data, setData] = useState<Settings | null>(null)
+  const router = useRouter()
+  const w = useWorkspace()
+  const cacheKey = `mengantar:${w.tenant.id}`
+  const [data, setData] = useState<Settings | null>(() => readSettingsCache<Settings>(cacheKey))
   const [error, setError] = useState<string | null>(null)
   const [secret, setSecret] = useState("")
   const [fieldError, setFieldError] = useState<string | undefined>()
@@ -49,19 +53,28 @@ export function PengaturanMengantarPage() {
   const [byokErr, setByokErr] = useState<string | undefined>()
   const [byokSaving, setByokSaving] = useState(false)
   const [byokDone, setByokDone] = useState(false)
+  const gen = useRef(0)
 
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<Settings>("/settings/mengantar")
       .then((d) => {
+        if (mine !== gen.current) return
+        writeSettingsCache(cacheKey, d)
         setError(null)
         setData(d)
       })
       .catch((e) => {
+        if (mine !== gen.current) return
         if (e instanceof ApiError && e.status === 401) window.location.assign("/masuk")
-        else setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
+        else if (!readSettingsCache<Settings>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
       })
-  }, [])
-  useEffect(load, [load])
+  }, [cacheKey])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -70,10 +83,14 @@ export function PengaturanMengantarPage() {
     setSaved(false)
     setSaving(true)
     try {
-      setData(await api<Settings>("/settings/mengantar/webhook-secret", { body: { secret } }))
+      const next = await api<Settings>("/settings/mengantar/webhook-secret", { body: { secret } })
+      gen.current++
+      writeSettingsCache(cacheKey, next)
+      setData(next)
       setSecret("")
       setSaved(true)
       refreshCounterStatus()
+      void router.invalidate()
     } catch (err) {
       if (err instanceof ApiError) setFieldError(err.body.field_errors.secret ?? err.body.message)
       else setFieldError("Gagal menyimpan. Coba lagi.")
@@ -93,6 +110,7 @@ export function PengaturanMengantarPage() {
       setByokKey("")
       setByokDone(true)
       refreshCounterStatus()
+      void router.invalidate()
       load()
     } catch (err) {
       if (err instanceof ApiError) setByokErr(err.body.field_errors.apiKey ?? err.body.message)

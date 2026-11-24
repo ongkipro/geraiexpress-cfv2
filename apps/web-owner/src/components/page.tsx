@@ -44,6 +44,7 @@ export const ONBOARDING_LABEL: Record<string, { label: string; tone: StatusTone 
 export function RecheckButton({ label, busyLabel = "Memeriksa…", path, body, onDone, variant = "outline", size = "default", done }: { label: string; busyLabel?: string; path: string; body?: Record<string, unknown>; onDone?: (data: unknown) => void; variant?: "default" | "outline" | "ghost"; size?: "default" | "sm"; done?: (data: unknown) => string }) {
   const [pending, setPending] = useState(false)
   async function run() {
+    if (pending) return
     setPending(true)
     try {
       const data = await api(path, { body: body ?? {} })

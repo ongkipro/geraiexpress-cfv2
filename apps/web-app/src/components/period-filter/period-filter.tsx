@@ -38,7 +38,7 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
   const preset = PRESETS.find((x) => x.id === value.preset)
   const aria = `Periode: ${preset ? `${preset.label}, ` : ""}${rangeLabel(value, true)}`
   const trigger = (onClick?: () => void) => (
-    <Button type="button" variant="outline" aria-label={aria} onClick={onClick} className="h-11 justify-between gap-2 px-3 text-base font-medium md:h-9 md:text-sm">
+    <Button type="button" variant="outline" aria-label={aria} onClick={onClick} className="h-11 max-w-full min-w-0 shrink justify-between gap-2 px-3 text-base font-medium md:h-9 md:text-sm">
       <CalendarIcon aria-hidden /> <span className="truncate tabular-nums">{triggerLabel(value)}</span> <ChevronDownIcon aria-hidden />
     </Button>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useSearch } from "@tanstack/react-router"
 import { RefreshCwIcon } from "lucide-react"
 import { DataTableShell } from "../../components/admin/data-table"
@@ -52,20 +52,30 @@ const ago = (ms: number | null) => {
 
 export function KeuanganPage() {
   const search = useSearch({ strict: false }) as { tab?: Tab }
-  const tab: Tab = search.tab ?? "ringkasan"
+  const tab: Tab = search.tab && TABS.some((t) => t.id === search.tab) ? search.tab : "ringkasan"
   const [d, setD] = useState<Finance | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<Finance>("/finance")
       .then((x) => {
+        if (mine !== gen.current) return
         setError(null)
         setD(x)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Keuangan tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setError(e instanceof ApiError ? e.body.message : "Keuangan tidak dapat dimuat.")
+      })
   }, [])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
   async function sync() {
     setSyncing(true)
     setMsg(null)
@@ -184,7 +194,7 @@ function Profits({ rows }: { rows: Profit[] }) {
         rowKey={(p) => p.slug}
         empty={<EmptyState title="Belum ada kiriman" body="Laba per INV muncul setelah resi terbit." />}
         columns={[
-          { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="inline-flex min-h-6 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {p.slug.toUpperCase()}</Link> },
+          { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums md:min-h-6">INV {p.slug.toUpperCase()}</Link> },
           { key: "terbit", header: "Terbit", cell: (p) => <span className="tabular-nums">{when(p.issued_at)}</span> },
           { key: "estimasi", header: "Estimasi", align: "right", cell: (p) => rp(p.estimated_margin_idr ?? 0) },
           { key: "kas", header: "Laba Kas", align: "right", cell: (p) => (p.reconciled && p.cash_profit_idr !== null ? rp(p.cash_profit_idr) : <span className="text-muted-foreground">menunggu</span>) },
@@ -255,7 +265,7 @@ function ReserveList({ rows }: { rows: Reserve[] }) {
         rowKey={(r) => `${r.kind}-${r.slug}`}
         empty={<EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />}
         columns={[
-          { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-6 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link> },
+          { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums md:min-h-6">INV {r.slug.toUpperCase()}</Link> },
           { key: "jenis", header: "Jenis", cell: (r) => (r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan") },
           { key: "jumlah", header: "Jumlah", align: "right", cell: (r) => <span className="font-medium">{rp(r.amount_idr)}</span> },
         ]}

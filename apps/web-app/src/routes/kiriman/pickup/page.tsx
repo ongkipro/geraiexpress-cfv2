@@ -88,22 +88,35 @@ function beep(ok: boolean) {
 export function ManifestPage() {
   const { batch } = useParams({ strict: false }) as { batch: string }
   const [b, setB] = useState<Batch | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadedBatch, setLoadedBatch] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ batch: string; msg: string } | null>(null)
   const [code, setCode] = useState("")
   const [last, setLast] = useState<ScanRes | null>(null)
   const [scanning, setScanning] = useState(false)
   const [unscanning, setUnscanning] = useState<string | null>(null)
+  const loadGen = useRef(0)
   const scanGen = useRef(0)
   const input = useRef<HTMLInputElement>(null)
   const load = useCallback(() => {
+    const mine = ++loadGen.current
     api<{ batch: Batch }>(`/pickup/${batch}`)
       .then((d) => {
-        setError(null)
+        if (mine !== loadGen.current) return
+        setErrState(null)
         setB(d.batch)
+        setLoadedBatch(batch)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Manifest tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== loadGen.current) return
+        setErrState({ batch, msg: e instanceof ApiError ? e.body.message : "Manifest tidak dapat dimuat." })
+        setLoadedBatch(batch)
+      })
   }, [batch])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = loadGen
+    return () => { g.current++ }
+  }, [load])
   async function scan(e: FormEvent) {
     e.preventDefault()
     const c = code.trim()
@@ -138,8 +151,9 @@ export function ManifestPage() {
       setUnscanning(null)
     }
   }
+  const error = errState?.batch === batch ? errState.msg : null
   if (error) return <div><PageTitle title="Manifest" /><ErrorState message={error} onRetry={load} /></div>
-  if (!b) return <LoadingState label="Memuat manifest" />
+  if (!b || loadedBatch !== batch) return <div><PageTitle title="Manifest" /><LoadingState label="Memuat manifest" /></div>
   const name = COURIER[b.courier_code] ?? b.courier_code
   const open = b.status === "open"
   const handedTime = b.handed_over_at ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(b.handed_over_at) : null

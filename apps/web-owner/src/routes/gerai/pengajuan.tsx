@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router"
+import { useParams, useRouter } from "@tanstack/react-router"
 import { ExternalLinkIcon } from "lucide-react"
 import { ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
 import { ReasonAction } from "../../components/reason-dialog"
@@ -34,9 +34,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function PengajuanPage() {
   const { id } = useParams({ strict: false }) as { id: string }
+  const router = useRouter()
   const { data, error, loading, reload } = useApi<Detail>(`/gerai/applications/${encodeURIComponent(id)}`)
-  if (loading) return <LoadingBlock />
-  if (error || !data) return <ErrorBlock message={error ?? "Pengajuan tidak ditemukan."} onRetry={reload} />
+  const onDecided = () => {
+    reload()
+    void router.invalidate()
+  }
+  if (loading) return <div className="flex flex-col gap-4"><PageHead title="Detail Pengajuan" /><LoadingBlock /></div>
+  if (error || !data) return <div className="flex flex-col gap-4"><PageHead title="Detail Pengajuan" /><ErrorBlock message={error ?? "Pengajuan tidak ditemukan."} onRetry={reload} /></div>
   const decided = data.state !== "submitted"
   return (
     <div className="flex flex-col gap-4 md:gap-5">
@@ -87,8 +92,8 @@ export function PengajuanPage() {
           {/* DEC-244: the decision is available on every viewport (the note above only advises a larger screen). */}
           {!decided ? (
             <div className="mt-4 flex flex-col gap-3 md:mt-6">
-              <ReasonAction label="Setujui & Buka Akun Seller Mengantar" confirmLabel="Setujui sekarang" path={`/gerai/applications/${data.id}/approve`} onDone={reload} hint="Memerlukan TOTP dalam 15 menit terakhir." />
-              <ReasonAction label="Tolak pengajuan" confirmLabel="Tolak" variant="outline" path={`/gerai/applications/${data.id}/reject`} onDone={reload} hint="Alasan dikirim ke pemohon lewat email." />
+              <ReasonAction label="Setujui & Buka Akun Seller Mengantar" confirmLabel="Setujui sekarang" path={`/gerai/applications/${data.id}/approve`} onDone={onDecided} hint="Memerlukan TOTP dalam 15 menit terakhir." />
+              <ReasonAction label="Tolak pengajuan" confirmLabel="Tolak" variant="outline" path={`/gerai/applications/${data.id}/reject`} onDone={onDecided} hint="Alasan dikirim ke pemohon lewat email." />
             </div>
           ) : null}
         </Section>

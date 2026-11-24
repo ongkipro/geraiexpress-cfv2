@@ -34,7 +34,7 @@ export function Kendala() {
   const [d, setD] = useState<{ counts: Record<Bucket, number>; rows: Row[] } | null>(null)
   const [loadedBucket, setLoadedBucket] = useState<Bucket | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ bucket: Bucket; msg: string } | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   // Only the latest bucket request may paint (a slower earlier bucket must not overwrite the one now selected).
   const gen = useRef(0)
@@ -43,17 +43,22 @@ export function Kendala() {
     api<{ counts: Record<Bucket, number>; rows: Row[] }>(`/exceptions?bucket=${bucket}`)
       .then((x) => {
         if (mine !== gen.current) return
-        setError(null)
+        setErrState(null)
         setD(x)
         setLoadedBucket(bucket)
       })
       .catch((e) => {
         if (mine !== gen.current) return
-        setError(e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat.")
+        setErrState({ bucket, msg: e instanceof ApiError ? e.body.message : "Kendala tidak dapat dimuat." })
         setLoadedBucket(bucket)
       })
   }, [bucket])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
+  const error = errState?.bucket === bucket ? errState.msg : null
   const loading = loadedBucket !== bucket && !error
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     if (busy) return
@@ -69,7 +74,6 @@ export function Kendala() {
       setBusy(false)
     }
   }
-  if (error) return <ErrorState message={error} onRetry={load} />
   return (
     <div className="mb-6 flex flex-col gap-4">
       <div role="group" aria-label="Jenis kendala" className="flex flex-wrap gap-2">
@@ -80,10 +84,14 @@ export function Kendala() {
         ))}
       </div>
       {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>{msg.text}</p> : null}
-      {!d || loading ? <LoadingState label="Memuat kendala" /> : d.rows.length === 0 ? (
+      {error ? (
+        <ErrorState message={error} onRetry={load} />
+      ) : !d ? (
+        <LoadingState label="Memuat kendala" />
+      ) : d.rows.length === 0 ? (
         <EmptyState title="Tidak ada kendala" body="Kiriman di kategori ini akan muncul di sini." />
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className={`flex flex-col gap-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
           {d.rows.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} busy={busy} act={act} />)}
         </ul>
       )}

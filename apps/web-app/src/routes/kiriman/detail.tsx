@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams } from "@tanstack/react-router"
 import { CheckCircle2Icon, CheckIcon, CopyIcon, PrinterIcon } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
@@ -46,24 +46,38 @@ export function KirimanDetailPage() {
   const w = useWorkspace()
   const owner = isOwner(w)
   const [d, setD] = useState<Detail | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ slug: string; msg: string } | null>(null)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<Detail>(`/shipments/${slug}`)
       .then((x) => {
-        setError(null)
+        if (mine !== gen.current) return
+        setErrState(null)
         setD(x)
+        setLoadedSlug(slug)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Kiriman tidak dapat dimuat."))
+      .catch((e) => {
+        if (mine !== gen.current) return
+        setErrState({ slug, msg: e instanceof ApiError ? e.body.message : "Kiriman tidak dapat dimuat." })
+        setLoadedSlug(slug)
+      })
   }, [slug])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
+  const error = errState?.slug === slug ? errState.msg : null
   if (error) return <div><PageTitle title={`INV ${slug.toUpperCase()}`} /><ErrorState message={error} onRetry={load} /></div>
-  if (!d) return <LoadingState label="Memuat kiriman" rows={5} />
+  if (!d || loadedSlug !== slug) return <div><PageTitle title={`INV ${slug.toUpperCase()}`} /><LoadingState label="Memuat kiriman" rows={5} /></div>
   const s = d.shipment
   const done = ["issued", "provider_unpaid_hold", "cancelled"].includes(s.dispatch_state)
   return (
     <div className="pb-32 md:pb-0">
       <PageTitle title={`INV ${slug.toUpperCase()}`} description={STATE_LABEL[s.dispatch_state] ?? s.status} />
-      {done ? <IssuedView d={d} owner={owner} reload={load} /> : <CheckoutView d={d} owner={owner} reload={load} />}
+      {done ? <IssuedView key={s.slug} d={d} owner={owner} reload={load} /> : <CheckoutView key={s.slug} d={d} owner={owner} reload={load} />}
     </div>
   )
 }

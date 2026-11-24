@@ -28,9 +28,9 @@ export function SistemPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Sistem & Audit" description="Kesehatan integrasi, konfigurasi Mengantar API, log audit, akses admin, dan profil perusahaan." />
-      <Tabs value={current} onValueChange={(v) => navigate({ to: "/sistem", search: { tab: v as Tab } })} className="min-w-0">
+      <Tabs value={current} onValueChange={(v) => navigate({ to: "/sistem", search: v === "kesehatan" ? {} : { tab: v as Exclude<Tab, "kesehatan"> } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <TabsList aria-label="Bagian sistem">
+          <TabsList aria-label="Bagian sistem" className="w-max max-w-none">
             <TabsTrigger value="kesehatan">Kesehatan & Relay</TabsTrigger>
             <TabsTrigger value="mengantar">Integrasi Mengantar</TabsTrigger>
             <TabsTrigger value="audit">Log Audit</TabsTrigger>
@@ -199,11 +199,20 @@ function AuditLog() {
   const [action, setAction] = useState("")
   const [tenant, setTenant] = useState("")
   const [path, setPath] = useState("/sistem/audit")
-  const { data, error, loading, reload } = useApi<{ items: AuditRow[] }>(path)
-  const needsTotp = error?.includes("TOTP") || error?.toLowerCase().includes("verifikasi")
+  const { data, error, errorCode, loading, reload } = useApi<{ items: AuditRow[] }>(path)
+  const needsTotp = errorCode === "TOTP_RECENT_REQUIRED"
   return (
     <Section title="Log audit" aside={<ReloadButton size="sm" onClick={reload} />}>
-      <form onSubmit={(e) => { e.preventDefault(); setPath(`/sistem/audit?action=${encodeURIComponent(action)}&tenant=${encodeURIComponent(tenant)}`) }} className="mb-4 grid gap-3 sm:grid-cols-3 sm:items-end" role="search">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          const nextPath = `/sistem/audit?action=${encodeURIComponent(action.trim())}&tenant=${encodeURIComponent(tenant.trim())}`
+          if (nextPath === path) reload()
+          else setPath(nextPath)
+        }}
+        className="mb-4 grid gap-3 sm:grid-cols-3 sm:items-end"
+        role="search"
+      >
         <Field><FieldLabel htmlFor="f-aksi">Aksi (awalan)</FieldLabel><Input id="f-aksi" value={action} onChange={(e) => setAction(e.target.value)} placeholder="pricing." /></Field>
         <Field><FieldLabel htmlFor="f-gerai">Gerai</FieldLabel><Input id="f-gerai" value={tenant} onChange={(e) => setTenant(e.target.value)} placeholder="berkahjaya" /></Field>
         <Button type="submit" variant="outline">Terapkan</Button>
@@ -221,7 +230,7 @@ function AuditLog() {
             { key: "aksi", header: "Aksi", cell: (a) => <span className="font-mono text-xs">{a.action}</span> },
             { key: "pelaku", header: "Pelaku", cell: (a) => a.actor_name ?? a.actor_type },
             { key: "gerai", header: "Gerai", cell: (a) => a.tenant_slug ?? "—" },
-            { key: "alasan", header: "Alasan", cell: (a) => <span className="text-muted-foreground">{a.reason ?? "—"}</span>, wide: true },
+            { key: "alasan", header: "Alasan", cell: (a) => <span className="block max-w-xs whitespace-normal break-words text-muted-foreground">{a.reason ?? "—"}</span>, wide: true },
             { key: "waktu", header: "Waktu", align: "right", cell: (a) => <span className="text-muted-foreground">{formatDate(a.at)}</span> },
           ]}
           mobile={(a) => (
@@ -287,11 +296,12 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
   const [npwp, setNpwp] = useState("")
   const [reason, setReason] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [msg, setMsg] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
   const dirty = Object.entries(v).some(([k, x]) => x !== (data.fields[k] ?? "")) || npwp.length > 0
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setErrors({})
     setMsg(null)
@@ -299,14 +309,14 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
     try {
       await api("/sistem/profil-perusahaan", { body: { fields: { ...changed, ...(npwp ? { npwp } : {}) }, reason } })
       toast.success("Profil perusahaan tersimpan.")
-      setMsg("Profil perusahaan tersimpan.")
+      setMsg({ tone: "safe", text: "Profil perusahaan tersimpan." })
       onSaved()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return totpRedirect("/sistem?tab=profil")
       if (err instanceof ApiError) {
         setErrors(err.body.field_errors)
-        setMsg(err.body.message)
-      } else setMsg("Gagal menyimpan.")
+        setMsg({ tone: "danger", text: err.body.message })
+      } else setMsg({ tone: "danger", text: "Gagal menyimpan." })
     } finally {
       setPending(false)
     }
@@ -330,7 +340,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
           </Field>
         </div>
         {dirty ? (
-          <div className="sticky bottom-0 flex flex-col gap-3 border-t bg-card pt-4 sm:flex-row sm:items-end">
+          <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t bg-card pt-4 pb-1 sm:flex-row sm:items-end">
             <Field className="flex-1">
               <FieldLabel htmlFor="lp-reason">Alasan (wajib, dicatat di log audit)</FieldLabel>
               <Textarea id="lp-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} />
@@ -338,7 +348,7 @@ function ProfileForm({ data, onSaved }: { data: { fields: Record<string, string 
             <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan"}</Button>
           </div>
         ) : null}
-        {msg ? <p role="status" className="text-sm">{msg}</p> : null}
+        {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`text-sm font-medium ${msg.tone === "safe" ? "text-emerald-700" : "text-rose-700"}`}>{msg.text}</p> : null}
       </form>
     </Section>
   )
@@ -417,6 +427,11 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
       toast.success("Konfigurasi Mengantar Partner API tersimpan dan langsung aktif.")
       setMsg({ tone: "safe", text: "Konfigurasi Mengantar Partner API tersimpan terenkripsi dan langsung aktif." })
       onSaved()
+      void loadOwnerOps()
+        .then((icon) => {
+          if (icon) rememberOpsStatus(OWNER_OPS_KEY, icon)
+        })
+        .catch(() => undefined)
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return totpRedirect("/sistem?tab=mengantar")
       if (err instanceof ApiError) {
@@ -464,13 +479,16 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
             </p>
           </div>
         </div>
-        <Button type="button" variant="outline" onClick={testConnection} disabled={testing}>
-          {testing ? "Menguji…" : "Uji Koneksi Partner API"}
-        </Button>
+        <div className="flex flex-col items-start gap-1 sm:items-end">
+          <Button type="button" variant="outline" onClick={testConnection} disabled={testing || dirty}>
+            {testing ? "Menguji…" : "Uji Koneksi Partner API"}
+          </Button>
+          {dirty ? <span className="text-xs text-muted-foreground">Simpan perubahan dulu sebelum menguji koneksi.</span> : null}
+        </div>
       </section>
 
       {testOut ? (
-        <p role="status" className={`rounded-lg border px-4 py-3 text-sm font-medium ${testOut.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>
+        <p role={testOut.ok ? "status" : "alert"} className={`rounded-lg border px-4 py-3 text-sm font-medium ${testOut.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>
           {testOut.message}
         </p>
       ) : null}
@@ -527,7 +545,7 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
             </Field>
           </div>
           {dirty ? (
-            <div className="sticky bottom-0 flex flex-col gap-3 border-t bg-card pt-4 sm:flex-row sm:items-end">
+            <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t bg-card pt-4 pb-1 sm:flex-row sm:items-end">
               <Field className="flex-1">
                 <FieldLabel htmlFor="mg-reason">Alasan perubahan (wajib, dicatat di log audit)</FieldLabel>
                 <Textarea id="mg-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} placeholder="Contoh: Isi Partner Secret produksi resmi dari Mengantar" />
@@ -535,7 +553,7 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
               <Button type="submit" disabled={pending || reason.trim().length < 5}>{pending ? "Menyimpan…" : "Simpan Konfigurasi"}</Button>
             </div>
           ) : null}
-          {msg ? <p role="status" className={`text-sm font-medium ${msg.tone === "safe" ? "text-emerald-700" : "text-rose-700"}`}>{msg.text}</p> : null}
+          {msg ? <p role={msg.tone === "danger" ? "alert" : "status"} className={`text-sm font-medium ${msg.tone === "safe" ? "text-emerald-700" : "text-rose-700"}`}>{msg.text}</p> : null}
         </form>
       </Section>
     </div>

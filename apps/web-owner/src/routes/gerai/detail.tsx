@@ -27,8 +27,8 @@ const WEBHOOK: Record<string, string> = { unconfigured: "Belum diatur", awaiting
 export function GeraiDetailPage() {
   const { slug } = useParams({ strict: false }) as { slug: string }
   const { data, error, loading, reload } = useApi<GeraiDetail>(`/gerai/${encodeURIComponent(slug)}`)
-  if (loading) return <LoadingBlock />
-  if (error || !data) return <ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} />
+  if (loading) return <div className="flex flex-col gap-4"><PageHead title={`Gerai ${slug}`} /><LoadingBlock /></div>
+  if (error || !data) return <div className="flex flex-col gap-4"><PageHead title={`Gerai ${slug}`} /><ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} /></div>
   const ob = ONBOARDING_LABEL[data.onboarding_state ?? "not_connected"] ?? ONBOARDING_LABEL.not_connected!
   const retryable = data.onboarding_state === "registration_pending" || data.onboarding_state === "registration_unknown"
   return (
@@ -76,7 +76,7 @@ export function GeraiDetailPage() {
             <TableBody>
               {data.hostnames.map((h) => (
                 <TableRow key={h.hostname}>
-                  <TableCell className="font-mono break-all">{h.hostname}</TableCell>
+                  <TableCell className="font-mono whitespace-normal break-all">{h.hostname}</TableCell>
                   <TableCell>{h.kind === "custom" ? "Domain sendiri" : "Bawaan"}</TableCell>
                   <TableCell><StatusChip tone={h.state === "active" ? "safe" : h.state === "pending" ? "warn" : "danger"}>{HOST_STATE[h.state] ?? h.state}</StatusChip></TableCell>
                 </TableRow>

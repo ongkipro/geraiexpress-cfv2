@@ -31,8 +31,8 @@ export function TarifGeraiPage() {
   const { tenantId } = useParams({ strict: false }) as { tenantId: string }
   const { data, error, loading, reload } = useApi<Data>(`/tarif/gerai/${encodeURIComponent(tenantId)}`)
   const [editing, setEditing] = useState<string | null>(null)
-  if (loading) return <LoadingBlock />
-  if (error || !data) return <ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} />
+  if (loading) return <div className="flex flex-col gap-4"><PageHead title="Tarif Gerai" /><LoadingBlock /></div>
+  if (error || !data) return <div className="flex flex-col gap-4"><PageHead title="Tarif Gerai" /><ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} /></div>
   const counts = { sesuai: data.items.filter((r) => r.verification_state === "sesuai").length, belum: data.items.filter((r) => r.verification_state === "belum_diterapkan").length, selisih: data.items.filter((r) => r.verification_state === "selisih").length }
   return (
     <div className="flex flex-col gap-4 md:gap-5">
@@ -110,13 +110,23 @@ function RuleEditor({ tenantId, rule, onDone, onCancel }: { tenantId: string; ru
   const [reason, setReason] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const toBps = (s: string) => Math.round(Number(s.replace(",", ".")) * 100)
+  const toBps = (s: string) => {
+    const clean = s.trim().replace(",", ".")
+    return clean === "" ? NaN : Math.round(Number(clean) * 100)
+  }
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
+    const assignedBps = toBps(assigned)
+    const cashbackBps = toBps(cashback)
+    if (!Number.isFinite(assignedBps) || !Number.isFinite(cashbackBps)) {
+      setError("Masukkan angka persentase yang valid.")
+      return
+    }
     setPending(true)
     setError(null)
     try {
-      await api(`/tarif/gerai/${encodeURIComponent(tenantId)}/${encodeURIComponent(rule.service_code)}`, { body: { assignedBps: toBps(assigned), cashbackBps: toBps(cashback), reason } })
+      await api(`/tarif/gerai/${encodeURIComponent(tenantId)}/${encodeURIComponent(rule.service_code)}`, { body: { assignedBps, cashbackBps, reason } })
       onDone()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent(window.location.pathname)}`)

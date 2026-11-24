@@ -111,8 +111,8 @@ html[data-text="sangat-besar"] { font-size: 125%; }
 @layer base {
   * { @apply border-border outline-ring/50; }
   html { @apply font-sans; font-size: 16px; }
-  /* Prevent 15px horizontal layout shift when switching between tall and short admin pages (e.g. Profil Gerai ↔ Mini-Site). */
-  html:has([data-admin-shell]) { scrollbar-gutter: stable; }
+  /* Prevent 15px horizontal layout shift when switching between tall and short admin pages (e.g. Profil Gerai ↔ Mini-Site) while keeping scrollWidth === clientWidth in Chromium. */
+  html:has([data-admin-shell]) { overflow-y: scroll; }
   body { @apply bg-background text-sm text-foreground; }
   .num { font-variant-numeric: tabular-nums; }
   /* Mobile anti-zoom guard (iOS Safari auto-zooms any focused form control below 16px). Scales up cleanly with Ukuran Teks. */

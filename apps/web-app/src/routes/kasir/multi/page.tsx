@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -42,21 +42,38 @@ export function PaketMassalPage() {
   const [rows, setRows] = useState<Cells[]>(() => [makeRow()])
   const [file, setFile] = useState<{ name: string; text: string } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [servicesError, setServicesError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const svcGen = useRef(0)
   // Sol R2-4: the services may arrive after the operator already opened the Cargo tab — the default comes from the tab
   // open at that moment (none when that tab is empty), never a hidden Reguler service.
   const tabRef = useRef(tab)
   useLayoutEffect(() => {
     tabRef.current = tab
   })
-  useEffect(() => {
+  const fetchServices = useCallback(() => {
+    const mine = ++svcGen.current
     api<{ items: Service[] }>("/bulk/services").then((r) => {
+      if (mine !== svcGen.current) return
+      setServicesError(null)
       setServices(r.items)
       const cargo = tabRef.current === "cargo"
       setService((cur) => cur || r.items.find((s) => s.cargo === cargo)?.code || "")
-    }).catch(() => setMsg("Daftar ekspedisi tidak dapat dimuat."))
+    }).catch((e) => {
+      if (mine !== svcGen.current) return
+      setServicesError(e instanceof ApiError ? e.body.message : "Daftar ekspedisi tidak dapat dimuat.")
+    })
   }, [])
+  const loadServices = useCallback(() => {
+    setServicesError(null)
+    fetchServices()
+  }, [fetchServices])
+  useEffect(() => {
+    fetchServices()
+    const g = svcGen
+    return () => { g.current++ }
+  }, [fetchServices])
   const chosen = services?.find((s) => s.code === service)
   // Cargo (and any service without COD) ships Non-COD only: the COD choice is locked to `none`.
   // Sol R1-7: the Cargo tab is Non-COD even before (or without) a card; the chosen service must belong to the open tab.
@@ -163,12 +180,17 @@ export function PaketMassalPage() {
 
         <SectionCard id="layanan" title="2. Ekspedisi & COD untuk semua baris">
           <div className="flex flex-col gap-4">
-          <ToggleGroup value={[tab]} onValueChange={(v) => v[0] && switchTab(v[0] as typeof tab)} variant="outline" spacing={0} aria-label="Kategori layanan">
+          <ToggleGroup value={[tab]} onValueChange={(v) => v[0] && switchTab(v[0] as typeof tab)} variant="outline" spacing={0} aria-label="Kategori layanan" className="flex-wrap">
             <ToggleGroupItem value="regular">Reguler</ToggleGroupItem>
-            <ToggleGroupItem value="cargo">Cargo ≥ 5 kg (Non-COD)</ToggleGroupItem>
+            <ToggleGroupItem value="cargo" className="whitespace-normal text-center leading-tight">Cargo ≥ 5 kg (Non-COD)</ToggleGroupItem>
           </ToggleGroup>
-          {services === null ? (
-            msg ? null : <p className="text-base md:text-sm text-muted-foreground">Memuat ekspedisi…</p>
+          {servicesError ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm text-danger">
+              <span>{servicesError}</span>
+              <Button type="button" variant="outline" size="sm" onClick={loadServices}>Coba Lagi</Button>
+            </div>
+          ) : services === null ? (
+            <p className="text-base md:text-sm text-muted-foreground">Memuat ekspedisi…</p>
           ) : cards.length === 0 ? (
             <p className="text-base md:text-sm text-muted-foreground">Tidak ada layanan pada kategori ini.</p>
           ) : (

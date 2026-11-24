@@ -363,7 +363,7 @@ export function PackageFields({ f, disclosure, children, extra, extraFilled = fa
       <div className="flex flex-col gap-1.5">
         <ToggleGroup value={[f.kind]} onValueChange={(v) => v[0] && f.setKind(v[0] as Kind)} variant="outline" spacing={0} aria-label="Jenis pembayaran ongkir" className="grid w-full grid-cols-3">
           {KINDS.map((k) => (
-            <ToggleGroupItem key={k.id} value={k.id} className="w-full px-1.5">{k.label}</ToggleGroupItem>
+            <ToggleGroupItem key={k.id} value={k.id} className="w-full px-1.5 text-center leading-tight whitespace-normal">{k.label}</ToggleGroupItem>
           ))}
         </ToggleGroup>
         <p data-kind-hint className="text-xs text-muted-foreground">{KINDS.find((k) => k.id === f.kind)!.hint}</p>

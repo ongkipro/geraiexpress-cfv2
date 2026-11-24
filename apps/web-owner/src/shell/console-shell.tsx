@@ -29,7 +29,7 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
     icon: TagIcon,
     children: [
       { to: "/tarif", label: "Diskon & Cashback" },
-      { to: "/tarif?tab=permintaan", label: "Permintaan Mengantar" },
+      { to: "/tarif?tab=permintaan", label: "Permintaan" },
       { to: "/tarif?tab=kebijakan", label: "Kebijakan Diskon" },
     ],
   },
@@ -38,7 +38,7 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
     label: "Pengawasan",
     icon: ActivityIcon,
     children: [
-      { to: "/pengawasan", label: "Pantauan Kiriman" },
+      { to: "/pengawasan", label: "Pantauan Kiriman & Sync" },
       { to: "/pengawasan?tab=risiko", label: "Radar Risiko COD" },
     ],
   },
@@ -47,7 +47,7 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
     label: "Sistem & Audit",
     icon: ShieldCheckIcon,
     children: [
-      { to: "/sistem", label: "Kesehatan Integrasi" },
+      { to: "/sistem", label: "Kesehatan & Relay" },
       { to: "/sistem?tab=mengantar", label: "Integrasi Mengantar" },
       { to: "/sistem?tab=audit", label: "Log Audit" },
       { to: "/sistem?tab=admin", label: "Akses Admin" },
@@ -56,10 +56,10 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
   },
 ]
 
-const DETAIL: Array<[RegExp, string]> = [
-  [/^\/gerai\/pengajuan\//, "Detail Pengajuan"],
-  [/^\/gerai\/[^/]+$/, "Detail Gerai"],
-  [/^\/tarif\/[^/]+$/, "Tarif Gerai"],
+const DETAIL: Array<[RegExp, Crumb[]]> = [
+  [/^\/gerai\/pengajuan\//, [{ label: "Gerai", to: "/gerai" }, { label: "Pengajuan Baru", to: "/gerai" }, { label: "Detail Pengajuan" }]],
+  [/^\/gerai\/[^/]+$/, [{ label: "Gerai", to: "/gerai" }, { label: "Direktori Gerai", to: "/gerai?tab=direktori" }, { label: "Detail Gerai" }]],
+  [/^\/tarif\/[^/]+$/, [{ label: "Tarif & Kurir", to: "/tarif" }, { label: "Tarif Gerai" }]],
 ]
 
 const sectionOf = (path: string) => NAV.find((n) => (n.to === "/" ? path === "/" : path === n.to || path.startsWith(`${n.to}/`)))
@@ -71,10 +71,10 @@ function activeChild(children: NavChild[], path: string, tab: string | undefined
 
 function crumbsOf(path: string, tab: string | undefined): Crumb[] {
   if (path === "/akun") return [{ label: "Profil & Keamanan Akun" }]
+  const detail = DETAIL.find(([re]) => re.test(path))?.[1]
+  if (detail) return detail
   const section = sectionOf(path)
   if (!section) return [{ label: "Konsol" }]
-  const detail = DETAIL.find(([re]) => re.test(path))?.[1]
-  if (detail) return [{ label: section.label, to: section.to }, { label: detail }]
   const child = section.children ? activeChild(section.children, path, tab) : undefined
   return child ? [{ label: section.label, to: section.to }, { label: child.label }] : [{ label: section.label }]
 }

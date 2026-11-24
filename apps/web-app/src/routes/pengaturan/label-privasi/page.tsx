@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { PRESET_HELP, PRESET_LABEL, type MaskPreset } from "../../../components/masking/preset-picker"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState, LoadingState } from "../../../shell/states"
+import { useWorkspace } from "../../../shell/workspace"
 import { CalloutAlert, ChoiceGroup, SectionCard, ToggleRow } from "../../../components/admin/page"
-import { SaveBar, SettingsLayout } from "../index/shared"
+import { readSettingsCache, SaveBar, SettingsLayout, writeSettingsCache } from "../index/shared"
 
 // Pengaturan › Label & Privasi (DEC-231, visual 08 §2.3): masking on/off, offered presets, default preset, mask
 // recipient phone on COD by default. Disabled with an explanation when the Super Admin kill-switch is off.
@@ -12,42 +13,63 @@ interface Settings { platformEnabled: boolean; offered: boolean; presetsEnabled:
 const OPTIONAL: MaskPreset[] = ["dropship_toko", "privasi_penerima_cod", "full_nama_gerai"]
 
 export function LabelPrivasiPage() {
-  const [saved, setSaved] = useState<Settings | null>(null)
-  const [form, setForm] = useState<Settings | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `masking:${w.tenant.id}`
+  const [{ saved, form }, setPair] = useState<{ saved: Settings | null; form: Settings | null }>(() => {
+    const initial = readSettingsCache<Settings>(cacheKey)
+    return { saved: initial, form: initial }
+  })
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<Settings>("/settings/masking")
       .then((s) => {
+        if (mine !== gen.current) return
+        writeSettingsCache(cacheKey, s)
         setError(null)
-        setSaved(s)
-        setForm(s)
+        setPair((prev) => ({
+          saved: s,
+          form: prev.form === null || JSON.stringify(prev.form) === JSON.stringify(prev.saved) ? s : prev.form,
+        }))
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat."))
-  }, [])
-  useEffect(load, [load])
+      .catch((e) => {
+        if (mine !== gen.current) return
+        if (!readSettingsCache<Settings>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
+      })
+  }, [cacheKey])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
   if (error) return <SettingsLayout title="Label & Privasi"><ErrorState message={error} onRetry={load} /></SettingsLayout>
   if (!form || !saved) return <SettingsLayout title="Label & Privasi"><LoadingState label="Memuat pengaturan label" /></SettingsLayout>
   const dirty = JSON.stringify(form) !== JSON.stringify(saved)
   const locked = !form.platformEnabled
-  const set = (p: Partial<Settings>) => setForm({ ...form, ...p })
+  const set = (p: Partial<Settings>) => setPair((prev) => (prev.form ? { ...prev, form: { ...prev.form, ...p } } : prev))
   const togglePreset = (p: MaskPreset, on: boolean) => {
     const presets = on ? [...form.presetsEnabled, p] : form.presetsEnabled.filter((x) => x !== p)
     set({ presetsEnabled: presets, defaultPreset: presets.includes(form.defaultPreset) || form.defaultPreset === "standar_gerai" ? form.defaultPreset : "standar_gerai" })
   }
   async function save() {
+    if (pending) return
+    const mine = ++gen.current
     setPending(true)
     setMsg(null)
     try {
       const s = await api<Settings>("/settings/masking", { body: { offered: form!.offered, presetsEnabled: form!.presetsEnabled, defaultPreset: form!.defaultPreset, maskRecipientOnCod: form!.maskRecipientOnCod, dropshipperSync: form!.dropshipperSync } })
-      setSaved(s)
-      setForm(s)
+      if (mine !== gen.current) return
+      writeSettingsCache(cacheKey, s)
+      setPair({ saved: s, form: s })
       setMsg({ tone: "safe", text: "Pengaturan label tersimpan." })
     } catch (err) {
+      if (mine !== gen.current) return
       setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal menyimpan." })
     } finally {
-      setPending(false)
+      if (mine === gen.current) setPending(false)
     }
   }
   const off = locked || !form.offered
@@ -86,7 +108,7 @@ export function LabelPrivasiPage() {
         </ToggleRow>
       </SectionCard>
       {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
-      <SaveBar dirty={dirty} pending={pending} onCancel={() => setForm(saved)} onSave={save} />
+      <SaveBar dirty={dirty} pending={pending} onCancel={() => setPair((prev) => ({ ...prev, form: prev.saved }))} onSave={save} />
     </SettingsLayout>
   )
 }

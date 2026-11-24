@@ -39,9 +39,9 @@ export function PengawasanPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title="Pengawasan" description="Pantauan kiriman lintas gerai (hanya baca) dan radar risiko COD." />
-      <Tabs value={current} onValueChange={(v) => navigate({ to: "/pengawasan", search: { tab: v as Tab } })} className="min-w-0">
+      <Tabs value={current} onValueChange={(v) => navigate({ to: "/pengawasan", search: { tab: v === "kiriman" ? undefined : (v as "risiko") } })} className="min-w-0">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <TabsList aria-label="Bagian pengawasan">
+          <TabsList aria-label="Bagian pengawasan" className="w-max max-w-none">
             <TabsTrigger value="kiriman">Pantauan Kiriman & Sync</TabsTrigger>
             <TabsTrigger value="risiko">Radar Risiko COD</TabsTrigger>
           </TabsList>
@@ -141,7 +141,7 @@ function ShipmentSearch() {
   )
 }
 
-interface RiskResult { items: Array<{ tenant_name: string; delivered_count: number; rts_count: number; last_event_at: number }>; total: { delivered: number; rts: number; rtsBps: number | null } }
+interface RiskResult { items: Array<{ tenant_id?: string; tenant_slug?: string; tenant_name: string; delivered_count: number; rts_count: number; last_event_at: number }>; total: { delivered: number; rts: number; rtsBps: number | null } }
 
 function RiskRadar() {
   const [phone, setPhone] = useState("")
@@ -151,6 +151,7 @@ function RiskRadar() {
   const [pending, setPending] = useState(false)
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (pending) return
     setPending(true)
     setError(null)
     try {
@@ -187,8 +188,8 @@ function RiskRadar() {
           <div className="mt-4 flex flex-col gap-3">
             <p className="text-sm tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
             <ul className="divide-y">
-              {result.items.map((r) => (
-                <li key={r.tenant_name} className="flex flex-wrap justify-between gap-2 py-2 text-sm tabular-nums">
+              {result.items.map((r, i) => (
+                <li key={r.tenant_id ?? r.tenant_slug ?? `${r.tenant_name}-${i}`} className="flex flex-wrap justify-between gap-2 py-2 text-sm tabular-nums">
                   <span>{r.tenant_name}</span>
                   <span>{r.delivered_count} terkirim · {r.rts_count} retur · {formatDate(r.last_event_at)}</span>
                 </li>

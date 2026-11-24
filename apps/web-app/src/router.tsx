@@ -155,7 +155,7 @@ const pengaturanLayoutRoute = createRoute({ getParentRoute: () => workspaceRoute
 const pengaturanIndexRoute = createRoute({
   getParentRoute: () => pengaturanLayoutRoute,
   path: "/",
-  beforeLoad: () => {
+  loader: () => {
     if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches && lastWorkspace) {
       throw redirect({ to: lastWorkspace.role === "gerai_admin" ? "/pengaturan/profil" : "/pengaturan/printer", replace: true })
     }

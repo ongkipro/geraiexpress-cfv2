@@ -63,7 +63,7 @@ export function DashboardPage() {
 function useDashboard(params: Record<string, string>) {
   const [data, setData] = useState<Resp | null>(null)
   const [loadedQs, setLoadedQs] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [errState, setErrState] = useState<{ qs: string; msg: string } | null>(null)
   const gen = useRef(0)
   const qs = new URLSearchParams(params).toString()
   const load = useCallback(() => {
@@ -71,17 +71,22 @@ function useDashboard(params: Record<string, string>) {
     api<Resp>(`/dashboard${qs ? `?${qs}` : ""}`)
       .then((r) => {
         if (mine !== gen.current) return
-        setError(null)
+        setErrState(null)
         setData(r)
         setLoadedQs(qs)
       })
       .catch((e) => {
         if (mine !== gen.current) return
-        setError(e instanceof ApiError ? e.body.message : "Dashboard tidak dapat dimuat.")
+        setErrState({ qs, msg: e instanceof ApiError ? e.body.message : "Dashboard tidak dapat dimuat." })
         setLoadedQs(qs)
       })
   }, [qs])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => { g.current++ }
+  }, [load])
+  const error = errState?.qs === qs ? errState.msg : null
   const loading = loadedQs !== qs && !error
   return { data, error, loading, load }
 }
@@ -306,7 +311,7 @@ function bucketLabel(p: Period, b: string): string {
 function CounterHome({ name }: { name: string }) {
   const { data, error, load } = useDashboard({})
   if (error) return <div><PageHeader title="Tugas Loket Hari Ini" /><ErrorState message={error} onRetry={load} /></div>
-  if (!data || data.kind !== "counter") return <LoadingState label="Memuat tugas loket" />
+  if (!data || data.kind !== "counter") return <div><PageHeader title="Tugas Loket Hari Ini" /><LoadingState label="Memuat tugas loket" /></div>
   const d = data.data
   const tasks: Array<{ n: number; label: string; to: string; tone: "warn" | "danger" }> = (
     [

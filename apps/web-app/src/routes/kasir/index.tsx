@@ -53,6 +53,11 @@ function ScanBox({ onClaim, autoFocus = false }: { onClaim: (c: Claim) => void; 
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus()
   }, [autoFocus])
+  useEffect(() => {
+    const onFocusScan = () => inputRef.current?.focus()
+    window.addEventListener("gx:kasir-scan", onFocusScan)
+    return () => window.removeEventListener("gx:kasir-scan", onFocusScan)
+  }, [])
   async function go(e: FormEvent) {
     e.preventDefault()
     if (pending) return
@@ -225,6 +230,21 @@ export function KasirPage() {
   const [displayInput, setDisplayInput] = useState<DisplayInput>({ kind: "idle" })
   const display = useCustomerDisplay(w.tenant.slug, displayInput)
   const displayButton = <CustomerDisplayButton display={display} owner={owner} />
+  const reset = () => {
+    // Clear any stale Cek Ongkir Cepat query params so `Kiriman Baru` opens truly blank.
+    void navigate({ to: "/kasir", search: {}, replace: true })
+    setClaim(null)
+    setRound((n) => n + 1)
+  }
+  useEffect(() => {
+    const onKasirReset = () => {
+      void navigate({ to: "/kasir", search: {}, replace: true })
+      setClaim(null)
+      setRound((n) => n + 1)
+    }
+    window.addEventListener("gx:kasir-reset", onKasirReset)
+    return () => window.removeEventListener("gx:kasir-reset", onKasirReset)
+  }, [navigate])
   return (
     <KasirScreen
       key={`${claim?.slug ?? "baru"}-${round}`}
@@ -235,12 +255,7 @@ export function KasirPage() {
         setClaim(c)
         setRound((n) => n + 1)
       }}
-      onReset={() => {
-        // Clear any stale Cek Ongkir Cepat query params so `Kiriman Baru` opens truly blank.
-        void navigate({ to: "/kasir", search: {}, replace: true })
-        setClaim(null)
-        setRound((n) => n + 1)
-      }}
+      onReset={reset}
     />
   )
 }
@@ -631,7 +646,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
               {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
               {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
               {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
-              <Button className="hidden w-full lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
+              <Button className="hidden w-full md:inline-flex" size="lg" onClick={submit} disabled={disabled}>
                 <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
               </Button>
             </fieldset>
@@ -641,7 +656,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
         )}
       </Panel>
       {card ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur md:hidden">
           <span className="flex flex-col text-sm tabular-nums"><span className="text-xs text-muted-foreground">Bayar di loket</span><strong className="text-base md:text-sm">{rp(due)}</strong></span>
           <Button className="flex-1" size="lg" onClick={submit} disabled={disabled}>
             {pending ? "Memproses…" : alreadyPaid ? "Terbitkan & Cetak" : needPay ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}

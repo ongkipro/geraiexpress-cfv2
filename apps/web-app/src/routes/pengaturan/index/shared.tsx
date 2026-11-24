@@ -1,4 +1,4 @@
-import { createContext, Suspense, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
+import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router"
 import { ArrowLeftIcon, Building2Icon, ChevronRightIcon, GlobeIcon, KeyRoundIcon, PackageIcon, PrinterIcon, ShieldIcon, StoreIcon, TruckIcon, UsersIcon, WebhookIcon, type LucideIcon } from "lucide-react"
 import { cn } from "cn"
@@ -242,54 +242,72 @@ export function Notice({ msg }: { msg: { tone: "safe" | "danger"; text: string }
 export function useSettingsForm<T>(pick: (s: SettingsView) => T, endpoint: string, toBody: (f: T) => unknown = (f) => f) {
   const w = useWorkspace()
   const cacheKey = `settings:${w.tenant.id}`
-  const initial = readSettingsCache<SettingsView>(cacheKey)
-  const [saved, setSaved] = useState<T | null>(() => (initial ? pick(initial) : null))
-  const [form, setForm] = useState<T | null>(() => (initial ? pick(initial) : null))
+  const [{ saved, form }, setPair] = useState<{ saved: T | null; form: T | null }>(() => {
+    const initial = readSettingsCache<SettingsView>(cacheKey)
+    if (!initial) return { saved: null, form: null }
+    const p = pick(initial)
+    return { saved: p, form: p }
+  })
   const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
+  const gen = useRef(0)
   const load = useCallback(() => {
+    const mine = ++gen.current
     api<SettingsView>("/settings")
       .then((s) => {
+        if (mine !== gen.current) return
         writeSettingsCache(cacheKey, s)
         setError(null)
         const picked = pick(s)
-        setSaved((prevSaved) => {
-          setForm((prevForm) => (prevForm === null || JSON.stringify(prevForm) === JSON.stringify(prevSaved) ? picked : prevForm))
-          return picked
-        })
+        setPair((prev) => ({
+          saved: picked,
+          form: prev.form === null || JSON.stringify(prev.form) === JSON.stringify(prev.saved) ? picked : prev.form,
+        }))
       })
       .catch((e) => {
+        if (mine !== gen.current) return
         if (!readSettingsCache<SettingsView>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
       })
     // `pick` is a stable module-level selector for each page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey])
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+    const g = gen
+    return () => {
+      g.current++
+    }
+  }, [load])
+  const setForm = useCallback((next: T | null) => setPair((prev) => ({ ...prev, form: next })), [])
+  const cancel = useCallback(() => setPair((prev) => ({ ...prev, form: prev.saved })), [])
   async function save() {
-    if (!form) return
+    if (!form || pending) return
+    const mine = ++gen.current
     setPending(true)
     setMsg(null)
     setFields({})
     try {
       const s = await api<SettingsView>(`/settings/${endpoint}`, { body: toBody(form) })
+      if (mine !== gen.current) return
       writeSettingsCache(cacheKey, s)
       refreshCounterStatus()
-      setSaved(pick(s))
-      setForm(pick(s))
+      const picked = pick(s)
+      setPair({ saved: picked, form: picked })
       setMsg({ tone: "safe", text: "Perubahan tersimpan." })
     } catch (e) {
+      if (mine !== gen.current) return
       if (e instanceof ApiError) {
         setFields(e.body.field_errors ?? {})
         setMsg({ tone: "danger", text: e.body.message })
       } else setMsg({ tone: "danger", text: "Gagal menyimpan. Coba lagi." })
     } finally {
-      setPending(false)
+      if (mine === gen.current) setPending(false)
     }
   }
   const dirty = form !== null && JSON.stringify(form) !== JSON.stringify(saved)
-  return { saved, form, setForm, error, fields, msg, pending, dirty, load, save, cancel: () => setForm(saved) }
+  return { saved, form, setForm, error, fields, msg, pending, dirty, load, save, cancel }
 }
 
 export interface SettingsView {

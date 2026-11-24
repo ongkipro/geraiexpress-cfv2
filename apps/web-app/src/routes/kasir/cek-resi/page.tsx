@@ -1,5 +1,5 @@
 import { courierLabel, statusLabel } from "../../../lib/status"
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useRouterState } from "@tanstack/react-router"
 import { CheckIcon, CopyIcon, SearchIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
@@ -41,47 +41,53 @@ export function CekResiPage() {
   const [pending, setPending] = useState(false)
   const [loadedInitialQ, setLoadedInitialQ] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const gen = useRef(0)
 
   if (prevInitialQ !== initialQ) {
     setPrevInitialQ(initialQ)
     setQ(initialQ)
   }
 
-  const runSearch = useCallback(async (term: string) => {
+  const runSearch = useCallback(async (term: string, fromUrl = false) => {
     const clean = term.trim()
     if (clean.length < 4) return
+    const mine = ++gen.current
     setPending(true)
     setMsg(null)
     setRes(null)
     try {
-      setRes(await api<Result>(`/track?q=${encodeURIComponent(clean)}`))
+      const r = await api<Result>(`/track?q=${encodeURIComponent(clean)}`)
+      if (mine !== gen.current) return
+      setRes(r)
+      if (fromUrl) setLoadedInitialQ(clean)
     } catch (err) {
+      if (mine !== gen.current) return
       setRes(null)
       setMsg(err instanceof ApiError ? err.body.message : "Pencarian gagal. Coba lagi.")
+      if (fromUrl) setLoadedInitialQ(clean)
     } finally {
-      setPending(false)
+      if (mine === gen.current) setPending(false)
     }
   }, [])
 
   useEffect(() => {
     if (initialQ.length < 4) return
-    let alive = true
+    const mine = ++gen.current
     api<Result>(`/track?q=${encodeURIComponent(initialQ)}`)
       .then((r) => {
-        if (!alive) return
+        if (mine !== gen.current) return
         setMsg(null)
         setRes(r)
         setLoadedInitialQ(initialQ)
       })
       .catch((err) => {
-        if (!alive) return
+        if (mine !== gen.current) return
         setRes(null)
         setMsg(err instanceof ApiError ? err.body.message : "Pencarian gagal. Coba lagi.")
         setLoadedInitialQ(initialQ)
       })
-    return () => {
-      alive = false
-    }
+    const g = gen
+    return () => { g.current++ }
   }, [initialQ])
 
   const busy = pending || (initialQ.length >= 4 && loadedInitialQ !== initialQ)
