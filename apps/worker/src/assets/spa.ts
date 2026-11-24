@@ -2,21 +2,27 @@
 // reads `/app/*`, the owner host only `/owner/*`. Source maps are refused even if one slipped into the build (DEC-210).
 export type SpaName = "app" | "owner"
 
-const SECURITY_HEADERS: Record<string, string> = {
+const BASE_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "DENY",
   "permissions-policy": "camera=(self), bluetooth=(self), geolocation=(), microphone=()",
-  "content-security-policy":
-    "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+}
+
+// `app` needs `frame-src blob:` and `object-src blob:` for the PrintDrawer PDF preview iframe and system print dialog;
+// `owner` never renders PDF blobs in an iframe and stays stricter.
+const CSP: Record<SpaName, string> = {
+  app: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src blob: https://challenges.cloudflare.com; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  owner: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 }
 
 // Static files the SPA build emits; everything else is a client-side route and gets the shell.
 const STATIC_FILE = /^\/(?:assets\/[A-Za-z0-9._-]+|[A-Za-z0-9._-]+\.(?:ico|png|svg|webp|txt|webmanifest|json))$/
 
-function withHeaders(res: Response, cache: string): Response {
+function withHeaders(res: Response, cache: string, spa: SpaName): Response {
   const out = new Response(res.body, res)
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v)
+  for (const [k, v] of Object.entries(BASE_HEADERS)) out.headers.set(k, v)
+  out.headers.set("content-security-policy", CSP[spa])
   out.headers.set("cache-control", cache)
   return out
 }
@@ -40,12 +46,12 @@ export async function serveSpa(request: Request, assets: Fetcher, spa: SpaName):
   if (path !== "/index.html" && STATIC_FILE.test(path)) {
     const res = await assets.fetch(new Request(new URL(`/${spa}${path}`, url.origin), { method: request.method }))
     if (res.status !== 200) return notFound()
-    return withHeaders(res, path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=300")
+    return withHeaders(res, path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "public, max-age=300", spa)
   }
   if (path.startsWith("/assets/")) return notFound()
 
   // Client-side route (incl. `/` and `/index.html`): always the shell, never cached long.
   const shell = await assets.fetch(new Request(new URL(`/${spa}/index.html`, url.origin), { method: request.method }))
   if (shell.status !== 200) return new Response("Aplikasi belum dibangun", { status: 503, headers: { "cache-control": "no-store" } })
-  return withHeaders(shell, "no-cache")
+  return withHeaders(shell, "no-cache", spa)
 }

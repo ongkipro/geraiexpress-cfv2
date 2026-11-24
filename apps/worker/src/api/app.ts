@@ -15,7 +15,7 @@ import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
-import { escposBytes, initials, labelsPdf, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
+import { escposBytes, initials, labelsPdf, labelSvg, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
 import { resolvePartnerClient } from "../mengantar/factory"
 import { cashierCard, frozenFrom, ownerCard, parseQuoteInput, runQuote } from "../pricing/quote/service"
 import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
@@ -913,9 +913,13 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!r.ok) return vaultErr(r)
     if (r.value.items.length === 0) throw new AppError(409, r.value.refused[0]?.code ?? "NOTHING_TO_PRINT", r.value.refused[0]?.message ?? "Tidak ada label yang bisa dicetak.")
     if (format === "roll_58mm") {
+      if (b.as === "text") return ok({ lines: r.value.items.map((d) => rollText(d)), styled: r.value.items.map((d) => rollLines(d)), refused: r.value.refused })
       const bytes = new Uint8Array(r.value.items.flatMap((d) => [...escposBytes(rollLines(d), b.density === "tebal" ? "tebal" : "normal")]))
-      if (b.as === "text") return ok({ lines: r.value.items.map((d) => rollText(d)), refused: r.value.refused })
       return new Response(bytes, { headers: { "content-type": "application/octet-stream", "cache-control": "no-store", "x-refused": String(r.value.refused.length) } })
+    }
+    if (b.as === "svg") {
+      const svg = labelSvg(r.value.items[0]!, format)
+      return new Response(svg, { headers: { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "no-store", "x-refused": String(r.value.refused.length) } })
     }
     const pdf = labelsPdf(r.value.items, format)
     return new Response(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="label-${slugs.length === 1 ? slugs[0] : "massal"}.pdf"`, "cache-control": "no-store", "x-refused": String(r.value.refused.length) } })

@@ -3,7 +3,27 @@
 // otherwise the same PDF path. Never retries silently; the server records the print.
 export type Format = "label_10x15_with_stub" | "label_10x10" | "label_10x15" | "roll_58mm"
 export const FORMAT_LABEL: Record<Format, string> = { label_10x15_with_stub: "10×15 · Paket + Bukti", label_10x10: "10×10 · Paket saja", label_10x15: "10×15 · Paket saja", roll_58mm: "Roll 58 mm" }
+export const FORMAT_SUB: Record<Format, string> = {
+  label_10x15_with_stub: "Stiker paket + sobekan bukti kirim",
+  label_10x10: "Stiker paket ringkas, hemat kertas",
+  label_10x15: "Stiker paket lega tanpa bukti kirim",
+  roll_58mm: "Label + struk via printer Bluetooth",
+}
 export const PAPER_HINT: Record<Format, string> = { label_10x15_with_stub: "Pakai kertas thermal 100×150 mm", label_10x10: "Pakai kertas thermal 100×100 mm", label_10x15: "Pakai kertas thermal 100×150 mm", roll_58mm: "Pakai roll thermal 58 mm" }
+
+export type RollPreviewLine = { text: string; bold?: boolean; invert?: boolean } | { barcode: string } | { qr: string } | { cut: true }
+
+export async function fetchRollPreview(slug: string): Promise<RollPreviewLine[]> {
+  const res = await fetch("/api/app/print", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slugs: [slug], format: "roll_58mm", preview: true, as: "text" }),
+  })
+  const j = (await res.json().catch(() => null)) as { ok?: boolean; data?: { styled?: RollPreviewLine[][] }; error?: { code?: string; message?: string } } | null
+  if (!res.ok || !j?.ok) throw new PrintError(j?.error?.code ?? "PRINT_FAILED", j?.error?.message ?? "Pratinjau 58 mm gagal dimuat.")
+  return j.data?.styled?.[0] ?? []
+}
 
 /** This device's print density (device-local per spec 01 §2.4; Kasir may change it). */
 export function deviceDensity(): "normal" | "tebal" {
@@ -30,7 +50,7 @@ export class PrintError extends Error {
   }
 }
 
-export async function fetchPrint(body: { slugs: string[]; format: Format; reason?: string; preview?: boolean; density?: "normal" | "tebal" }): Promise<{ blob: Blob; refused: number }> {
+export async function fetchPrint(body: { slugs: string[]; format: Format; reason?: string; preview?: boolean; density?: "normal" | "tebal"; as?: "svg" }): Promise<{ blob: Blob; refused: number }> {
   const res = await fetch("/api/app/print", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
   if (!res.ok) {
     const j = (await res.json().catch(() => null)) as { error?: { code: string; message: string } } | null

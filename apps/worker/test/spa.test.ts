@@ -74,4 +74,14 @@ describe("SPA shells via ASSETS (spec 07 §3.1)", () => {
     expect(brand).toContain('<img src="/logo.svg"')
     expect(brand).not.toContain("data:image/svg+xml")
   })
+
+  it("app CSP allows same-origin blob: PDF preview frames while owner stays strict and frame-ancestors stays none", async () => {
+    const appCsp = (await exports.default.fetch(`${APP}/`)).headers.get("content-security-policy") ?? ""
+    const ownerCsp = (await exports.default.fetch(`${OWNER}/`)).headers.get("content-security-policy") ?? ""
+    expect(appCsp).toContain("frame-src blob: https://challenges.cloudflare.com")
+    expect(appCsp).toContain("object-src blob:")
+    expect(appCsp).toContain("frame-ancestors 'none'")
+    expect(ownerCsp).not.toContain("frame-src blob:")
+    expect(ownerCsp).toContain("frame-ancestors 'none'")
+  })
 })

@@ -65,7 +65,8 @@ export function rollLines(d: LabelData): RollLine[] {
   const t = (text: string, o: { bold?: boolean; invert?: boolean } = {}) => L.push({ text, ...o })
   // --- Parcel label ---
   t(center(d.courierName.toUpperCase()), { bold: true })
-  t(center(`LAYANAN: ${d.serviceName}`))
+  const svcBadge = [d.serviceName, d.isCargo ? "KARGO" : null, d.isDangerousGoods ? "DG/BATERAI" : null].filter(Boolean).join(" - ")
+  t(center(`LAYANAN: ${svcBadge}`))
   L.push({ barcode: d.awb })
   t(center(groupAwb(d.awb)), { bold: true })
   t(center(d.sortingCode ?? d.destinationFallback), { bold: true, invert: true })
@@ -79,6 +80,7 @@ export function rollLines(d: LabelData): RollLine[] {
   t(pad(d.recipient.phone))
   for (const l of wrap32(d.recipient.street, 3)) t(l)
   for (const l of wrap32(d.recipient.area.toUpperCase(), 2)) t(l)
+  if (d.deliveryInstruction) for (const l of wrap32(`Catatan: ${d.deliveryInstruction}`, 2)) t(l)
   t(rule())
   t(pad("PENGIRIM:"))
   t(pad(`${d.sender.name}${d.sender.phone ? ` (${d.sender.phone})` : ""}`))
@@ -86,7 +88,10 @@ export function rollLines(d: LabelData): RollLine[] {
   t(rule())
   t(pad(`Berat : ${d.actualWeightGram.toLocaleString("id-ID")} g (Tagih: ${d.billableWeightGram.toLocaleString("id-ID")} g)`))
   t(pad(`Ukuran: ${d.dims ?? "-"} | Asuransi:${d.insuranceIdr === null ? "-" : d.insuranceIdr.toLocaleString("id-ID")}`))
-  t(pad(`Isi   : ${d.content}`))
+  const qtySuffix = d.quantity && d.quantity > 1 ? ` (${d.quantity} pcs)` : ""
+  const maxContent = COLS - "Isi   : ".length - qtySuffix.length
+  const contentText = qtySuffix ? ascii(d.content).slice(0, Math.max(1, maxContent)).trimEnd() : d.content
+  t(pad(`Isi   : ${contentText}${qtySuffix}`))
   if (d.remark) for (const l of wrap32(`*${d.remark}*`, 2)) t(l)
   t(pad(""))
   t(center("------- Potong Disini --------"))

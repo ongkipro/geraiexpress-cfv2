@@ -42,8 +42,12 @@ describe("print API", () => {
     expect(s.first_printed_at).toBeGreaterThan(0)
     const audit = await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec<{ metadata_json: string }>("SELECT metadata_json FROM audit_logs WHERE action = 'label.reprint'").toArray())
     expect(JSON.parse(audit[0]!.metadata_json)).toMatchObject({ slug, reason: "label sobek" })
-    // Preview never records.
+    // Preview never records (both PDF and vector SVG preview).
     expect((await print(t.cookie, { slugs: [slug], format: "label_10x10", preview: true })).status).toBe(200)
+    const svgRes = await print(t.cookie, { slugs: [slug], format: "label_10x15_with_stub", preview: true, as: "svg" })
+    expect(svgRes.status).toBe(200)
+    expect(svgRes.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8")
+    expect(await svgRes.text()).toContain('viewBox="0 0 100 150"')
     expect((await runInDurableObject(t.vault, (_i: GeraiVaultDO, st) => st.storage.sql.exec<{ print_count: number }>("SELECT print_count FROM shipments WHERE slug = ?", slug).one())).print_count).toBe(2)
   })
 

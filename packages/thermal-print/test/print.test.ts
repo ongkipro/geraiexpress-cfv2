@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { code128Values, COLS, drawBarcode, escposBytes, labelPage, labelsPdf, MM, PdfPage, QUIET_ZONE_MM, rollLines, rollText, splitUrl, textWidthMm } from "../src"
+import { code128Values, COLS, drawBarcode, escposBytes, labelPage, labelsPdf, labelSvg, MM, PdfPage, QUIET_ZONE_MM, rollLines, rollText, splitUrl, textWidthMm } from "../src"
 import { codDropship, nonCodStandard } from "./fixture"
 
 const texts0 = (page: { ops: Array<{ kind: string; text?: string }> }) => page.ops.filter((o) => o.kind === "text").map((o) => o.text ?? "")
@@ -13,6 +13,12 @@ describe("100 mm PDFs (DEC-224)", () => {
     expect(mediaBoxes(labelsPdf([codDropship, nonCodStandard, codDropship], "label_10x15"))).toEqual([[mm(100), mm(150)], [mm(100), mm(150)], [mm(100), mm(150)]])
     const head = new TextDecoder("latin1").decode(labelsPdf([codDropship], "label_10x10").slice(0, 8))
     expect(head).toBe("%PDF-1.4")
+    const svg = labelSvg(codDropship, "label_10x15_with_stub")
+    expect(svg).toMatch(/^<svg [^>]*viewBox="0 0 100 150"/)
+    expect(svg).toContain("J&amp;T EXPRESS")
+    expect(svg).toContain("BDO-CBL02")
+    expect(svg).toContain("JX88 2910 4412")
+    expect(svg.endsWith("</svg>")).toBe(true)
   })
 
   it("every text line of the stub stays inside the page, even with the largest service fee and a promo (Sol delta B-5)", () => {
@@ -91,6 +97,34 @@ describe("100 mm PDFs (DEC-224)", () => {
     expect(text).toContain("0857****8821")
     expect(text).toContain("INV 8K4M2P7")
     expect(text).toContain("COD \\267 TAGIH PENERIMA Rp 167.560")
+  })
+
+  it("expedition metadata: huge COD auto-fits inside its banner, KARGO/DG badges and courier note stay within 97 mm", () => {
+    const heavy = {
+      ...codDropship,
+      serviceName: "JTR",
+      isCargo: true,
+      isDangerousGoods: true,
+      quantity: 3,
+      deliveryInstruction: "Titip pos satpam dekat gerbang utama",
+      cod: { collectIdr: 4950000 },
+    }
+    for (const fmt of ["label_10x15_with_stub", "label_10x10", "label_10x15"] as const) {
+      const page = labelPage(heavy, fmt)
+      const allTexts = page.ops.filter((o): o is Extract<(typeof page.ops)[number], { kind: "text" }> => o.kind === "text")
+      expect(allTexts.some((t) => t.text === "KARGO"), fmt).toBe(true)
+      expect(allTexts.some((t) => t.text === "DG"), fmt).toBe(true)
+      expect(allTexts.some((t) => t.text.includes("Titip pos satpam")), fmt).toBe(true)
+      const codText = allTexts.find((t) => t.text.startsWith("COD · TAGIH PENERIMA"))!
+      const codBox = page.ops.find((o) => o.kind === "rect" && Math.abs(o.h - 6.4) < 0.05) as { x: number; w: number }
+      expect(textWidthMm(codText.text, codText.size, "B")).toBeLessThanOrEqual(codBox.w - 3)
+      // Every left/right/center text stays inside [3, 97] mm safe printable margins.
+      for (const t of allTexts) {
+        const w = textWidthMm(t.text, t.size, t.font)
+        const right = t.align === "right" ? t.x : t.align === "center" ? t.x + w / 2 : t.x + w
+        expect(right, `${fmt}: ${t.text}`).toBeLessThanOrEqual(97.5)
+      }
+    }
   })
 })
 

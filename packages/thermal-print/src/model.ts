@@ -27,6 +27,14 @@ export interface LabelData {
   sender: { name: string; phone: string | null; area: string | null }
   outlet: { name: string; whatsapp: string | null } | null // null = no outlet branding (Dropship)
   content: string
+  /** Number of items/pieces in the parcel (default 1). */
+  quantity?: number
+  /** Courier delivery note (e.g. "Titip pos satpam"). */
+  deliveryInstruction?: string | null
+  /** True for cargo services (prints a high-contrast KARGO badge for hub sorting). */
+  isCargo?: boolean
+  /** True when the parcel contains batteries/dangerous goods (prints a DG warning badge). */
+  isDangerousGoods?: boolean
   actualWeightGram: number
   billableWeightGram: number
   dims: string | null // "30×20×15 cm"

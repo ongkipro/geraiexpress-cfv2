@@ -4,6 +4,28 @@ import type { LabelData } from "@gx/thermal-print"
 
 type Row = Record<string, SqlStorageValue>
 const courierNames: Record<string, string> = { JNE: "JNE", SiCepat: "SiCepat", Sap: "SAP Express", iDexpress: "iDexpress", JT: "J&T Express", lion: "Lion Parcel", anteraja: "Anteraja", pos: "Pos Indonesia", spx: "SPX Express" }
+const serviceNames: Record<string, string> = {
+  JT: "EZ (Reguler)",
+  JTEco: "ECO",
+  JTCargo: "Cargo",
+  JNE: "REG",
+  JNEJTR: "JTR Cargo",
+  SiCepat: "REG",
+  SiCepatGokil: "GOKIL Cargo",
+  Sap: "Reguler",
+  SapLite: "Lite",
+  lion: "REGPACK",
+  anteraja: "Reguler",
+  iDexpress: "Reguler",
+  iDexpressCargo: "Cargo",
+  pos: "Reguler",
+  spx: "Reguler",
+}
+const shortArea = (area: string | null | undefined): string | null => {
+  if (!area) return null
+  const parts = area.split(",").map((x) => x.trim()).filter(Boolean)
+  return (parts.length >= 3 ? parts.slice(1, 3) : parts.slice(-2)).join(", ") || null
+}
 
 const wibStamp = (ms: number) => {
   const d = new Date(ms + 7 * 3600_000)
@@ -40,10 +62,15 @@ export function labelDataFrom(s: Row, opts: { quote: Row | null; lastPayment: Ro
           ? { status: "unpaid" }
           : { status: "not_required" }
   const dims = opts.quote && opts.quote.length_cm ? `${opts.quote.length_cm}×${opts.quote.width_cm}×${opts.quote.height_cm} cm` : null
+  const svcCode = String(s.service_code ?? s.courier_code)
+  const isCargo = opts.quote?.service_class === "cargo" || /cargo|jtr|gokil/i.test(svcCode)
+  const isDangerousGoods = Number(opts.quote?.is_dangerous_goods ?? 0) === 1
+  const qty = Number(s.item_quantity ?? 1)
+  const instruction = typeof s.delivery_instruction === "string" && s.delivery_instruction.trim() ? s.delivery_instruction.trim() : null
   return {
     inv: slug,
     courierName: courierNames[String(s.courier_code)] ?? String(s.courier_code),
-    serviceName: String(s.service_code ?? s.courier_code).replace(/Cargo$/, " Cargo"),
+    serviceName: serviceNames[svcCode] ?? svcCode.replace(/Cargo$/, " Cargo"),
     awb: s.awb_number,
     printedAt: wibStamp(opts.now),
     sortingCode: typeof s.sorting_code === "string" && s.sorting_code ? s.sorting_code : null,
@@ -51,9 +78,13 @@ export function labelDataFrom(s: Row, opts: { quote: Row | null; lastPayment: Ro
     destinationLine: area.toUpperCase(),
     cod: cod ? { collectIdr: Number(s.cod_collection_total_idr) } : null,
     recipient: { name: rec.name, phone: mask.recipientPhonePrinted, street: rec.street, area },
-    sender: { name: mask.sender.name, phone: mask.sender.phone, area: null },
+    sender: { name: mask.sender.name, phone: mask.sender.phone, area: mask.showOutletBranding ? shortArea(pick?.area) : null },
     outlet: mask.showOutletBranding && pick?.name ? { name: pick.name, whatsapp: pick.phone } : null,
     content: String(s.content_declaration_text ?? ""),
+    quantity: Number.isSafeInteger(qty) && qty > 1 ? qty : 1,
+    deliveryInstruction: instruction,
+    isCargo,
+    isDangerousGoods,
     actualWeightGram: Number(s.actual_weight_gram ?? 1000),
     billableWeightGram: Number(s.billable_weight_gram ?? 1000),
     dims,

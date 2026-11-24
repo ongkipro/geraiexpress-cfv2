@@ -2,7 +2,10 @@
 // and Helvetica / Helvetica-Bold / Courier-Bold text (WinAnsi). Coordinates are mm from the top-left.
 export const MM = 72 / 25.4
 
-type Op = { kind: "rect"; x: number; y: number; w: number; h: number; white?: boolean } | { kind: "text"; x: number; y: number; size: number; font: "R" | "B" | "M"; text: string; white?: boolean; align?: "left" | "center" | "right" }
+type Op =
+  | { kind: "rect"; x: number; y: number; w: number; h: number; white?: boolean }
+  | { kind: "stroke"; x: number; y: number; w: number; h: number; lw: number }
+  | { kind: "text"; x: number; y: number; size: number; font: "R" | "B" | "M"; text: string; white?: boolean; align?: "left" | "center" | "right" }
 
 export class PdfPage {
   readonly ops: Op[] = []
@@ -12,6 +15,11 @@ export class PdfPage {
   ) {}
   rect(x: number, y: number, w: number, h: number, white = false) {
     this.ops.push({ kind: "rect", x, y, w, h, white })
+    return this
+  }
+  /** Crisp 1-bit monochrome outlined rectangle (thermal-safe: pure black stroke, no halftone gray). */
+  strokeRect(x: number, y: number, w: number, h: number, lw = 0.35) {
+    this.ops.push({ kind: "stroke", x, y, w, h, lw })
     return this
   }
   /** `y` is the text baseline in mm from the top. */
@@ -90,6 +98,7 @@ export function renderPdf(pages: PdfPage[]): Uint8Array {
     let content = ""
     for (const op of p.ops) {
       if (op.kind === "rect") content += `${op.white ? "1 g" : "0 g"} ${n(op.x * MM)} ${n(H - (op.y + op.h) * MM)} ${n(op.w * MM)} ${n(op.h * MM)} re f\n`
+      else if (op.kind === "stroke") content += `0 G ${n(op.lw * MM)} w ${n(op.x * MM)} ${n(H - (op.y + op.h) * MM)} ${n(op.w * MM)} ${n(op.h * MM)} re S\n`
       else {
         const font = op.font === "B" ? "/F2" : op.font === "M" ? "/F3" : "/F1"
         const w = textWidthMm(op.text, op.size, op.font)
@@ -117,4 +126,30 @@ export function renderPdf(pages: PdfPage[]): Uint8Array {
   const bytes = new Uint8Array(body.length)
   for (let i = 0; i < body.length; i++) bytes[i] = body.charCodeAt(i) & 0xff
   return bytes
+}
+
+function escXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;")
+}
+
+/** Exact vector SVG preview of a PdfPage in millimetre coordinates (single source of truth with renderPdf). */
+export function renderSvg(p: PdfPage): string {
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n(p.widthMm)} ${n(p.heightMm)}" width="${n(p.widthMm)}mm" height="${n(p.heightMm)}mm">`,
+    `<rect x="0" y="0" width="${n(p.widthMm)}" height="${n(p.heightMm)}" fill="#ffffff"/>`,
+  ]
+  for (const op of p.ops) {
+    if (op.kind === "rect") {
+      parts.push(`<rect x="${n(op.x)}" y="${n(op.y)}" width="${n(op.w)}" height="${n(op.h)}" fill="${op.white ? "#ffffff" : "#000000"}" shape-rendering="crispEdges"/>`)
+    } else if (op.kind === "stroke") {
+      parts.push(`<rect x="${n(op.x)}" y="${n(op.y)}" width="${n(op.w)}" height="${n(op.h)}" fill="none" stroke="#000000" stroke-width="${n(op.lw)}" shape-rendering="crispEdges"/>`)
+    } else {
+      const family = op.font === "M" ? "'Courier New',Courier,monospace" : "Helvetica,Arial,sans-serif"
+      const weight = op.font === "R" ? "" : ' font-weight="700"'
+      const anchor = op.align === "center" ? ' text-anchor="middle"' : op.align === "right" ? ' text-anchor="end"' : ""
+      parts.push(`<text x="${n(op.x)}" y="${n(op.y)}" font-family="${family}" font-size="${n(op.size / MM)}"${weight}${anchor} fill="${op.white ? "#ffffff" : "#000000"}">${escXml(op.text)}</text>`)
+    }
+  }
+  parts.push("</svg>")
+  return parts.join("")
 }
