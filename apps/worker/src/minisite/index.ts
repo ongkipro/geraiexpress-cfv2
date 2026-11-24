@@ -390,7 +390,13 @@ export async function handleMinisite(request: Request, env: Env, c: Ctx): Promis
     const ip = await ipHash(env.AUTH_SESSION_PEPPER, request)
     const lim = await hit(env.DB, `ms-area:${ip}`, 60, 60_000, Date.now())
     if (!lim.allowed) return Response.json({ items: [] }, { status: 429 })
-    return Response.json({ items: (await searchAreas(env, url.searchParams.get("q") ?? "")).items }, { headers: { "cache-control": "public, max-age=3600" } })
+    try {
+      return Response.json({ items: (await searchAreas(env, url.searchParams.get("q") ?? "")).items }, { headers: { "cache-control": "public, max-age=3600" } })
+    } catch (err) {
+      const status = err instanceof AppError ? err.status : 502
+      const message = err instanceof AppError ? err.userMessage : "Pencarian wilayah sedang bermasalah. Coba lagi sebentar lagi."
+      return Response.json({ items: [], error: message }, { status, headers: { "cache-control": "no-store" } })
+    }
   }
   if ((path === "/logo" || COURIER_PATH.test(path)) && (m === "GET" || m === "HEAD")) return path === "/logo" ? logo(env, c, m) : courierLogo(env, url, path)
   if (path === "/" && (m === "GET" || m === "HEAD" || m === "POST")) return ongkir(env, c, request)

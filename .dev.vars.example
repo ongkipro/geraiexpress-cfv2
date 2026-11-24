@@ -10,3 +10,6 @@ CF_SAAS_API_TOKEN="local-dev-cf-token"
 OPS_TOKEN="local-dev-ops-token"
 # Owner alert channel (incoming webhook URL of the owner chat). Empty locally = alerts are logged only.
 ALERT_WEBHOOK_URL=""
+# Platform Mengantar Public API key for shared area lookup (`GET /address/search`). Optional locally in mock mode;
+# required in staging/production via `wrangler secret put MENGANTAR_PUBLIC_READ_KEY`.
+# MENGANTAR_PUBLIC_READ_KEY=""

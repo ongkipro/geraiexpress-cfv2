@@ -4,7 +4,7 @@ import { AuthCard, FormAlert, WizardBar } from "../../components/auth/auth-card"
 import { TextField } from "../../components/auth/text-field"
 import { LocationPinPicker } from "../../components/location-pin-picker"
 import { Button } from "../../components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "../../components/ui/field"
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { api, ApiError } from "../../lib/api"
 import { CheckboxField } from "../../components/admin/page"
@@ -43,7 +43,8 @@ export function DaftarPage() {
   const [query, setQuery] = useState("")
   // Results belong to the exact trimmed query that produced them (Sol R2): while a new query is pending (debounce or
   // request in flight) the old options are gone, so ArrowDown + Enter can never pick a stale area.
-  const [results, setResults] = useState<{ q: string; items: Area[]; state: "ok" | "error" }>({ q: "", items: [], state: "ok" })
+  const [results, setResults] = useState<{ q: string; items: Area[]; state: "ok" | "error"; errMsg?: string }>({ q: "", items: [], state: "ok" })
+  const [retryTick, setRetryTick] = useState(0)
   const areas = results.q === query.trim() ? results.items : []
   const [area, setArea] = useState<Area | null>(null)
   const searchingArea = !area && query.trim().length >= 3 && results.q !== query.trim()
@@ -127,13 +128,17 @@ export function DaftarPage() {
           setResults({ q, items: r.items, state: "ok" })
           setHl(-1)
         })
-        .catch(() => alive && setResults({ q, items: [], state: "error" }))
+        .catch((err) => {
+          if (!alive) return
+          const errMsg = err instanceof ApiError ? err.body.message : "Pencarian wilayah gagal. Periksa koneksi lalu coba lagi."
+          setResults({ q, items: [], state: "error", errMsg })
+        })
     }, 300)
     return () => {
       alive = false
       clearTimeout(t)
     }
-  }, [query, area])
+  }, [query, area, retryTick])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -219,16 +224,14 @@ export function DaftarPage() {
               </div>
             ) : null}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
-            <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" placeholder="gerai@gmail.com" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
-          </div>
+          <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
+          <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" placeholder="gerai@gmail.com" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
           <Button type="submit" size="lg">Lanjut ke Titik Jemput →</Button>
         </form>
       ) : null}
       {step === 3 ? (
         <form className="flex flex-col gap-3.5" onSubmit={submit} noValidate>
-          <Field data-invalid={fieldErrors.areaId ? true : undefined}>
+          <Field data-invalid={fieldErrors.areaId || (!area && query.trim().length >= 3 && results.q === query.trim() && results.state === "error") ? true : undefined}>
             <FieldLabel htmlFor="area-search">Cari kelurahan / kecamatan / kode pos</FieldLabel>
             <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setListOpen(false) }}>
               <Input
@@ -238,7 +241,11 @@ export function DaftarPage() {
                 aria-expanded={showList}
                 aria-controls="area-results"
                 aria-activedescendant={showList && hl >= 0 ? `area-opt-${hl}` : undefined}
+                aria-invalid={fieldErrors.areaId || (!area && query.trim().length >= 3 && results.q === query.trim() && results.state === "error") ? true : undefined}
                 value={query}
+                onFocus={() => {
+                  if (!area && areas.length > 0) setListOpen(true)
+                }}
                 onChange={(e) => {
                   setQuery(e.target.value)
                   setArea(null)
@@ -285,19 +292,34 @@ export function DaftarPage() {
                 </ul>
               ) : null}
             </div>
-            <FieldDescription id="area-help">
-              {area
-                ? `Dipilih: ${area.label}`
-                : fieldErrors.areaId
-                  ? fieldErrors.areaId
+            {!area && fieldErrors.areaId ? (
+              <FieldError id="area-help">{fieldErrors.areaId}</FieldError>
+            ) : !area && query.trim().length >= 3 && results.q === query.trim() && results.state === "error" ? (
+              <FieldError id="area-help" className="flex flex-wrap items-center gap-x-2">
+                <span>{results.errMsg ?? "Pencarian wilayah gagal. Periksa koneksi lalu coba lagi."}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResults({ q: "", items: [], state: "ok" })
+                    setListOpen(true)
+                    setRetryTick((n) => n + 1)
+                  }}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Coba lagi
+                </button>
+              </FieldError>
+            ) : (
+              <FieldDescription id="area-help">
+                {area
+                  ? `Dipilih: ${area.label}`
                   : searchingArea
                     ? "Mencari wilayah…"
-                    : query.trim().length >= 3 && results.q === query.trim() && results.state === "error"
-                      ? "Pencarian wilayah gagal. Periksa koneksi lalu ketik ulang."
-                      : query.trim().length >= 3 && results.q === query.trim() && areas.length === 0
-                        ? "Wilayah tidak ditemukan. Coba ketik nama kecamatan atau kode pos."
-                        : "Ketik minimal 3 huruf, lalu pilih dari daftar."}
-            </FieldDescription>
+                    : query.trim().length >= 3 && results.q === query.trim() && areas.length === 0
+                      ? "Wilayah tidak ditemukan. Coba ketik nama kecamatan atau kode pos."
+                      : "Ketik minimal 3 huruf, lalu pilih dari daftar."}
+              </FieldDescription>
+            )}
           </Field>
           <TextField label="Alamat lengkap titik jemput" name="street" placeholder="Jl. Merdeka No. 12, RT 02/RW 05 (dekat patokan)" value={street} onChange={setStreet} error={fieldErrors.streetAddress} required maxLength={300} />
           <div className="grid grid-cols-2 gap-3 sm:gap-4">

@@ -17,7 +17,7 @@ export const SECRET_PATTERNS = [
 ]
 
 // Client (browser) bundles must not even mention secret-like names (spec 05 §4 gate 2: SECRET, PARTNER, PRIVATE).
-export const CLIENT_FORBIDDEN_TOKEN = /\b[A-Z0-9_]*(?:SECRET|PARTNER|PRIVATE|PEPPER|KEK_|OPS_TOKEN|API_TOKEN)[A-Z0-9_]*\b/g
+export const CLIENT_FORBIDDEN_TOKEN = /\b[A-Z0-9_]*(?:SECRET|PARTNER|PRIVATE|PEPPER|KEK_|OPS_TOKEN|API_TOKEN|MENGANTAR_PUBLIC_READ_KEY)[A-Z0-9_]*\b/g
 
 const SOURCEMAP_COMMENT = /(?:\/\/|\/\*)[#@]\s*sourceMappingURL=/
 
