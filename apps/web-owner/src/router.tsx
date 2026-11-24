@@ -56,6 +56,8 @@ async function loadMe() {
 const consoleRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "console",
+  staleTime: 60_000,
+  gcTime: 5 * 60_000,
   loader: loadMe,
   component: function Console() {
     const { me, pending } = consoleRoute.useLoaderData()
@@ -95,7 +97,7 @@ export const routeTree = rootRoute.addChildren([
   masukRoute,
   totpRoute,
 ])
-export const router = createRouter({ routeTree, defaultPreload: "intent" })
+export const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadStaleTime: 30_000 })
 
 declare module "@tanstack/react-router" {
   interface Register {

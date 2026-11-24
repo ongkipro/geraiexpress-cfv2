@@ -8,7 +8,8 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "../../../compon
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { ErrorState, LoadingState } from "../../../shell/states"
-import { Notice, SettingsLayout } from "../index/shared"
+import { useWorkspace } from "../../../shell/workspace"
+import { Notice, readSettingsCache, SettingsLayout, writeSettingsCache } from "../index/shared"
 import { CalloutAlert, ChoiceGroup, CopyField, SectionCard, StatusBadge, type StatusTone } from "../../../components/admin/page"
 
 // Pengaturan › Mini-Site (visual 08 §2.3) with `Domain Sendiri` (spec 11 §5–6): DNS record to add, steps,
@@ -86,7 +87,9 @@ function DnsTable({ rows }: { rows: Array<{ type: string; name: string; value: s
 }
 
 export function MiniSitePage() {
-  const [v, setV] = useState<View | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `custom-domain:${w.tenant.id}`
+  const [v, setV] = useState<View | null>(() => readSettingsCache<View>(cacheKey))
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -94,11 +97,14 @@ export function MiniSitePage() {
   const load = useCallback(() => {
     api<View>("/custom-domain")
       .then((x) => {
+        writeSettingsCache(cacheKey, x)
         setError(null)
         setV(x)
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Data mini-site tidak dapat dimuat."))
-  }, [])
+      .catch((e) => {
+        if (!readSettingsCache<View>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Data mini-site tidak dapat dimuat.")
+      })
+  }, [cacheKey])
   useEffect(load, [load])
   /** Returns the error message (null on success) so a dialog can show it in place (Sol R1 #1). */
   async function act(path: string, body: unknown, ok: string, inline = false): Promise<string | null> {
@@ -106,7 +112,9 @@ export function MiniSitePage() {
     setPending(true)
     setFieldErrors({})
     try {
-      setV(await api<View>(path, { body }))
+      const next = await api<View>(path, { body })
+      writeSettingsCache(cacheKey, next)
+      setV(next)
       setMsg({ tone: "safe", text: ok })
       return null
     } catch (e) {

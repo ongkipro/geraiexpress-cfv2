@@ -1,12 +1,25 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
-import { Link, Navigate, useRouterState } from "@tanstack/react-router"
+import { createContext, Suspense, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
+import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router"
 import { ArrowLeftIcon, Building2Icon, ChevronRightIcon, GlobeIcon, KeyRoundIcon, PackageIcon, PrinterIcon, ShieldIcon, StoreIcon, TruckIcon, UsersIcon, WebhookIcon, type LucideIcon } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "../../../components/ui/button"
 import { Card } from "../../../components/ui/card"
+import { Skeleton } from "../../../components/ui/skeleton"
 import { FormAlert } from "../../../components/auth/auth-card"
 import { isOwner, refreshCounterStatus, useWorkspace, type Workspace } from "../../../shell/workspace"
 import { api, ApiError } from "../../../lib/api"
+
+// Tenant-scoped in-memory stale-while-revalidate cache so switching between Pengaturan sub-pages never flashes blank
+// skeletons while background revalidation keeps data fresh.
+const viewCache = new Map<string, unknown>()
+export function readSettingsCache<T>(key: string): T | null {
+  return (viewCache.get(key) as T | undefined) ?? null
+}
+export function writeSettingsCache<T>(key: string, value: T): void {
+  viewCache.set(key, value)
+}
+
+const SettingsShellContext = createContext(false)
 
 // Pengaturan (visual 08 §2, DEC-223, DEC-240 — TokoPhi settings rail): ≥ 1024 px a framed left rail (icon, title,
 // one-line subtitle) beside the section, one card only (DEC-243: identity and Mengantar state already sit in the
@@ -75,50 +88,88 @@ function SettingsLink({ item, active, warn, size }: { item: SettingsItem; active
   )
 }
 
-/** Section page frame: rail (≥ 1024 px) + the section's own `h1`, description and cards (flush-left, max 896 px). */
-export function SettingsLayout({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) {
+function SettingsRail() {
   const w = useWorkspace()
   const owner = isOwner(w)
   const path = useRouterState({ select: (s) => s.location.pathname })
   return (
-    <div className="grid items-start gap-6 pb-24 md:pb-0 lg:-mb-8 lg:grid-cols-[260px_minmax(0,1fr)]">
-      {/* DEC-242: a secondary sidebar — pinned 84 px down (64 px topbar + 20 px) and bounded to the viewport
-          (100dvh − 6.5rem), so scrolling the form never moves it, while the rail itself scrolls when it is taller than
-          the screen. The grid row reaches over the main area's 32 px bottom padding (grid `lg:-mb-8`, content column `lg:pb-8`):
-          sticky is bounded by its grid area, and without that the rail is pushed up 12 px at the end of the page. */}
-      <aside aria-label="Navigasi pengaturan" data-settings-rail className="thin-scrollbar hidden lg:sticky lg:top-[5.25rem] lg:block lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
-        <Card className="gap-0 p-1.5 md:p-1.5">
-          <nav aria-label="Menu pengaturan">
-            {visibleGroups(owner).map((g) => (
-              <div key={g.label} className="not-first:mt-1 not-first:border-t not-first:border-slate-100 not-first:pt-1">
-                <p className="px-2.5 pt-1.5 pb-1 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label}</p>
-                <ul className="flex flex-col gap-0.5">
-                  {g.items.map((i) => (
-                    <li key={i.to}>
-                      <SettingsLink item={i} active={path === i.to} warn={attention(w, i.to)} size="rail" />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </Card>
-      </aside>
-      <div className="flex w-full max-w-4xl min-w-0 flex-col gap-4 md:gap-5 lg:pb-8">
-        <div className="flex flex-col gap-3">
-          <Link to="/pengaturan" className="inline-flex h-11 w-fit items-center gap-1.5 rounded-lg pr-2 text-sm font-medium text-muted-foreground hover:text-slate-950 lg:hidden">
-            <ArrowLeftIcon aria-hidden className="size-4" /> Semua Pengaturan
-          </Link>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">{title}</h1>
-              {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+    <aside aria-label="Navigasi pengaturan" data-settings-rail className="thin-scrollbar hidden lg:sticky lg:top-[5.25rem] lg:block lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
+      <Card className="gap-0 p-1.5 md:p-1.5">
+        <nav aria-label="Menu pengaturan">
+          {visibleGroups(owner).map((g) => (
+            <div key={g.label} className="not-first:mt-1 not-first:border-t not-first:border-slate-100 not-first:pt-1">
+              <p className="px-2.5 pt-1.5 pb-1 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label}</p>
+              <ul className="flex flex-col gap-0.5">
+                {g.items.map((i) => (
+                  <li key={i.to}>
+                    <SettingsLink item={i} active={path === i.to} warn={attention(w, i.to)} size="rail" />
+                  </li>
+                ))}
+              </ul>
             </div>
-            {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-          </div>
+          ))}
+        </nav>
+      </Card>
+    </aside>
+  )
+}
+
+/**
+ * Persistent parent shell for all `/pengaturan/*` routes: keeps `<aside data-settings-rail>` mounted across sub-page
+ * switches (zero flicker, preserves rail scroll, and scopes Suspense fallbacks to the right content column).
+ */
+export function SettingsShell() {
+  const path = useRouterState({ select: (s) => s.location.pathname })
+  if (path === "/pengaturan" || path === "/pengaturan/") {
+    return (
+      <Suspense fallback={<div className="flex max-w-2xl flex-col gap-3" aria-busy="true" aria-label="Memuat pengaturan"><Skeleton className="h-10 w-48" /><Skeleton className="h-40 w-full" /></div>}>
+        <Outlet />
+      </Suspense>
+    )
+  }
+  return (
+    <SettingsShellContext.Provider value={true}>
+      <div className="grid items-start gap-6 pb-24 md:pb-0 lg:-mb-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* DEC-242: a secondary sidebar — pinned 84 px down (64 px topbar + 20 px) and bounded to the viewport
+            (100dvh − 6.5rem), so scrolling the form never moves it, while the rail itself scrolls when it is taller than
+            the screen. The grid row reaches over the main area's 32 px bottom padding (grid `lg:-mb-8`, content column `lg:pb-8`):
+            sticky is bounded by its grid area, and without that the rail is pushed up 12 px at the end of the page. */}
+        <SettingsRail />
+        <div className="flex w-full max-w-4xl min-w-0 flex-col gap-4 md:gap-5 lg:pb-8">
+          <Suspense fallback={<div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat halaman pengaturan"><Skeleton className="h-12 w-56" /><Skeleton className="h-44 w-full" /></div>}>
+            <Outlet />
+          </Suspense>
         </div>
-        {children}
       </div>
+    </SettingsShellContext.Provider>
+  )
+}
+
+/** Section page frame: header + content inside persistent SettingsShell (falls back to full rail if rendered standalone). */
+export function SettingsLayout({ title, description, actions, children }: { title: string; description?: string; actions?: ReactNode; children: ReactNode }) {
+  const inShell = useContext(SettingsShellContext)
+  const content = (
+    <>
+      <div className="flex flex-col gap-3">
+        <Link to="/pengaturan" className="inline-flex h-11 w-fit items-center gap-1.5 rounded-lg pr-2 text-sm font-medium text-muted-foreground hover:text-slate-950 lg:hidden">
+          <ArrowLeftIcon aria-hidden className="size-4" /> Semua Pengaturan
+        </Link>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl leading-tight font-semibold tracking-[-0.02em] text-slate-950 md:text-2xl">{title}</h1>
+            {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+          </div>
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        </div>
+      </div>
+      {children}
+    </>
+  )
+  if (inShell) return content
+  return (
+    <div className="grid items-start gap-6 pb-24 md:pb-0 lg:-mb-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <SettingsRail />
+      <div className="flex w-full max-w-4xl min-w-0 flex-col gap-4 md:gap-5 lg:pb-8">{content}</div>
     </div>
   )
 }
@@ -189,8 +240,11 @@ export function Notice({ msg }: { msg: { tone: "safe" | "danger"; text: string }
  * form to `/settings/<endpoint>` and adopts the server's answer. Field errors come back keyed by field name.
  */
 export function useSettingsForm<T>(pick: (s: SettingsView) => T, endpoint: string, toBody: (f: T) => unknown = (f) => f) {
-  const [saved, setSaved] = useState<T | null>(null)
-  const [form, setForm] = useState<T | null>(null)
+  const w = useWorkspace()
+  const cacheKey = `settings:${w.tenant.id}`
+  const initial = readSettingsCache<SettingsView>(cacheKey)
+  const [saved, setSaved] = useState<T | null>(() => (initial ? pick(initial) : null))
+  const [form, setForm] = useState<T | null>(() => (initial ? pick(initial) : null))
   const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
@@ -198,14 +252,20 @@ export function useSettingsForm<T>(pick: (s: SettingsView) => T, endpoint: strin
   const load = useCallback(() => {
     api<SettingsView>("/settings")
       .then((s) => {
+        writeSettingsCache(cacheKey, s)
         setError(null)
-        setSaved(pick(s))
-        setForm(pick(s))
+        const picked = pick(s)
+        setSaved((prevSaved) => {
+          setForm((prevForm) => (prevForm === null || JSON.stringify(prevForm) === JSON.stringify(prevSaved) ? picked : prevForm))
+          return picked
+        })
       })
-      .catch((e) => setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat."))
+      .catch((e) => {
+        if (!readSettingsCache<SettingsView>(cacheKey)) setError(e instanceof ApiError ? e.body.message : "Pengaturan tidak dapat dimuat.")
+      })
     // `pick` is a stable module-level selector for each page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cacheKey])
   useEffect(load, [load])
   async function save() {
     if (!form) return
@@ -214,6 +274,7 @@ export function useSettingsForm<T>(pick: (s: SettingsView) => T, endpoint: strin
     setFields({})
     try {
       const s = await api<SettingsView>(`/settings/${endpoint}`, { body: toBody(form) })
+      writeSettingsCache(cacheKey, s)
       refreshCounterStatus()
       setSaved(pick(s))
       setForm(pick(s))

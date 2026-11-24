@@ -162,14 +162,14 @@ export function AdminShell({
           </SidebarContent>
           {sidebarStatus ? <SidebarFooter className="p-3 group-data-[collapsible=icon]:hidden">{sidebarStatus}</SidebarFooter> : null}
         </Sidebar>
-        <SidebarInset className="min-w-0 bg-background">
+        <SidebarInset data-admin-shell className="min-w-0 bg-background">
           {/* DEC-243 3-zone topbar. ≥ 1024 px it is a 3-column grid (1fr | 260–380 px | 1fr): the breadcrumb lives in
               its own flexible track, so a longer trail never moves the search bar — it sits at the same x on every page.
               The right track holds only what fits beside it: an avatar-only account chip below xl and the labelled
               pills (mini-site, TOTP) from 2xl, so utilities never run into the search (Sol R1 DEC-243 #1). With enlarged
               text below xl the search track narrows to 220–320 px (still fixed per page) so the owner's status icon,
               bell and avatar fit at 125 % (DEC-244). */}
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)] lg:gap-4 lg:in-data-text:grid-cols-[minmax(0,1fr)_minmax(220px,320px)_minmax(0,1fr)] xl:in-data-text:grid-cols-[minmax(0,1fr)_minmax(260px,380px)_minmax(0,1fr)]">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)] lg:gap-4 lg:in-data-text:grid-cols-[minmax(0,1fr)_minmax(200px,300px)_minmax(0,1fr)] xl:in-data-text:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)]">
             <div className="flex min-w-0 items-center gap-2">
               <SidebarTrigger className="size-11 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 md:size-9" />
               <span aria-hidden className="hidden h-4 w-px shrink-0 bg-slate-200 md:block" />

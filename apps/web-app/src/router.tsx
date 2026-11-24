@@ -9,17 +9,36 @@ import { DashboardPage } from "./routes/index/page"
 import { KasirPage } from "./routes/kasir/index"
 import { KirimanPage } from "./routes/kiriman/index/page"
 import { MasukPage } from "./routes/masuk/page"
+import { PengaturanIndexPage, SettingsShell } from "./routes/pengaturan/index/shared"
 
-// Route-level code splitting for secondary screens so auth, Kasir POS, and Dashboard load fast on 4G counter phones.
-function lazyPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
-  const Comp = lazy<ComponentType>(() => loader().then((m) => ({ default: m[key] })))
-  return function LazyRoute() {
+// Route-level code splitting with intent preloading: hovering a menu item loads its JS chunk before click so route
+// transitions never flash a fallback skeleton on fast connections.
+type LazyPageComponent = (() => ReactNode) & { preload: () => Promise<void> }
+function lazyPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K): LazyPageComponent {
+  let promise: Promise<{ default: ComponentType }> | null = null
+  const load = () => (promise ??= loader().then((m) => ({ default: m[key] })))
+  const Comp = lazy<ComponentType>(load)
+  const LazyRoute = function LazyRoute() {
     return (
       <Suspense fallback={<div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat halaman"><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div>}>
         <Comp />
       </Suspense>
     )
-  }
+  } as LazyPageComponent
+  LazyRoute.preload = () => load().then(() => undefined)
+  return LazyRoute
+}
+
+/** Lazy page rendered inside SettingsShell's scoped Suspense (keeps the left rail mounted while only the body loads). */
+function lazySettingsPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K): LazyPageComponent {
+  let promise: Promise<{ default: ComponentType }> | null = null
+  const load = () => (promise ??= loader().then((m) => ({ default: m[key] })))
+  const Comp = lazy<ComponentType>(load)
+  const LazyRoute = function LazySettingsRoute() {
+    return <Comp />
+  } as LazyPageComponent
+  LazyRoute.preload = () => load().then(() => undefined)
+  return LazyRoute
 }
 
 const AturSandiPage = lazyPage(() => import("./routes/atur-sandi/page"), "AturSandiPage")
@@ -28,8 +47,8 @@ const LupaSandiPage = lazyPage(() => import("./routes/lupa-sandi/page"), "LupaSa
 const UndanganPage = lazyPage(() => import("./routes/undangan/page"), "UndanganPage")
 const DaftarPage = lazyPage(() => import("./routes/daftar/page"), "DaftarPage")
 const DaftarStatusPage = lazyPage(() => import("./routes/daftar/status"), "DaftarStatusPage")
-const PengaturanMengantarPage = lazyPage(() => import("./routes/pengaturan/mengantar/page"), "PengaturanMengantarPage")
-const PengaturanEkspedisiPage = lazyPage(() => import("./routes/pengaturan/ekspedisi/page"), "PengaturanEkspedisiPage")
+const PengaturanMengantarPage = lazySettingsPage(() => import("./routes/pengaturan/mengantar/page"), "PengaturanMengantarPage")
+const PengaturanEkspedisiPage = lazySettingsPage(() => import("./routes/pengaturan/ekspedisi/page"), "PengaturanEkspedisiPage")
 const NotifikasiPage = lazyPage(() => import("./routes/notifikasi/page"), "NotifikasiPage")
 const PengirimPage = lazyPage(() => import("./routes/kontak/pengirim"), "PengirimPage")
 const PenerimaPage = lazyPage(() => import("./routes/kontak/penerima"), "PenerimaPage")
@@ -41,19 +60,18 @@ const RiwayatMassalPage = lazyPage(() => import("./routes/kiriman/massal/history
 const BatchPage = lazyPage(() => import("./routes/kiriman/massal/batch"), "BatchPage")
 const ManifestPage = lazyPage(() => import("./routes/kiriman/pickup/page"), "ManifestPage")
 const KeuanganPage = lazyPage(() => import("./routes/keuangan/page"), "KeuanganPage")
-const PengaturanIndexPage = lazyPage(() => import("./routes/pengaturan/index/shared"), "PengaturanIndexPage")
 const StatusPage = lazyPage(() => import("./routes/status/page"), "StatusPage")
-const ProfilGeraiPage = lazyPage(() => import("./routes/pengaturan/profil/page"), "ProfilGeraiPage")
-const DataUsahaPage = lazyPage(() => import("./routes/pengaturan/data-usaha/page"), "DataUsahaPage")
-const PrinterPage = lazyPage(() => import("./routes/pengaturan/printer/page"), "PrinterPage")
-const PackingPage = lazyPage(() => import("./routes/pengaturan/packing/page"), "PackingPage")
-const AnggotaPage = lazyPage(() => import("./routes/pengaturan/anggota/page"), "AnggotaPage")
-const ApiMcpPage = lazyPage(() => import("./routes/pengaturan/api-mcp/page"), "ApiMcpPage")
-const MiniSitePage = lazyPage(() => import("./routes/pengaturan/mini-site/page"), "MiniSitePage")
+const ProfilGeraiPage = lazySettingsPage(() => import("./routes/pengaturan/profil/page"), "ProfilGeraiPage")
+const DataUsahaPage = lazySettingsPage(() => import("./routes/pengaturan/data-usaha/page"), "DataUsahaPage")
+const PrinterPage = lazySettingsPage(() => import("./routes/pengaturan/printer/page"), "PrinterPage")
+const PackingPage = lazySettingsPage(() => import("./routes/pengaturan/packing/page"), "PackingPage")
+const AnggotaPage = lazySettingsPage(() => import("./routes/pengaturan/anggota/page"), "AnggotaPage")
+const ApiMcpPage = lazySettingsPage(() => import("./routes/pengaturan/api-mcp/page"), "ApiMcpPage")
+const MiniSitePage = lazySettingsPage(() => import("./routes/pengaturan/mini-site/page"), "MiniSitePage")
 const AkunPage = lazyPage(() => import("./routes/akun/page"), "AkunPage")
 const BantuanPage = lazyPage(() => import("./routes/bantuan/page"), "BantuanPage")
 const KirimanDetailPage = lazyPage(() => import("./routes/kiriman/detail"), "KirimanDetailPage")
-const LabelPrivasiPage = lazyPage(() => import("./routes/pengaturan/label-privasi/page"), "LabelPrivasiPage")
+const LabelPrivasiPage = lazySettingsPage(() => import("./routes/pengaturan/label-privasi/page"), "LabelPrivasiPage")
 const CetakMassalPage = lazyPage(() => import("./routes/kiriman/cetak-massal/page"), "CetakMassalPage")
 const LayarPelangganPage = lazyPage(() => import("./routes/kasir/layar-pelanggan"), "LayarPelangganPage")
 
@@ -82,13 +100,20 @@ function NotFound() {
 
 // Authenticated workspace layout (TASK-301): loads the projected workspace once; 401 → /masuk, no gerai yet →
 // /daftar/status. Feature pages render inside the shell.
+let lastWorkspace: Workspace | null = null
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "workspace",
+  // Keep workspace projection fresh across menu transitions without refiring GET /workspace on every hover/click.
+  staleTime: 60_000,
+  gcTime: 5 * 60_000,
   loader: async () => {
     try {
-      return await api<Workspace>("/workspace")
+      const w = await api<Workspace>("/workspace")
+      lastWorkspace = w
+      return w
     } catch (err) {
+      lastWorkspace = null
       if (err instanceof ApiError && err.status === 401) throw redirect({ to: "/masuk" })
       if (err instanceof ApiError && err.status === 403 && err.body.code === "NO_MEMBERSHIP") throw redirect({ to: "/daftar/status" })
       throw err
@@ -124,36 +149,61 @@ function ownerOnly(Page: () => ReactNode) {
 }
 
 const indexRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/", component: DashboardPage })
-const notifikasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/notifikasi", component: NotifikasiPage })
-const pengaturanMengantarRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/mengantar", component: ownerOnly(PengaturanMengantarPage) })
-const labelPrivasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/label-privasi", component: ownerOnly(LabelPrivasiPage) })
-const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/ekspedisi", component: ownerOnly(PengaturanEkspedisiPage) })
+const notifikasiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/notifikasi", loader: NotifikasiPage.preload, component: NotifikasiPage })
+// Persistent nested layout for Pengaturan: the desktop left rail stays mounted across every sub-page transition.
+const pengaturanLayoutRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: SettingsShell })
+const pengaturanIndexRoute = createRoute({
+  getParentRoute: () => pengaturanLayoutRoute,
+  path: "/",
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches && lastWorkspace) {
+      throw redirect({ to: lastWorkspace.role === "gerai_admin" ? "/pengaturan/profil" : "/pengaturan/printer", replace: true })
+    }
+  },
+  component: PengaturanIndexPage,
+})
+const profilRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/profil", loader: ProfilGeraiPage.preload, component: ownerOnly(ProfilGeraiPage) })
+const miniSiteRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/mini-site", loader: MiniSitePage.preload, component: ownerOnly(MiniSitePage) })
+const dataUsahaRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/data-usaha", loader: DataUsahaPage.preload, component: ownerOnly(DataUsahaPage) })
+const pengaturanEkspedisiRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/ekspedisi", loader: PengaturanEkspedisiPage.preload, component: ownerOnly(PengaturanEkspedisiPage) })
+const printerRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/printer", loader: PrinterPage.preload, component: PrinterPage })
+const labelPrivasiRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/label-privasi", loader: LabelPrivasiPage.preload, component: ownerOnly(LabelPrivasiPage) })
+const packingRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/packing", loader: PackingPage.preload, component: ownerOnly(PackingPage) })
+const anggotaRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/anggota", loader: AnggotaPage.preload, component: ownerOnly(AnggotaPage) })
+const pengaturanMengantarRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/mengantar", loader: PengaturanMengantarPage.preload, component: ownerOnly(PengaturanMengantarPage) })
+const apiMcpRoute = createRoute({ getParentRoute: () => pengaturanLayoutRoute, path: "/api-mcp", loader: ApiMcpPage.preload, component: ownerOnly(ApiMcpPage) })
+const pengaturanRoute = pengaturanLayoutRoute.addChildren([
+  pengaturanIndexRoute,
+  profilRoute,
+  miniSiteRoute,
+  dataUsahaRoute,
+  pengaturanEkspedisiRoute,
+  printerRoute,
+  labelPrivasiRoute,
+  packingRoute,
+  anggotaRoute,
+  pengaturanMengantarRoute,
+  apiMcpRoute,
+])
+
 const kasirRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir", component: KasirPage })
-const cekCepatRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-cepat", component: CekCepatPage })
-const cetakMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/cetak-massal", component: CetakMassalPage })
-const kirimanDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/$slug", component: KirimanDetailPage })
-const shiftRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/shift", component: ShiftPage })
-const multiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/multi", component: PaketMassalPage })
-const cekResiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-resi", component: CekResiPage })
-const riwayatMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/massal", component: RiwayatMassalPage })
-const batchRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/massal/$batch", component: BatchPage })
-const profilRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/profil", component: ownerOnly(ProfilGeraiPage) })
-const dataUsahaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/data-usaha", component: ownerOnly(DataUsahaPage) })
-const printerRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/printer", component: PrinterPage })
-const packingRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/packing", component: ownerOnly(PackingPage) })
-const anggotaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/anggota", component: ownerOnly(AnggotaPage) })
-const manifestRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/pickup/$batch", component: ManifestPage })
-const miniSiteRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/mini-site", component: ownerOnly(MiniSitePage) })
-const apiMcpRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan/api-mcp", component: ownerOnly(ApiMcpPage) })
+const cekCepatRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-cepat", loader: CekCepatPage.preload, component: CekCepatPage })
+const cetakMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/cetak-massal", loader: CetakMassalPage.preload, component: CetakMassalPage })
+const kirimanDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/$slug", loader: KirimanDetailPage.preload, component: KirimanDetailPage })
+const shiftRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/shift", loader: ShiftPage.preload, component: ShiftPage })
+const multiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/multi", loader: PaketMassalPage.preload, component: PaketMassalPage })
+const cekResiRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kasir/cek-resi", loader: CekResiPage.preload, component: CekResiPage })
+const riwayatMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/massal", loader: RiwayatMassalPage.preload, component: RiwayatMassalPage })
+const batchRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/massal/$batch", loader: BatchPage.preload, component: BatchPage })
+const manifestRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/pickup/$batch", loader: ManifestPage.preload, component: ManifestPage })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: KirimanPage })
-const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", component: PengirimPage })
-const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", component: PenerimaPage })
-const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", component: ownerOnly(KeuanganPage) })
-const pengaturanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/pengaturan", component: PengaturanIndexPage })
-const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", component: AkunPage })
-const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", component: BantuanPage })
-const statusRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/status", component: ownerOnly(StatusPage) })
-const featureRoutes = [miniSiteRoute, apiMcpRoute, manifestRoute, profilRoute, dataUsahaRoute, printerRoute, packingRoute, anggotaRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
+const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", loader: PengirimPage.preload, component: PengirimPage })
+const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", loader: PenerimaPage.preload, component: PenerimaPage })
+const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", loader: KeuanganPage.preload, component: ownerOnly(KeuanganPage) })
+const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", loader: AkunPage.preload, component: AkunPage })
+const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", loader: BantuanPage.preload, component: BantuanPage })
+const statusRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/status", loader: StatusPage.preload, component: ownerOnly(StatusPage) })
+const featureRoutes = [manifestRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 // DEC-250 Sol R1: an applicant who already has an app session but no gerai continues on `/daftar` — from the auth
@@ -184,7 +234,7 @@ const undanganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/und
 const layarPelangganRoute = createRoute({ getParentRoute: () => rootRoute, path: "/kasir/layar-pelanggan", component: LayarPelangganPage })
 
 export const routeTree = rootRoute.addChildren([
-  workspaceRoute.addChildren([indexRoute, notifikasiRoute, pengaturanMengantarRoute, pengaturanEkspedisiRoute, labelPrivasiRoute, ...featureRoutes]),
+  workspaceRoute.addChildren([indexRoute, notifikasiRoute, ...featureRoutes]),
   masukRoute,
   daftarAkunRoute,
   lupaSandiRoute,
@@ -195,7 +245,7 @@ export const routeTree = rootRoute.addChildren([
   layarPelangganRoute,
 ])
 
-export const router = createRouter({ routeTree, defaultPreload: "intent" })
+export const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadStaleTime: 30_000 })
 
 declare module "@tanstack/react-router" {
   interface Register {

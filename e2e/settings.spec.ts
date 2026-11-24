@@ -96,4 +96,21 @@ test("Pengaturan: rail tetap diam saat form digulir dan bisa digulir sendiri", a
   await expect.poll(() => rail.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   expect(await settled()).toBe(pageTop)
   await expect(page.getByRole("navigation", { name: "Menu pengaturan" }).getByRole("link", { name: /API & MCP/ })).toBeInViewport()
+
+  // 3. Switching between Pengaturan sections (tall → short Mini-Site → Data Usaha) keeps the exact same rail DOM node
+  //    mounted (no rail unmount/flicker) and shifts neither the rail nor the topbar search horizontally.
+  const railNav = page.getByRole("navigation", { name: "Menu pengaturan" })
+  const search = page.locator("[data-shell-search]")
+  const beforeRailX = (await rail.boundingBox())!.x
+  const beforeSearchX = (await search.boundingBox())!.x
+  await rail.evaluate((el) => { (el as unknown as { __gxSameRail?: boolean }).__gxSameRail = true })
+  await railNav.getByRole("link", { name: /Mini-Site/ }).click()
+  await expect(page.getByRole("heading", { name: "Mini-Site", level: 1 })).toBeVisible()
+  expect(await rail.evaluate((el) => (el as unknown as { __gxSameRail?: boolean }).__gxSameRail)).toBe(true)
+  expect(Math.abs((await rail.boundingBox())!.x - beforeRailX)).toBeLessThan(1)
+  expect(Math.abs((await search.boundingBox())!.x - beforeSearchX)).toBeLessThan(1)
+  await railNav.getByRole("link", { name: /Data Usaha/ }).click()
+  await expect(page.getByRole("heading", { name: "Data Usaha", level: 1 })).toBeVisible()
+  expect(await rail.evaluate((el) => (el as unknown as { __gxSameRail?: boolean }).__gxSameRail)).toBe(true)
+  expect(Math.abs((await rail.boundingBox())!.x - beforeRailX)).toBeLessThan(1)
 })
