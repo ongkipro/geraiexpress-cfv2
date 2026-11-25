@@ -35,6 +35,7 @@ test.describe("TASK-105 accounts", () => {
 
     await page.getByRole("button", { name: "Keluar" }).click()
     await page.getByRole("link", { name: "Lupa kata sandi?" }).click()
+    await expect(page.getByRole("heading", { name: "Atur Ulang Kata Sandi" })).toBeVisible()
     await page.getByLabel("Email").fill(email)
     await page.getByRole("button", { name: "Kirim Tautan" }).click()
     await expect(page.getByText("Jika email terdaftar")).toBeVisible()
