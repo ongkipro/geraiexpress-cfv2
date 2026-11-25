@@ -1,6 +1,7 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from "react"
-import { createRootRoute, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router"
+import { lazy, Suspense, useEffect, type ComponentType, type ReactNode } from "react"
+import { createRootRoute, createRoute, createRouter, Link, Outlet, redirect, type ErrorComponentProps } from "@tanstack/react-router"
 import { api, ApiError } from "./lib/api"
+import { isChunkLoadError, recoverFromChunkError } from "./lib/chunk-recovery"
 import { AppShell } from "./shell/app-shell"
 import { ErrorState, Forbidden } from "./shell/states"
 import { useWorkspace, WorkspaceContext, type Workspace } from "./shell/workspace"
@@ -12,12 +13,35 @@ import { MasukPage } from "./routes/masuk/page"
 import { PengaturanIndexPage, SettingsShell } from "./routes/pengaturan/index/shared"
 
 // Route-level code splitting with intent preloading: hovering a menu item loads its JS chunk before click so route
-// transitions never flash a fallback skeleton on fast connections.
+// transitions never flash a fallback skeleton on fast connections. Failed imports clear their cached promise so
+// transient network glitches recover cleanly, and stale chunks after a new deploy auto-reload once on render.
 type LazyPageComponent = (() => ReactNode) & { preload: () => Promise<void> }
-function lazyPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K): LazyPageComponent {
+function makeLazyLoader<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
   let promise: Promise<{ default: ComponentType }> | null = null
-  const load = () => (promise ??= loader().then((m) => ({ default: m[key] })))
-  const Comp = lazy<ComponentType>(load)
+  const load = (recoverOnStale: boolean): Promise<{ default: ComponentType }> => {
+    if (!promise) {
+      promise = loader()
+        .then((m) => ({ default: m[key] }))
+        .catch((err) => {
+          promise = null
+          if (recoverOnStale && isChunkLoadError(err) && recoverFromChunkError()) {
+            return new Promise<never>(() => {})
+          }
+          throw err
+        })
+    }
+    return promise
+  }
+  return {
+    Comp: lazy<ComponentType>(() => load(true)),
+    // Intent preload (hover/route loader) must never blow up the current screen on a stale chunk or transient blip;
+    // actual navigation renders `Comp`, which retries or reloads cleanly into the new bundle.
+    preload: () => load(false).then(() => undefined, () => undefined),
+  }
+}
+
+function lazyPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K): LazyPageComponent {
+  const { Comp, preload } = makeLazyLoader(loader, key)
   const LazyRoute = function LazyRoute() {
     return (
       <Suspense fallback={<div className="flex flex-col gap-3" aria-busy="true" aria-label="Memuat halaman"><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div>}>
@@ -25,19 +49,17 @@ function lazyPage<K extends string>(loader: () => Promise<Record<K, ComponentTyp
       </Suspense>
     )
   } as LazyPageComponent
-  LazyRoute.preload = () => load().then(() => undefined)
+  LazyRoute.preload = preload
   return LazyRoute
 }
 
 /** Lazy page rendered inside SettingsShell's scoped Suspense (keeps the left rail mounted while only the body loads). */
 function lazySettingsPage<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K): LazyPageComponent {
-  let promise: Promise<{ default: ComponentType }> | null = null
-  const load = () => (promise ??= loader().then((m) => ({ default: m[key] })))
-  const Comp = lazy<ComponentType>(load)
+  const { Comp, preload } = makeLazyLoader(loader, key)
   const LazyRoute = function LazySettingsRoute() {
     return <Comp />
   } as LazyPageComponent
-  LazyRoute.preload = () => load().then(() => undefined)
+  LazyRoute.preload = preload
   return LazyRoute
 }
 
@@ -132,13 +154,43 @@ const workspaceRoute = createRoute({
   },
 })
 
-function WorkspaceError() {
+function WorkspaceError({ error }: ErrorComponentProps) {
+  const stale = isChunkLoadError(error)
+  useEffect(() => {
+    if (stale) recoverFromChunkError()
+  }, [stale])
   return (
     <main className="flex min-h-svh items-center justify-center p-4">
       <div className="flex w-full max-w-[440px] flex-col gap-3">
-        <ErrorState message="Ruang kerja tidak dapat dimuat. Periksa koneksi lalu coba lagi." onRetry={() => window.location.reload()} />
+        <ErrorState
+          message={
+            stale
+              ? "Aplikasi baru saja diperbarui. Muat ulang halaman untuk membuka versi terbaru."
+              : "Ruang kerja tidak dapat dimuat. Periksa koneksi lalu coba lagi."
+          }
+          onRetry={() => window.location.reload()}
+        />
       </div>
     </main>
+  )
+}
+
+function PageError({ error, reset }: ErrorComponentProps) {
+  const stale = isChunkLoadError(error)
+  useEffect(() => {
+    if (stale) recoverFromChunkError()
+  }, [stale])
+  return (
+    <div className="mx-auto max-w-lg py-6">
+      <ErrorState
+        message={
+          stale
+            ? "Aplikasi baru saja diperbarui. Muat ulang halaman untuk membuka versi terbaru."
+            : "Halaman ini gagal dimuat. Periksa koneksi lalu coba lagi."
+        }
+        onRetry={() => (stale ? window.location.reload() : reset())}
+      />
+    </div>
   )
 }
 
@@ -256,7 +308,12 @@ export const routeTree = rootRoute.addChildren([
   layarPelangganRoute,
 ])
 
-export const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadStaleTime: 30_000 })
+export const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+  defaultPreloadStaleTime: 30_000,
+  defaultErrorComponent: PageError,
+})
 
 declare module "@tanstack/react-router" {
   interface Register {

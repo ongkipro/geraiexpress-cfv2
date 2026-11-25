@@ -218,3 +218,53 @@ test("Pengaturan › Mengantar: sinkron otomatis aktif tanpa titik peringatan, s
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
 })
+
+test("Semua halaman ruang kerja terbuka tanpa error 'Ruang kerja tidak dapat dimuat' dan pulih otomatis jika chunk usang", async ({ page, context, request }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "full route sweep runs once on desktop")
+  const email = uniqueEmail("e2e-sweep")
+  const api = context.request
+  const h = { origin: APP, "content-type": "application/json" }
+  const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
+  const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Sweep", password: "sweep-e2e-kuat-1" } })
+  expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `sw${Date.now().toString(36)}`, name: "Gerai Sweep", connect: true } })).status()).toBe(201)
+
+  const pageErrors: string[] = []
+  page.on("pageerror", (e) => pageErrors.push(e.message))
+
+  const routes = [
+    "/",
+    "/kasir",
+    "/kasir/cek-cepat",
+    "/kasir/cek-resi",
+    "/kasir/multi",
+    "/kasir/shift",
+    "/kiriman",
+    "/kiriman/cetak-massal",
+    "/kiriman/massal",
+    "/kontak/pengirim",
+    "/kontak/penerima",
+    "/keuangan",
+    "/notifikasi",
+    "/akun",
+    "/bantuan",
+    "/status",
+    "/pengaturan/profil",
+    "/pengaturan/mini-site",
+    "/pengaturan/data-usaha",
+    "/pengaturan/ekspedisi",
+    "/pengaturan/printer",
+    "/pengaturan/label-privasi",
+    "/pengaturan/packing",
+    "/pengaturan/anggota",
+    "/pengaturan/mengantar",
+    "/pengaturan/api-mcp",
+  ]
+  for (const r of routes) {
+    await page.goto(`${APP}${r}`, { waitUntil: "domcontentloaded" })
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText("Ruang kerja tidak dapat dimuat")).toHaveCount(0)
+    await expect(page.getByText("Halaman ini gagal dimuat")).toHaveCount(0)
+  }
+  expect(pageErrors).toEqual([])
+})
