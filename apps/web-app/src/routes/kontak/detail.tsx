@@ -162,7 +162,11 @@ function ContactHistorySection({
               <EmptyState
                 title={kind === "sender" ? "Belum ada riwayat pengiriman" : "Belum ada riwayat penerimaan"}
                 body="Kiriman yang sudah diterbitkan atau diproses untuk kontak ini akan muncul di sini lengkap dengan checkpoint terbarunya."
-                action={<LinkButton to="/kasir"><PlusIcon aria-hidden data-icon="inline-start" /> Buat Pengiriman</LinkButton>}
+                action={
+                  <LinkButton to="/kasir" search={(kind === "sender" ? { pengirim: id } : { penerima: id }) as never}>
+                    <PlusIcon aria-hidden data-icon="inline-start" /> Buat Pengiriman
+                  </LinkButton>
+                }
               />
             }
             footer={
@@ -358,7 +362,7 @@ export function PengirimDetailPage() {
         <Button variant="outline" onClick={() => setEditing(true)}>
           <PencilIcon aria-hidden /> Ubah Data
         </Button>
-        <LinkButton to="/kasir">
+        <LinkButton to="/kasir" search={{ pengirim: sender.id } as never}>
           <PlusIcon aria-hidden data-icon="inline-start" /> Buat Kiriman
         </LinkButton>
       </PageTitle>
@@ -509,7 +513,7 @@ export function PenerimaDetailPage() {
         <Button variant="outline" onClick={() => setEditing(true)}>
           <PencilIcon aria-hidden /> Ubah Data
         </Button>
-        <LinkButton to="/kasir">
+        <LinkButton to="/kasir" search={{ penerima: recipient.id } as never}>
           <PlusIcon aria-hidden data-icon="inline-start" /> Buat Kiriman
         </LinkButton>
       </PageTitle>

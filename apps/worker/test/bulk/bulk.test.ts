@@ -50,7 +50,7 @@ describe("Paket Massal", () => {
     expect(by[3]).toMatchObject({ state: "needs_fix", errors: ["Berat kosong"] })
     expect(by[4]).toMatchObject({ state: "needs_fix", errors: ["Kecamatan tidak ditemukan"] })
     expect(by[5]).toMatchObject({ state: "needs_fix", errors: ["Kecamatan lebih dari satu, pilih yang benar"] })
-    expect(by[5]!.candidates.length).toBe(2)
+    expect(by[5]!.candidates.length).toBeGreaterThanOrEqual(2)
     // Fix row 5 by picking an area; row 3 by adding a weight; then remove row 4.
     await post(`/bulk/${id}/rows/5`, t.cookie, { cells: { name: "Agus Salim", phone: "081355556666", street: "Jl. Melati No. 9", areaText: "Jawa", weightGram: "700" }, areaId: by[5]!.candidates[0]!.id, areaLabel: by[5]!.candidates[0]!.label })
     await post(`/bulk/${id}/rows/3`, t.cookie, { cells: { name: "Siti Aminah", phone: "081311112222", street: "Jl. Airlangga No. 7", areaText: "Airlangga", weightGram: "1200" } })

@@ -39,4 +39,13 @@ test("Kontak: tambah pengirim reseller, verifikasi WA, tambah penerima", async (
   await page.getByRole("button", { name: "Simpan" }).click()
   await expect(page.getByRole("cell", { name: /085712348821/ })).toBeVisible()
   await expect(page.getByText("Riwayat baru").first()).toBeVisible()
+
+  // Open recipient detail (full unmasked phone visible) → 1-click Buat Kiriman prefills recipient in Kasir.
+  await page.getByRole("link", { name: "Rina Kartika" }).first().click()
+  await expect(page).toHaveURL(/\/kontak\/penerima\/.+/)
+  await expect(page.getByText("No. HP: 085712348821")).toBeVisible()
+  await page.getByRole("link", { name: "Buat Kiriman" }).click()
+  await expect(page).toHaveURL(/\/kasir\?penerima=/)
+  await expect(page.getByText("Rina Kartika", { exact: true })).toBeVisible()
+  await expect(page.getByText(/085712348821 · Dago, Coblong/)).toBeVisible()
 })

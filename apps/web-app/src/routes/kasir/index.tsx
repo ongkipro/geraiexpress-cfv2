@@ -366,6 +366,33 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       alive = false
     }
   }, [claim])
+  // One-click prefill from Contact Detail (`/kontak/pengirim/$id` or `/kontak/penerima/$id` → `/kasir?pengirim=...&penerima=...`).
+  const prefillSenderId = !claim ? q("pengirim") : undefined
+  const prefillRecipientId = !claim ? q("penerima") : undefined
+  useEffect(() => {
+    if (!prefillSenderId && !prefillRecipientId) return
+    let alive = true
+    if (prefillSenderId) {
+      api<{ item: Contact }>(`/contacts/senders/${encodeURIComponent(prefillSenderId)}`)
+        .then((s) => {
+          if (alive) setSender((cur) => cur ?? s.item)
+        })
+        .catch(() => undefined)
+    }
+    if (prefillRecipientId) {
+      api<{ item: Contact }>(`/contacts/recipients/${encodeURIComponent(prefillRecipientId)}`)
+        .then((r) => {
+          if (alive) {
+            setAreaOnly(false)
+            setRecipient((cur) => cur ?? r.item)
+          }
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      alive = false
+    }
+  }, [prefillSenderId, prefillRecipientId])
   // The chosen recipient's Mengantar area is the quote destination: no second district entry, no area mismatch.
   const recipientArea = (recipient as Recipient | null)?.mengantar_area_id ?? null
   // Choosing another recipient (or `Ganti`) never keeps the previous recipient's district and rates: a recipient without

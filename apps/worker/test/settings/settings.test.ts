@@ -64,7 +64,7 @@ describe("Pengaturan", () => {
     const long = await post("/settings/receipt", t.cookie, { defaultLabelFormat: "label_10x10", unboxingRemark: "x".repeat(51) })
     expect(((await long.json()) as { error: { field_errors: Record<string, string> } }).error.field_errors.unboxingRemark).toBe("Maksimal 50 karakter.")
     await post("/settings/receipt", t.cookie, { defaultLabelFormat: "label_10x10", unboxingRemark: "", showCommission: true })
-    expect(((await (await appGet("/print/settings", t.cookie)).json()) as { data: { format: string; remark: string } }).data).toEqual({ format: "label_10x10", remark: "" })
+    expect(((await (await appGet("/print/settings", t.cookie)).json()) as { data: { format: string; remark: string; logoUrl: string | null } }).data).toEqual({ format: "label_10x10", remark: "", logoUrl: null })
     const fee = await post("/settings/packing", t.cookie, { items: [{ name: "Kardus", priceIdr: 5000 }], serviceFeeEnabled: true, serviceFeeIdr: 500 })
     expect(((await fee.json()) as { error: { field_errors: Record<string, string> } }).error.field_errors.serviceFeeIdr).toBe("Biaya layanan Rp1.000–Rp200.000.")
     const ok = (await (await post("/settings/packing", t.cookie, { items: [{ name: "Kardus", priceIdr: 5000 }, { name: "Bubble", priceIdr: 3000, active: false }], serviceFeeEnabled: true, serviceFeeIdr: 2000 })).json()) as { data: { packing: { items: Array<{ name: string; active: boolean }>; serviceFeeIdr: number } } }
