@@ -69,6 +69,7 @@ export function labelDataFrom(s: Row, opts: { quote: Row | null; lastPayment: Ro
   const instruction = typeof s.delivery_instruction === "string" && s.delivery_instruction.trim() ? s.delivery_instruction.trim() : null
   return {
     inv: slug,
+    courierCode: String(s.courier_code ?? ""),
     courierName: courierNames[String(s.courier_code)] ?? String(s.courier_code),
     serviceName: serviceNames[svcCode] ?? svcCode.replace(/Cargo$/, " Cargo"),
     awb: s.awb_number,

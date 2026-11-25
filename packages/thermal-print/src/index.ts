@@ -1,5 +1,6 @@
 export * from "./model"
 export * from "./code128"
+export * from "./courier-marks"
 export * from "./pdf"
 export * from "./label"
 export * from "./roll58"

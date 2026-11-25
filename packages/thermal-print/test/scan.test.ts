@@ -29,9 +29,11 @@ describe.skipIf(!hasGs || !existsSync(py))("print scan (Ghostscript 203 dpi + zx
     writeFileSync(pdf, labelsPdf([d], format))
     execFileSync("gs", ["-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pnggray", "-r203", `-sOutputFile=${png}`, pdf])
     const decoded = JSON.parse(execFileSync(py, ["-c", "import sys,json,zxingcpp;from PIL import Image;print(json.dumps([[r.format.name,r.text] for r in zxingcpp.read_barcodes(Image.open(sys.argv[1]))]))", png]).toString()) as Array<[string, string]>
-    expect(decoded.find(([f]) => f === "Code128")?.[1]).toBe(d.awb)
+    const codes = decoded.filter(([f]) => f === "Code128").map(([, t]) => t)
+    expect(codes).toContain(d.awb)
+    expect(codes).toContain(d.inv.toUpperCase())
     const qrs = decoded.filter(([f]) => f === "QRCode").map(([, t]) => t)
-    expect(qrs.length).toBeGreaterThanOrEqual(1)
+    if (format !== "label_10x10") expect(qrs.length).toBeGreaterThanOrEqual(1)
     for (const t of qrs) expect(t).toBe(`https://${d.trackingUrl}`)
   })
 })

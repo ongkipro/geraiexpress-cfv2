@@ -71,14 +71,26 @@ describe("100 mm PDFs (DEC-224)", () => {
     expect(b.left).toBeGreaterThanOrEqual(QUIET_ZONE_MM)
   })
 
-  it("sorting pill text always fits inside the pill (long subdistrict fallback shrinks, never clips)", () => {
+  it("destination banner text always fits inside the banner (long subdistrict fallback shrinks, never clips)", () => {
     for (const fallback of ["COBLONG 40132", "TANJUNG PRIOK 14310", "BDO-CBL02"]) {
-      const page = labelPage({ ...nonCodStandard, sortingCode: null, destinationFallback: fallback }, "label_10x10")
-      const pill = page.ops.find((o) => o.kind === "rect" && o.h === 12) as { x: number; w: number }
-      const t = page.ops.find((o) => o.kind === "text" && o.text === fallback) as { size: number; x: number }
-      expect(textWidthMm(fallback, t.size, "B")).toBeLessThanOrEqual(pill.w - 2)
-      expect(t.size).toBeGreaterThanOrEqual(10)
+      const page = labelPage({ ...nonCodStandard, sortingCode: null, destinationFallback: fallback, destinationLine: fallback }, "label_10x10")
+      const banner = page.ops.find((o) => o.kind === "rect" && o.w === 94 && o.h >= 6.5) as { x: number; w: number }
+      const t = page.ops.find((o) => o.kind === "text" && o.text.includes(fallback)) as { text: string; size: number; x: number }
+      expect(banner).toBeTruthy()
+      expect(t).toBeTruthy()
+      expect(textWidthMm(t.text, t.size, "B")).toBeLessThanOrEqual(banner.w - 3)
+      expect(t.size).toBeGreaterThanOrEqual(6.5)
     }
+  })
+
+  it("renders monochrome vector courier logo and gerai headline brand cleanly in SVG and PDF", () => {
+    const svg = labelSvg({ ...nonCodStandard, courierCode: "JNE" }, "label_10x15_with_stub")
+    expect(svg).toContain("<path d=")
+    expect(svg).toContain("BERKAH JAYA")
+    expect(svg).toContain("NON-COD")
+    const pdf = new TextDecoder("latin1").decode(labelsPdf([{ ...nonCodStandard, courierCode: "JNE" }], "label_10x15_with_stub"))
+    expect(pdf).toContain("BERKAH JAYA")
+    expect(pdf).toContain(" cm\n")
   })
 
   it("Code 128: start B, weighted mod-103 checksum, stop; digit runs use subset C", () => {
@@ -94,12 +106,13 @@ describe("100 mm PDFs (DEC-224)", () => {
     const text = new TextDecoder("latin1").decode(labelsPdf([codDropship], "label_10x15_with_stub"))
     expect(text).toContain("TOKO HIJAB NISA")
     expect(text).not.toContain("Berkah Jaya")
+    expect(text).not.toContain("BERKAH JAYA")
     expect(text).toContain("0857****8821")
     expect(text).toContain("INV 8K4M2P7")
-    expect(text).toContain("COD \\267 TAGIH PENERIMA Rp 167.560")
+    expect(text).toContain("COD : Rp 167.560")
   })
 
-  it("expedition metadata: huge COD auto-fits inside its banner, KARGO/DG badges and courier note stay within 97 mm", () => {
+  it("expedition metadata: huge COD auto-fits inside headline, KARGO/DG badges and courier note stay within 97 mm", () => {
     const heavy = {
       ...codDropship,
       serviceName: "JTR",
@@ -115,9 +128,9 @@ describe("100 mm PDFs (DEC-224)", () => {
       expect(allTexts.some((t) => t.text === "KARGO"), fmt).toBe(true)
       expect(allTexts.some((t) => t.text === "DG"), fmt).toBe(true)
       expect(allTexts.some((t) => t.text.includes("Titip pos satpam")), fmt).toBe(true)
-      const codText = allTexts.find((t) => t.text.startsWith("COD · TAGIH PENERIMA"))!
-      const codBox = page.ops.find((o) => o.kind === "rect" && Math.abs(o.h - 6.4) < 0.05) as { x: number; w: number }
-      expect(textWidthMm(codText.text, codText.size, "B")).toBeLessThanOrEqual(codBox.w - 3)
+      const codText = allTexts.find((t) => t.text.startsWith("COD : "))!
+      expect(codText).toBeTruthy()
+      expect(textWidthMm(codText.text, codText.size, "B")).toBeLessThanOrEqual(45.5)
       // Every left/right/center text stays inside [3, 97] mm safe printable margins.
       for (const t of allTexts) {
         const w = textWidthMm(t.text, t.size, t.font)

@@ -934,9 +934,12 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
 
   r("GET", "/print/settings", "app_member", "role", async (c) => {
     const m = c.get("membership")!
-    const r = await vaultFor(c.env, m.tenantId).printSettings(m.tenantId)
+    const vault = vaultFor(c.env, m.tenantId)
+    const [r, s] = await Promise.all([vault.printSettings(m.tenantId), vault.settingsView(m.tenantId)])
     if (!r.ok) return vaultErr(r)
-    return ok(r.value)
+    const logoId = s.ok ? s.value.profile?.logoMediaId ?? null : null
+    const logoUrl = logoId ? await signMediaUrl(c.env.KEK_SECRET, m.tenantId, logoId, now()) : null
+    return ok({ ...r.value, logoUrl })
   })
   r("POST", "/print", "app_member", "role", async (c) => {
     const m = c.get("membership")!
@@ -944,9 +947,34 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const slugs = Array.isArray(b.slugs) ? [...new Set((b.slugs as unknown[]).filter((x): x is string => typeof x === "string" && /^[0-9a-hjkmnp-tv-z]{7}$/.test(x)))] : []
     const format = (FORMATS as readonly string[]).includes(String(b.format)) ? (b.format as (typeof FORMATS)[number]) : "label_10x15_with_stub"
     const preview = b.preview === true
-    const r = await vaultFor(c.env, m.tenantId).preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: await trackingHost(c), record: !preview && !isDemoTenantSlug(m.tenantSlug) })
+    const vault = vaultFor(c.env, m.tenantId)
+    const r = await vault.preparePrint(m.tenantId, { slugs, reason: typeof b.reason === "string" ? b.reason : undefined, actorId: c.get("session").user.id, trackingHost: await trackingHost(c), record: !preview && !isDemoTenantSlug(m.tenantSlug) })
     if (!r.ok) return vaultErr(r)
     if (r.value.items.length === 0) throw new AppError(409, r.value.refused[0]?.code ?? "NOTHING_TO_PRINT", r.value.refused[0]?.message ?? "Tidak ada label yang bisa dicetak.")
+    // Attach uploaded outlet logo (when present and non-dropship) so both SVG preview and 100 mm PDF show the gerai mark.
+    if (format !== "roll_58mm" && r.value.items.some((it) => it.outlet !== null)) {
+      const logoRef = await vault.minisiteLogo(m.tenantId).catch(() => null)
+      if (logoRef?.ok && logoRef.value) {
+        const obj = await c.env.BUCKET.get(logoRef.value.key).catch(() => null)
+        if (obj) {
+          const bytes = new Uint8Array(await obj.arrayBuffer())
+          const ct = logoRef.value.contentType
+          const isJpeg = ct === "image/jpeg" || ct === "image/jpg"
+          let dataUrl: string | null = null
+          if (b.as === "svg") {
+            let bin = ""
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+            dataUrl = `data:${ct};base64,${btoa(bin)}`
+          }
+          for (const it of r.value.items) {
+            if (it.outlet) {
+              if (dataUrl) it.outlet.logoDataUrl = dataUrl
+              if (isJpeg) it.outlet.logoJpeg = bytes
+            }
+          }
+        }
+      }
+    }
     if (format === "roll_58mm") {
       if (b.as === "text") return ok({ lines: r.value.items.map((d) => rollText(d)), styled: r.value.items.map((d) => rollLines(d)), refused: r.value.refused })
       const bytes = new Uint8Array(r.value.items.flatMap((d) => [...escposBytes(rollLines(d), b.density === "tebal" ? "tebal" : "normal")]))

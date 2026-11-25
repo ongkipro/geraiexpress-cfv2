@@ -1,10 +1,16 @@
-// 100 mm thermal stickers (DEC-224, visual 04 §3): exact-size 1-bit monochrome vector PDFs built for 203 dpi
-// direct-thermal heads. Barcode band keeps >= 3 mm quiet zones with zero vertical borders; triage band gives
-// couriers 0.5-second sorting + COD/NON-COD contrast; recipient/sender/detail hierarchy fits every field without clipping.
+// 100 mm thermal stickers (DEC-224, visual 04 §3): clean 1-bit monochrome vector PDFs & SVG previews built for
+// 203 dpi direct-thermal heads. Inspired by industrial Indonesian courier shipping labels:
+//   1. Headline: Gerai logo/monogram + Gerai name (left) | bold COD amount or NON-COD hero (right)
+//   2. Courier vector mark (left) + borderless Code 128 AWB barcode (right, >= 3 mm quiet zones, zero clutter)
+//   3. Service pill + weight + optional KARGO/DG badges + INV code
+//   4. Full-width solid black DESTINASI bar (+ outlined COD notice bar when COD)
+//   5. Airy 2-column Dari: (left) | Kepada: (right) with zero redundant boxes or vertical dividers
+//   6. ISI PAKET + CATATAN lines + bottom horizontal Order ID / INV barcode (no messy QR overlapping parcel text)
 import { encode } from "uqr"
 import { code128Modules, totalModules } from "./code128"
+import { COURIER_MARKS, courierMarkKey } from "./courier-marks"
 import { PdfPage, renderPdf, renderSvg, textWidthMm, wrapMm } from "./pdf"
-import { FORMAT_SIZE_MM, grams, groupAwb, idr, kg, type LabelData, type LabelFormat } from "./model"
+import { FORMAT_SIZE_MM, groupAwb, idr, kg, type LabelData, type LabelFormat } from "./model"
 
 export const QUIET_ZONE_MM = 3
 export const BAR_HEIGHT_MM = 15
@@ -57,222 +63,247 @@ function fitSize(text: string, maxMm: number, maxPt: number, minPt: number, font
   return pt
 }
 
-/** The parcel block (header, borderless barcode, triage, recipient, sender); returns the y after sender divider. */
-function parcelBlock(p: PdfPage, d: LabelData, roomy: boolean): number {
-  // --- 1. Header bar: Courier solid badge + Service outlined pill + optional KARGO / DG + print stamp ---
-  const stamp = `Cetak ${d.printedAt}`
-  const stampW = textWidthMm(stamp, 6.8, "R")
-  const maxLeft = IW - stampW - 2
+function monogramOf(name: string): string {
+  const words = name.trim().split(/[^A-Za-z0-9]+/).filter(Boolean)
+  const raw = words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? "GE").slice(0, 2)
+  return raw.toUpperCase() || "GE"
+}
 
-  const courier = d.courierName.toUpperCase()
-  const cSize = fitSize(courier, 38, 9.5, 7.5, "B")
-  const cW = Math.min(42, textWidthMm(courier, cSize, "B") + 4.4)
-  p.rect(PAD, 2.8, cW, 5.8)
-  p.text(PAD + cW / 2, 2.8 + 3.0 + cSize * 0.13, cSize, courier, { font: "B", white: true, align: "center" })
+/**
+ * Main parcel sticker layout.
+ * - `roomy = false`: fits cleanly inside 0..98.5 mm (used by `10×10` and the top sticker of `10×15 · Paket + Bukti`).
+ * - `roomy = true`: spacious 0..147 mm layout (`10×15 · Paket saja`) with larger text, generous breathing room, and
+ *   isolated bottom-right tracking QR.
+ */
+function parcelSticker(p: PdfPage, d: LabelData, roomy: boolean): void {
+  // === 1. HEADLINE: Gerai Brand (left) + COD / NON-COD Hero (right) ===
+  const rightMaxW = 45
+  const heroText = d.cod ? `COD : ${idr(d.cod.collectIdr)}` : "NON-COD"
+  const heroSize = fitSize(heroText, rightMaxW, roomy ? 15 : 14, 9.5, "B")
+  const heroW = textWidthMm(heroText, heroSize, "B")
+  p.text(W - PAD, roomy ? 8.8 : 8.2, heroSize, heroText, { font: "B", align: "right" })
+  p.text(W - PAD, roomy ? 12.2 : 11.4, 6.0, `Cetak ${d.printedAt}`, { align: "right" })
 
-  let bx = PAD + cW + 1.6
-  const svc = d.serviceName.toUpperCase()
-  const svcSize = fitSize(svc, Math.max(12, PAD + maxLeft - bx - 3), 7.5, 6.2, "B")
-  const svcW = textWidthMm(svc, svcSize, "B") + 3.2
-  if (bx + svcW <= PAD + maxLeft) {
-    p.strokeRect(bx, 3.0, svcW, 5.4, 0.35)
-    p.text(bx + svcW / 2, 3.0 + 2.8 + svcSize * 0.13, svcSize, svc, { font: "B", align: "center" })
-    bx += svcW + 1.4
-  }
-  if (d.isCargo && !/KARGO|CARGO/.test(svc)) {
-    const kw = textWidthMm("KARGO", 6.5, "B") + 2.8
-    if (bx + kw <= PAD + maxLeft) {
-      p.rect(bx, 3.0, kw, 5.4)
-      p.text(bx + kw / 2, 6.6, 6.5, "KARGO", { font: "B", white: true, align: "center" })
-      bx += kw + 1.4
+  const leftMaxW = Math.max(36, IW - Math.max(heroW, 24) - 3.5)
+  const brandName = (d.outlet?.name ?? d.sender.name).trim() || "Gerai Pengiriman"
+  const hasLogoImg = Boolean(d.outlet && (d.outlet.logoDataUrl || d.outlet.logoJpeg))
+
+  if (d.outlet) {
+    const logoSize = roomy ? 9.0 : 8.2
+    const logoY = roomy ? 3.2 : 2.9
+    if (hasLogoImg) {
+      p.image(PAD, logoY, logoSize, logoSize, { dataUrl: d.outlet.logoDataUrl, jpeg: d.outlet.logoJpeg })
+    } else {
+      // Crisp 1-bit monochrome gerai monogram badge when no image logo is uploaded.
+      p.rect(PAD, logoY, logoSize, logoSize)
+      p.text(PAD + logoSize / 2, logoY + logoSize / 2 + 1.35, 9.5, monogramOf(brandName), { font: "B", white: true, align: "center" })
     }
+    const textX = PAD + logoSize + 2.0
+    const availW = Math.max(24, leftMaxW - logoSize - 2.0)
+    const eyebrow = d.outlet.whatsapp ? `WA ${d.outlet.whatsapp}` : "PENGIRIMAN GERAI"
+    p.text(textX, logoY + 2.6, 5.6, clampText(eyebrow, availW, 5.6, "B"), { font: "B" })
+    const nameSize = fitSize(brandName.toUpperCase(), availW, roomy ? 10.5 : 9.8, 7.2, "B")
+    p.text(textX, logoY + 7.2, nameSize, clampText(brandName.toUpperCase(), availW, nameSize, "B"), { font: "B" })
+  } else {
+    // Dropship mode: never leak outlet branding; show the reseller store cleanly.
+    p.text(PAD, 5.6, 5.6, "PENGIRIMAN TOKO", { font: "B" })
+    const nameSize = fitSize(brandName.toUpperCase(), leftMaxW, roomy ? 10.5 : 9.8, 7.2, "B")
+    p.text(PAD, 10.1, nameSize, clampText(brandName.toUpperCase(), leftMaxW, nameSize, "B"), { font: "B" })
+  }
+
+  let y = roomy ? 13.8 : 12.8
+  hline(p, y, 0.35)
+
+  // === 2. COURIER VECTOR LOGO (left) + BORDERLESS AWB BARCODE (right) ===
+  // Zero `rect` shapes share the barcode's vertical band — logo is drawn as pure vector `path` ops.
+  const bandTop = y + (roomy ? 1.8 : 1.3)
+  const markKey = courierMarkKey(d.courierCode) ?? courierMarkKey(d.courierName)
+  const mark = markKey ? COURIER_MARKS[markKey] : null
+  const logoW = 26
+  const logoH = roomy ? 13.5 : 12.0
+  if (mark) {
+    p.vector(PAD, bandTop + 1.8, logoW, logoH, mark)
+  } else {
+    const cName = d.courierName.toUpperCase()
+    const cPt = fitSize(cName, logoW, 11.5, 7.5, "B")
+    p.text(PAD, bandTop + 10.5, cPt, clampText(cName, logoW, cPt, "B"), { font: "B" })
+  }
+
+  const barX0 = 32
+  const barBandW = W - barX0 // 68 mm (keeps >= 3 mm quiet zone on both left & right)
+  p.text(barX0 + barBandW / 2, bandTop + 2.2, 6.2, "Nomor Resi", { font: "B", align: "center" })
+  const barY = bandTop + 3.0
+  const barH = roomy ? 16.5 : 14.5
+  drawBarcode(p, d.awb, barX0, barY, barBandW, barH)
+  const awbTextY = barY + barH + 3.5
+  p.text(barX0 + barBandW / 2, awbTextY, roomy ? 10.5 : 9.8, groupAwb(d.awb), { font: "M", align: "center" })
+
+  // === 3. SERVICE PILL + WEIGHT + BADGES (clean strip completely below barcode band) ===
+  y = awbTextY + (roomy ? 2.4 : 1.7)
+  let bx = PAD
+  const svc = d.serviceName.toUpperCase()
+  const svcSize = fitSize(svc, 28, 7.6, 6.2, "B")
+  const svcW = Math.min(30, textWidthMm(svc, svcSize, "B") + 4.0)
+  const pillH = roomy ? 5.2 : 4.6
+  p.rect(bx, y, svcW, pillH)
+  p.text(bx + svcW / 2, y + pillH / 2 + svcSize * 0.13, svcSize, svc, { font: "B", white: true, align: "center" })
+  bx += svcW + 1.8
+
+  if (d.isCargo && !/KARGO|CARGO/.test(svc)) {
+    const kw = textWidthMm("KARGO", 6.5, "B") + 3.0
+    p.rect(bx, y, kw, pillH)
+    p.text(bx + kw / 2, y + pillH / 2 + 0.85, 6.5, "KARGO", { font: "B", white: true, align: "center" })
+    bx += kw + 1.6
   }
   if (d.isDangerousGoods) {
-    const dw = textWidthMm("DG", 6.5, "B") + 2.8
-    if (bx + dw <= PAD + maxLeft) {
-      p.strokeRect(bx, 3.0, dw, 5.4, 0.5)
-      p.text(bx + dw / 2, 6.6, 6.5, "DG", { font: "B", align: "center" })
-    }
+    const dw = textWidthMm("DG", 6.5, "B") + 3.0
+    p.strokeRect(bx, y, dw, pillH, 0.45)
+    p.text(bx + dw / 2, y + pillH / 2 + 0.85, 6.5, "DG", { font: "B", align: "center" })
+    bx += dw + 1.6
   }
-  p.text(W - PAD, 6.9, 6.8, stamp, { align: "right" })
 
-  let y = 9.8
-  hline(p, y, 0.5)
+  const invTag = `INV ${d.inv.toUpperCase()}`
+  const invW = textWidthMm(invTag, 7.5, "B")
+  p.text(W - PAD, y + pillH / 2 + 0.95, 7.5, invTag, { font: "B", align: "right" })
 
-  // --- 2. Borderless Barcode band (zero left/right borders; >= 3 mm quiet zone enforced in drawBarcode) ---
-  y += 1.8
-  const barH = roomy ? 17 : BAR_HEIGHT_MM
-  drawBarcode(p, d.awb, 0, y, W, barH)
-  y += barH + 4.3
-  p.text(W / 2, y, roomy ? 13 : 12, groupAwb(d.awb), { font: "M", align: "center" })
-  y += 1.9
-  hline(p, y, 0.45)
-  y += 2.0
+  const weightMeta = `${d.courierName.toUpperCase()} · Berat: ${kg(d.billableWeightGram)}`
+  const metaAvail = Math.max(18, W - PAD - invW - 2.5 - bx)
+  const metaText = textWidthMm(weightMeta, 7.2, "B") <= metaAvail ? weightMeta : `Berat: ${kg(d.billableWeightGram)}`
+  p.text(bx, y + pillH / 2 + 0.95, 7.2, clampText(metaText, metaAvail, 7.2, "B"), { font: "B" })
 
-  // --- 3. 0.5-second Courier Triage Band: Sorting Pill (12 mm high) + Destination + COD / NON-COD ---
-  const pill = d.sortingCode ?? d.destinationFallback
-  let pillSize = 16
-  while (pillSize > 10 && textWidthMm(pill, pillSize, "B") + 6 > 44) pillSize -= 1
-  const pillW = Math.min(44, Math.max(30, textWidthMm(pill, pillSize, "B") + 6))
-  p.rect(PAD, y, pillW, 12)
-  p.text(PAD + pillW / 2, y + 6 + pillSize * 0.13, pillSize, pill, { font: "B", white: true, align: "center" })
-
-  const rx = PAD + pillW + 2.8
-  const rw = W - PAD - rx
-  const dest = wrapMm(d.destinationLine, rw, 7.3, "B", 2)
-  for (const [i, line] of dest.entries()) p.text(rx, y + 3.0 + i * 3.1, 7.3, line, { font: "B" })
+  // === 4. FULL-WIDTH DESTINATION TRIAGE BAR (+ COD NOTICE BAR) ===
+  y += pillH + (roomy ? 2.2 : 1.6)
+  const destH = roomy ? 8.2 : 7.0
+  const destBase = d.destinationLine.trim()
+  const destLabel =
+    d.sortingCode && destBase && !destBase.toUpperCase().includes(d.sortingCode.toUpperCase())
+      ? `DESTINASI : ${destBase} (${d.sortingCode})`
+      : `DESTINASI : ${destBase || d.sortingCode || d.destinationFallback}`
+  const destPt = fitSize(destLabel, IW - 5, roomy ? 10.2 : 9.2, 6.6, "B")
+  p.rect(PAD, y, IW, destH)
+  p.text(W / 2, y + destH / 2 + destPt * 0.13, destPt, clampText(destLabel, IW - 4, destPt, "B"), { font: "B", white: true, align: "center" })
+  y += destH
 
   if (d.cod) {
-    const by = y + dest.length * 3.1 + 1.2
-    const codText = `COD · TAGIH PENERIMA ${idr(d.cod.collectIdr)}`
-    const codSize = fitSize(codText, rw - 3.6, 8.2, 6.0, "B")
-    p.rect(rx, by, rw, 6.4)
-    p.text(rx + rw / 2, by + 3.3 + codSize * 0.13, codSize, codText, { font: "B", white: true, align: "center" })
-    const noteY = Math.max(y + 12.2, by + 6.4) + 2.8
-    p.text(rx, noteY, 6.6, clampText("Dilarang buka paket sebelum bayar ke kurir", rw, 6.6, "B"), { font: "B" })
-    y = noteY + 1.5
-  } else {
-    const by = y + Math.max(6.2, dest.length * 3.1 + 1.4)
-    const ncw = 23
-    p.strokeRect(rx, by, ncw, 5.4, 0.5)
-    p.text(rx + ncw / 2, by + 3.8, 8.5, "NON-COD", { font: "B", align: "center" })
-    y = Math.max(y + 13.0, by + 6.6)
+    y += 1.2
+    const noticeH = roomy ? 5.2 : 4.4
+    p.strokeRect(PAD, y, IW, noticeH, 0.35)
+    const noticeTxt = "Dilarang buka paket sebelum bayar kurir · Konfirmasi pengirim sebelum retur"
+    const noticePt = fitSize(noticeTxt, IW - 4, 6.6, 5.8, "B")
+    p.text(W / 2, y + noticeH / 2 + noticePt * 0.13, noticePt, noticeTxt, { font: "B", align: "center" })
+    y += noticeH
   }
-  hline(p, y, 0.45)
-  y += 2.0
 
-  // --- 4. PENERIMA Block: eyebrow tag + phone right-aligned, full-width bold name, street, bold area ---
-  p.strokeRect(PAD, y, 16.5, 3.8, 0.3)
-  p.text(PAD + 8.25, y + 2.8, 6.2, "PENERIMA", { font: "B", align: "center" })
-  p.text(W - PAD, y + 3.2, roomy ? 10 : 9.2, d.recipient.phone.slice(0, 26), { font: "B", align: "right" })
-  y += roomy ? 8.8 : 8.0
-  const rNameSize = roomy ? 12.5 : 11
-  p.text(PAD, y, rNameSize, clampText(d.recipient.name.toUpperCase(), IW, rNameSize, "B"), { font: "B" })
-  y += roomy ? 1.2 : 0.6
-  const streetSize = roomy ? 9 : 7.9
-  const streetLead = roomy ? 3.9 : 3.4
-  for (const line of wrapMm(d.recipient.street, IW, streetSize, "R", roomy ? 3 : 2)) {
-    y += streetLead
-    p.text(PAD, y, streetSize, line)
+  // === 5. CLEAN 2-COLUMN `Dari:` (left) & `Kepada:` (right) — ZERO BOXES, ZERO VERTICAL LINES ===
+  y += roomy ? 4.8 : 3.6
+  const leftW = 35
+  const rightX = PAD + leftW + 3.5 // 41.5 mm
+  const rightW = W - PAD - rightX // 55.5 mm
+  const leadS = roomy ? 3.8 : 3.2
+  const leadR = roomy ? 4.1 : 3.3
+
+  // Left column: Dari
+  let ly = y
+  p.text(PAD, ly, roomy ? 7.6 : 6.8, "Dari:")
+  const sNamePt = roomy ? 9.0 : 8.2
+  for (const line of wrapMm(d.sender.name, leftW, sNamePt, "B", 2)) {
+    ly += leadS
+    p.text(PAD, ly, sNamePt, line, { font: "B" })
+  }
+  if (d.sender.phone) {
+    ly += leadS
+    p.text(PAD, ly, roomy ? 8.0 : 7.2, clampText(d.sender.phone, leftW, roomy ? 8.0 : 7.2, "R"))
+  }
+  if (d.sender.area) {
+    for (const line of wrapMm(d.sender.area, leftW, roomy ? 7.6 : 6.8, "R", 2)) {
+      ly += leadS - 0.2
+      p.text(PAD, ly, roomy ? 7.6 : 6.8, line)
+    }
+  }
+
+  // Right column: Kepada
+  let ry = y
+  p.text(rightX, ry, roomy ? 7.6 : 6.8, "Kepada:")
+  const rNamePt = roomy ? 11.2 : 9.4
+  ry += roomy ? 4.6 : 3.7
+  p.text(rightX, ry, rNamePt, clampText(d.recipient.name.toUpperCase(), rightW, rNamePt, "B"), { font: "B" })
+  const rPhonePt = roomy ? 9.4 : 8.2
+  ry += roomy ? 4.0 : 3.3
+  p.text(rightX, ry, rPhonePt, clampText(d.recipient.phone, rightW, rPhonePt, "B"), { font: "B" })
+  const streetPt = roomy ? 8.4 : 7.3
+  const maxStreetLines = roomy ? 4 : d.cod ? 2 : 3
+  for (const line of wrapMm(d.recipient.street, rightW, streetPt, "R", maxStreetLines)) {
+    ry += leadR
+    p.text(rightX, ry, streetPt, line)
   }
   if (d.recipient.area) {
-    const areaSize = roomy ? 8.5 : 7.7
-    for (const line of wrapMm(d.recipient.area, IW, areaSize, "B", roomy ? 2 : 1)) {
-      y += roomy ? 3.8 : 3.3
-      p.text(PAD, y, areaSize, line, { font: "B" })
+    const areaPt = roomy ? 8.2 : 7.0
+    for (const line of wrapMm(d.recipient.area, rightW, areaPt, "B", 2)) {
+      ry += roomy ? leadR : 2.95
+      p.text(rightX, ry, areaPt, line, { font: "B" })
     }
   }
-  if (d.deliveryInstruction) {
-    const noteSize = roomy ? 7.8 : 7.0
-    for (const line of wrapMm(`Catatan kurir: ${d.deliveryInstruction}`, IW, noteSize, "B", roomy ? 2 : 1)) {
-      y += roomy ? 3.5 : 3.1
-      p.text(PAD, y, noteSize, line, { font: "B" })
-    }
-  }
-  y += 1.6
-  hline(p, y, 0.35)
-  y += 2.0
 
-  // --- 5. PENGIRIM Block: aligned micro-label + phone right-aligned, sender name + optional origin city ---
-  p.text(PAD, y + 2.6, 6.2, "PENGIRIM", { font: "B" })
-  if (d.sender.phone) p.text(W - PAD, y + 2.8, roomy ? 9 : 8.2, d.sender.phone.slice(0, 26), { font: "B", align: "right" })
-  y += roomy ? 6.8 : 6.0
-  const sNameSize = roomy ? 10 : 8.8
-  const senderLine = d.sender.area && !roomy ? `${d.sender.name} · ${d.sender.area}` : d.sender.name
-  p.text(PAD, y, sNameSize, clampText(senderLine, IW, sNameSize, "B"), { font: "B" })
-  if (roomy && d.sender.area) {
-    y += 3.6
-    p.text(PAD, y, 8.2, clampText(d.sender.area, IW, 8.2, "R"))
-  }
-  y += 1.5
+  // === 6. ISI PAKET + CATATAN (thin clean dividers) ===
+  y = Math.max(ly, ry) + (roomy ? 3.2 : 1.8)
+  const maxFooterTop = roomy ? 108 : 80.2
+  if (y > maxFooterTop) y = maxFooterTop
   hline(p, y, 0.3)
-  return y
-}
 
-/** Compact parcel footer for 10x10 and top half of 10x15+stub: fits cleanly above y = 97.5 mm. */
-function compactFooter(p: PdfPage, d: LabelData, y0: number) {
-  const qr = 14
-  const qrX = W - PAD - qr // 83 mm
-  const qrY = Math.min(y0 + 1.0, 79.4)
-  drawQr(p, `https://${d.trackingUrl}`, qrX, qrY, qr)
-  p.text(W - PAD, qrY + qr + 2.8, 7.0, `INV ${d.inv.toUpperCase()}`, { font: "B", align: "right" })
-
-  const textW = qrX - PAD - 2.2 // 77.8 mm
-  let y = y0 + 3.5
+  y += roomy ? 4.2 : 3.4
   const qty = d.quantity && d.quantity > 1 && !/\b\d+\s*pcs\b/i.test(d.content) ? ` (${d.quantity} pcs)` : ""
-  p.text(PAD, y, 7.5, clampText(`Isi: ${d.content}${qty}`, textW, 7.5, "B"), { font: "B" })
-  y += 3.2
-  const weightLine = `Berat ${grams(d.actualWeightGram)}${d.dims ? ` · ${d.dims}` : ""} · Tagih ${kg(d.billableWeightGram)}`
-  p.text(PAD, y, 7.2, clampText(weightLine, textW, 7.2, "R"))
-  if (d.insuranceIdr !== null) {
-    y += 3.0
-    p.text(PAD, y, 7.0, clampText(`Asuransi: ${idr(d.insuranceIdr)}`, textW, 7.0, "R"))
-  }
-  if (d.remark && y < 93.2) {
-    const maxLines = y < 90.2 ? 2 : 1
-    for (const line of wrapMm(d.remark, textW, 6.7, "R", maxLines)) {
-      y += 2.9
-      if (y <= 96.8) p.text(PAD, y, 6.7, line)
+  const extraBits = [d.dims, d.insuranceIdr !== null ? `Asuransi ${idr(d.insuranceIdr)}` : null].filter(Boolean).join(" · ")
+  const extraPt = roomy ? 7.4 : 6.6
+  const extraW = extraBits ? textWidthMm(extraBits, extraPt, "R") : 0
+  if (extraBits) p.text(W - PAD, y, extraPt, extraBits, { align: "right" })
+  const isiPt = roomy ? 8.2 : 7.4
+  const isiLabelW = textWidthMm("ISI PAKET: ", isiPt, "R")
+  p.text(PAD, y, isiPt, "ISI PAKET:")
+  p.text(PAD + isiLabelW, y, isiPt, clampText(`${d.content}${qty}`, Math.max(20, IW - isiLabelW - (extraW ? extraW + 3 : 0)), isiPt, "B"), { font: "B" })
+
+  const noteParts = [d.deliveryInstruction ? `Kurir: ${d.deliveryInstruction}` : null, d.remark || null].filter(Boolean)
+  if (noteParts.length) {
+    y += roomy ? 4.0 : 3.2
+    const notePt = roomy ? 7.6 : 6.8
+    const noteText = `CATATAN: ${noteParts.join(" · ")}`
+    for (const [i, line] of wrapMm(noteText, IW, notePt, "B", roomy ? 2 : 1).entries()) {
+      if (i) y += 3.2
+      p.text(PAD, y, notePt, line, { font: "B" })
     }
   }
-}
 
-/** Roomy 10x15 parcel-only lower section: structured detail grid + dispute box + bottom INV/QR strip (zero dead void). */
-function roomyFooter(p: PdfPage, d: LabelData, y0: number) {
-  let y = y0 + 2.4
-  const col1 = 54
-  const col2 = IW - col1
-  const row1H = 13
-  const row2H = 10
+  y += roomy ? 2.4 : 1.6
+  hline(p, y, 0.3)
 
-  // Structured 2x2 Detail Paket table
-  p.strokeRect(PAD, y, IW, row1H + row2H, 0.35)
-  p.rect(PAD + col1, y, 0.3, row1H + row2H)
-  p.rect(PAD, y + row1H, IW, 0.3)
+  // === 7. BOTTOM ORDER ID BARCODE (clean horizontal barcode — zero square QR clutter on compact label!) ===
+  if (!roomy) {
+    const invBarY = Math.min(y + 1.4, 89.2)
+    const invBarH = Math.max(5.5, Math.min(7.2, 97.5 - invBarY))
+    p.text(PAD, invBarY + 3.0, 6.4, "Order ID", { font: "B" })
+    p.text(PAD, invBarY + 6.4, 8.2, `INV ${d.inv.toUpperCase()}`, { font: "B" })
+    drawBarcode(p, d.inv.toUpperCase(), 34, invBarY, 63, invBarH)
+  } else {
+    // Spacious 10×15 parcel-only lower band: Order ID barcode + clean bottom tracking strip with isolated QR.
+    const invBarY = Math.max(y + 4.5, 108)
+    p.text(PAD, invBarY + 3.8, 7.6, "Order ID", { font: "B" })
+    p.text(PAD, invBarY + 8.0, 10.5, `INV ${d.inv.toUpperCase()}`, { font: "B" })
+    drawBarcode(p, d.inv.toUpperCase(), 34, invBarY, 63, 9.5)
 
-  p.text(PAD + 2, y + 3.3, 6.2, "ISI PAKET", { font: "B" })
-  for (const [i, line] of wrapMm(d.content || "—", col1 - 4, 8.2, "B", 2).entries()) {
-    p.text(PAD + 2, y + 7.1 + i * 3.5, 8.2, line, { font: "B" })
-  }
-
-  p.text(PAD + col1 + 2, y + 3.3, 6.2, "BERAT ASLI / TAGIH", { font: "B" })
-  p.text(PAD + col1 + 2, y + 7.5, 9.2, clampText(`${grams(d.actualWeightGram)}`, col2 - 4, 9.2, "B"), { font: "B" })
-  p.text(PAD + col1 + 2, y + 11.2, 7.5, clampText(`Tagih: ${kg(d.billableWeightGram)}`, col2 - 4, 7.5, "R"))
-
-  const r2 = y + row1H
-  const hasQty = Boolean(d.quantity && d.quantity > 1)
-  p.text(PAD + 2, r2 + 3.3, 6.2, hasQty ? "DIMENSI & JUMLAH" : "DIMENSI PAKET", { font: "B" })
-  p.text(PAD + 2, r2 + 7.5, 8.0, clampText(hasQty ? `${d.dims ?? "—"} · ${d.quantity} pcs` : d.dims ?? "—", col1 - 4, 8.0, "R"))
-
-  p.text(PAD + col1 + 2, r2 + 3.3, 6.2, "ASURANSI", { font: "B" })
-  p.text(PAD + col1 + 2, r2 + 7.5, 8.0, d.insuranceIdr === null ? "—" : idr(d.insuranceIdr), { font: "B" })
-
-  // Dispute-shield / unboxing note box
-  y = r2 + row2H + 2.5
-  const noteH = 9.5
-  p.strokeRect(PAD, y, IW, noteH, 0.3)
-  p.text(PAD + 2, y + 3.2, 6.2, "CATATAN & KLAIM", { font: "B" })
-  const noteText = d.remark || "Rekam video paket utuh saat dibuka untuk syarat klaim kerusakan/kekurangan."
-  for (const [i, line] of wrapMm(noteText, IW - 4, 7.3, "R", 2).entries()) {
-    p.text(PAD + 2, y + 6.4 + i * 2.8, 7.3, line)
-  }
-
-  // Bottom tracking + return-key strip anchored cleanly at the bottom of the 150 mm sticker
-  const qr = 18
-  const qrX = W - PAD - qr
-  const qrY = 150 - PAD - qr
-  hline(p, qrY - 3, 0.35)
-  drawQr(p, `https://${d.trackingUrl}`, qrX, qrY, qr)
-  const leftW = qrX - PAD - 3
-  p.text(PAD, qrY + 3.2, 6.5, "KODE KIRIMAN (LACAK & RETUR)", { font: "B" })
-  p.text(PAD, qrY + 8.6, 12.5, `INV ${d.inv.toUpperCase()}`, { font: "B" })
-  let ly = qrY + 12.6
-  for (const line of urlLines(d.trackingUrl, leftW, 7.4).slice(0, 2)) {
-    p.text(PAD, ly, 7.4, line)
-    ly += 3.1
-  }
-  if (d.outlet?.whatsapp && ly <= 147) {
-    p.text(PAD, ly, 7.0, `WA gerai: ${d.outlet.whatsapp}`)
+    const qr = 15
+    const qrX = W - PAD - qr
+    const qrY = 150 - PAD - qr
+    hline(p, qrY - 2.6, 0.3)
+    drawQr(p, `https://${d.trackingUrl}`, qrX, qrY, qr)
+    const leftTrackW = qrX - PAD - 3
+    p.text(PAD, qrY + 3.6, 6.8, "LACAK & BUKTI DIGITAL", { font: "B" })
+    let ly2 = qrY + 7.4
+    for (const line of urlLines(d.trackingUrl, leftTrackW, 7.4).slice(0, 2)) {
+      p.text(PAD, ly2, 7.4, line)
+      ly2 += 3.2
+    }
+    if (d.outlet?.whatsapp && ly2 <= 147) {
+      p.text(PAD, ly2, 7.0, `WA gerai: ${d.outlet.whatsapp}`)
+    }
   }
 }
 
@@ -397,9 +428,7 @@ export function labelPage(d: LabelData, format: Exclude<LabelFormat, "roll_58mm"
   const size = FORMAT_SIZE_MM[format]
   const p = new PdfPage(size.w, size.h)
   const roomy = format === "label_10x15"
-  const y = parcelBlock(p, d, roomy)
-  if (format === "label_10x15") roomyFooter(p, d, y)
-  else compactFooter(p, d, y)
+  parcelSticker(p, d, roomy)
   if (format === "label_10x15_with_stub") stubBlock(p, d, 100)
   return p
 }

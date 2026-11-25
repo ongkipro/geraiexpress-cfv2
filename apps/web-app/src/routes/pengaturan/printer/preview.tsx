@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { escposBytes, FORMAT_SIZE_MM, labelSvg, labelsPdf, rollLines, type LabelData } from "@gx/thermal-print"
 import { Maximize2Icon, PrinterIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
+import { api } from "../../../lib/api"
 import { RollPaperPreview } from "../../../print/drawer"
 import { connectBluetooth, FORMAT_LABEL, printPdf, type Format } from "../../../print/print"
 
@@ -19,10 +20,53 @@ interface PreviewProps {
 }
 
 /**
+ * Loads the tenant's uploaded logo (if any) once as both a data URL (for SVG preview) and grayscale JPEG bytes
+ * (for crisp PDF test print), falling back cleanly to the monogram badge when no logo is uploaded.
+ */
+function useOutletLogo(key: string) {
+  const [logo, setLogo] = useState<{ dataUrl: string | null; jpeg: Uint8Array | null }>({ dataUrl: null, jpeg: null })
+  useEffect(() => {
+    let alive = true
+    api<{ logoUrl?: string | null }>("/print/settings")
+      .then(async (s) => {
+        if (!alive || !s.logoUrl) return
+        const res = await fetch(s.logoUrl, { credentials: "same-origin" })
+        if (!alive || !res.ok) return
+        const blob = await res.blob()
+        const dataUrl = await new Promise<string | null>((resolve) => {
+          const r = new FileReader()
+          r.onload = () => resolve(typeof r.result === "string" ? r.result : null)
+          r.onerror = () => resolve(null)
+          r.readAsDataURL(blob)
+        })
+        if (!alive || !dataUrl) return
+        let jpeg: Uint8Array | null = null
+        if (blob.type === "image/jpeg" || blob.type === "image/jpg") {
+          jpeg = new Uint8Array(await blob.arrayBuffer())
+        }
+        if (alive) setLogo({ dataUrl, jpeg })
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [key])
+  return logo
+}
+
+/**
  * Builds synthetic Indonesian sample label data (AGENTS.md Example Data Policy: redacted phones, synthetic people/addresses)
  * combined with the tenant's real outlet identity and live unboxing remark so the preview matches production output 1:1.
  */
-function buildSampleLabel({ outletName, outletWhatsapp, miniSiteHost, remark, kind }: Omit<PreviewProps, "format" | "density"> & { kind: SampleKind }): LabelData {
+function buildSampleLabel({
+  outletName,
+  outletWhatsapp,
+  outletLogoDataUrl,
+  outletLogoJpeg,
+  miniSiteHost,
+  remark,
+  kind,
+}: Omit<PreviewProps, "format" | "density"> & { outletLogoDataUrl: string | null; outletLogoJpeg: Uint8Array | null; kind: SampleKind }): LabelData {
   const host = miniSiteHost || "contoh.geraimitra.com"
   const common = {
     inv: "8k4m2p7",
@@ -41,7 +85,7 @@ function buildSampleLabel({ outletName, outletWhatsapp, miniSiteHost, remark, ki
       phone: "08xx-xxxx-5678",
       area: "Sukodono, Sidoarjo",
     },
-    outlet: { name: outletName || "Gerai Contoh", whatsapp: outletWhatsapp },
+    outlet: { name: outletName || "Gerai Contoh", whatsapp: outletWhatsapp, logoDataUrl: outletLogoDataUrl, logoJpeg: outletLogoJpeg },
     content: kind === "cod" ? "Kemeja Katun + Tote Bag" : "Sepatu Lari Pria Uk. 42",
     quantity: kind === "cod" ? 2 : 1,
     deliveryInstruction: kind === "cod" ? "Hubungi penerima sebelum tiba" : "Titip pos satpam jika rumah kosong",
@@ -57,6 +101,7 @@ function buildSampleLabel({ outletName, outletWhatsapp, miniSiteHost, remark, ki
   if (kind === "cod") {
     return {
       ...common,
+      courierCode: "JT",
       courierName: "J&T Express",
       serviceName: "EZ",
       awb: "JP9841205531",
@@ -78,6 +123,7 @@ function buildSampleLabel({ outletName, outletWhatsapp, miniSiteHost, remark, ki
 
   return {
     ...common,
+    courierCode: "JNE",
     courierName: "JNE",
     serviceName: "REG",
     awb: "CGK25008194210",
@@ -112,10 +158,11 @@ export function LabelPreview({ format, remark, density, outletName, outletWhatsa
   const [zoomOpen, setZoomOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [printNote, setPrintNote] = useState<string | null>(null)
+  const logo = useOutletLogo(miniSiteHost)
 
   const sample = useMemo(
-    () => buildSampleLabel({ outletName, outletWhatsapp, miniSiteHost, remark, kind }),
-    [outletName, outletWhatsapp, miniSiteHost, remark, kind],
+    () => buildSampleLabel({ outletName, outletWhatsapp, outletLogoDataUrl: logo.dataUrl, outletLogoJpeg: logo.jpeg, miniSiteHost, remark, kind }),
+    [outletName, outletWhatsapp, logo.dataUrl, logo.jpeg, miniSiteHost, remark, kind],
   )
 
   const svgUrl = useMemo(() => {

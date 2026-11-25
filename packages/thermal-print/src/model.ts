@@ -15,6 +15,7 @@ export const FORMAT_SIZE_MM: Record<Exclude<LabelFormat, "roll_58mm">, { w: numb
 
 export interface LabelData {
   inv: string // 7-char slug, lower case
+  courierCode?: string | null
   courierName: string
   serviceName: string
   awb: string
@@ -25,7 +26,7 @@ export interface LabelData {
   cod: { collectIdr: number } | null
   recipient: { name: string; phone: string; street: string; area: string }
   sender: { name: string; phone: string | null; area: string | null }
-  outlet: { name: string; whatsapp: string | null } | null // null = no outlet branding (Dropship)
+  outlet: { name: string; whatsapp: string | null; logoDataUrl?: string | null; logoJpeg?: Uint8Array | null } | null // null = no outlet branding (Dropship)
   content: string
   /** Number of items/pieces in the parcel (default 1). */
   quantity?: number
