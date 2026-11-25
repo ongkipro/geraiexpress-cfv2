@@ -6,6 +6,7 @@ import { paramsOf, periodFromParams, resolvePreset, type Period } from "@gx/doma
 import { PeriodFilter } from "../../../components/period-filter/period-filter"
 import { DataTableShell } from "../../../components/admin/data-table"
 import { SectionCard, StatusBadge } from "../../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav } from "../../../components/admin/pagination"
 import { Button } from "../../../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
 import { Field, FieldLabel } from "../../../components/ui/field"
@@ -45,7 +46,7 @@ interface Row {
   estimated_margin_idr?: number | null
 }
 type Tab = "semua" | "belum-dibayar" | "draf-qr" | "menunggu-saldo" | "pickup" | "kendala" | "retur"
-interface ListResp { items: Row[]; nextCursor: string | null; counts: Record<Tab, number> }
+interface ListResp { items: Row[]; nextCursor: string | null; counts: Record<Tab, number>; total: number; page: number; pageSize: number; totalPages: number }
 
 // DEC-241: the list keeps only its four status filters; Pickup, Meja Retur and Kendala are workstations of their own
 // (sidebar sub-tree under Kiriman), still served on `?tab=` so links and bookmarks keep working.
@@ -65,7 +66,7 @@ const METHOD: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer:
 const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
 const newKey = () => crypto.randomUUID().replace(/-/g, "")
 
-type Search = { tab?: Tab; q?: string; periode?: string; dari?: string; sampai?: string; cetak?: string; macet?: number | string }
+type Search = { tab?: Tab; q?: string; periode?: string; dari?: string; sampai?: string; cetak?: string; macet?: number | string; page?: number | string }
 // DEC-251C `Pergerakan`: issued INVs the courier has not scanned for N days (from the last courier event or issue time).
 // The URL carries a plain number (`?macet=3`); a string would be JSON-quoted by the router.
 const STUCK = [
@@ -95,9 +96,6 @@ export function KirimanPage() {
   }
   const [data, setData] = useState<ListResp | null>(null)
   const [loadedQs, setLoadedQs] = useState<string | null>(null)
-  const [more, setMore] = useState<Row[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [errState, setErrState] = useState<{ qs: string; msg: string } | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [payRow, setPayRow] = useState<Row | null>(null)
@@ -108,7 +106,10 @@ export function KirimanPage() {
   const [payKey, setPayKey] = useState(newKey)
   const station = STATION[tab]
   const macet = STUCK.some((o) => o.value && o.value === String(search.macet ?? "")) ? String(search.macet) : ""
-  const qs = useMemo(() => new URLSearchParams({ tab, ...(search.q ? { q: search.q } : {}), ...(search.cetak ? { cetak: search.cetak } : {}), ...(macet ? { macet } : {}), ...paramsOf(period) }).toString(), [tab, search.q, search.cetak, macet, period])
+  const rawPage = Number(search.page)
+  const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1
+  const filterQs = useMemo(() => new URLSearchParams({ tab, ...(search.q ? { q: search.q } : {}), ...(search.cetak ? { cetak: search.cetak } : {}), ...(macet ? { macet } : {}), ...paramsOf(period) }).toString(), [tab, search.q, search.cetak, macet, period])
+  const qs = useMemo(() => `${filterQs}&page=${page}&limit=${DEFAULT_PAGE_SIZE}`, [filterQs, page])
   // Only the latest request may paint: an earlier (e.g. unfiltered) response that resolves after a search must not
   // overwrite the filtered list.
   const gen = useRef(0)
@@ -121,8 +122,6 @@ export function KirimanPage() {
         setErrState(null)
         setData(d)
         setLoadedQs(qs)
-        setMore([])
-        setCursor(d.nextCursor)
       })
       .catch((e) => {
         if (mine !== gen.current) return
@@ -137,22 +136,9 @@ export function KirimanPage() {
   }, [load])
   const error = errState?.qs === qs ? errState.msg : null
   const refreshing = !station && data !== null && loadedQs !== qs && !error
-  const go = (p: Partial<Search>) => void navigate({ to: "/kiriman", search: { ...search, ...p } as never })
-  async function loadMore() {
-    if (!cursor || loadingMore) return
-    setLoadingMore(true)
-    // Sol R1-9: a page that answers after the filters changed (e.g. `macet`) belongs to the old list — drop it.
-    const mine = gen.current
-    try {
-      const d = await api<ListResp>(`/shipments?${qs}&cursor=${encodeURIComponent(cursor)}`)
-      if (mine !== gen.current) return
-      setMore((m) => [...m, ...d.items])
-      setCursor(d.nextCursor)
-    } catch (e) {
-      if (mine === gen.current) setMsg({ tone: "danger", text: e instanceof ApiError ? e.body.message : "Gagal memuat halaman berikutnya." })
-    } finally {
-      setLoadingMore(false)
-    }
+  const go = (p: Partial<Search>) => {
+    const resetPage = !("page" in p)
+    void navigate({ to: "/kiriman", search: { ...search, ...p, ...(resetPage ? { page: undefined } : {}) } as never })
   }
   function openPayDialog(r: Row) {
     setPayRow(r)
@@ -189,8 +175,8 @@ export function KirimanPage() {
       setPaying(false)
     }
   }
-  const rows = [...(data?.items ?? []), ...more]
-  const exportHref = `/api/app/shipments-export.csv?${qs}`
+  const rows = data?.items ?? []
+  const exportHref = `/api/app/shipments-export.csv?${filterQs}`
   const filtered = !!(search.q || search.cetak || macet)
   if (station) {
     return (
@@ -215,7 +201,7 @@ export function KirimanPage() {
             const cls = `flex h-11 items-center gap-1.5 rounded-md px-3 text-base whitespace-nowrap md:h-8 md:text-sm ${active ? "bg-white font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]" : "text-muted-foreground hover:text-slate-900"}`
             return (
               <li key={t.id}>
-                <Link to="/kiriman" search={{ ...search, tab: t.id === "semua" ? undefined : t.id } as never} aria-current={active ? "page" : undefined} className={cls}>
+                <Link to="/kiriman" search={{ ...search, tab: t.id === "semua" ? undefined : t.id, page: undefined } as never} aria-current={active ? "page" : undefined} className={cls}>
                   {t.label}{count !== undefined && count !== null ? <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-slate-100 text-slate-600" : "text-muted-foreground"}`}>{count}</span> : null}
                 </Link>
               </li>
@@ -259,13 +245,23 @@ export function KirimanPage() {
           <EmptyState title="Belum ada kiriman di sini" body="Kiriman yang resinya terbit akan muncul di daftar ini." action={<LinkButton to="/kasir">Buat Pengiriman</LinkButton>} />
         )
       ) : (
-        <SectionCard id="daftar-kiriman" title="Daftar kiriman" description={`${rows.length} kiriman ditampilkan`} flush>
+        <SectionCard id="daftar-kiriman" title="Daftar kiriman" description={`${(data.total ?? rows.length).toLocaleString("id-ID")} kiriman total · maks. ${DEFAULT_PAGE_SIZE} per halaman`} flush>
           <DataTableShell
             bare
             caption="Daftar kiriman"
             rows={rows}
             rowKey={(r) => r.slug}
-            footer={cursor ? <Button variant="outline" disabled={loadingMore} onClick={loadMore}>{loadingMore ? "Memuat…" : "Muat Lebih Banyak"}</Button> : undefined}
+            footer={
+              <PageNav
+                page={data.page ?? page}
+                totalPages={data.totalPages ?? 1}
+                total={data.total ?? rows.length}
+                pageSize={data.pageSize ?? DEFAULT_PAGE_SIZE}
+                onPageChange={(next) => go({ page: next <= 1 ? undefined : next })}
+                itemLabel="kiriman"
+                loading={refreshing}
+              />
+            }
             columns={[
               { key: "inv", header: "INV", cell: (r) => <><Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">INV {r.slug.toUpperCase()}</Link><span className="block text-xs text-muted-foreground tabular-nums">{time(r.created_at)}</span></> },
               { key: "kurir", header: "Kurir & resi", cell: (r) => <>{courierLabel(r.courier_code)}<span className="block text-xs text-muted-foreground tabular-nums">{r.awb_number ?? "Resi belum terbit"}{r.print_count ? ` · ${r.print_count}× cetak` : ""}</span></> },

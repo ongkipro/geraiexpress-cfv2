@@ -14,7 +14,7 @@ import { quotaFor } from "../partner-quota"
 import { CAP_REACHED, releaseApiSpend, reserveApiSpend, spendAmount, type ApiSpend } from "./api-spend"
 import { nextPickupSlot, pickupVolume, posCodRefusal, type Courier, type CourierRate, type OrderItem } from "@gx/mengantar-sdk"
 import { safeLink, type NotificationItem, type NotificationKind } from "../../notifications"
-import { archiveContact, badgeForPhone, badgeOf, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
+import { archiveContact, badgeForPhone, badgeOf, contactShipmentHistory, createRecipient, createSender, markWaVerified, readRecipient, readSender, recordCodOutcome, searchRecipients, searchSenders, senderCounts, updateRecipient, updateSender, type ContactError, type ContactHistorySummary, type ContactShipmentRow, type RecipientInput, type RecipientRow, type SenderInput, type SenderRow } from "./contacts"
 import { phoneHmac } from "../../admin/monitor"
 import { dispatchKey, ensureDraft, latestQuote, orderPayload, readyToDispatch, recordOutcome, setParties, type DispatchError, type OrderOutcome, type PickupRef, type QuoteRow } from "./dispatch"
 import { markPaid, receiptsFor, voidPayment, type PaymentError, type Receipt } from "./payment"
@@ -47,10 +47,12 @@ import { eventKeyOf, newPathToken, verifySignature, type VerifyFailure } from ".
 import { dueTimers, flagStuck, nextTimerAt, pollCandidates, readShipment, recordProviderObservation, setDispatchStatus, setTimer, findShipment, type ShipmentRow, type TimerName } from "./status"
 
 export type ContactOp =
-  | { op: "list_senders"; q?: string; filter?: "all" | "walk_in" | "reseller_dropship" }
-  | { op: "list_recipients"; q?: string }
+  | { op: "list_senders"; q?: string; filter?: "all" | "walk_in" | "reseller_dropship"; page?: number; limit?: number }
+  | { op: "list_recipients"; q?: string; page?: number; limit?: number }
   | { op: "get_sender"; id: string }
   | { op: "get_recipient"; id: string }
+  | { op: "sender_history"; id: string; page?: number; limit?: number }
+  | { op: "recipient_history"; id: string; page?: number; limit?: number }
   | { op: "create_sender"; input: SenderInput }
   | { op: "update_sender"; id: string; input: SenderInput }
   | { op: "create_recipient"; input: RecipientInput }
@@ -62,10 +64,11 @@ export type ContactOp =
 type Risk = { badge: "baru" | "hijau" | "kuning" | "merah"; rtsBps: number | null }
 export type ContactOpResult =
   | { kind: "none" }
-  | { kind: "senders"; items: SenderRow[]; counts: { all: number; reseller_dropship: number; walk_in: number } }
-  | { kind: "recipients"; items: Array<RecipientRow & { risk: Risk }> }
+  | { kind: "senders"; items: SenderRow[]; counts: { all: number; reseller_dropship: number; walk_in: number }; total: number; page: number; pageSize: number; totalPages: number }
+  | { kind: "recipients"; items: Array<RecipientRow & { risk: Risk }>; total: number; page: number; pageSize: number; totalPages: number }
   | { kind: "sender"; item: SenderRow | null }
   | { kind: "recipient"; item: (RecipientRow & { risk: Risk }) | null }
+  | { kind: "contact_history"; found: boolean; items: ContactShipmentRow[]; summary: ContactHistorySummary; total: number; page: number; pageSize: number; totalPages: number }
   | { kind: "errors"; errors: ContactError[] }
   | { kind: "archived"; done: boolean }
   | { kind: "badge"; badge: { phone: string | null; delivered: number; rts: number } & Risk }
@@ -155,7 +158,7 @@ export interface ShipmentDetail {
   sender: SenderRow | null
   recipient: RecipientRow | null
   receipts: Receipt[]
-  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
+  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; status_text: string | null; event_at: number; event_at_text: string | null }>
   /** Non-COD issue pre-flight (spec 09 §3.1): Kasir gets the boolean only (projection strips the amounts). */
   preflight: { balance_sufficient: boolean | null; synced_balance_idr: number | null; estimated_debit_idr: number | null }
 }
@@ -178,7 +181,7 @@ export type TrackItem = {
   area: string | null
   createdAt: number
   history: Array<{ date: string; status: string | null; category: string | null }> | null
-  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>
+  events: Array<{ source: string; raw_category: string | null; mapped_status: string | null; status_text: string | null; event_at: number; event_at_text: string | null }>
 }
 
 export type SettingsView = {
@@ -426,18 +429,48 @@ export class GeraiVaultDO extends DurableObject<Env> {
     let out: ContactOpResult = { kind: "none" }
     this.ctx.storage.transactionSync(() => {
       switch (op.op) {
-        case "list_senders":
-          out = { kind: "senders", items: searchSenders(sql, op.q ?? "", op.filter ?? "all"), counts: senderCounts(sql) }
+        case "list_senders": {
+          const res = searchSenders(sql, op.q ?? "", op.filter ?? "all", op.limit ?? 50, op.page ?? 1)
+          out = { kind: "senders", ...res, counts: senderCounts(sql) }
           return
-        case "list_recipients":
-          out = { kind: "recipients", items: searchRecipients(sql, op.q ?? "").map((r) => ({ ...r, risk: badgeOf(r) })) }
+        }
+        case "list_recipients": {
+          const res = searchRecipients(sql, op.q ?? "", op.limit ?? 50, op.page ?? 1)
+          out = { kind: "recipients", ...res, items: res.items.map((r) => ({ ...r, risk: badgeOf(r) })) }
           return
-        case "get_sender":
-          out = { kind: "sender", item: readSender(sql, op.id) }
+        }
+        case "get_sender": {
+          const item = readSender(sql, op.id)
+          if (item) {
+            item.shipments_count = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE sender_contact_id = ? AND dispatch_state != 'draft'", item.id).one().n
+          }
+          out = { kind: "sender", item }
           return
+        }
         case "get_recipient": {
           const r = readRecipient(sql, op.id)
+          if (r) {
+            r.shipments_count = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM shipments WHERE recipient_contact_id = ? AND dispatch_state != 'draft'", r.id).one().n
+          }
           out = { kind: "recipient", item: r ? { ...r, risk: badgeOf(r) } : null }
+          return
+        }
+        case "sender_history": {
+          const exists = !!readSender(sql, op.id)
+          if (!exists) {
+            out = { kind: "contact_history", found: false, items: [], summary: { total: 0, in_progress: 0, delivered: 0, rts: 0, cancelled: 0, total_due_idr: 0, last_shipment_at: null }, total: 0, page: 1, pageSize: op.limit ?? 20, totalPages: 1 }
+            return
+          }
+          out = { kind: "contact_history", found: true, ...contactShipmentHistory(sql, "sender", op.id, op.page ?? 1, op.limit ?? 20) }
+          return
+        }
+        case "recipient_history": {
+          const exists = !!readRecipient(sql, op.id)
+          if (!exists) {
+            out = { kind: "contact_history", found: false, items: [], summary: { total: 0, in_progress: 0, delivered: 0, rts: 0, cancelled: 0, total_due_idr: 0, last_shipment_at: null }, total: 0, page: 1, pageSize: op.limit ?? 20, totalPages: 1 }
+            return
+          }
+          out = { kind: "contact_history", found: true, ...contactShipmentHistory(sql, "recipient", op.id, op.page ?? 1, op.limit ?? 20) }
           return
         }
         case "create_sender":
@@ -842,7 +875,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         recipient: s.recipient_contact_id ? readRecipient(sql, String(s.recipient_contact_id)) : null,
         receipts: receiptsFor(sql, slug),
         preflight: preflightOf(sql, s, q),
-        events: sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>("SELECT source, raw_category, mapped_status, event_at FROM shipment_events WHERE slug = ? ORDER BY event_at DESC LIMIT 50", slug).toArray(),
+        events: sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; status_text: string | null; event_at: number; event_at_text: string | null }>("SELECT source, raw_category, mapped_status, status_text, event_at, event_at_text FROM shipment_events WHERE slug = ? ORDER BY event_at DESC, recorded_at DESC LIMIT 50", slug).toArray(),
       },
     }
   }
@@ -2015,7 +2048,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   // ---- Kiriman list (TASK-311) -----------------------------------------------------------------------------------
 
-  async shipmentList(tenantId: string, q: ListQuery): Promise<VaultResult<{ items: ListRow[]; nextCursor: string | null; counts: Record<Tab, number> }>> {
+  async shipmentList(tenantId: string, q: ListQuery): Promise<VaultResult<{ items: ListRow[]; nextCursor: string | null; counts: Record<Tab, number>; total: number; page: number; pageSize: number; totalPages: number }>> {
     const refused = this.refusal(tenantId)
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
@@ -2445,20 +2478,116 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const items: TrackItem[] = []
     for (const r of rows) {
       let history = this.trackCache.get(r.slug)
+      let curStatus = r.status
       if (key && r.awb_number && (!history || history.at < Date.now() - 5 * 60_000)) {
         try {
           const o = await publicClient(this.env, key.key, tenantId).getOrder({ trackingId: r.awb_number })
-          history = { at: Date.now(), history: (o?.history ?? []).map((h) => ({ date: h.date, status: typeof h.status === "string" ? h.status.slice(0, 200) : null, category: h.statusCategory ?? null })) }
+          const rawHistory = o?.history ?? []
+          history = { at: Date.now(), history: rawHistory.map((h) => ({ date: h.date, status: typeof h.status === "string" ? h.status.slice(0, 200) : null, category: h.statusCategory ?? null })) }
           this.trackCache.set(r.slug, history)
+          // Persist live Mengantar observations into DO SQLite so Cek Resi, Kiriman, INV detail & Contact history stay 100% synced.
+          const persisted = await this.persistOrderHistory(tenantId, r.slug, rawHistory, Date.now())
+          if (persisted.status) curStatus = persisted.status
         } catch {
           // Provider down: show local events only.
         }
       }
-      const local = sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; event_at: number }>("SELECT source, raw_category, mapped_status, event_at FROM shipment_events WHERE slug = ? ORDER BY event_at DESC LIMIT 30", r.slug).toArray()
+      const local = sql.exec<{ source: string; raw_category: string | null; mapped_status: string | null; status_text: string | null; event_at: number; event_at_text: string | null }>("SELECT source, raw_category, mapped_status, status_text, event_at, event_at_text FROM shipment_events WHERE slug = ? ORDER BY event_at DESC, recorded_at DESC LIMIT 30", r.slug).toArray()
       const rec = r.true_recipient_json ? (JSON.parse(r.true_recipient_json) as { name?: string; area?: string }) : null
-      items.push({ slug: r.slug, awb: r.awb_number, courier: r.courier_code, service: r.service_code, status: r.status, dispatchState: r.dispatch_state, recipient: rec?.name ?? null, area: rec?.area ?? null, createdAt: r.created_at, history: history?.history ?? null, events: local })
+      items.push({ slug: r.slug, awb: r.awb_number, courier: r.courier_code, service: r.service_code, status: curStatus, dispatchState: r.dispatch_state, recipient: rec?.name ?? null, area: rec?.area ?? null, createdAt: r.created_at, history: history?.history ?? null, events: local })
     }
     return { ok: true, value: { kind: "found", items } }
+  }
+
+  /**
+   * On-demand live Mengantar status & checkpoint sync for one INV (`POST /api/app/shipments/:slug/sync`).
+   * Pulls `GET /order`, persists every checkpoint into `shipment_events` (with `status_text`), updates `shipments.status`,
+   * and records recipient COD risk outcome on terminal delivery/RTS transitions.
+   */
+  async syncShipmentStatus(
+    tenantId: string,
+    slug: string,
+    now: number = Date.now(),
+  ): Promise<VaultResult<{ synced: boolean; changed: boolean; status: string; eventsAdded: number; syncedAt: number; note?: string } | null>> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    const s = readShipment(sql, slug)
+    if (!s) return { ok: true, value: null }
+    if (!s.awb_number && !s.mengantar_order_code) {
+      return { ok: true, value: { synced: false, changed: false, status: s.status, eventsAdded: 0, syncedAt: now, note: "Resi belum terbit di Mengantar." } }
+    }
+    const key = await this.sellerKey(tenantId)
+    if (!key) {
+      return { ok: true, value: { synced: false, changed: false, status: s.status, eventsAdded: 0, syncedAt: now, note: "Koneksi Mengantar belum aktif atau kunci sedang diputar." } }
+    }
+    try {
+      const order = await publicClient(this.env, key.key, tenantId).getOrder(s.awb_number ? { trackingId: s.awb_number } : { orderId: s.mengantar_order_code! })
+      const rawHistory = order?.history ?? []
+      this.trackCache.set(slug, { at: now, history: rawHistory.map((h) => ({ date: h.date, status: typeof h.status === "string" ? h.status.slice(0, 200) : null, category: h.statusCategory ?? null })) })
+      const persisted = await this.persistOrderHistory(tenantId, slug, rawHistory, now)
+      await this.armOutbox()
+      return {
+        ok: true,
+        value: {
+          synced: true,
+          changed: persisted.changed,
+          status: persisted.status ?? s.status,
+          eventsAdded: persisted.recorded,
+          syncedAt: now,
+          note: rawHistory.length === 0 ? "Belum ada pembaruan checkpoint baru dari ekspedisi di Mengantar." : undefined,
+        },
+      }
+    } catch {
+      return { ok: true, value: { synced: false, changed: false, status: s.status, eventsAdded: 0, syncedAt: now, note: "Mengantar belum bisa dihubungi saat ini. Coba lagi sebentar lagi." } }
+    }
+  }
+
+  private async persistOrderHistory(
+    tenantId: string,
+    slug: string,
+    history: Array<{ date: string; status?: string | null; statusCategory?: string | null }>,
+    now: number,
+  ): Promise<{ recorded: number; changed: boolean; status: string | null; pausedWebhook: boolean }> {
+    const sql = this.ctx.storage.sql
+    const conn = readConnection(sql)
+    const obs = await Promise.all(
+      history.map(async (h) => {
+        const category = (h.statusCategory ?? h.status ?? "").trim()
+        const statusText = typeof h.status === "string" && h.status.trim() ? h.status.trim().slice(0, 240) : null
+        return { category, statusText, eventAt: parseJakartaMinute(h.date), text: h.date, key: await sha256Hex(`poll|${slug}|${h.date}|${category}`) }
+      }),
+    )
+    let recorded = 0
+    let changed = false
+    let latestStatus: string | null = null
+    let pausedWebhook = false
+    let codTransition: { recipientId: string; outcome: "delivered" | "rts" } | null = null
+    const terminalOf = (st: string | null): "delivered" | "rts" | null => (st === "delivered" ? "delivered" : st && (st.startsWith("rts_") || st === "provider_returned") ? "rts" : null)
+    this.ctx.storage.transactionSync(() => {
+      const before = sql.exec<{ status: string; cod_fee_mode: string | null; recipient_contact_id: string | null }>("SELECT status, cod_fee_mode, recipient_contact_id FROM shipments WHERE slug = ?", slug).toArray()[0]
+      const prevTerminal = terminalOf(before?.status ?? null)
+      for (const o of obs) {
+        if (o.eventAt === null || !o.category) continue
+        const r = recordProviderObservation(sql, { slug, eventKey: o.key, source: "poll", rawCategory: o.category, statusText: o.statusText, mapped: mapMengantarCategory(o.category), eventAt: o.eventAt, eventAtText: o.text }, now)
+        if (r.recorded) recorded++
+        if (r.changed) changed = true
+        if (r.status) latestStatus = r.status
+        if (r.changed && conn?.webhook_state === "active" && o.eventAt < now - 2 * HOUR) pausedWebhook = true
+      }
+      sql.exec("UPDATE shipments SET last_polled_at = ? WHERE slug = ?", now, slug)
+      if (pausedWebhook) sql.exec("UPDATE mengantar_connections SET webhook_state = 'paused'")
+      const afterStatus = latestStatus ?? before?.status ?? null
+      const nextTerminal = terminalOf(afterStatus)
+      if (!prevTerminal && nextTerminal && before?.recipient_contact_id && before.cod_fee_mode && before.cod_fee_mode !== "none") {
+        codTransition = { recipientId: before.recipient_contact_id, outcome: nextTerminal }
+      }
+    })
+    if (codTransition) {
+      const t = codTransition as { recipientId: string; outcome: "delivered" | "rts" }
+      await this.recordRecipientCodOutcome(tenantId, t.recipientId, t.outcome, now)
+    }
+    return { recorded, changed, status: latestStatus, pausedWebhook }
   }
 
   // ---- Printing (TASK-306) ---------------------------------------------------------------------------------------
@@ -3173,27 +3302,42 @@ export class GeraiVaultDO extends DurableObject<Env> {
     if (refused) return { ok: false, refused }
     const sql = this.ctx.storage.sql
     let out: { state: "applied" | "rejected" | "noop"; status: string | null } = { state: "noop", status: null }
+    let codTransition: { recipientId: string; outcome: "delivered" | "rts" } | null = null
+    const terminalOf = (st: string | null): "delivered" | "rts" | null => (st === "delivered" ? "delivered" : st && (st.startsWith("rts_") || st === "provider_returned") ? "rts" : null)
     this.ctx.storage.transactionSync(() => {
       const row = sql.exec<{ raw_body: string; provider_event_at: number; state: string }>("SELECT raw_body, provider_event_at, state FROM webhook_inbox WHERE event_key = ?", eventKey).toArray()[0]
       if (!row || row.state !== "received") return
-      let body: { cnote_no?: unknown; order_id?: unknown; status_category?: unknown } = {}
+      let body: { cnote_no?: unknown; order_id?: unknown; status_category?: unknown; status?: unknown } = {}
       try {
         body = JSON.parse(row.raw_body) as typeof body
       } catch {
         body = {}
       }
-      const str = (v: unknown) => (typeof v === "string" && v.length > 0 && v.length <= 100 ? v : null)
+      const str = (v: unknown) => (typeof v === "string" && v.length > 0 && v.length <= 240 ? v : null)
       const ship = findShipment(sql, { awb: str(body.cnote_no), orderCode: str(body.order_id) })
       const category = str(body.status_category)
+      const statusText = str(body.status)
       if (!ship || !category) {
         sql.exec("UPDATE webhook_inbox SET state = 'rejected', applied_at = ?, error = ? WHERE event_key = ?", now, !ship ? "UNKNOWN_SHIPMENT" : "MISSING_STATUS", eventKey)
         out = { state: "rejected", status: null }
         return
       }
-      const r = recordProviderObservation(sql, { slug: ship.slug, eventKey: `wh:${eventKey}`, source: "webhook", rawCategory: category, mapped: mapMengantarCategory(category), eventAt: row.provider_event_at, eventAtText: null }, now)
+      const prevTerminal = terminalOf(ship.status)
+      const r = recordProviderObservation(sql, { slug: ship.slug, eventKey: `wh:${eventKey}`, source: "webhook", rawCategory: category, statusText, mapped: mapMengantarCategory(category), eventAt: row.provider_event_at, eventAtText: null }, now)
       sql.exec("UPDATE webhook_inbox SET state = 'applied', applied_at = ? WHERE event_key = ?", now, eventKey)
       out = { state: "applied", status: r.status }
+      const nextTerminal = terminalOf(r.status)
+      if (!prevTerminal && nextTerminal) {
+        const meta = sql.exec<{ cod_fee_mode: string | null; recipient_contact_id: string | null }>("SELECT cod_fee_mode, recipient_contact_id FROM shipments WHERE slug = ?", ship.slug).toArray()[0]
+        if (meta?.recipient_contact_id && meta.cod_fee_mode && meta.cod_fee_mode !== "none") {
+          codTransition = { recipientId: meta.recipient_contact_id, outcome: nextTerminal }
+        }
+      }
     })
+    if (codTransition) {
+      const t = codTransition as { recipientId: string; outcome: "delivered" | "rts" }
+      await this.recordRecipientCodOutcome(tenantId, t.recipientId, t.outcome, now)
+    }
     this.scheduleFinanceSync(now)
     await this.armOutbox()
     return { ok: true, value: out }
@@ -3248,25 +3392,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
         try {
           const order = await client.getOrder(s.awb_number ? { trackingId: s.awb_number } : { orderId: s.mengantar_order_code! })
           polled++
-          const history = order?.history ?? []
-          const obs = await Promise.all(
-            history.map(async (h) => {
-              const category = (h.statusCategory ?? h.status ?? "").trim()
-              return { category, eventAt: parseJakartaMinute(h.date), text: h.date, key: await sha256Hex(`poll|${s.slug}|${h.date}|${category}`) }
-            }),
-          )
-          let paused = false
-          this.ctx.storage.transactionSync(() => {
-            for (const o of obs) {
-              if (o.eventAt === null || !o.category) continue
-              const r = recordProviderObservation(sql, { slug: s.slug, eventKey: o.key, source: "poll", rawCategory: o.category, mapped: mapMengantarCategory(o.category), eventAt: o.eventAt, eventAtText: o.text }, now)
-              if (r.changed) changed++
-              // A provider change older than 2 h that never arrived by webhook means Mengantar paused deliveries.
-              if (r.changed && conn?.webhook_state === "active" && o.eventAt < now - 2 * HOUR) paused = true
-            }
-            sql.exec("UPDATE shipments SET last_polled_at = ? WHERE slug = ?", now, s.slug)
-            if (paused) sql.exec("UPDATE mengantar_connections SET webhook_state = 'paused'")
-          })
+          const res = await this.persistOrderHistory(tenantId, s.slug, order?.history ?? [], now)
+          if (res.changed) changed++
         } catch {
           failed++
           // A failing order moves to the back of the queue (it must never starve the healthy ones).

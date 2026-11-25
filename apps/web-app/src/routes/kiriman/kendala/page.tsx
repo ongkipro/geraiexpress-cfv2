@@ -9,6 +9,7 @@ import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { EmptyState, ErrorState, LoadingState } from "../../../shell/states"
 import { rp } from "../../kasir/quote-panel"
 import { Panel } from "../../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav, paginate } from "../../../components/admin/pagination"
 
 // `Kendala & Klaim` (spec 04 §3): five sub-filters, per-courier claim countdown chips (Mengantar help 8140017),
 // claim records with a ready-to-send packet, owner notes on `Status Bertentangan`.
@@ -31,6 +32,7 @@ export function Kendala() {
   const w = useWorkspace()
   const owner = isOwner(w)
   const [bucket, setBucket] = useState<Bucket>("tidak_bergerak")
+  const [page, setPage] = useState(1)
   const [d, setD] = useState<{ counts: Record<Bucket, number>; rows: Row[] } | null>(null)
   const [loadedBucket, setLoadedBucket] = useState<Bucket | null>(null)
   const [busy, setBusy] = useState(false)
@@ -78,7 +80,7 @@ export function Kendala() {
     <div className="mb-6 flex flex-col gap-4">
       <div role="group" aria-label="Jenis kendala" className="flex flex-wrap gap-2">
         {BUCKETS.map((b) => (
-          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => setBucket(b.id)} className={`h-11 rounded-full border px-4 text-base md:text-sm md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
+          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => { setBucket(b.id); setPage(1) }} className={`h-11 rounded-full border px-4 text-base md:text-sm md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
             {b.label}{d ? <span className="ml-1 tabular-nums text-muted-foreground">({d.counts[b.id]})</span> : null}
           </button>
         ))}
@@ -90,11 +92,17 @@ export function Kendala() {
         <LoadingState label="Memuat kendala" />
       ) : d.rows.length === 0 ? (
         <EmptyState title="Tidak ada kendala" body="Kiriman di kategori ini akan muncul di sini." />
-      ) : (
-        <ul className={`flex flex-col gap-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
-          {d.rows.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} busy={busy} act={act} />)}
-        </ul>
-      )}
+      ) : (() => {
+        const paged = paginate(d.rows, page, DEFAULT_PAGE_SIZE)
+        return (
+          <div className="flex flex-col gap-3">
+            <ul className={`flex flex-col gap-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
+              {paged.items.map((r) => <KendalaRow key={r.slug} r={r} bucket={bucket} owner={owner} busy={busy} act={act} />)}
+            </ul>
+            <PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="kendala" loading={loading} />
+          </div>
+        )
+      })()}
       <p className="text-base md:text-sm text-muted-foreground">Batas klaim mengikuti ketentuan Mengantar per ekspedisi. Batas berbasis hari kerja ditampilkan sebagai hari kalender, jadi bisa lebih cepat dari sebenarnya.</p>
     </div>
   )

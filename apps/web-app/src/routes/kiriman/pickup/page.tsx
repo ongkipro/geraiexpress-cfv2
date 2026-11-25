@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react"
-import { useNavigate, useParams } from "@tanstack/react-router"
-import { ScanLineIcon, TruckIcon } from "lucide-react"
+import { Link, useNavigate, useParams } from "@tanstack/react-router"
+import { FileTextIcon, ScanLineIcon, TruckIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
 import { sanitizePhone } from "../../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
-import { SectionCard, Panel } from "../../../components/admin/page"
+import { ItemList, Panel, SectionCard, StatusBadge } from "../../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav, paginate } from "../../../components/admin/pagination"
 
 // `Pickup & Manifest` (spec 04 §1, visual 07 `/kiriman/pickup/:batch`): per-courier queue → scan into the manifest
 // (red banner + tone on block, amber on counter-unpaid) → driver fields + on-screen signature → Surat Jalan PDF.
@@ -18,18 +19,27 @@ type ScanRes = { result: "added" | "duplicate"; slug: string; awb: string; warni
 const COURIER: Record<string, string> = { JT: "J&T", JNE: "JNE", SiCepat: "SiCepat", Sap: "SAP Express", iDexpress: "iDexpress", lion: "Lion Parcel", anteraja: "Anteraja", pos: "Pos Indonesia", spx: "SPX", ninja: "Ninja Xpress" }
 const kg = (g: number) => `${(g / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kg`
 
-/** Queue shown inside the `Pickup & Manifest` tab. */
+interface HistoryBatch { id: string; courier_code: string; status: string; scanned_count: number; driver_name: string | null; created_at: number; handed_over_at: number | null }
+const whenPickup = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
+
+/** Queue + past manifest history shown inside the `Pickup & Manifest` tab. */
 export function PickupQueue() {
   const navigate = useNavigate()
   const [groups, setGroups] = useState<Group[] | null>(null)
+  const [history, setHistory] = useState<HistoryBatch[]>([])
+  const [histPage, setHistPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState<string | null>(null)
   const [actErr, setActErr] = useState<string | null>(null)
   const load = useCallback(() => {
-    api<{ groups: Group[] }>("/pickup")
-      .then((d) => {
+    Promise.all([
+      api<{ groups: Group[] }>("/pickup"),
+      api<{ items: HistoryBatch[] }>("/pickup/history").catch(() => ({ items: [] })),
+    ])
+      .then(([d, h]) => {
         setError(null)
         setGroups(d.groups)
+        setHistory(h.items ?? [])
       })
       .catch((e) => setError(e instanceof ApiError ? e.body.message : "Antrean pickup tidak dapat dimuat."))
   }, [])
@@ -49,19 +59,63 @@ export function PickupQueue() {
   }
   if (error) return <ErrorState message={error} onRetry={load} />
   if (!groups) return <LoadingState label="Memuat antrean pickup" />
-  if (!groups.length) return <EmptyState title="Tidak ada paket menunggu kurir" body="Paket yang resinya terbit dan belum diserahkan akan muncul di sini per ekspedisi." />
+  const pagedHist = paginate(history, histPage, DEFAULT_PAGE_SIZE)
   return (
-    <div className="mb-6 flex flex-col gap-3">
+    <div className="mb-6 flex flex-col gap-6">
       {actErr ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{actErr}</p> : null}
-      <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {groups.map((g) => (
-          <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
-            <p className="flex items-center justify-between gap-2 text-sm font-semibold md:text-base">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base md:text-sm font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
-            <p className="flex items-center gap-2 text-base md:text-sm text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
-            <div><Button disabled={starting !== null} onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {starting === g.courier_code ? "Membuka…" : g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
-          </Panel>
-        ))}
-      </ul>
+      {!groups.length ? (
+        <EmptyState title="Tidak ada paket menunggu kurir" body="Paket yang resinya terbit dan belum diserahkan akan muncul di sini per ekspedisi." />
+      ) : (
+        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {groups.map((g) => (
+            <Panel as="li" key={g.courier_code} className="flex flex-col gap-2 md:p-4">
+              <p className="flex items-center justify-between gap-2 text-sm font-semibold md:text-base">{COURIER[g.courier_code] ?? g.courier_code}<span className="text-base md:text-sm font-normal text-muted-foreground tabular-nums">{g.ready} paket · {kg(g.weight_gram)}</span></p>
+              <p className="flex items-center gap-2 text-base md:text-sm text-muted-foreground"><TruckIcon aria-hidden className="size-4" /> Kendaraan: {g.vehicle}{g.unpaid ? ` · ${g.unpaid} belum dibayar` : ""}</p>
+              <div><Button disabled={starting !== null} onClick={() => start(g.courier_code)}><ScanLineIcon aria-hidden /> {starting === g.courier_code ? "Membuka…" : g.open_batch ? `Lanjutkan Pindai (${g.scanned})` : "Mulai Pindai"}</Button></div>
+            </Panel>
+          ))}
+        </ul>
+      )}
+      {history.length > 0 ? (
+        <section aria-labelledby="riwayat-manifest" className="flex flex-col gap-3">
+          <h2 id="riwayat-manifest" className="text-sm font-semibold md:text-base">Riwayat Surat Jalan &amp; Serah Terima ({history.length})</h2>
+          <ItemList>
+            {pagedHist.items.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to="/kiriman/pickup/$batch" params={{ batch: h.id }} className="font-semibold text-primary underline-offset-4 hover:underline">
+                      Manifest {COURIER[h.courier_code] ?? h.courier_code}
+                    </Link>
+                    <StatusBadge tone={h.status === "open" ? "warn" : "safe"}>
+                      {h.status === "open" ? "Sedang dipindai" : h.status === "dropped_at_branch" ? "Diantar ke cabang" : "Diserahkan ke kurir"}
+                    </StatusBadge>
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {h.scanned_count} paket{h.driver_name ? ` · Kurir: ${h.driver_name}` : ""} · {whenPickup(h.handed_over_at ?? h.created_at)} WIB
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link to="/kiriman/pickup/$batch" params={{ batch: h.id }} className="text-xs font-medium text-primary hover:underline">
+                    Detail
+                  </Link>
+                  {h.status !== "open" ? (
+                    <a
+                      href={`/api/app/pickup/${h.id}/surat-jalan.pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                    >
+                      <FileTextIcon aria-hidden className="size-3.5" /> Surat Jalan PDF
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ItemList>
+          <PageNav page={pagedHist.page} totalPages={pagedHist.totalPages} total={pagedHist.total} pageSize={pagedHist.pageSize} onPageChange={setHistPage} itemLabel="manifest" />
+        </section>
+      ) : null}
     </div>
   )
 }

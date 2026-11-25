@@ -564,7 +564,11 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     // DEC-251C `?macet=2|3|5|7`: only issued, still-moving shipments without a courier scan for that many days.
     const macet = Number(c.req.query("macet"))
     const stuckDays = (STUCK_DAYS as readonly number[]).includes(macet) ? (macet as (typeof STUCK_DAYS)[number]) : 0
-    return { tab, q: (c.req.query("q") ?? "").slice(0, 60), fromMs: period.fromMs, toMs: period.toMs, courier, printed, cursor: c.req.query("cursor") ?? null, limit: Number(c.req.query("limit") ?? 50) || 50, stuckDays } satisfies ListQuery
+    const rawPage = Number(c.req.query("page"))
+    const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : null
+    const rawLimit = Number(c.req.query("limit"))
+    const limit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.min(200, Math.floor(rawLimit)) : page ? 20 : 50
+    return { tab, q: (c.req.query("q") ?? "").slice(0, 60), fromMs: period.fromMs, toMs: period.toMs, courier, printed, cursor: c.req.query("cursor") ?? null, page, limit, stuckDays } satisfies ListQuery
   }
   r("GET", "/shipments", "app_member", "role", async (c) => {
     const m = c.get("membership")!
@@ -1063,6 +1067,13 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!r.ok) return vaultErr(r)
     return ok(r.value)
   })
+  r("POST", "/shipments/:slug/sync", "app_member", "role", async (c) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).syncShipmentStatus(m.tenantId, slugParam(c))
+    if (!r.ok) return vaultErr(r)
+    if (!r.value) throw new AppError(404, "SHIPMENT_NOT_FOUND", "Kiriman tidak ditemukan.")
+    return ok(r.value)
+  })
   r("POST", "/shipments/:slug/pay-unpaid", "app_member", "role", async (c) => {
     const m = c.get("membership")!
     const r = await vaultFor(c.env, m.tenantId).payUnpaid(m.tenantId, slugParam(c), c.get("session").user.id)
@@ -1087,18 +1098,28 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
     const v = r.value
     if (v.kind === "errors") throw new AppError(422, "INVALID_CONTACT", v.errors[0]!.message, Object.fromEntries(v.errors.map((e) => [e.field, e.message])))
-    if ((v.kind === "sender" || v.kind === "recipient") && !v.item) throw new AppError(404, "CONTACT_NOT_FOUND", "Kontak tidak ditemukan.")
+    if (((v.kind === "sender" || v.kind === "recipient") && !v.item) || (v.kind === "contact_history" && !v.found)) throw new AppError(404, "CONTACT_NOT_FOUND", "Kontak tidak ditemukan.")
     return ok(projectFor(m.role, v), status)
   }
   const filterOf = (x: string | undefined) => (x === "walk_in" || x === "reseller_dropship" ? x : "all")
-  r("GET", "/contacts/senders", "app_member", "role", (c) => contacts(c, { op: "list_senders", q: (c.req.query("q") ?? "").slice(0, 60), filter: filterOf(c.req.query("jenis")) }))
+  const pageParam = (c: AppCtx) => {
+    const n = Number(c.req.query("page"))
+    return Number.isInteger(n) && n >= 1 ? n : 1
+  }
+  const limitParam = (c: AppCtx, fallback: number) => {
+    const n = Number(c.req.query("limit"))
+    return Number.isFinite(n) && n >= 1 ? Math.min(200, Math.floor(n)) : fallback
+  }
+  r("GET", "/contacts/senders", "app_member", "role", (c) => contacts(c, { op: "list_senders", q: (c.req.query("q") ?? "").slice(0, 60), filter: filterOf(c.req.query("jenis")), page: pageParam(c), limit: limitParam(c, c.req.query("page") ? 20 : 50) }))
   r("GET", "/contacts/senders/:id", "app_member", "role", (c) => contacts(c, { op: "get_sender", id: c.req.param("id") ?? "" }))
+  r("GET", "/contacts/senders/:id/shipments", "app_member", "role", (c) => contacts(c, { op: "sender_history", id: c.req.param("id") ?? "", page: pageParam(c), limit: limitParam(c, 20) }))
   r("POST", "/contacts/senders", "app_member", "role", async (c) => contacts(c, { op: "create_sender", input: (await body(c)) as SenderInput }, 201))
   r("POST", "/contacts/senders/:id", "app_member", "role", async (c) => contacts(c, { op: "update_sender", id: c.req.param("id") ?? "", input: (await body(c)) as SenderInput }))
   r("POST", "/contacts/senders/:id/verify-wa", "app_member", "role", (c) => contacts(c, { op: "verify_wa", id: c.req.param("id") ?? "" }))
   r("POST", "/contacts/senders/:id/archive", "app_owner", "role", (c) => contacts(c, { op: "archive", contact: "sender", id: c.req.param("id") ?? "" }))
-  r("GET", "/contacts/recipients", "app_member", "role", (c) => contacts(c, { op: "list_recipients", q: (c.req.query("q") ?? "").slice(0, 60) }))
+  r("GET", "/contacts/recipients", "app_member", "role", (c) => contacts(c, { op: "list_recipients", q: (c.req.query("q") ?? "").slice(0, 60), page: pageParam(c), limit: limitParam(c, c.req.query("page") ? 20 : 50) }))
   r("GET", "/contacts/recipients/:id", "app_member", "role", (c) => contacts(c, { op: "get_recipient", id: c.req.param("id") ?? "" }))
+  r("GET", "/contacts/recipients/:id/shipments", "app_member", "role", (c) => contacts(c, { op: "recipient_history", id: c.req.param("id") ?? "", page: pageParam(c), limit: limitParam(c, 20) }))
   r("POST", "/contacts/recipients", "app_member", "role", async (c) => contacts(c, { op: "create_recipient", input: (await body(c)) as RecipientInput }, 201))
   r("POST", "/contacts/recipients/:id", "app_member", "role", async (c) => contacts(c, { op: "update_recipient", id: c.req.param("id") ?? "", input: (await body(c)) as RecipientInput }))
   r("POST", "/contacts/recipients/:id/archive", "app_owner", "role", (c) => contacts(c, { op: "archive", contact: "recipient", id: c.req.param("id") ?? "" }))

@@ -209,7 +209,13 @@ export const shipments = sqliteTable(
     itemQuantity: integer("item_quantity").notNull().default(1),
     deliveryInstruction: text("delivery_instruction"),
   },
-  (t) => [primaryKey({ columns: [t.tenantId, t.slug] }), index("shipments_awb").on(t.awbNumber), index("shipments_order_code").on(t.mengantarOrderCode)],
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.slug] }),
+    index("shipments_awb").on(t.awbNumber),
+    index("shipments_order_code").on(t.mengantarOrderCode),
+    index("shipments_sender_created").on(t.senderContactId, t.createdAt),
+    index("shipments_recipient_created").on(t.recipientContactId, t.createdAt),
+  ],
 )
 
 export const shipmentEvents = sqliteTable(
@@ -220,6 +226,7 @@ export const shipmentEvents = sqliteTable(
     source: text("source", { enum: ["webhook", "poll", "local"] }).notNull(),
     rawCategory: text("raw_category"),
     mappedStatus: text("mapped_status"),
+    statusText: text("status_text"),
     eventAt: integer("event_at").notNull(),
     eventAtText: text("event_at_text"),
     recordedAt: integer("recorded_at").notNull(),

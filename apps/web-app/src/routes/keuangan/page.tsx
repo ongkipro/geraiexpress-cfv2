@@ -3,6 +3,7 @@ import { Link, useSearch } from "@tanstack/react-router"
 import { RefreshCwIcon } from "lucide-react"
 import { DataTableShell } from "../../components/admin/data-table"
 import { CalloutAlert, MetricCard, MetricGrid, SectionCard, StatusBadge } from "../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav, paginate } from "../../components/admin/pagination"
 import { Button } from "../../components/ui/button"
 import { Field, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
@@ -158,13 +159,16 @@ function Figure({ label, value, note }: { label: string; value: string; note: st
 const STATUS_TEXT: Record<string, string> = { statusPending: "Menunggu", statusExpired: "Kedaluwarsa", statusCleared: "Selesai" }
 
 function Mutations({ rows }: { rows: Mutation[] }) {
+  const [page, setPage] = useState(1)
+  const paged = paginate(rows, page, DEFAULT_PAGE_SIZE)
   return (
     <SectionCard id="mutasi" title="Mutasi Sync" description="Mutasi saldo dari Mengantar, terbaru di atas">
       <DataTableShell
         caption="Mutasi saldo Mengantar"
-        rows={rows}
+        rows={paged.items}
         rowKey={(m) => m.invoice_id}
         empty={<EmptyState title="Belum ada mutasi" body="Tekan Sinkronkan Sekarang untuk menarik mutasi saldo dari Mengantar." />}
+        footer={<PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="mutasi" />}
         columns={[
           { key: "waktu", header: "Waktu", cell: (m) => <span className="tabular-nums">{when(m.provider_created_at)}</span> },
           { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{TYPE_LABEL[m.type] ?? "Mutasi lainnya"}</span> },
@@ -186,13 +190,16 @@ function Mutations({ rows }: { rows: Mutation[] }) {
 }
 
 function Profits({ rows }: { rows: Profit[] }) {
+  const [page, setPage] = useState(1)
+  const paged = paginate(rows, page, DEFAULT_PAGE_SIZE)
   return (
     <SectionCard id="laba-inv" title="Laba per INV" description="Estimasi saat resi terbit dan Laba Kas setelah cocok dengan Mengantar">
       <DataTableShell
         caption="Laba per INV"
-        rows={rows}
+        rows={paged.items}
         rowKey={(p) => p.slug}
         empty={<EmptyState title="Belum ada kiriman" body="Laba per INV muncul setelah resi terbit." />}
+        footer={<PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="kiriman" />}
         columns={[
           { key: "inv", header: "INV", cell: (p) => <Link to="/kiriman/$slug" params={{ slug: p.slug }} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums md:min-h-6">INV {p.slug.toUpperCase()}</Link> },
           { key: "terbit", header: "Terbit", cell: (p) => <span className="tabular-nums">{when(p.issued_at)}</span> },
@@ -206,6 +213,7 @@ function Profits({ rows }: { rows: Profit[] }) {
 }
 
 function Discrepancies({ rows, onResolved }: { rows: Discrepancy[]; onResolved: () => void }) {
+  const [page, setPage] = useState(1)
   const [closing, setClosing] = useState<string | null>(null)
   const [reason, setReason] = useState("")
   const [done, setDone] = useState<Set<string>>(new Set())
@@ -213,6 +221,7 @@ function Discrepancies({ rows, onResolved }: { rows: Discrepancy[]; onResolved: 
   const [pending, setPending] = useState(false)
   const open = rows.filter((x) => !done.has(x.id))
   if (!open.length) return <EmptyState title="Tidak ada selisih" body="Semua mutasi Mengantar cocok dengan kiriman gerai." />
+  const paged = paginate(open, page, DEFAULT_PAGE_SIZE)
   async function resolve(id: string) {
     if (pending) return
     setPending(true)
@@ -231,39 +240,45 @@ function Discrepancies({ rows, onResolved }: { rows: Discrepancy[]; onResolved: 
   }
   return (
     <SectionCard id="selisih" title="Selisih Sync" description="Mutasi Mengantar yang belum cocok dengan kiriman gerai" flush>
-    <ul className="divide-y">
-      {open.map((x) => (
-        <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base md:text-sm md:px-6">
-          <span className="font-medium">{KIND_LABEL[x.kind] ?? "Selisih"}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
-          <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
-          {closing === x.id ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <Field className="min-w-0 flex-1">
-                <FieldLabel htmlFor={`alasan-${x.id}`}>Alasan (dicatat, min. 5 karakter)</FieldLabel>
-                <Input id={`alasan-${x.id}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
-              </Field>
-              <Button variant="outline" disabled={pending} onClick={() => setClosing(null)}>Batal</Button>
-              <Button disabled={pending || reason.trim().length < 5} onClick={() => resolve(x.id)}>{pending ? "Menyimpan…" : "Tandai Selesai"}</Button>
-            </div>
-          ) : (
-            <div><Button variant="outline" onClick={() => { setClosing(x.id); setReason("") }}>Tandai Selesai</Button></div>
-          )}
-          {closing === x.id && error ? <p role="alert" className="text-danger">{error}</p> : null}
-        </li>
-      ))}
-    </ul>
+      <ul className="divide-y">
+        {paged.items.map((x) => (
+          <li key={x.id} className="flex flex-col gap-2 px-4 py-3 text-base md:text-sm md:px-6">
+            <span className="font-medium">{KIND_LABEL[x.kind] ?? "Selisih"}{x.shipment_slug && !x.shipment_slug.startsWith("#") ? <> · <Link to="/kiriman/$slug" params={{ slug: x.shipment_slug }} className="text-primary underline-offset-4 hover:underline tabular-nums">INV {x.shipment_slug.toUpperCase()}</Link></> : null}</span>
+            <span className="text-muted-foreground">{x.detail}{x.expected_idr !== null || x.actual_idr !== null ? ` · perkiraan ${x.expected_idr === null ? "—" : rp(x.expected_idr)}, tercatat ${x.actual_idr === null ? "—" : rp(x.actual_idr)}` : ""} · {when(x.created_at)}</span>
+            {closing === x.id ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <Field className="min-w-0 flex-1">
+                  <FieldLabel htmlFor={`alasan-${x.id}`}>Alasan (dicatat, min. 5 karakter)</FieldLabel>
+                  <Input id={`alasan-${x.id}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
+                </Field>
+                <Button variant="outline" disabled={pending} onClick={() => setClosing(null)}>Batal</Button>
+                <Button disabled={pending || reason.trim().length < 5} onClick={() => resolve(x.id)}>{pending ? "Menyimpan…" : "Tandai Selesai"}</Button>
+              </div>
+            ) : (
+              <div><Button variant="outline" onClick={() => { setClosing(x.id); setReason("") }}>Tandai Selesai</Button></div>
+            )}
+            {closing === x.id && error ? <p role="alert" className="text-danger">{error}</p> : null}
+          </li>
+        ))}
+      </ul>
+      <div className="border-t border-slate-100 px-4 py-3 md:px-6">
+        <PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="selisih" />
+      </div>
     </SectionCard>
   )
 }
 
 function ReserveList({ rows }: { rows: Reserve[] }) {
+  const [page, setPage] = useState(1)
+  const paged = paginate(rows, page, DEFAULT_PAGE_SIZE)
   return (
     <SectionCard id="cadangan" title="Cadangan Retur" description="Saldo yang ditahan untuk retur atau sengketa">
       <DataTableShell
         caption="Cadangan retur"
-        rows={rows}
+        rows={paged.items}
         rowKey={(r) => `${r.kind}-${r.slug}`}
         empty={<EmptyState title="Tidak ada cadangan" body="Saldo tidak ditahan untuk retur atau sengketa saat ini." />}
+        footer={<PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="cadangan" />}
         columns={[
           { key: "inv", header: "INV", cell: (r) => <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline tabular-nums md:min-h-6">INV {r.slug.toUpperCase()}</Link> },
           { key: "jenis", header: "Jenis", cell: (r) => (r.kind === "retur" ? "Retur (ongkir + perkiraan biaya retur)" : "Penyesuaian berat/tujuan") },

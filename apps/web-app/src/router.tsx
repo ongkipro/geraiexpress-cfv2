@@ -52,6 +52,8 @@ const PengaturanEkspedisiPage = lazySettingsPage(() => import("./routes/pengatur
 const NotifikasiPage = lazyPage(() => import("./routes/notifikasi/page"), "NotifikasiPage")
 const PengirimPage = lazyPage(() => import("./routes/kontak/pengirim"), "PengirimPage")
 const PenerimaPage = lazyPage(() => import("./routes/kontak/penerima"), "PenerimaPage")
+const PengirimDetailPage = lazyPage(() => import("./routes/kontak/detail"), "PengirimDetailPage")
+const PenerimaDetailPage = lazyPage(() => import("./routes/kontak/detail"), "PenerimaDetailPage")
 const CekCepatPage = lazyPage(() => import("./routes/kasir/cek-cepat"), "CekCepatPage")
 const ShiftPage = lazyPage(() => import("./routes/kasir/shift"), "ShiftPage")
 const PaketMassalPage = lazyPage(() => import("./routes/kasir/multi/page"), "PaketMassalPage")
@@ -197,13 +199,22 @@ const riwayatMassalRoute = createRoute({ getParentRoute: () => workspaceRoute, p
 const batchRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/massal/$batch", loader: BatchPage.preload, component: BatchPage })
 const manifestRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman/pickup/$batch", loader: ManifestPage.preload, component: ManifestPage })
 const kirimanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kiriman", component: KirimanPage })
+const kontakIndexRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "/kontak",
+  beforeLoad: () => {
+    throw redirect({ to: "/kontak/pengirim", replace: true })
+  },
+})
+const pengirimDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim/$id", loader: PengirimDetailPage.preload, component: PengirimDetailPage })
+const penerimaDetailRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima/$id", loader: PenerimaDetailPage.preload, component: PenerimaDetailPage })
 const pengirimRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/pengirim", loader: PengirimPage.preload, component: PengirimPage })
 const penerimaRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/kontak/penerima", loader: PenerimaPage.preload, component: PenerimaPage })
 const keuanganRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/keuangan", loader: KeuanganPage.preload, component: ownerOnly(KeuanganPage) })
 const akunRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/akun", loader: AkunPage.preload, component: AkunPage })
 const bantuanRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/bantuan", loader: BantuanPage.preload, component: BantuanPage })
 const statusRoute = createRoute({ getParentRoute: () => workspaceRoute, path: "/status", loader: StatusPage.preload, component: ownerOnly(StatusPage) })
-const featureRoutes = [manifestRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kirimanRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
+const featureRoutes = [manifestRoute, kasirRoute, cekCepatRoute, shiftRoute, multiRoute, cekResiRoute, riwayatMassalRoute, batchRoute, cetakMassalRoute, kirimanDetailRoute, kirimanRoute, kontakIndexRoute, pengirimDetailRoute, penerimaDetailRoute, pengirimRoute, penerimaRoute, keuanganRoute, pengaturanRoute, akunRoute, bantuanRoute, statusRoute] as const
 
 const masukRoute = createRoute({ getParentRoute: () => rootRoute, path: "/masuk", component: MasukPage })
 // DEC-250 Sol R1: an applicant who already has an app session but no gerai continues on `/daftar` — from the auth

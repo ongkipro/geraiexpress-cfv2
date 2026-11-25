@@ -1,31 +1,41 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useParams } from "@tanstack/react-router"
-import { CheckCircle2Icon, CheckIcon, CopyIcon, PrinterIcon } from "lucide-react"
+import { Link, useParams } from "@tanstack/react-router"
+import { AlertTriangleIcon, ArrowLeftIcon, CheckCircle2Icon, CheckIcon, ClockIcon, CopyIcon, ExternalLinkIcon, MapPinIcon, PackageIcon, PrinterIcon, RefreshCwIcon, RotateCcwIcon, TruckIcon, UserIcon } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
 import { Button } from "../../components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
-import { courierLabel } from "../../lib/status"
+import { courierLabel, statusLabel } from "../../lib/status"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { rp } from "../kasir/quote-panel"
 import { PresetPicker, PRESET_LABEL, type MaskPreset } from "../../components/masking/preset-picker"
 import { PrintDrawer } from "../../print/drawer"
-import { CheckboxField, SectionCard, Panel } from "../../components/admin/page"
+import { CheckboxField, Panel, SectionCard, StatusBadge, type StatusTone } from "../../components/admin/page"
+import { LinkButton } from "../../components/admin/link-button"
 
-// `/kiriman/:slug` checkout (visual 07 §3.2, visual 05 stages 3–6, DEC-220): sender → recipient & contents → locked
-// summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
-// owns every amount (frozen quote); the screen never computes money.
+// `/kiriman/:slug` checkout & INV detail (visual 07 §3.2, visual 05 stages 3–6, DEC-220): sender → recipient & contents
+// → locked summary → payment → live Mengantar sync + checkpoint timeline + print + cancel.
 type Method = "qris" | "tunai" | "transfer" | "later"
-export interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; postal_code?: string | null; display_brand_name?: string | null; sender_kind?: string }
+export interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; true_street?: string | null; subdistrict_name?: string | null; true_area_label?: string | null; postal_code?: string | null; true_postal_code?: string | null; display_brand_name?: string | null; sender_kind?: string }
+interface ShipmentEvent {
+  source: string
+  raw_category: string | null
+  mapped_status: string | null
+  status_text: string | null
+  event_at: number
+  event_at_text: string | null
+}
 interface Detail {
-  shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null; mask_preset: MaskPreset; mask_snapshot_json: string | null }
+  shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_payment_method?: string | null; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null; mask_preset: MaskPreset; mask_snapshot_json: string | null; created_at?: number; issued_at?: number | null; last_polled_at?: number | null; provider_status_conflict_at?: number | null }
   quote: (Record<string, unknown> & { service_code: string; billable_weight_gram: number; expires_at: number; cod_fee_idr: number }) | null
   sender: Contact | null
   recipient: Contact | null
   receipts: Array<{ id: string; event: string; amount_idr: number; method: string; created_at: number }>
+  events: ShipmentEvent[]
   preflight?: { balance_sufficient: boolean | null; synced_balance_idr?: number | null; estimated_debit_idr?: number | null }
 }
 
@@ -38,6 +48,16 @@ const STATE_LABEL: Record<string, string> = {
   failed: "Gagal diterbitkan",
   cancel_unknown: "Pembatalan belum pasti",
   cancelled: "Dibatalkan",
+}
+const METHOD_NAME: Record<string, string> = { qris: "QRIS", tunai: "Tunai", transfer: "Transfer", deposit: "Deposit" }
+const EVENT_SOURCE: Record<string, string> = { webhook: "Webhook Mengantar", poll: "Sync Mengantar", local: "Loket Gerai" }
+const fmtWib = (ms: number) => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms)
+const statusTone = (dispatchState: string, status: string): StatusTone => {
+  if (dispatchState === "cancelled" || status === "cancelled") return "muted"
+  if (dispatchState !== "issued") return "warn"
+  if (status === "delivered") return "safe"
+  if (status.startsWith("rts_") || status === "provider_returned" || status === "undelivery_hold" || status === "lost") return "danger"
+  return "primary"
 }
 const newKey = () => crypto.randomUUID().replace(/-/g, "")
 
@@ -73,10 +93,21 @@ export function KirimanDetailPage() {
   if (error) return <div><PageTitle title={`INV ${slug.toUpperCase()}`} /><ErrorState message={error} onRetry={load} /></div>
   if (!d || loadedSlug !== slug) return <div><PageTitle title={`INV ${slug.toUpperCase()}`} /><LoadingState label="Memuat kiriman" rows={5} /></div>
   const s = d.shipment
-  const done = ["issued", "provider_unpaid_hold", "cancelled"].includes(s.dispatch_state)
+  const done = ["issued", "provider_unpaid_hold", "cancelled", "reconciliation_needed", "cancel_unknown"].includes(s.dispatch_state)
+  const headlineStatus = s.dispatch_state === "issued" ? statusLabel(s.status) : (STATE_LABEL[s.dispatch_state] ?? statusLabel(s.status))
   return (
     <div className="pb-32 md:pb-0">
-      <PageTitle title={`INV ${slug.toUpperCase()}`} description={STATE_LABEL[s.dispatch_state] ?? s.status} />
+      <div className="mb-2 flex items-center">
+        <Link to="/kiriman" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-slate-900 md:min-h-8">
+          <ArrowLeftIcon aria-hidden className="size-4" /> Kembali ke Daftar Kiriman
+        </Link>
+      </div>
+      <PageTitle
+        title={`INV ${slug.toUpperCase()}`}
+        description={`${headlineStatus}${s.created_at ? ` · Dibuat ${fmtWib(Number(s.created_at))} WIB` : ""}`}
+      >
+        <StatusBadge tone={statusTone(s.dispatch_state, s.status)}>{headlineStatus}</StatusBadge>
+      </PageTitle>
       {done ? <IssuedView key={s.slug} d={d} owner={owner} reload={load} /> : <CheckoutView key={s.slug} d={d} owner={owner} reload={load} />}
     </div>
   )
@@ -279,24 +310,130 @@ function CheckoutView({ d, owner, reload }: { d: Detail; owner: boolean; reload:
   )
 }
 
+function ShipmentProgress({ dispatchState, status }: { dispatchState: string; status: string }) {
+  const isCancelled = dispatchState === "cancelled" || status === "cancelled"
+  const isRts = status.startsWith("rts_") || status === "provider_returned"
+  const isHold = status === "undelivery_hold" || status === "lost"
+  const steps = [
+    { key: "created", label: "Dibuat & Resi", icon: PackageIcon },
+    { key: "pickup", label: "Pickup Kurir", icon: TruckIcon },
+    { key: "transit", label: "Dalam Perjalanan", icon: ClockIcon },
+    { key: "final", label: isRts ? "Retur" : isHold ? "Kendala Antar" : "Terkirim", icon: isRts ? RotateCcwIcon : isHold ? AlertTriangleIcon : CheckCircle2Icon },
+  ]
+  let reached = 0
+  if (dispatchState === "issued") {
+    if (status === "ready_for_pickup") reached = 1
+    else if (status === "handed_to_courier") reached = 2
+    else if (status === "in_transit") reached = 3
+    else if (status === "delivered" || isRts || isHold) reached = 4
+  }
+  if (isCancelled) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-muted-foreground">
+        Kiriman ini telah <strong className="text-slate-900">dibatalkan</strong> dan tidak diproses oleh ekspedisi.
+      </div>
+    )
+  }
+  return (
+    <ol aria-label="Tahapan proses pengiriman" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {steps.map((st, idx) => {
+        const active = idx + 1 === reached
+        const doneStep = idx + 1 < reached || (idx === 3 && status === "delivered")
+        const isDangerStep = idx === 3 && (isRts || isHold)
+        const Icon = st.icon
+        return (
+          <li
+            key={st.key}
+            className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium ${
+              isDangerStep
+                ? "border-danger/40 bg-danger-bg text-danger"
+                : doneStep
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : active
+                    ? "border-primary/40 bg-accent/60 text-slate-950"
+                    : "border-slate-200/80 bg-slate-50/70 text-muted-foreground"
+            }`}
+          >
+            <Icon aria-hidden className="size-4 shrink-0" />
+            <span className="truncate">{st.label}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: () => void }) {
   const s = d.shipment
   const w = useWorkspace()
-  const [msg, setMsg] = useState<string | null>(null)
+  const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmKind, setConfirmKind] = useState<"void" | "cancel" | null>(null)
-  const act = async (fn: () => Promise<unknown>) => {
+  const [payOpen, setPayOpen] = useState(false)
+  const [payMethod, setPayMethod] = useState<"qris" | "tunai" | "transfer">("qris")
+  const [payCash, setPayCash] = useState("")
+  const [payErr, setPayErr] = useState<string | null>(null)
+  const [payKey, setPayKey] = useState(newKey)
+  const payCashNum = Number(payCash.replace(/\D/g, ""))
+
+  const act = async (fn: () => Promise<unknown>, okText?: string) => {
     if (pending) return
     setPending(true)
     setMsg(null)
     try {
       await fn()
       setReason("")
+      if (okText) setMsg({ tone: "safe", text: okText })
       reload()
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.body.message : "Gagal. Coba lagi.")
+      setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal. Coba lagi." })
+    } finally {
+      setPending(false)
+    }
+  }
+  async function syncNow() {
+    if (syncing) return
+    setSyncing(true)
+    setMsg(null)
+    try {
+      const r = await api<{ synced: boolean; changed: boolean; status: string; eventsAdded: number; note?: string }>(`/shipments/${s.slug}/sync`, { body: {} })
+      if (!r.synced) setMsg({ tone: "danger", text: r.note ?? "Sinkronisasi status ke Mengantar belum berhasil." })
+      else if (r.changed || r.eventsAdded > 0) setMsg({ tone: "safe", text: `Status disinkronkan dari Mengantar: ${statusLabel(r.status)} (${r.eventsAdded} checkpoint baru).` })
+      else setMsg({ tone: "safe", text: r.note ?? `Status terbaru di Mengantar: ${statusLabel(r.status)}.` })
+      reload()
+    } catch (err) {
+      setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal menyinkronkan status dari Mengantar." })
+    } finally {
+      setSyncing(false)
+    }
+  }
+  async function confirmPay() {
+    if (pending) return
+    setPending(true)
+    setPayErr(null)
+    setMsg(null)
+    try {
+      const res = await fetch(`/api/app/shipments/${s.slug}/payment`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", "idempotency-key": payKey },
+        body: JSON.stringify({ method: payMethod, cashReceivedIdr: payMethod === "tunai" ? payCashNum : undefined }),
+      })
+      const j = (await res.json().catch(() => null)) as { ok: boolean; error?: { message: string } } | null
+      if (!j?.ok) {
+        setPayErr(j?.error?.message ?? "Pembayaran gagal dicatat.")
+        return
+      }
+      setPayOpen(false)
+      setPayCash("")
+      setPayKey(newKey())
+      setMsg({ tone: "safe", text: `INV ${s.slug.toUpperCase()} ditandai lunas (${METHOD_NAME[payMethod] ?? payMethod}).` })
+      reload()
+    } catch {
+      setPayErr("Koneksi terputus saat mencatat pembayaran.")
     } finally {
       setPending(false)
     }
@@ -311,55 +448,273 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
       () => undefined,
     )
   }
+
+  let printedSenderName: string | null = null
+  let printedSenderPhone: string | null = null
+  if (s.mask_snapshot_json) {
+    try {
+      const snap = JSON.parse(s.mask_snapshot_json) as { sender?: { name?: string; phone?: string } }
+      printedSenderName = snap.sender?.name ?? null
+      printedSenderPhone = snap.sender?.phone ?? null
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+  const isRts = s.status.startsWith("rts_") || s.status === "provider_returned"
+  const isIssue = s.status === "undelivery_hold" || s.status === "lost" || !!s.provider_status_conflict_at
+  const events = d.events ?? []
+
   return (
     <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">
-      <Panel className="flex flex-col gap-4">
-        {s.dispatch_state === "issued" ? (
-          <>
-            <p className="flex items-center gap-2 text-sm font-semibold md:text-base text-safe"><CheckCircle2Icon aria-hidden className="size-6" /> Resi terbit</p>
-            <div className="flex flex-wrap items-center gap-2 text-base md:text-sm tabular-nums">
-              <span>{courierLabel(s.courier_code)} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</span>
-              {s.awb_number ? (
-                <Button type="button" variant="outline" size="sm" onClick={copyAwb}>
-                  {copied ? <><CheckIcon aria-hidden /> Tersalin</> : <><CopyIcon aria-hidden /> Salin Resi</>}
+      <div className="flex flex-col gap-4 md:gap-5">
+        <Panel className="flex flex-col gap-4">
+          {s.dispatch_state === "issued" ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold md:text-base text-safe">
+                  <CheckCircle2Icon aria-hidden className="size-5" /> Resi terbit · {statusLabel(s.status)}
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
+                  <RefreshCwIcon aria-hidden className={syncing ? "animate-spin" : ""} /> {syncing ? "Menyinkronkan…" : "Sinkronkan Status"}
                 </Button>
-              ) : null}
-            </div>
-            <p className="text-base md:text-sm">{s.counter_payment_status === "paid" ? "LUNAS" : s.counter_payment_status === "unpaid" ? "BELUM DIBAYAR" : "Tidak ada tagihan loket"}</p>
-            {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
-            {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
-            <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
-            {owner && w.hints.sandboxTools ? <SimulateStatus slug={s.slug} reload={reload} /> : null}
-          </>
-        ) : s.dispatch_state === "provider_unpaid_hold" ? (
-          <>
-            <p className="text-sm font-semibold md:text-base text-warn">Menunggu saldo Mengantar</p>
-            <p className="text-base md:text-sm">Kiriman sudah tercatat di Mengantar tetapi resi belum terbit karena saldo kurang. Isi saldo, lalu tekan tombol di bawah. Label belum bisa dicetak.</p>
-            <div><Button onClick={() => act(() => api(`/shipments/${s.slug}/pay-unpaid`, { body: {} }))} disabled={pending}>{pending ? "Memproses…" : "Bayar ke Mengantar & Terbitkan Resi"}</Button></div>
-          </>
-        ) : (
-          <p className="text-sm font-semibold md:text-base">Kiriman dibatalkan</p>
-        )}
-        {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
-        {s.dispatch_state !== "cancelled" ? (
-          <div className="flex flex-col gap-2 border-t pt-4">
-            <Field>
-              <FieldLabel htmlFor="alasan-batal">Alasan pembatalan</FieldLabel>
-              <Input id="alasan-batal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder="Contoh: pengirim batal kirim" />
-              <FieldDescription>Minimal 3 karakter untuk mengaktifkan tombol pembatalan.</FieldDescription>
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              {s.counter_payment_status === "paid" ? (
-                <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("void")}>
-                  Batalkan Pembayaran
+              </div>
+              <ShipmentProgress dispatchState={s.dispatch_state} status={s.status} />
+              <div className="flex flex-wrap items-center gap-2 text-base md:text-sm tabular-nums">
+                <span>{courierLabel(s.courier_code)} · AWB <strong className="font-mono">{s.awb_number}</strong>{s.sorting_code ? ` · Kode sortir ${String(s.sorting_code)}` : ""}</span>
+                {s.awb_number ? (
+                  <Button type="button" variant="outline" size="sm" onClick={copyAwb}>
+                    {copied ? <><CheckIcon aria-hidden /> Tersalin</> : <><CopyIcon aria-hidden /> Salin Resi</>}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <StatusBadge tone={s.counter_payment_status === "paid" ? "safe" : s.counter_payment_status === "unpaid" ? "warn" : "muted"}>
+                  {s.counter_payment_status === "paid"
+                    ? `LUNAS${s.counter_payment_method ? ` · ${METHOD_NAME[String(s.counter_payment_method)] ?? String(s.counter_payment_method)}` : ""}`
+                    : s.counter_payment_status === "unpaid"
+                      ? "BELUM DIBAYAR"
+                      : "Tanpa tagihan loket"}
+                </StatusBadge>
+                {s.counter_payment_status === "unpaid" ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setPayErr(null); setPayCash(""); setPayOpen(true) }}>
+                    Tandai Lunas
+                  </Button>
+                ) : null}
+                {isRts ? (
+                  <LinkButton variant="outline" size="sm" to="/kiriman" search={{ tab: "retur" } as never}>
+                    <RotateCcwIcon aria-hidden data-icon="inline-start" /> Buka Meja Retur
+                  </LinkButton>
+                ) : null}
+                {isIssue ? (
+                  <LinkButton variant="outline" size="sm" to="/kiriman" search={{ tab: "kendala" } as never}>
+                    <AlertTriangleIcon aria-hidden data-icon="inline-start" /> Buka Kendala &amp; Klaim
+                  </LinkButton>
+                ) : null}
+              </div>
+              {s.mask_preset && s.mask_preset !== "standar_gerai" ? <Reveal slug={s.slug} preset={s.mask_preset} /> : null}
+              {["buyer_bears_fee", "sender_bears_fee", "cod_all_in"].includes(s.cod_fee_mode) ? <CodPayout d={d} owner={owner} reload={reload} /> : null}
+              <div><PrintDrawer slug={s.slug} printCount={Number(s.print_count ?? 0)} firstPrintedAt={(s.first_printed_at as number | null) ?? null} onPrinted={reload} /></div>
+              {owner && w.hints.sandboxTools ? <SimulateStatus slug={s.slug} reload={reload} /> : null}
+            </>
+          ) : s.dispatch_state === "provider_unpaid_hold" ? (
+            <>
+              <p className="text-sm font-semibold md:text-base text-warn">Menunggu saldo Mengantar</p>
+              <p className="text-base md:text-sm">Kiriman sudah tercatat di Mengantar tetapi resi belum terbit karena saldo kurang. Isi saldo, lalu tekan tombol di bawah. Label belum bisa dicetak.</p>
+              <div><Button onClick={() => act(() => api(`/shipments/${s.slug}/pay-unpaid`, { body: {} }), "Pembayaran ke Mengantar berhasil dan resi diterbitkan.")} disabled={pending}>{pending ? "Memproses…" : "Bayar ke Mengantar & Terbitkan Resi"}</Button></div>
+            </>
+          ) : s.dispatch_state === "reconciliation_needed" || s.dispatch_state === "cancel_unknown" ? (
+            <>
+              <p className="text-sm font-semibold md:text-base text-warn">{STATE_LABEL[s.dispatch_state]}</p>
+              <p className="text-base md:text-sm text-muted-foreground">Status kiriman di Mengantar perlu dipastikan ulang agar tidak terjadi pengiriman ganda.</p>
+              <div>
+                <Button onClick={() => act(() => api(`/shipments/${s.slug}/reconcile`, { body: {} }), "Pemeriksaan status ke Mengantar selesai.")} disabled={pending}>
+                  <RefreshCwIcon aria-hidden className={pending ? "animate-spin" : ""} /> {pending ? "Memeriksa…" : "Periksa Status ke Mengantar"}
                 </Button>
-              ) : null}
-              <Button variant="destructive" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("cancel")}>Batalkan Kiriman</Button>
+              </div>
+            </>
+          ) : (
+            <ShipmentProgress dispatchState={s.dispatch_state} status={s.status} />
+          )}
+          {msg ? (
+            <p role={msg.tone === "danger" ? "alert" : "status"} className={`border-l-4 py-1 pl-3 text-base md:text-sm font-medium ${msg.tone === "danger" ? "border-danger text-danger" : "border-safe text-safe"}`}>
+              {msg.text}
+            </p>
+          ) : null}
+          {s.dispatch_state !== "cancelled" ? (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <Field>
+                <FieldLabel htmlFor="alasan-batal">Alasan pembatalan</FieldLabel>
+                <Input id="alasan-batal" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder="Contoh: pengirim batal kirim" />
+                <FieldDescription>Minimal 3 karakter untuk mengaktifkan tombol pembatalan.</FieldDescription>
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                {s.counter_payment_status === "paid" ? (
+                  <Button variant="outline" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("void")}>
+                    Batalkan Pembayaran
+                  </Button>
+                ) : null}
+                <Button variant="destructive" disabled={pending || reason.trim().length < 3} onClick={() => setConfirmKind("cancel")}>Batalkan Kiriman</Button>
+              </div>
             </div>
-          </div>
+          ) : null}
+        </Panel>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SectionCard
+            id="info-pengirim"
+            title="Pengirim"
+            action={
+              d.sender ? (
+                <Link to="/kontak/pengirim/$id" params={{ id: d.sender.id }} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  Riwayat <ExternalLinkIcon aria-hidden className="size-3" />
+                </Link>
+              ) : null
+            }
+          >
+            {d.sender ? (
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="flex items-center gap-1.5 font-semibold text-slate-950">
+                  <UserIcon aria-hidden className="size-4 text-muted-foreground" />
+                  {d.sender.display_brand_name ?? d.sender.true_name}
+                </p>
+                {d.sender.display_brand_name ? <p className="text-xs text-muted-foreground">Pengirim asli: {d.sender.true_name}</p> : null}
+                <p className="text-muted-foreground tabular-nums">{d.sender.true_phone}</p>
+                {d.sender.true_area_label ? <p className="text-xs text-muted-foreground">{d.sender.true_area_label}</p> : null}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="font-semibold text-slate-950">{printedSenderName ?? "Pengirim disamarkan"}</p>
+                {printedSenderPhone ? <p className="text-muted-foreground tabular-nums">{printedSenderPhone}</p> : null}
+                <p className="text-xs text-muted-foreground">Preset label: {PRESET_LABEL[s.mask_preset] ?? s.mask_preset}. Gunakan “Lihat Pengirim Asli” di atas jika perlu verifikasi.</p>
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            id="info-penerima"
+            title="Penerima"
+            action={
+              d.recipient ? (
+                <Link to="/kontak/penerima/$id" params={{ id: d.recipient.id }} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  Riwayat <ExternalLinkIcon aria-hidden className="size-3" />
+                </Link>
+              ) : null
+            }
+          >
+            {d.recipient ? (
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="flex items-center gap-1.5 font-semibold text-slate-950">
+                  <UserIcon aria-hidden className="size-4 text-muted-foreground" />
+                  {d.recipient.name}
+                </p>
+                <p className="text-muted-foreground tabular-nums">{d.recipient.phone}</p>
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <MapPinIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    {d.recipient.street_address}
+                    {d.recipient.subdistrict_name ? `, ${d.recipient.subdistrict_name}` : ""}
+                    {d.recipient.postal_code ? ` ${d.recipient.postal_code}` : ""}
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Data penerima belum tercatat.</p>
+            )}
+          </SectionCard>
+        </div>
+
+        <SectionCard
+          id="checkpoint-pengiriman"
+          title="Riwayat Proses & Checkpoint"
+          description={s.last_polled_at ? `Sinkron terakhir ${fmtWib(Number(s.last_polled_at))} WIB` : "Riwayat pergerakan paket dari pickup sampai terkirim atau retur"}
+          action={
+            s.dispatch_state === "issued" ? (
+              <Button type="button" variant="ghost" size="sm" onClick={syncNow} disabled={syncing}>
+                <RefreshCwIcon aria-hidden className={syncing ? "animate-spin" : ""} /> Perbarui
+              </Button>
+            ) : null
+          }
+        >
+          {events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Belum ada checkpoint dari ekspedisi. Klik <strong>Sinkronkan Status</strong> untuk menarik status terbaru dari Mengantar.
+            </p>
+          ) : (
+            <ol className="relative flex flex-col gap-3 border-l border-slate-200 pl-4">
+              {events.map((ev, idx) => (
+                <li key={`${ev.event_at}-${idx}`} className="relative flex flex-col gap-0.5 text-sm">
+                  <span
+                    aria-hidden
+                    className={`absolute top-1.5 -left-[21px] size-2.5 rounded-full border-2 border-white ${idx === 0 ? "bg-primary" : "bg-slate-300"}`}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-slate-900">
+                      {ev.status_text || (ev.mapped_status ? statusLabel(ev.mapped_status) : ev.raw_category) || "Pembaruan status"}
+                    </span>
+                    {ev.mapped_status ? (
+                      <StatusBadge tone={statusTone("issued", ev.mapped_status)}>{statusLabel(ev.mapped_status)}</StatusBadge>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {fmtWib(ev.event_at)} WIB · {EVENT_SOURCE[ev.source] ?? ev.source}
+                    {ev.raw_category && ev.status_text && ev.raw_category !== ev.status_text ? ` (${ev.raw_category})` : ""}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="flex flex-col gap-4 md:gap-5">
+        <Summary d={d} owner={owner} />
+        {d.receipts.length > 0 ? (
+          <SectionCard id="riwayat-bayar" title="Riwayat Pembayaran Loket">
+            <ul className="divide-y divide-slate-100 text-sm">
+              {d.receipts.map((rc) => (
+                <li key={rc.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0 tabular-nums">
+                  <div>
+                    <span className="font-medium">{rc.event === "void" ? "Pembatalan (Void)" : `Lunas · ${METHOD_NAME[rc.method] ?? rc.method}`}</span>
+                    <span className="block text-xs text-muted-foreground">{fmtWib(rc.created_at)} WIB</span>
+                  </div>
+                  <span className={`font-semibold ${rc.event === "void" ? "text-danger" : "text-safe"}`}>
+                    {rc.event === "void" ? "-" : ""}{rp(rc.amount_idr)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
         ) : null}
-      </Panel>
-      <Summary d={d} owner={owner} />
+      </div>
+
+      <Dialog open={payOpen} onOpenChange={(o) => !o && !pending && setPayOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tandai Lunas INV {s.slug.toUpperCase()}</DialogTitle>
+            <DialogDescription>Pilih metode pembayaran loket sebesar <strong className="tabular-nums">{rp(s.counter_due_idr)}</strong>.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <ToggleGroup value={[payMethod]} onValueChange={(v) => v[0] && setPayMethod(v[0] as typeof payMethod)} variant="outline" aria-label="Metode pembayaran" className="grid w-full grid-cols-3 gap-1.5">
+              <ToggleGroupItem value="qris" className="w-full">QRIS</ToggleGroupItem>
+              <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
+              <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
+            </ToggleGroup>
+            {payMethod === "tunai" ? (
+              <Field>
+                <FieldLabel htmlFor="detail-pay-cash">Uang diterima</FieldLabel>
+                <Input id="detail-pay-cash" inputMode="numeric" className="tabular-nums" value={payCash} onChange={(e) => setPayCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} />
+                {payCashNum >= s.counter_due_idr ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(payCashNum - s.counter_due_idr)}</p> : <FieldDescription>Minimal {rp(s.counter_due_idr)}.</FieldDescription>}
+              </Field>
+            ) : null}
+            {payErr ? <p role="alert" className="text-sm font-medium text-danger">{payErr}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setPayOpen(false)}>Batal</Button>
+            <Button disabled={pending || (payMethod === "tunai" && payCashNum < s.counter_due_idr)} onClick={confirmPay}>{pending ? "Menyimpan…" : "Simpan Lunas"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={confirmKind !== null} onOpenChange={(o) => !o && !pending && setConfirmKind(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -382,9 +737,9 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
                     const res = await fetch(`/api/app/shipments/${s.slug}/payment`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "idempotency-key": newKey() }, body: JSON.stringify({ op: "void_payment", reason }) })
                     const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: { code: string; message: string; field_errors: Record<string, string> } } | null
                     if (!j?.ok) throw new ApiError(res.status, j?.error ?? { code: "UNKNOWN", message: "Pembatalan pembayaran gagal.", field_errors: {} })
-                  })
+                  }, "Pembayaran berhasil dibatalkan (void).")
                 } else if (kind === "cancel") {
-                  void act(() => api(`/shipments/${s.slug}/cancel`, { body: { reason } }))
+                  void act(() => api(`/shipments/${s.slug}/cancel`, { body: { reason } }), "Kiriman berhasil dibatalkan.")
                 }
               }}
             >

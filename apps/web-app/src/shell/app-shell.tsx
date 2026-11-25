@@ -128,6 +128,8 @@ const SECTIONS: Array<[RegExp, Crumb[]]> = [
   [/^\/kiriman\/pickup/, [{ label: "Kiriman", to: "/kiriman" }, { label: "Pickup & Surat Jalan", to: "/kiriman?tab=pickup" }, { label: "Surat Jalan" }]],
   [/^\/kiriman\/[a-z0-9]{7}$/i, [{ label: "Kiriman", to: "/kiriman" }, { label: "Detail Kiriman" }]],
   [/^\/kiriman/, [{ label: "Kiriman" }]],
+  [/^\/kontak\/pengirim\/.+/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Pengirim", to: "/kontak/pengirim" }, { label: "Riwayat Pengirim" }]],
+  [/^\/kontak\/penerima\/.+/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Penerima", to: "/kontak/penerima" }, { label: "Riwayat Penerima" }]],
   [/^\/kontak\/pengirim/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Pengirim" }]],
   [/^\/kontak\/penerima/, [{ label: "Kontak", to: "/kontak/pengirim" }, { label: "Data Penerima" }]],
   [/^\/keuangan/, [{ label: "Keuangan" }]],

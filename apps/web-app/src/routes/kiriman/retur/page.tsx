@@ -9,6 +9,7 @@ import { courierLabel } from "../../../lib/status"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { ChoiceGroup, Panel, ItemList } from "../../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav, paginate } from "../../../components/admin/pagination"
 
 // `Meja Retur` (spec 04 §2, ADR-0005, visual 07 `/kiriman/retur/:awb`): scan arriving return → condition + photo →
 // true sender revealed (audited) → `Kirim Kode Ambil` via WhatsApp → handback by code (or owner ID check).
@@ -27,6 +28,9 @@ const wa = (phone: string) => {
 export function MejaRetur() {
   const w = useWorkspace()
   const [d, setD] = useState<Desk | null>(null)
+  const [openPage, setOpenPage] = useState(1)
+  const [incomingPage, setIncomingPage] = useState(1)
+  const [returnedPage, setReturnedPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
   const [last, setLast] = useState<Intake | null>(null)
@@ -41,6 +45,9 @@ export function MejaRetur() {
   useEffect(load, [load])
   if (error) return <ErrorState message={error} onRetry={load} />
   if (!d) return <LoadingState label="Memuat Meja Retur" />
+  const openPaged = paginate(d.open, openPage, DEFAULT_PAGE_SIZE)
+  const incomingPaged = paginate(d.incoming, incomingPage, DEFAULT_PAGE_SIZE)
+  const returnedPaged = paginate(d.returned, returnedPage, DEFAULT_PAGE_SIZE)
   return (
     <div className="mb-6 flex flex-col gap-6">
       <IntakeForm onDone={(r) => { setLast(r); setMsg(null); load() }} />
@@ -49,25 +56,44 @@ export function MejaRetur() {
       <section aria-labelledby="di-gerai">
         <h2 id="di-gerai" className="mb-3 text-sm font-semibold md:text-base">Di gerai, menunggu diambil ({d.open.length})</h2>
         {d.open.length === 0 ? <p className="text-base md:text-sm text-muted-foreground">Tidak ada paket retur yang menunggu.</p> : (
-          <ul className="flex flex-col gap-3">
-            {d.open.map((r) => <OpenRow key={r.slug} r={r} owner={isOwner(w)} onChange={(m) => { setMsg(m); load() }} />)}
-          </ul>
+          <div className="flex flex-col gap-3">
+            <ul className="flex flex-col gap-3">
+              {openPaged.items.map((r) => <OpenRow key={r.slug} r={r} owner={isOwner(w)} onChange={(m) => { setMsg(m); load() }} />)}
+            </ul>
+            <PageNav page={openPaged.page} totalPages={openPaged.totalPages} total={openPaged.total} pageSize={openPaged.pageSize} onPageChange={setOpenPage} itemLabel="paket retur" />
+          </div>
         )}
       </section>
       {d.incoming.length ? (
-        <section aria-labelledby="dalam-jalan">
-          <h2 id="dalam-jalan" className="mb-3 text-sm font-semibold md:text-base">Retur dalam perjalanan ({d.incoming.length})</h2>
+        <section aria-labelledby="dalam-jalan" className="flex flex-col gap-3">
+          <h2 id="dalam-jalan" className="text-sm font-semibold md:text-base">Retur dalam perjalanan ({d.incoming.length})</h2>
           <ItemList>
-            {d.incoming.map((i) => <li key={i.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">{courierLabel(i.courier_code)} · {i.awb_number} · INV {i.slug.toUpperCase()}</li>)}
+            {incomingPaged.items.map((i) => (
+              <li key={i.slug} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-base md:text-sm tabular-nums">
+                <span>
+                  <Link to="/kiriman/$slug" params={{ slug: i.slug }} className="font-medium text-primary underline-offset-4 hover:underline">INV {i.slug.toUpperCase()}</Link>
+                  {" · "}{courierLabel(i.courier_code)}{i.awb_number ? ` · ${i.awb_number}` : ""}
+                </span>
+              </li>
+            ))}
           </ItemList>
+          <PageNav page={incomingPaged.page} totalPages={incomingPaged.totalPages} total={incomingPaged.total} pageSize={incomingPaged.pageSize} onPageChange={setIncomingPage} itemLabel="retur berjalan" />
         </section>
       ) : null}
       {d.returned.length ? (
-        <section aria-labelledby="selesai">
-          <h2 id="selesai" className="mb-3 text-sm font-semibold md:text-base">Sudah diserahkan (7 hari)</h2>
+        <section aria-labelledby="selesai" className="flex flex-col gap-3">
+          <h2 id="selesai" className="text-sm font-semibold md:text-base">Sudah diserahkan (7 hari)</h2>
           <ItemList>
-            {d.returned.map((r) => <li key={r.slug} className="px-4 py-2 text-base md:text-sm tabular-nums">INV {r.slug.toUpperCase()} · {r.handback_at ? when(r.handback_at) : ""} · {r.handback_method === "code" ? "dengan Kode Ambil" : "cek identitas oleh pemilik"}</li>)}
+            {returnedPaged.items.map((r) => (
+              <li key={r.slug} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-base md:text-sm tabular-nums">
+                <span>
+                  <Link to="/kiriman/$slug" params={{ slug: r.slug }} className="font-medium text-primary underline-offset-4 hover:underline">INV {r.slug.toUpperCase()}</Link>
+                  {r.handback_at ? ` · ${when(r.handback_at)}` : ""} · {r.handback_method === "code" ? "dengan Kode Ambil" : "cek identitas oleh pemilik"}
+                </span>
+              </li>
+            ))}
           </ItemList>
+          <PageNav page={returnedPaged.page} totalPages={returnedPaged.totalPages} total={returnedPaged.total} pageSize={returnedPaged.pageSize} onPageChange={setReturnedPage} itemLabel="retur selesai" />
         </section>
       ) : null}
     </div>

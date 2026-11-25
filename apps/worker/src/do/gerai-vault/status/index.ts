@@ -138,26 +138,31 @@ function project(sql: SqlStorage, before: ShipmentRow, next: Pick<ShipmentRow, "
  */
 export function recordProviderObservation(
   sql: SqlStorage,
-  input: { slug: string; eventKey: string; source: ObservationSource; rawCategory: string | null; mapped: ProviderStatus | null; eventAt: number; eventAtText: string | null },
+  input: { slug: string; eventKey: string; source: ObservationSource; rawCategory: string | null; statusText?: string | null; mapped: ProviderStatus | null; eventAt: number; eventAtText: string | null },
   now: number,
-): { recorded: boolean; changed: boolean; status: string | null } {
+): { recorded: boolean; changed: boolean; previousStatus: string | null; status: string | null } {
   const s = readShipment(sql, input.slug)
-  if (!s) return { recorded: false, changed: false, status: null }
+  if (!s) return { recorded: false, changed: false, previousStatus: null, status: null }
+  const text = typeof input.statusText === "string" && input.statusText.trim() ? input.statusText.trim().slice(0, 240) : null
   const inserted = sql
     .exec(
-      `INSERT INTO shipment_events (event_key, slug, source, raw_category, mapped_status, event_at, event_at_text, recorded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_key) DO NOTHING RETURNING event_key`,
+      `INSERT INTO shipment_events (event_key, slug, source, raw_category, mapped_status, status_text, event_at, event_at_text, recorded_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_key) DO NOTHING RETURNING event_key`,
       input.eventKey,
       input.slug,
       input.source,
       input.rawCategory,
       input.mapped,
+      text,
       input.eventAt,
       input.eventAtText,
       now,
     )
     .toArray().length
-  if (!inserted || !input.mapped) return { recorded: inserted > 0, changed: false, status: s.status }
+  if (!inserted && text) {
+    sql.exec("UPDATE shipment_events SET status_text = COALESCE(status_text, ?) WHERE event_key = ?", text, input.eventKey)
+  }
+  if (!inserted || !input.mapped) return { recorded: inserted > 0, changed: false, previousStatus: s.status, status: s.status }
   // Pre-issue dispatch states own `status` (a held/unresolved order is not "ready for pickup" yet): record the
   // provider status for later, but leave `status` until `markIssued` projects it.
   if (["draft", "issuing_in_flight", "reconciliation_needed", "provider_unpaid_hold"].includes(s.status)) {
@@ -166,7 +171,7 @@ export function recordProviderObservation(
     if (!current0 || compareKeys(keyOf(incoming0), keyOf(current0)) > 0) {
       sql.exec("UPDATE shipments SET provider_status = ?, last_provider_event_at = ?, last_provider_rank = ?, updated_at = ? WHERE slug = ?", input.mapped, Math.floor(input.eventAt / 60_000) * 60_000, PROVIDER_RANK[input.mapped], now, input.slug)
     }
-    return { recorded: true, changed: false, status: s.status }
+    return { recorded: true, changed: false, previousStatus: s.status, status: s.status }
   }
   const incoming: ProviderObservation = { status: input.mapped, eventAt: input.eventAt }
   const current: ProviderObservation | null = s.provider_status && s.last_provider_event_at !== null ? { status: s.provider_status, eventAt: s.last_provider_event_at } : null
@@ -187,7 +192,7 @@ export function recordProviderObservation(
     },
     now,
   )
-  return { recorded: true, changed: r.changed, status: r.status }
+  return { recorded: true, changed: r.changed, previousStatus: s.status, status: r.status }
 }
 
 /** Verified local custody action (manifest handover, Meja Retur intake, OTP handback, read-back-confirmed cancel). */

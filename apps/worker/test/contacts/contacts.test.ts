@@ -8,6 +8,7 @@ import { phoneHmac } from "../../src/admin/monitor"
 import { d1UpsertStatement } from "../../src/do/gerai-vault/core/outbox"
 import { ownerOnlyKeysIn } from "../../src/dto/projection"
 import { appUser } from "../onboarding/helpers"
+import { checkoutGerai, post, readyInv } from "../dispatch/helpers"
 import { APP, appGet, appPost, seedConnected } from "../webhooks/helpers"
 
 const AREA = "5fc62f5df8f44b34aa4c0d8c"
@@ -108,5 +109,56 @@ describe("media", () => {
     expect(txt.status).toBe(415)
     const kas = await withCashier(o.tenantId, "kasir.media@contoh.test")
     expect((await exports.default.fetch(`${APP}/api/app/media?purpose=logo`, { method: "POST", headers: { origin: APP, cookie: kas.cookie }, body: png })).status).toBe(403)
+  })
+})
+
+describe("Contact shipment history, live counts, pagination & INV Mengantar sync", () => {
+  it("computes live shipments_count, returns paginated contact history with checkpoints, and syncs live Mengantar status on INV", async () => {
+    const t = await checkoutGerai("kontakriwayat")
+    const slug = await readyInv(t)
+    await post(`/shipments/${slug}/payment`, t.cookie, { method: "tunai", cashReceivedIdr: 20000 }, `pay-${slug}`)
+    expect((await post(`/shipments/${slug}/dispatch`, t.cookie, {})).status).toBe(200)
+
+    // Live shipments_count on both sender and recipient lists with 20/page pagination metadata.
+    const sendersRes = ((await (await appGet("/contacts/senders?page=1&limit=20", t.cookie)).json()) as {
+      data: { items: Array<{ id: string; shipments_count: number }>; page: number; pageSize: number; total: number; totalPages: number }
+    }).data
+    expect(sendersRes).toMatchObject({ page: 1, pageSize: 20, total: 1, totalPages: 1 })
+    expect(sendersRes.items[0]!.shipments_count).toBe(1)
+
+    const recipientsRes = ((await (await appGet("/contacts/recipients?page=1&limit=20", t.cookie)).json()) as {
+      data: { items: Array<{ id: string; shipments_count: number }>; page: number; pageSize: number; total: number; totalPages: number }
+    }).data
+    expect(recipientsRes).toMatchObject({ page: 1, pageSize: 20, total: 1, totalPages: 1 })
+    expect(recipientsRes.items[0]!.shipments_count).toBe(1)
+
+    // Sync live status from Mengantar on INV (`POST /shipments/:slug/sync`) → persists checkpoints into shipment_events.
+    const syncRes = await appPost(`/shipments/${slug}/sync`, t.cookie, {})
+    expect(syncRes.status).toBe(200)
+    const syncData = ((await syncRes.json()) as { data: { synced: boolean; status: string } }).data
+    expect(syncData.synced).toBe(true)
+
+    // Contact history returns the actual shipment with summary counters & latest checkpoint.
+    const sHist = ((await (await appGet(`/contacts/senders/${t.sender}/shipments?page=1&limit=20`, t.cookie)).json()) as {
+      data: { items: Array<{ slug: string; counterparty_id: string | null }>; summary: { total: number }; page: number; pageSize: number; total: number }
+    }).data
+    expect(sHist).toMatchObject({ page: 1, pageSize: 20, total: 1 })
+    expect(sHist.summary.total).toBe(1)
+    expect(sHist.items[0]!.slug).toBe(slug)
+    expect(sHist.items[0]!.counterparty_id).toBe(t.recipient)
+
+    const rHist = ((await (await appGet(`/contacts/recipients/${t.recipient}/shipments?page=1&limit=20`, t.cookie)).json()) as {
+      data: { items: Array<{ slug: string; counterparty_id: string | null }>; summary: { total: number } }
+    }).data
+    expect(rHist.summary.total).toBe(1)
+    expect(rHist.items[0]!.slug).toBe(slug)
+    expect(rHist.items[0]!.counterparty_id).toBe(t.sender)
+
+    // Numbered pagination on /shipments returns page/pageSize/total/totalPages.
+    const listRes = ((await (await appGet("/shipments?page=1&limit=20", t.cookie)).json()) as {
+      data: { items: Array<{ slug: string }>; page: number; pageSize: number; total: number; totalPages: number }
+    }).data
+    expect(listRes).toMatchObject({ page: 1, pageSize: 20, total: 1, totalPages: 1 })
+    expect(listRes.items[0]!.slug).toBe(slug)
   })
 })

@@ -6,6 +6,7 @@ import { linkTo } from "../../components/admin/shell"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { Panel } from "../../components/admin/page"
+import { DEFAULT_PAGE_SIZE, PageNav, paginate } from "../../components/admin/pagination"
 
 // `/notifikasi` (visual 07 §3.2): grouped by WIB day, each item deep-links; `Tandai Semua Dibaca`.
 interface Item { id: string; kind: string; title: string; body: string | null; link: string | null; createdAt: number; readAt: number | null }
@@ -24,6 +25,7 @@ const time = (ms: number) => new Intl.DateTimeFormat("id-ID", { hour: "2-digit",
 export function NotifikasiPage() {
   const router = useRouter()
   const [data, setData] = useState<{ items: Item[]; unread: number } | null>(null)
+  const [page, setPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -68,8 +70,9 @@ export function NotifikasiPage() {
     }
   }
 
+  const paged = paginate(data?.items ?? [], page, DEFAULT_PAGE_SIZE)
   const groups = new Map<string, Item[]>()
-  for (const i of data?.items ?? []) groups.set(dayKey(i.createdAt), [...(groups.get(dayKey(i.createdAt)) ?? []), i])
+  for (const i of paged.items) groups.set(dayKey(i.createdAt), [...(groups.get(dayKey(i.createdAt)) ?? []), i])
 
   return (
     <div>
@@ -112,6 +115,7 @@ export function NotifikasiPage() {
               </ul>
             </Panel>
           ))}
+          <PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="notifikasi" />
         </div>
       )}
     </div>

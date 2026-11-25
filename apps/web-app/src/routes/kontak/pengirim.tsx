@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
-import { CheckIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
+import { Link } from "@tanstack/react-router"
+import { CheckIcon, HistoryIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
+import { DataTableShell } from "../../components/admin/data-table"
+import { LinkButton } from "../../components/admin/link-button"
+import { DEFAULT_PAGE_SIZE, PageNav } from "../../components/admin/pagination"
 import { PreciseAreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
 import { Badge } from "../../components/ui/badge"
@@ -7,7 +11,6 @@ import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { Switch } from "../../components/ui/switch"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { Textarea } from "../../components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
@@ -37,25 +40,33 @@ interface Sender {
 }
 type Filter = "all" | "reseller_dropship" | "walk_in"
 
+type SendersResp = { items: Sender[]; counts: Record<Filter, number>; total: number; page: number; pageSize: number; totalPages: number }
+
 export function PengirimPage() {
   const w = useWorkspace()
   const owner = isOwner(w)
   const [filter, setFilter] = useState<Filter>("all")
   const [q, setQ] = useState("")
-  const [data, setData] = useState<{ items: Sender[]; counts: Record<Filter, number> } | null>(null)
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState<SendersResp | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Sender | "new" | null>(null)
   const gen = useRef(0)
   const load = useCallback(() => {
     const mine = ++gen.current
-    api<{ items: Sender[]; counts: Record<Filter, number> }>(`/contacts/senders?jenis=${filter}&q=${encodeURIComponent(q)}`)
+    setLoading(true)
+    api<SendersResp>(`/contacts/senders?jenis=${filter}&q=${encodeURIComponent(q)}&page=${page}&limit=${DEFAULT_PAGE_SIZE}`)
       .then((d) => {
         if (mine !== gen.current) return
         setError(null)
         setData(d)
       })
       .catch((e) => mine === gen.current && setError(e instanceof ApiError ? e.body.message : "Daftar pengirim tidak dapat dimuat."))
-  }, [filter, q])
+      .finally(() => {
+        if (mine === gen.current) setLoading(false)
+      })
+  }, [filter, q, page])
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0)
     return () => clearTimeout(t)
@@ -64,71 +75,143 @@ export function PengirimPage() {
 
   return (
     <div>
-      <PageTitle title="Pengirim">
+      <PageTitle title="Pengirim" description="Klik nama pengirim atau Riwayat untuk melihat seluruh riwayat kiriman dan status INV.">
         <Button onClick={() => setEditing("new")}>
           <PlusIcon aria-hidden /> Tambah Pengirim
         </Button>
       </PageTitle>
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
-          <ToggleGroup value={[filter]} onValueChange={(v) => v[0] && setFilter(v[0] as Filter)} aria-label="Jenis pengirim" variant="outline">
+          <ToggleGroup
+            value={[filter]}
+            onValueChange={(v) => {
+              if (v[0]) {
+                setFilter(v[0] as Filter)
+                setPage(1)
+              }
+            }}
+            aria-label="Jenis pengirim"
+            variant="outline"
+          >
             <ToggleGroupItem value="all">Semua ({data?.counts.all ?? 0})</ToggleGroupItem>
             <ToggleGroupItem value="reseller_dropship">Toko Reseller ({data?.counts.reseller_dropship ?? 0})</ToggleGroupItem>
             <ToggleGroupItem value="walk_in">Walk-in ({data?.counts.walk_in ?? 0})</ToggleGroupItem>
           </ToggleGroup>
         </div>
-        <Input aria-label="Cari nama, toko atau nomor HP" placeholder="Cari nama, toko atau nomor HP" value={q} onChange={(e) => setQ(e.target.value)} className="lg:w-80" type="search" />
+        <Input
+          aria-label="Cari nama, toko atau nomor HP"
+          placeholder="Cari nama, toko atau nomor HP"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setPage(1)
+          }}
+          className="lg:w-80"
+          type="search"
+        />
       </div>
       <Panel className="p-0 md:p-0">
-        {error ? <div className="p-4"><ErrorState message={error} onRetry={load} /></div> : !data ? <div className="p-4"><LoadingState label="Memuat pengirim" /></div> : data.items.length === 0 ? (
-          filtered ? (
-            <EmptyState title="Tidak ada yang cocok" body="Coba kata kunci lain atau hapus filter." action={<Button variant="outline" onClick={() => { setQ(""); setFilter("all") }}>Hapus filter</Button>} />
-          ) : (
-            <EmptyState title="Belum ada pengirim" body="Pengirim tersimpan otomatis saat kiriman dibuat, atau tambahkan sekarang." action={<Button onClick={() => setEditing("new")}>Tambah Pengirim</Button>} />
-          )
+        {error ? (
+          <div className="p-4"><ErrorState message={error} onRetry={load} /></div>
+        ) : !data ? (
+          <div className="p-4"><LoadingState label="Memuat pengirim" /></div>
         ) : (
-          <>
-            <div className="hidden overflow-hidden rounded-xl border border-slate-200/85 md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pengirim asli (WA retur)</TableHead>
-                    <TableHead>Nama tercetak</TableHead>
-                    <TableHead className="text-right">Kiriman</TableHead>
-                    {owner ? <TableHead className="text-right">Deposit</TableHead> : null}
-                    <TableHead><span className="sr-only">Aksi</span></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.items.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{s.true_name}</span>
-                          <span className="text-muted-foreground tabular-nums">WA {s.true_phone} {s.wa_verified_at ? <span className="text-safe">· terverifikasi</span> : null}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{s.display_brand_name ?? s.true_name}{s.sender_kind === "reseller_dropship" ? <Badge variant="outline" className="ml-2">Reseller</Badge> : null}</TableCell>
-                      <TableCell className="text-right tabular-nums">{s.shipments_count}</TableCell>
-                      {owner ? <TableCell className="text-right tabular-nums">{s.deposit_balance_idr ? rupiah(s.deposit_balance_idr) : "—"}</TableCell> : null}
-                      <TableCell className="text-right"><Button variant="outline" onClick={() => setEditing(s)}>Ubah</Button></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <ul className="divide-y md:hidden">
-              {data.items.map((s) => (
-                <li key={s.id}>
-                  <button type="button" onClick={() => setEditing(s)} className="flex min-h-11 w-full flex-col items-start gap-1 px-4 py-3 text-left">
-                    <span className="font-medium">{s.display_brand_name ?? s.true_name}</span>
-                    <span className="text-base md:text-sm text-muted-foreground tabular-nums">{s.true_name} · {s.true_phone}{s.wa_verified_at ? " · terverifikasi" : ""}</span>
-                    <span className="text-base md:text-sm text-muted-foreground tabular-nums">{s.shipments_count} kiriman{owner && s.deposit_balance_idr ? ` · deposit ${rupiah(s.deposit_balance_idr)}` : ""}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
+          <DataTableShell
+            bare
+            caption="Daftar pengirim"
+            rows={data.items}
+            rowKey={(s) => s.id}
+            empty={
+              filtered ? (
+                <EmptyState title="Tidak ada yang cocok" body="Coba kata kunci lain atau hapus filter." action={<Button variant="outline" onClick={() => { setQ(""); setFilter("all"); setPage(1) }}>Hapus filter</Button>} />
+              ) : (
+                <EmptyState title="Belum ada pengirim" body="Pengirim tersimpan otomatis saat kiriman dibuat, atau tambahkan sekarang." action={<Button onClick={() => setEditing("new")}>Tambah Pengirim</Button>} />
+              )
+            }
+            footer={
+              <PageNav
+                page={data.page}
+                totalPages={data.totalPages}
+                total={data.total}
+                pageSize={data.pageSize}
+                onPageChange={setPage}
+                itemLabel="pengirim"
+                loading={loading}
+              />
+            }
+            columns={[
+              {
+                key: "pengirim",
+                header: "Pengirim asli (WA retur)",
+                cell: (s) => (
+                  <div className="flex flex-col">
+                    <Link to="/kontak/pengirim/$id" params={{ id: s.id }} className="font-medium text-primary underline-offset-4 hover:underline">
+                      {s.true_name}
+                    </Link>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      WA {s.true_phone} {s.wa_verified_at ? <span className="text-safe">· terverifikasi</span> : null}
+                    </span>
+                  </div>
+                ),
+              },
+              {
+                key: "brand",
+                header: "Nama tercetak",
+                cell: (s) => (
+                  <span>
+                    {s.display_brand_name ?? s.true_name}
+                    {s.sender_kind === "reseller_dropship" ? <Badge variant="outline" className="ml-2">Reseller</Badge> : null}
+                  </span>
+                ),
+              },
+              {
+                key: "kiriman",
+                header: "Kiriman",
+                align: "right",
+                cell: (s) => (
+                  <Link to="/kontak/pengirim/$id" params={{ id: s.id }} className="font-medium text-primary underline-offset-4 hover:underline tabular-nums">
+                    {s.shipments_count}
+                  </Link>
+                ),
+              },
+              ...(owner
+                ? [{ key: "deposit", header: "Deposit", align: "right" as const, cell: (s: Sender) => (s.deposit_balance_idr ? rupiah(s.deposit_balance_idr) : "—") }]
+                : []),
+              {
+                key: "aksi",
+                header: <span className="sr-only">Aksi</span>,
+                align: "right",
+                cell: (s) => (
+                  <div className="flex justify-end gap-1.5">
+                    <LinkButton variant="ghost" size="sm" to="/kontak/pengirim/$id" params={{ id: s.id } as never}>
+                      <HistoryIcon aria-hidden data-icon="inline-start" /> Riwayat
+                    </LinkButton>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(s)}>Ubah</Button>
+                  </div>
+                ),
+              },
+            ]}
+            mobile={(s) => (
+              <div className="flex flex-col gap-1.5 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <Link to="/kontak/pengirim/$id" params={{ id: s.id }} className="font-semibold text-primary underline-offset-4 hover:underline">
+                    {s.display_brand_name ?? s.true_name}
+                  </Link>
+                  <span className="text-xs font-medium text-muted-foreground tabular-nums">{s.shipments_count} kiriman</span>
+                </div>
+                <span className="text-muted-foreground tabular-nums">
+                  {s.true_name} · {s.true_phone}{s.wa_verified_at ? " · terverifikasi" : ""}
+                </span>
+                {owner && s.deposit_balance_idr ? <span className="text-xs text-muted-foreground tabular-nums">Deposit {rupiah(s.deposit_balance_idr)}</span> : null}
+                <div className="mt-1 flex gap-2">
+                  <LinkButton variant="outline" size="sm" to="/kontak/pengirim/$id" params={{ id: s.id } as never}>
+                    <HistoryIcon aria-hidden data-icon="inline-start" /> Lihat Riwayat
+                  </LinkButton>
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(s)}>Ubah</Button>
+                </div>
+              </div>
+            )}
+          />
         )}
       </Panel>
       <ContactDialog

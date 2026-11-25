@@ -46,6 +46,41 @@ export type RecipientRow = {
   is_archived: number
   created_at: number
   updated_at: number
+  /** Derived live count of non-draft shipments addressed to this recipient. */
+  shipments_count?: number
+}
+
+export type ContactShipmentRow = {
+  slug: string
+  created_at: number
+  issued_at: number | null
+  courier_code: string
+  service_code: string
+  awb_number: string | null
+  status: string
+  dispatch_state: string
+  cod_fee_mode: string
+  counter_due_idr: number
+  cod_collection_total_idr: number
+  counter_payment_status: string
+  counter_payment_method: string | null
+  counterparty_id: string | null
+  counterparty_name: string | null
+  counterparty_area: string | null
+  latest_event_category: string | null
+  latest_event_status: string | null
+  latest_event_text: string | null
+  latest_event_at: number | null
+}
+
+export interface ContactHistorySummary {
+  total: number
+  in_progress: number
+  delivered: number
+  rts: number
+  cancelled: number
+  total_due_idr: number
+  last_shipment_at: number | null
 }
 
 export interface SenderInput {
@@ -253,43 +288,151 @@ export function archiveContact(sql: SqlStorage, kind: "sender" | "recipient", id
   return sql.exec(`UPDATE ${table} SET is_archived = 1, updated_at = ? WHERE id = ? AND is_archived = 0 RETURNING id`, now, id).toArray().length > 0
 }
 
-/** Search by name or phone (any format); newest first; archived hidden. */
-export function searchSenders(sql: SqlStorage, q: string, kind: "all" | "walk_in" | "reseller_dropship", limit = 50): SenderRow[] {
+/** Search by name or phone (any format); newest first; archived hidden; live shipment counts + numbered pagination. */
+export function searchSenders(
+  sql: SqlStorage,
+  q: string,
+  kind: "all" | "walk_in" | "reseller_dropship",
+  limit = 50,
+  page = 1,
+): { items: SenderRow[]; total: number; page: number; pageSize: number; totalPages: number } {
   const phone = normalizePhone08(q)
   const like = `%${q.trim().replace(/[%_]/g, "")}%`
-  return sql
+  const pageSize = Math.min(200, Math.max(1, limit))
+  const params = [kind, kind, q.trim(), like, like, `%${q.replace(/\D/g, "") || "~"}%`, phone ?? ""] as const
+  const where = `is_archived = 0 AND (? = 'all' OR sender_kind = ?)
+    AND (? = '' OR true_name LIKE ? OR display_brand_name LIKE ? OR true_phone LIKE ? OR true_phone = ?)`
+  const total = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM sender_contacts WHERE ${where}`, ...params).one().n
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
+  const offset = (cur - 1) * pageSize
+  const items = sql
     .exec<SenderRow>(
-      `SELECT * FROM sender_contacts WHERE is_archived = 0 AND (? = 'all' OR sender_kind = ?)
-         AND (? = '' OR true_name LIKE ? OR display_brand_name LIKE ? OR true_phone LIKE ? OR true_phone = ?)
-       ORDER BY updated_at DESC LIMIT ?`,
-      kind,
-      kind,
-      q.trim(),
-      like,
-      like,
-      `%${q.replace(/\D/g, "") || "~"}%`,
-      phone ?? "",
-      Math.min(200, limit),
+      `SELECT c.*,
+              (SELECT COUNT(*) FROM shipments s WHERE s.sender_contact_id = c.id AND s.dispatch_state != 'draft') AS shipments_count
+         FROM sender_contacts c
+        WHERE ${where}
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?`,
+      ...params,
+      pageSize,
+      offset,
     )
     .toArray()
+  return { items, total, page: cur, pageSize, totalPages }
 }
 
-export function searchRecipients(sql: SqlStorage, q: string, limit = 50): RecipientRow[] {
+export function searchRecipients(
+  sql: SqlStorage,
+  q: string,
+  limit = 50,
+  page = 1,
+): { items: RecipientRow[]; total: number; page: number; pageSize: number; totalPages: number } {
   const phone = normalizePhone08(q)
   const like = `%${q.trim().replace(/[%_]/g, "")}%`
-  return sql
+  const pageSize = Math.min(200, Math.max(1, limit))
+  const params = [q.trim(), like, like, `%${q.replace(/\D/g, "") || "~"}%`, phone ?? ""] as const
+  const where = `is_archived = 0
+    AND (? = '' OR name LIKE ? OR subdistrict_name LIKE ? OR phone LIKE ? OR phone = ?)`
+  const total = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM recipient_contacts WHERE ${where}`, ...params).one().n
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
+  const offset = (cur - 1) * pageSize
+  const items = sql
     .exec<RecipientRow>(
-      `SELECT * FROM recipient_contacts WHERE is_archived = 0
-         AND (? = '' OR name LIKE ? OR subdistrict_name LIKE ? OR phone LIKE ? OR phone = ?)
-       ORDER BY updated_at DESC LIMIT ?`,
-      q.trim(),
-      like,
-      like,
-      `%${q.replace(/\D/g, "") || "~"}%`,
-      phone ?? "",
-      Math.min(200, limit),
+      `SELECT c.*,
+              (SELECT COUNT(*) FROM shipments s WHERE s.recipient_contact_id = c.id AND s.dispatch_state != 'draft') AS shipments_count
+         FROM recipient_contacts c
+        WHERE ${where}
+        ORDER BY c.updated_at DESC
+        LIMIT ? OFFSET ?`,
+      ...params,
+      pageSize,
+      offset,
     )
     .toArray()
+  return { items, total, page: cur, pageSize, totalPages }
+}
+
+/**
+ * Actual shipment history for a sender or recipient contact (excluding abandoned counter drafts), joined with
+ * counterparty info and the latest checkpoint from `shipment_events`. Respects ADR-0005 masking when reading a
+ * recipient's history (masked shipments expose the printed sender label name, never the true sender contact id/name).
+ */
+export function contactShipmentHistory(
+  sql: SqlStorage,
+  kind: "sender" | "recipient",
+  id: string,
+  page = 1,
+  limit = 20,
+): { items: ContactShipmentRow[]; summary: ContactHistorySummary; total: number; page: number; pageSize: number; totalPages: number } {
+  const col = kind === "sender" ? "s.sender_contact_id" : "s.recipient_contact_id"
+  const where = `${col} = ? AND s.dispatch_state != 'draft'`
+  const agg = sql
+    .exec<{ total: number; in_progress: number | null; delivered: number | null; rts: number | null; cancelled: number | null; total_due_idr: number | null; last_shipment_at: number | null }>(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN s.dispatch_state = 'issued' AND s.status IN ('ready_for_pickup','handed_to_courier','in_transit','undelivery_hold') THEN 1 ELSE 0 END) AS in_progress,
+              SUM(CASE WHEN s.status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+              SUM(CASE WHEN s.status IN ('rts_in_transit','provider_returned','rts_at_gerai','rts_returned_to_sender') THEN 1 ELSE 0 END) AS rts,
+              SUM(CASE WHEN s.dispatch_state = 'cancelled' OR s.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+              SUM(CASE WHEN s.dispatch_state != 'cancelled' THEN s.counter_due_idr ELSE 0 END) AS total_due_idr,
+              MAX(s.created_at) AS last_shipment_at
+         FROM shipments s
+        WHERE ${where}`,
+      id,
+    )
+    .one()
+  const pageSize = Math.min(100, Math.max(1, limit))
+  const total = agg.total
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const cur = Math.min(Math.max(1, Math.floor(page)), totalPages)
+  const offset = (cur - 1) * pageSize
+  const counterpartyCols =
+    kind === "sender"
+      ? `s.recipient_contact_id AS counterparty_id,
+         r.name AS counterparty_name,
+         r.subdistrict_name AS counterparty_area`
+      : `CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
+              THEN NULL ELSE s.sender_contact_id END AS counterparty_id,
+         CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
+              THEN json_extract(s.mask_snapshot_json, '$.sender.name') ELSE COALESCE(c.display_brand_name, c.true_name) END AS counterparty_name,
+         c.true_area_label AS counterparty_area`
+  const items = sql
+    .exec<ContactShipmentRow>(
+      `SELECT s.slug, s.created_at, s.issued_at, s.courier_code, s.service_code, s.awb_number, s.status, s.dispatch_state,
+              s.cod_fee_mode, s.counter_due_idr, s.cod_collection_total_idr, s.counter_payment_status, s.counter_payment_method,
+              ${counterpartyCols},
+              (SELECT e.raw_category FROM shipment_events e WHERE e.slug = s.slug ORDER BY e.event_at DESC, e.recorded_at DESC LIMIT 1) AS latest_event_category,
+              (SELECT e.mapped_status FROM shipment_events e WHERE e.slug = s.slug ORDER BY e.event_at DESC, e.recorded_at DESC LIMIT 1) AS latest_event_status,
+              (SELECT e.status_text FROM shipment_events e WHERE e.slug = s.slug ORDER BY e.event_at DESC, e.recorded_at DESC LIMIT 1) AS latest_event_text,
+              (SELECT e.event_at FROM shipment_events e WHERE e.slug = s.slug ORDER BY e.event_at DESC, e.recorded_at DESC LIMIT 1) AS latest_event_at
+         FROM shipments s
+         LEFT JOIN recipient_contacts r ON r.id = s.recipient_contact_id
+         LEFT JOIN sender_contacts c ON c.id = s.sender_contact_id
+        WHERE ${where}
+        ORDER BY s.created_at DESC, s.slug DESC
+        LIMIT ? OFFSET ?`,
+      id,
+      pageSize,
+      offset,
+    )
+    .toArray()
+  return {
+    items,
+    summary: {
+      total,
+      in_progress: agg.in_progress ?? 0,
+      delivered: agg.delivered ?? 0,
+      rts: agg.rts ?? 0,
+      cancelled: agg.cancelled ?? 0,
+      total_due_idr: agg.total_due_idr ?? 0,
+      last_shipment_at: agg.last_shipment_at ?? null,
+    },
+    total,
+    page: cur,
+    pageSize,
+    totalPages,
+  }
 }
 
 export function senderCounts(sql: SqlStorage): { all: number; reseller_dropship: number; walk_in: number } {

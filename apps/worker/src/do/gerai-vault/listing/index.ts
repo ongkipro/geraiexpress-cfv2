@@ -29,6 +29,8 @@ export interface ListQuery {
   courier: string | null
   printed: "semua" | "belum" | "sudah"
   cursor: string | null
+  /** 1-based page number (overrides `cursor` when provided, enabling numbered Page Nav). */
+  page?: number | null
   limit: number
   /** DEC-251C `Paket Macet`: issued, still moving, no courier scan (or issue/creation) for at least N days; 0 = all. */
   stuckDays?: 0 | 2 | 3 | 5 | 7
@@ -105,19 +107,29 @@ export function tabCounts(sql: SqlStorage, q: ListQuery, now: number = Date.now(
   return Object.fromEntries(TABS.map((t) => [t, row[t] ?? 0])) as Record<Tab, number>
 }
 
-/** One page, newest first. Cursor = `<created_at>:<slug>` of the last row (keyset, stable under inserts). */
-export function listShipments(sql: SqlStorage, q: ListQuery, now: number = Date.now()): { items: ListRow[]; nextCursor: string | null } {
+/** One page, newest first. Supports both keyset `cursor` and 1-based numbered `page` pagination. */
+export function listShipments(
+  sql: SqlStorage,
+  q: ListQuery,
+  now: number = Date.now(),
+): { items: ListRow[]; nextCursor: string | null; total: number; page: number; pageSize: number; totalPages: number } {
   const f = filters(q, now)
-  const parts = [`(${tabWhere(now)[q.tab]})`, f.where]
+  const baseParts = [`(${tabWhere(now)[q.tab]})`, f.where]
+  const total = sql.exec<{ n: number }>(`SELECT COUNT(*) AS n ${FROM} WHERE ${baseParts.join(" AND ")}`, ...f.params).one().n
+  const limit = Math.min(200, Math.max(1, q.limit))
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  const usePage = typeof q.page === "number" && Number.isFinite(q.page) && q.page >= 1
+  const page = usePage ? Math.min(Math.floor(q.page!), totalPages) : 1
+  const parts = [...baseParts]
   const params = [...f.params]
-  if (q.cursor) {
+  if (!usePage && q.cursor) {
     const m = /^(\d{1,16}):([0-9a-z]{7})$/.exec(q.cursor)
     if (m) {
       parts.push("(s.created_at < ? OR (s.created_at = ? AND s.slug < ?))")
       params.push(Number(m[1]), Number(m[1]), m[2]!)
     }
   }
-  const limit = Math.min(200, Math.max(1, q.limit))
+  const offset = usePage ? (page - 1) * limit : 0
   const rows = sql
     .exec<ListRow>(
       `SELECT s.slug, s.created_at, s.issued_at, s.courier_code, s.service_code, s.awb_number, s.print_count, CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
@@ -125,15 +137,16 @@ export function listShipments(sql: SqlStorage, q: ListQuery, now: number = Date.
               CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed') THEN NULL ELSE c.display_brand_name END AS sender_brand,
               r.name AS recipient, r.subdistrict_name AS recipient_area, s.cod_fee_mode, s.counter_due_idr, s.cod_collection_total_idr, s.counter_payment_status,
               s.counter_payment_method, s.status, s.dispatch_state, s.bulk_batch_id, q.effective_gerai_cost_idr, q.estimated_margin_idr
-       ${FROM} WHERE ${parts.join(" AND ")} ORDER BY s.created_at DESC, s.slug DESC LIMIT ?`,
+       ${FROM} WHERE ${parts.join(" AND ")} ORDER BY s.created_at DESC, s.slug DESC LIMIT ? OFFSET ?`,
       ...params,
       limit + 1,
+      offset,
     )
     .toArray()
   const more = rows.length > limit
   const items = rows.slice(0, limit)
   const last = items[items.length - 1]
-  return { items, nextCursor: more && last ? `${last.created_at}:${last.slug}` : null }
+  return { items, nextCursor: more && last ? `${last.created_at}:${last.slug}` : null, total, page, pageSize: limit, totalPages }
 }
 
 const CSV_COLUMNS: Array<[keyof ListRow | "created_wib", string]> = [
