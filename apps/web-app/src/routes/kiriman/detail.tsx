@@ -19,7 +19,7 @@ import { CheckboxField, SectionCard, Panel } from "../../components/admin/page"
 // summary → record payment → one primary `Tandai Lunas & Cetak` (or `Simpan & Cetak` for `Bayar nanti`). The server
 // owns every amount (frozen quote); the screen never computes money.
 type Method = "qris" | "tunai" | "transfer" | "later"
-export interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; display_brand_name?: string | null; sender_kind?: string }
+export interface Contact { id: string; true_name?: string; name?: string; true_phone?: string; phone?: string; wa_verified_at?: number | null; street_address?: string; subdistrict_name?: string | null; postal_code?: string | null; display_brand_name?: string | null; sender_kind?: string }
 interface Detail {
   shipment: Record<string, unknown> & { slug: string; status: string; dispatch_state: string; counter_payment_status: string; counter_due_idr: number; awb_number: string | null; courier_code: string; cod_fee_mode: string; publish_shipping_idr: number; packing_addon_idr: number; cod_collection_total_idr: number; sender_cod_payable_idr: number; dispatch_error: string | null; estimated_profit_idr?: number; gerai_shipping_cost_idr?: number; content_declaration_text: string | null; prohibited_ack_at: number | null; mask_preset: MaskPreset; mask_snapshot_json: string | null }
   quote: (Record<string, unknown> & { service_code: string; billable_weight_gram: number; expires_at: number; cod_fee_idr: number }) | null
@@ -139,12 +139,12 @@ export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders
   return (
     <div className="flex flex-col gap-2">
       <Input aria-label={`Cari ${label.toLowerCase()}`} placeholder={`Cari ${label.toLowerCase()} (nama atau nomor HP)`} value={q} onChange={(e) => setQ(e.target.value)} type="search" />
-      <ul className="flex flex-col divide-y border-y" aria-label={`Pilihan ${label.toLowerCase()}`}>
+      <ul className="flex flex-col divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white" aria-label={`Pilihan ${label.toLowerCase()}`}>
         {items.map((c) => (
           <li key={c.id}>
-            <button type="button" aria-pressed={value?.id === c.id} onClick={() => onPick(c)} className={`flex min-h-11 w-full flex-col items-start px-3 py-2 text-left text-base md:text-sm ${value?.id === c.id ? "bg-primary/10 font-medium" : "hover:bg-muted"}`}>
-              <span>{c.display_brand_name ?? c.true_name ?? c.name}</span>
-              <span className="text-muted-foreground tabular-nums">{c.true_phone ?? c.phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}{kind === "senders" ? (c.wa_verified_at ? " · WA terverifikasi" : " · WA belum diverifikasi") : ""}</span>
+            <button type="button" aria-pressed={value?.id === c.id} onClick={() => onPick(c)} className={`flex min-h-11 w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-base transition-colors md:text-sm ${value?.id === c.id ? "bg-primary/10 font-medium" : "hover:bg-slate-50"}`}>
+              <span className="w-full truncate font-medium text-slate-900">{c.display_brand_name ?? c.true_name ?? c.name}</span>
+              <span className="w-full truncate text-xs text-muted-foreground tabular-nums">{c.true_phone ?? c.phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}${c.postal_code ? ` ${c.postal_code}` : ""}` : ""}{kind === "senders" ? (c.wa_verified_at ? " · WA terverifikasi" : " · WA belum diverifikasi") : ""}</span>
             </button>
           </li>
         ))}

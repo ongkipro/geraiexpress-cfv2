@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { CheckIcon, MessageCircleIcon, PlusIcon } from "lucide-react"
-import { AreaPicker, type Area } from "../../components/area-picker"
+import { PreciseAreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../components/ui/sheet"
 import { Switch } from "../../components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
-import { rupiah } from "./shared"
+import { ContactDialog, rupiah } from "./shared"
 import { Panel } from "../../components/admin/page"
 
 // Kontak › Pengirim (visual 06 §2, visual 07, DEC-212): walk-in senders and reseller/dropship brands. Deposit column
@@ -26,6 +25,7 @@ interface Sender {
   true_street: string | null
   true_area_id: string | null
   true_area_label: string | null
+  true_postal_code?: string | null
   display_brand_name: string | null
   display_brand_phone: string | null
   hide_gerai_branding: number
@@ -128,24 +128,49 @@ export function PengirimPage() {
           </>
         )}
       </Panel>
-      <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>{editing === "new" ? "Tambah Pengirim" : "Ubah Pengirim"}</SheetTitle>
-          </SheetHeader>
-          {editing ? <SenderForm key={editing === "new" ? "new" : editing.id} sender={editing === "new" ? null : editing} owner={owner} onSaved={() => { setEditing(null); load() }} onVerified={load} /> : null}
-        </SheetContent>
-      </Sheet>
+      <ContactDialog
+        open={editing !== null}
+        onOpenChange={(o) => !o && setEditing(null)}
+        title={editing === "new" ? "Tambah Pengirim Baru" : "Ubah Pengirim"}
+        description="Lengkapi data pengirim di bawah. Klik Batal jika ingin menutup tanpa menyimpan."
+      >
+        {editing ? (
+          <SenderForm
+            key={editing === "new" ? "new" : editing.id}
+            sender={editing === "new" ? null : editing}
+            owner={owner}
+            onSaved={() => {
+              setEditing(null)
+              load()
+            }}
+            onCancel={() => setEditing(null)}
+            onVerified={load}
+          />
+        ) : null}
+      </ContactDialog>
     </div>
   )
 }
 
-export function SenderForm({ sender, owner, onSaved, onVerified }: { sender: Sender | null; owner: boolean; onSaved: (saved?: Sender) => void; onVerified?: () => void }) {
+export function SenderForm({
+  sender,
+  owner,
+  onSaved,
+  onCancel,
+  onVerified,
+}: {
+  sender: Sender | null
+  owner: boolean
+  onSaved: (saved?: Sender) => void
+  onCancel?: () => void
+  onVerified?: () => void
+}) {
   const [kind, setKind] = useState<Sender["sender_kind"]>(sender?.sender_kind ?? "walk_in")
   const [name, setName] = useState(sender?.true_name ?? "")
   const [phone, setPhone] = useState(sender?.true_phone ?? "")
   const [street, setStreet] = useState(sender?.true_street ?? "")
-  const [area, setArea] = useState<Area | null>(sender?.true_area_id ? { id: sender.true_area_id, label: sender.true_area_label ?? "", postalCode: null } : null)
+  const [area, setArea] = useState<Area | null>(sender?.true_area_id ? { id: sender.true_area_id, label: sender.true_area_label ?? "", postalCode: sender.true_postal_code ?? null } : null)
+  const [postalCode, setPostalCode] = useState(sender?.true_postal_code ?? "")
   const [brand, setBrand] = useState(sender?.display_brand_name ?? "")
   const [brandPhone, setBrandPhone] = useState(sender?.display_brand_phone ?? "")
   const [hide, setHide] = useState(sender?.hide_gerai_branding === 1)
@@ -165,7 +190,18 @@ export function SenderForm({ sender, owner, onSaved, onVerified }: { sender: Sen
     setErrors({})
     setMsg(null)
     try {
-      const body = { senderKind: kind, name, phone, street: street || null, areaId: area?.id ?? null, areaLabel: area?.label ?? null, brandName: brand || null, brandPhone: brandPhone || null, hideGeraiBranding: hide }
+      const body = {
+        senderKind: kind,
+        name,
+        phone,
+        street: street || null,
+        areaId: area?.id ?? null,
+        areaLabel: area?.label ?? null,
+        postalCode: postalCode || null,
+        brandName: brand || null,
+        brandPhone: brandPhone || null,
+        hideGeraiBranding: hide,
+      }
       // The POST answers with the full contact (same shape as GET): callers use it directly, no second request.
       const r = await api<{ item: Sender }>(sender ? `/contacts/senders/${sender.id}` : "/contacts/senders", { body })
       onSaved(r.item)
@@ -210,49 +246,69 @@ export function SenderForm({ sender, owner, onSaved, onVerified }: { sender: Sen
   const waDigits = phone.replace(/\D/g, "")
   const wa = waDigits ? `62${waDigits.replace(/^(62|0)/, "")}` : ""
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4 px-4 pb-6" noValidate>
-      <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as Sender["sender_kind"])} aria-label="Jenis pengirim" variant="outline">
-        <ToggleGroupItem value="walk_in">Walk-in</ToggleGroupItem>
-        <ToggleGroupItem value="reseller_dropship">Toko Reseller / Dropship</ToggleGroupItem>
-      </ToggleGroup>
-      <TextField label="Nama pengirim asli" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
-      <TextField label="Nomor WhatsApp (untuk retur & COD)" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0812-3456-7890" required />
-      {sender ? (
-        <div className="flex flex-col gap-2 rounded-lg border p-3">
-          {verified && phone === sender.true_phone ? (
-            <p className="flex items-center gap-2 text-base md:text-sm text-safe"><CheckIcon aria-hidden className="size-5" /> WhatsApp terverifikasi di loket</p>
-          ) : (
-            <>
-              <p className="text-base md:text-sm text-muted-foreground">Kirim pesan uji, lalu tanyakan ke pengirim apakah pesan sudah diterima.</p>
-              <div className="flex flex-wrap gap-2">
-                {wa ? (
-                  <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-base md:text-sm font-medium md:h-10">
-                    <MessageCircleIcon aria-hidden className="size-5" /> Kirim pesan uji
-                  </a>
-                ) : null}
-                <Button type="button" variant="outline" onClick={verify} disabled={pending || phone !== sender.true_phone}>{pending ? "Memverifikasi…" : "Pengirim sudah menerima"}</Button>
-              </div>
-              {phone !== sender.true_phone ? <p className="text-xs text-muted-foreground">Simpan perubahan nomor dulu sebelum memverifikasi.</p> : null}
-            </>
-          )}
+    <form onSubmit={submit} className="flex flex-col" noValidate>
+      <div className="flex flex-col gap-4 px-6 py-5">
+        <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as Sender["sender_kind"])} aria-label="Jenis pengirim" variant="outline" spacing={0} className="grid w-full grid-cols-2">
+          <ToggleGroupItem value="walk_in" className="w-full">Walk-in</ToggleGroupItem>
+          <ToggleGroupItem value="reseller_dropship" className="w-full">Toko Reseller / Dropship</ToggleGroupItem>
+        </ToggleGroup>
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <TextField label="Nama pengirim asli" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
+          <TextField label="Nomor WhatsApp (untuk retur & COD)" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0812-3456-7890" required />
         </div>
-      ) : null}
-      <TextField label="Alamat pengirim (opsional)" name="street" value={street} onChange={setStreet} error={errors.street} maxLength={200} />
-      <AreaPicker label="Kecamatan pengirim (opsional)" value={area} onChange={setArea} error={errors.areaId} />
-      {kind === "reseller_dropship" ? (
-        <>
-          <TextField label="Nama toko tercetak di label" name="brandName" value={brand} onChange={setBrand} error={errors.brandName} maxLength={60} required />
-          <TextField label="Nomor HP tercetak di label (opsional)" name="brandPhone" inputMode="numeric" value={brandPhone} onChange={setBrandPhone} error={errors.brandPhone} />
-          <label className="flex min-h-11 items-center justify-between gap-3 text-base md:text-sm">
-            Sembunyikan nama gerai di label
-            <Switch checked={hide} onCheckedChange={setHide} />
-          </label>
-        </>
-      ) : null}
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
-        {sender && owner ? <Button type="button" variant="outline" disabled={pending} onClick={archive}>Arsipkan</Button> : null}
+        {sender ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+            {verified && phone === sender.true_phone ? (
+              <p className="flex items-center gap-2 text-base md:text-sm text-safe"><CheckIcon aria-hidden className="size-5" /> WhatsApp terverifikasi di loket</p>
+            ) : (
+              <>
+                <p className="text-base md:text-sm text-muted-foreground">Kirim pesan uji, lalu tanyakan ke pengirim apakah pesan sudah diterima.</p>
+                <div className="flex flex-wrap gap-2">
+                  {wa ? (
+                    <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Halo, ini pesan uji dari gerai untuk memastikan nomor WhatsApp Anda aktif.")}`} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-lg border bg-white px-4 text-base md:text-sm font-medium md:h-10">
+                      <MessageCircleIcon aria-hidden className="size-5" /> Kirim pesan uji
+                    </a>
+                  ) : null}
+                  <Button type="button" variant="outline" onClick={verify} disabled={pending || phone !== sender.true_phone}>{pending ? "Memverifikasi…" : "Pengirim sudah menerima"}</Button>
+                </div>
+                {phone !== sender.true_phone ? <p className="text-xs text-muted-foreground">Simpan perubahan nomor dulu sebelum memverifikasi.</p> : null}
+              </>
+            )}
+          </div>
+        ) : null}
+        {kind === "reseller_dropship" ? (
+          <div className="flex flex-col gap-3.5 rounded-lg border border-slate-200/90 bg-slate-50/55 p-3.5">
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <TextField label="Nama toko tercetak di label" name="brandName" value={brand} onChange={setBrand} error={errors.brandName} maxLength={60} required />
+              <TextField label="Nomor HP tercetak di label (opsional)" name="brandPhone" inputMode="numeric" value={brandPhone} onChange={setBrandPhone} error={errors.brandPhone} />
+            </div>
+            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-base md:min-h-9 md:text-sm">
+              <span>Sembunyikan nama gerai di label</span>
+              <Switch checked={hide} onCheckedChange={setHide} />
+            </label>
+          </div>
+        ) : null}
+        <PreciseAreaPicker
+          kecamatanLabel="Kecamatan pengirim (opsional)"
+          value={area}
+          postalCode={postalCode}
+          onChange={setArea}
+          onPostalCodeChange={setPostalCode}
+          error={errors.areaId}
+          postalError={errors.postalCode}
+          optional
+        />
+        <TextField label="Alamat pengirim (opsional)" name="street" value={street} onChange={setStreet} error={errors.street} maxLength={200} />
+        {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
+      </div>
+      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-6 py-3.5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {sender && owner ? <Button type="button" variant="outline" disabled={pending} onClick={archive}>Arsipkan</Button> : null}
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+          {onCancel ? <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>Batal</Button> : null}
+          <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
+        </div>
       </div>
     </form>
   )

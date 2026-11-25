@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { PlusIcon } from "lucide-react"
-import { AreaPicker, type Area } from "../../components/area-picker"
+import { PreciseAreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
+import { Textarea } from "../../components/ui/textarea"
 import { api, ApiError } from "../../lib/api"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
-import { RiskChip, type RiskBadge } from "./shared"
+import { ContactDialog, RiskChip, type RiskBadge } from "./shared"
 import { Panel } from "../../components/admin/page"
 
 // Kontak › Penerima (visual 06 §2): address book with this gerai's own COD history badge.
@@ -101,24 +102,48 @@ export function PenerimaPage() {
           </>
         )}
       </Panel>
-      <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>{editing === "new" ? "Tambah Penerima" : "Ubah Penerima"}</SheetTitle>
-          </SheetHeader>
-          {editing ? <RecipientForm key={editing === "new" ? "new" : editing.id} recipient={editing === "new" ? null : editing} canArchive={isOwner(w)} onSaved={() => { setEditing(null); load() }} /> : null}
-        </SheetContent>
-      </Sheet>
+      <ContactDialog
+        open={editing !== null}
+        onOpenChange={(o) => !o && setEditing(null)}
+        title={editing === "new" ? "Tambah Penerima Baru" : "Ubah Penerima"}
+        description="Cari kecamatan lalu pilih kelurahan agar kode pos terisi otomatis. Klik Batal untuk menutup."
+      >
+        {editing ? (
+          <RecipientForm
+            key={editing === "new" ? "new" : editing.id}
+            recipient={editing === "new" ? null : editing}
+            canArchive={isOwner(w)}
+            onSaved={() => {
+              setEditing(null)
+              load()
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        ) : null}
+      </ContactDialog>
     </div>
   )
 }
 
-export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: { recipient: Recipient | null; canArchive: boolean; onSaved: (saved?: Recipient) => void; initialArea?: Area | null }) {
+export function RecipientForm({
+  initialArea,
+  recipient,
+  canArchive,
+  onSaved,
+  onCancel,
+}: {
+  recipient: Recipient | null
+  canArchive: boolean
+  onSaved: (saved?: Recipient) => void
+  onCancel?: () => void
+  initialArea?: Area | null
+}) {
   const [name, setName] = useState(recipient?.name ?? "")
   const [phone, setPhone] = useState(recipient?.phone ?? "")
   const [street, setStreet] = useState(recipient?.street_address ?? "")
   const [note, setNote] = useState(recipient?.address_note ?? "")
   const [area, setArea] = useState<Area | null>(recipient?.mengantar_area_id ? { id: recipient.mengantar_area_id, label: recipient.subdistrict_name ?? "", postalCode: recipient.postal_code } : (initialArea ?? null))
+  const [postalCode, setPostalCode] = useState(recipient?.postal_code ?? initialArea?.postalCode ?? "")
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -133,7 +158,7 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
     setErrors({})
     setMsg(null)
     try {
-      const body = { name, phone, street, note: note || null, areaId: area?.id ?? "", areaLabel: area?.label ?? "", postalCode: area?.postalCode ?? null }
+      const body = { name, phone, street, note: note || null, areaId: area?.id ?? "", areaLabel: area?.label ?? "", postalCode: postalCode || null }
       // The POST answers with the full contact (same shape as GET): callers use it directly, no second request.
       const r = await api<{ item: Recipient }>(recipient ? `/contacts/recipients/${recipient.id}` : "/contacts/recipients", { body })
       onSaved(r.item)
@@ -148,38 +173,69 @@ export function RecipientForm({ initialArea, recipient, canArchive, onSaved }: {
     }
   }
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4 px-4 pb-6" noValidate>
-      <TextField label="Nama penerima" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
-      <TextField label="Nomor HP penerima" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0857-1234-5678" required />
-      <AreaPicker label="Kecamatan tujuan" value={area} onChange={setArea} error={errors.areaId} />
-      <TextField label="Alamat lengkap" name="street" value={street} onChange={setStreet} error={errors.street} hint="Nama jalan, nomor rumah, RT/RW." required maxLength={200} />
-      <TextField label="Patokan (opsional)" name="note" value={note} onChange={setNote} maxLength={200} />
-      {msg ? <p role="alert" className="border-l-4 border-danger py-1 pl-3 text-base md:text-sm font-medium text-danger">{msg}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
-        {recipient && canArchive ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={async () => {
-              if (pending) return
-              if (!window.confirm(`Arsipkan penerima “${recipient.name}”?`)) return
-              setPending(true)
-              setMsg(null)
-              try {
-                await api(`/contacts/recipients/${recipient.id}/archive`, { body: {} })
-                onSaved()
-              } catch (err) {
-                setMsg(err instanceof ApiError ? err.body.message : "Gagal mengarsipkan penerima.")
-              } finally {
-                setPending(false)
-              }
-            }}
-          >
-            Arsipkan
-          </Button>
-        ) : null}
+    <form onSubmit={submit} className="flex flex-col" noValidate>
+      <div className="flex flex-col gap-4 px-6 py-5">
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <TextField label="Nama penerima" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
+          <TextField label="Nomor HP penerima" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0857-1234-5678" required />
+        </div>
+        <PreciseAreaPicker
+          kecamatanLabel="Kecamatan tujuan"
+          value={area}
+          postalCode={postalCode}
+          onChange={setArea}
+          onPostalCodeChange={setPostalCode}
+          error={errors.areaId}
+          postalError={errors.postalCode}
+        />
+        <Field data-invalid={errors.street ? true : undefined}>
+          <FieldLabel htmlFor="recipient-street">Alamat lengkap</FieldLabel>
+          <Textarea
+            id="recipient-street"
+            name="street"
+            rows={2}
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+            maxLength={200}
+            required
+            placeholder="Nama jalan, nomor rumah, RT/RW, blok atau gang"
+            aria-invalid={errors.street ? true : undefined}
+          />
+          {errors.street ? <FieldError>{errors.street}</FieldError> : <FieldDescription>Nama jalan, nomor rumah, RT/RW.</FieldDescription>}
+        </Field>
+        <TextField label="Patokan (opsional)" name="note" value={note} onChange={setNote} maxLength={200} hint="Contoh: Rumah pagar hijau sebelah minimarket" />
+        {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
+      </div>
+      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-6 py-3.5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {recipient && canArchive ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={async () => {
+                if (pending) return
+                if (!window.confirm(`Arsipkan penerima “${recipient.name}”?`)) return
+                setPending(true)
+                setMsg(null)
+                try {
+                  await api(`/contacts/recipients/${recipient.id}/archive`, { body: {} })
+                  onSaved()
+                } catch (err) {
+                  setMsg(err instanceof ApiError ? err.body.message : "Gagal mengarsipkan penerima.")
+                } finally {
+                  setPending(false)
+                }
+              }}
+            >
+              Arsipkan
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+          {onCancel ? <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>Batal</Button> : null}
+          <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan"}</Button>
+        </div>
       </div>
     </form>
   )

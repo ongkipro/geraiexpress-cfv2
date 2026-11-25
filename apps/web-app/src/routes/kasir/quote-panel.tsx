@@ -403,15 +403,16 @@ export function PackageFields({ f, disclosure, children, extra, extraFilled = fa
   )
 }
 
-const COLS = "md:grid-cols-[minmax(0,11rem)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,8.5rem)_6.5rem]"
-const COLS_MARGIN = "md:grid-cols-[minmax(0,11rem)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,8.5rem)_minmax(0,9rem)_6.5rem]"
-const COLS_CHOOSE = "md:grid-cols-[minmax(0,10rem)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,8rem)_auto]"
-const COLS_CHOOSE_MARGIN = "md:grid-cols-[minmax(0,10rem)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,8rem)_minmax(0,9rem)_auto]"
+const COLS = "md:grid-cols-[minmax(0,10.5rem)_minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,7.5rem)_5.5rem]"
+const COLS_MARGIN = "md:grid-cols-[minmax(0,9.5rem)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,7.25rem)_minmax(0,8.25rem)_5.25rem]"
+const COLS_CHOOSE = "md:grid-cols-[minmax(0,10rem)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,8rem)_auto]"
+const COLS_CHOOSE_MARGIN = "md:grid-cols-[minmax(0,9.5rem)_minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,7.5rem)_minmax(0,8.5rem)_auto]"
 
 /**
- * `4. Pilihan Ekspedisi`: a rail (destination, Reguler/Cargo counts, `Cek Ongkir`/`Hitung Ulang`, the owner's margin
- * view) beside a cheapest-first courier table from 768px (stacked rows below). `select` is the POS mode — each row is
- * a radio (`aria-checked`, arrows move and select); otherwise each row is a list item with the `onChoose` button.
+ * `4. Pilihan Ekspedisi`: a compact horizontal control bar (title, destination, Reguler/Cargo tabs, `Cek Ongkir` /
+ * `Hitung Ulang`, owner margin toggle) above a full-width cheapest-first courier table from 768px (stacked rows below).
+ * `select` is the POS mode — each row is a radio (`aria-checked`, arrows move and select); otherwise each row is a list
+ * item with the `onChoose` button.
  */
 export function CourierResults({
   f,
@@ -436,30 +437,36 @@ export function CourierResults({
   const cols = onChoose ? (margin ? COLS_CHOOSE_MARGIN : COLS_CHOOSE) : margin ? COLS_MARGIN : COLS
   return (
     <Panel className="flex flex-col gap-4" aria-labelledby="pilih-ekspedisi">
-      <div className="grid gap-4 md:grid-cols-[11rem_minmax(0,1fr)] md:gap-5">
-        <div className="flex flex-col gap-3">
-          <StepTitle n={n} title="Pilihan Ekspedisi" id="pilih-ekspedisi" />
-          <p className="text-xs text-muted-foreground">
-            Tujuan<span className="mt-0.5 block text-sm font-medium text-slate-900">{f.area?.label || "Belum dipilih"}</span>
-          </p>
-          {data ? (
-            <ToggleGroup value={[f.tab]} onValueChange={(v) => v[0] && f.setTab(v[0] as typeof f.tab)} variant="outline" aria-label="Kategori layanan" className="grid w-full grid-cols-2 gap-1.5 md:grid-cols-1">
-              <ToggleGroupItem value="regular" className="w-full justify-between">Reguler <span className="tabular-nums">({counts.regular})</span></ToggleGroupItem>
-              <ToggleGroupItem value="cargo" className="w-full justify-between">Cargo ≥ 5 kg <span className="tabular-nums">({counts.cargo})</span></ToggleGroupItem>
-            </ToggleGroup>
-          ) : null}
-          <Button type="button" variant={data ? "outline" : "default"} onClick={() => void f.submit()} disabled={f.loading} className="w-full">
-            {data ? <RefreshCwIcon aria-hidden /> : null}
-            {f.loading ? "Menghitung…" : data ? "Hitung Ulang" : "Cek Ongkir"}
-          </Button>
-          {owner && data ? (
-            <Button type="button" variant="ghost" size="sm" onClick={f.toggleMargin} aria-pressed={f.showMargin} aria-label={f.showMargin ? "Sembunyikan modal" : "Lihat modal & margin"} className="justify-start text-muted-foreground">
-              {f.showMargin ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />} Laba pemilik
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <StepTitle n={n} title="Pilihan Ekspedisi" id="pilih-ekspedisi" />
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
+              <span className="shrink-0 text-muted-foreground">Tujuan:</span>
+              <span className="truncate font-medium text-slate-900">{f.area?.label || "Belum dipilih"}</span>
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {owner && data ? (
+              <Button type="button" variant="ghost" size="sm" onClick={f.toggleMargin} aria-pressed={f.showMargin} aria-label={f.showMargin ? "Sembunyikan modal" : "Lihat modal & margin"} className="text-muted-foreground">
+                {f.showMargin ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />} Laba pemilik
+              </Button>
+            ) : null}
+            <Button type="button" variant={data ? "outline" : "default"} size="sm" onClick={() => void f.submit()} disabled={f.loading}>
+              {data ? <RefreshCwIcon aria-hidden /> : null}
+              {f.loading ? "Menghitung…" : data ? "Hitung Ulang" : "Cek Ongkir"}
             </Button>
-          ) : null}
+          </div>
         </div>
+        {data ? (
+          <ToggleGroup value={[f.tab]} onValueChange={(v) => v[0] && f.setTab(v[0] as typeof f.tab)} variant="outline" spacing={0} aria-label="Kategori layanan" className="grid w-full grid-cols-2 sm:inline-grid sm:w-auto">
+            <ToggleGroupItem value="regular" className="gap-1.5 px-3">Reguler <span className="text-xs opacity-80 tabular-nums">({counts.regular})</span></ToggleGroupItem>
+            <ToggleGroupItem value="cargo" className="gap-1.5 px-3">Cargo ≥ 5 kg <span className="text-xs opacity-80 tabular-nums">({counts.cargo})</span></ToggleGroupItem>
+          </ToggleGroup>
+        ) : null}
+      </div>
 
-        <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
           {f.loading && !data ? <LoadingState label="Menghitung ongkir semua ekspedisi" rows={4} /> : f.error ? <ErrorState message={f.error} onRetry={() => void f.submit()} /> : !data ? (
             <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-sm text-muted-foreground">{empty}</p>
           ) : (
@@ -587,7 +594,6 @@ export function CourierResults({
             </>
           )}
           {footer}
-        </div>
       </div>
     </Panel>
   )

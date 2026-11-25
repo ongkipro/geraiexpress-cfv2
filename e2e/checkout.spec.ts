@@ -81,3 +81,56 @@ test("Checkout COD: pengirim baru diverifikasi di layar kasir → resi terbit", 
   await expect(page.getByText("Resi terbit").first()).toBeVisible()
   await expect(page.getByText(/AWB JT\d{10}/)).toBeVisible()
 })
+
+test("Kasir popup Tambah Penerima: tidak tutup saat klik luar, Batal menutup, cari kecamatan → kelurahan → kode pos otomatis", async ({ page, context, request }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "modal + 2-col sticky flow checked once on desktop")
+  const email = uniqueEmail("e2e-kasir-popup")
+  const api = context.request
+  const h = { origin: APP, "content-type": "application/json" }
+  const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
+  const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Popup", password: "popup-e2e-kuat-1" } })
+  expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `p${Date.now().toString(36)}`, name: "Gerai Popup", connect: true } })).status()).toBe(201)
+
+  await page.goto(`${APP}/kasir`)
+  // 2-column layout: right sticky summary sits beside the left input column on desktop (x > left column's x).
+  const leftBox = (await page.locator('[aria-labelledby="pihak-senders"]').boundingBox())!
+  const rightBox = (await page.locator('[aria-labelledby="ringkasan-judul"]').boundingBox())!
+  expect(rightBox.x).toBeGreaterThan(leftBox.x + leftBox.width - 1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+
+  // Open Tambah Penerima popup, fill partial data, click outside backdrop → popup MUST stay open & preserve data.
+  await page.getByRole("button", { name: "Penerima baru" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel("Nama penerima").fill("Dian Kusuma")
+  await dialog.getByLabel("Nomor HP penerima").fill("085611223344")
+  await page.mouse.click(8, 8)
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel("Nama penerima")).toHaveValue("Dian Kusuma")
+
+  // Explicit Batal closes the popup.
+  await dialog.getByRole("button", { name: "Batal" }).click()
+  await expect(dialog).toBeHidden()
+
+  // Reopen, search Kecamatan ("sukodono") → pick Sidoarjo group (2 kelurahan) → narrow Kelurahan ("panj") → Kode pos auto-fills 61216!
+  await page.getByRole("button", { name: "Penerima baru" }).click()
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel("Nama penerima").fill("Dian Kusuma")
+  await dialog.getByLabel("Nomor HP penerima").fill("085611223344")
+  await dialog.getByLabel("Kecamatan tujuan").fill("sukodono")
+  await dialog.getByRole("list", { name: "Hasil pencarian wilayah" }).getByRole("button", { name: /Kec\. Sukodono.*Sidoarjo/i }).click()
+  const kelInput = dialog.getByLabel("Kelurahan / Desa")
+  await expect(kelInput).toBeFocused()
+  await kelInput.fill("panj")
+  await dialog.getByRole("list", { name: "Hasil pencarian kelurahan" }).getByRole("button", { name: /Panjunan/i }).click()
+  await expect(dialog.getByLabel(/Kode pos/)).toHaveValue("61216")
+  await dialog.getByLabel("Alamat lengkap").fill("Jl. Raya Panjunan No. 22 RT 02 RW 01")
+  await dialog.getByRole("button", { name: "Simpan" }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.locator('[aria-labelledby="pihak-recipients"]')).toContainText("Dian Kusuma")
+  await expect(page.locator('[aria-labelledby="pihak-recipients"]')).toContainText("61216")
+  // Auto-quote runs for the newly added recipient's exact subdistrict.
+  await expect(page.getByRole("radio", { name: /^J&T Express/ })).toBeVisible({ timeout: 20_000 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+})

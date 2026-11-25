@@ -1,24 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CheckCircle2Icon, CheckIcon, CopyIcon, MapPinnedIcon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
+import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, CopyIcon, MapPinnedIcon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { Textarea } from "../../components/ui/textarea"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../components/ui/sheet"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
 import { PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { CheckboxField, Panel } from "../../components/admin/page"
+import { CourierLogo } from "../../components/admin/courier-logo"
 import { PresetPicker, type MaskPreset } from "../../components/masking/preset-picker"
 import { PrintDrawer } from "../../print/drawer"
 import { AnchorButton } from "../../components/admin/link-button"
 import { PartyPicker, type Contact } from "../kiriman/detail"
 import { RecipientForm } from "../kontak/penerima"
 import { SenderForm } from "../kontak/pengirim"
-import { RiskChip, type RiskBadge } from "../kontak/shared"
+import { ContactDialog, RiskChip, type RiskBadge } from "../kontak/shared"
 import { CourierResults, PackageFields, StepTitle, rp, useQuoteForm, type Mode, type QuoteCard, type QuoteInitial, type QuoteRequest } from "./quote-panel"
 import { AreaPicker, type Area } from "../../components/area-picker"
 import { PickupChip } from "./pickup-chip"
@@ -130,7 +130,7 @@ function ChosenParty({ c, kind, destinationId, onClear, onChange, locked = false
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-sm font-semibold text-slate-900">{c.display_brand_name ? `${c.display_brand_name} · ${c.true_name}` : (c.true_name ?? c.name)}</span>
-          <span className="truncate text-xs text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}` : ""}</span>
+          <span className="truncate text-xs text-muted-foreground tabular-nums">{phone}{c.subdistrict_name ? ` · ${c.subdistrict_name}${c.postal_code ? ` ${c.postal_code}` : ""}` : ""}</span>
           {kind === "recipients" && c.street_address ? <span className="line-clamp-2 text-xs text-muted-foreground">{c.street_address}</span> : null}
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClear} disabled={locked}>Ganti</Button>
@@ -205,16 +205,37 @@ function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initi
   }
   return (
     <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby={`pihak-${kind}`}>
-      <StepTitle n={n} id={`pihak-${kind}`} title={label} action={<Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setSheet(true)} aria-label={`${label} baru`}><PlusIcon aria-hidden /> Baru</Button>} />
+      <StepTitle
+        n={n}
+        id={`pihak-${kind}`}
+        title={label}
+        action={
+          <Button type="button" variant="outline" size="sm" disabled={locked} onClick={() => setSheet(true)} aria-label={`${label} baru`}>
+            <PlusIcon aria-hidden /> Baru
+          </Button>
+        }
+      />
       {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onUpdate ?? onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
-      <Sheet open={adding} onOpenChange={setSheet}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-          <SheetHeader><SheetTitle>{label} baru</SheetTitle></SheetHeader>
-          {adding ? (kind === "senders" ? <SenderForm key={sheetId} sender={null} owner={isOwner(w)} onSaved={(item) => savedIf(sheetId, item)} /> : <RecipientForm key={sheetId} recipient={null} canArchive={false} onSaved={(item) => savedIf(sheetId, item)} initialArea={initialArea ?? null} />) : null}
-        </SheetContent>
-      </Sheet>
+      <ContactDialog
+        open={adding}
+        onOpenChange={setSheet}
+        title={`Tambah ${label} Baru`}
+        description={
+          kind === "recipients"
+            ? "Cari kecamatan lalu pilih kelurahan agar kode pos terisi otomatis. Data langsung dipilih untuk kiriman ini."
+            : "Data tersimpan ke buku kontak dan langsung dipilih untuk kiriman ini. Klik Batal untuk menutup."
+        }
+      >
+        {adding ? (
+          kind === "senders" ? (
+            <SenderForm key={sheetId} sender={null} owner={isOwner(w)} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} />
+          ) : (
+            <RecipientForm key={sheetId} recipient={null} canArchive={false} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} initialArea={initialArea ?? null} />
+          )
+        ) : null}
+      </ContactDialog>
     </Panel>
   )
 }
@@ -501,7 +522,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
   const pickedArea = recipient && recipientArea ? null : areaOnly || (recipient && !recipientArea)
 
   return (
-    <div className="flex flex-col gap-4 pb-28 lg:pb-0">
+    <div className="flex flex-col gap-4 pb-28 lg:pb-24">
       <PageTitle title="Kiriman Satuan" description={<span className="flex flex-col items-start gap-2"><span>Buat resi dari meja kasir dalam satu layar.</span><PickupChip outlet={pos?.outlet} owner={owner} loaded={pos !== null} /></span>}>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start">
           <ScanBox onClaim={onClaim} autoFocus={q("scan") === "1"} />
@@ -513,150 +534,185 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
       ) : null}
       {claimLoadError ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{claimLoadError}</p> : null}
 
-      <div className="grid items-start gap-4 xl:grid-cols-3">
-        <PartyStep n={1} kind="senders" value={sender} onPick={pickSender} onUpdate={(v) => setSender((cur) => (cur?.id === v.id ? v : cur))} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
-          {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
-          <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
-          {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
-        </PartyStep>
-        <PartyStep n={2} kind="recipients" value={recipient} onPick={pickRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area} locked={pending}>
-          {pickedArea ? (
-            <div data-area-only className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-              {recipient && !recipientArea ? <p className="text-xs text-warn">Penerima ini belum punya kecamatan Mengantar. Pilih kecamatan tujuan.</p> : null}
-              <AreaPicker label="Kecamatan tujuan" value={f.area} onChange={f.setArea} error={f.errors.destinationAreaId} />
-              {!recipient ? <p className="text-xs text-muted-foreground">Tarif muncul di bagian 4. Setelah pelanggan setuju, pilih atau tambah penerima di kecamatan ini.</p> : null}
-            </div>
-          ) : !recipient ? (
-            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setAreaOnly(true)}>
-              <MapPinnedIcon aria-hidden /> Cek kecamatan tujuan saja dulu
-            </Button>
-          ) : null}
-        </PartyStep>
-        <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby="paket-judul">
-          <StepTitle n={3} id="paket-judul" title="Detail Paket" />
-          <PackageFields
-            f={f}
-            disclosure
-            extraFilled={!!note}
-            extra={
-              <Field data-invalid={errors.deliveryInstruction ? true : undefined}>
-                <FieldLabel htmlFor="instruksi">Instruksi kurir / patokan (opsional)</FieldLabel>
-                <Textarea id="instruksi" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} placeholder="Contoh: Titip ke satpam, rumah pagar hijau" />
-                {errors.deliveryInstruction ? <FieldError>{errors.deliveryInstruction}</FieldError> : null}
-              </Field>
-            }
-          >
-            <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
-              <Field data-invalid={errors.content ? true : undefined}>
-                <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
-                <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
-                {errors.content ? <FieldError>{errors.content}</FieldError> : null}
-              </Field>
-              <Field data-invalid={errors.quantity ? true : undefined}>
-                <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
-                <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
-                {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
-              </Field>
-            </div>
-          </PackageFields>
-        </Panel>
-      </div>
-
-      <CourierResults
-        f={f}
-        n={4}
-        empty="Pilih penerima (atau cek kecamatan saja) dan isi berat — ongkir semua ekspedisi muncul otomatis di sini."
-        select={{
-          selected: card?.serviceCode ?? null,
-          onSelect: (req, c) => {
-            if (pending) return
-            setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c })
-          },
-        }}
-      />
-
-      <Panel className="flex flex-col gap-4" aria-labelledby="ringkasan-judul">
-        <StepTitle n={5} id="ringkasan-judul" title="Ringkasan, Pembayaran & Cetak" action={frozen ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">INV {frozen.slug.toUpperCase()}</span> : null} />
-        {card && sel ? (
-          <div className="grid gap-5 lg:grid-cols-2 lg:gap-8">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-slate-900">{card.name}{form.areaLabel ? <span className="font-normal text-muted-foreground"> · ke {form.areaLabel}</span> : null}</span>
-                  <span className="block text-xs text-muted-foreground tabular-nums">Berat ditagih {(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg{card.eta ? ` · ${card.eta}` : ""}</span>
-                </span>
-              </div>
-              <dl className="flex flex-col gap-1.5 text-sm tabular-nums">
-                <Row label="Ongkir publish" value={rp(card.publishShippingIdr)} />
-                {sel.req.packingIdr ? <Row label="Packing" value={rp(sel.req.packingIdr)} /> : null}
-                {sel.req.serviceFeeIdr ? <Row label="Biaya layanan loket" value={rp(sel.req.serviceFeeIdr)} /> : null}
-                {cod ? (
-                  <>
-                    <Row label="Ditagih kurir ke penerima" value={rp(card.codCollectionTotalIdr)} />
-                    {sel.req.mode !== "dfod" ? <Row label="Estimasi cair ke pengirim" value={rp(card.senderCodPayableIdr)} /> : null}
-                  </>
-                ) : null}
-                <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-slate-300 pt-2.5">
-                  <dt className="text-sm font-semibold text-slate-900">Bayar di loket</dt>
-                  <dd className="text-2xl font-bold text-slate-950">{rp(due)}</dd>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24.5rem]">
+        {/* Left column: sequential counter input flow (1. Pengirim & 2. Penerima → 3. Detail Paket → 4. Pilihan Ekspedisi) */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="grid items-start gap-4 md:grid-cols-2">
+            <PartyStep n={1} kind="senders" value={sender} onPick={pickSender} onUpdate={(v) => setSender((cur) => (cur?.id === v.id ? v : cur))} error={errors.senderId} destination={sel?.req ?? null} locked={pending}>
+              {/* The label preset belongs to the sender (masking needs a verified WhatsApp). */}
+              <PresetPicker key={sender?.id ?? "none"} value={preset} onChange={setPreset} cod={cod} reseller={sender?.sender_kind === "reseller_dropship"} preview={{ sender: sender?.true_name ?? "Pengirim", brand: sender?.display_brand_name ?? null, outlet: w.tenant.name, recipientPhone: recipient?.phone ?? null }} />
+              {errors.maskPreset ? <p role="alert" className="text-xs text-danger">{errors.maskPreset}</p> : null}
+            </PartyStep>
+            <PartyStep n={2} kind="recipients" value={recipient} onPick={pickRecipient} error={errors.recipientId} destination={sel?.req ?? null} initialArea={recipient ? null : f.area} locked={pending}>
+              {pickedArea ? (
+                <div data-area-only className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                  {recipient && !recipientArea ? <p className="text-xs text-warn">Penerima ini belum punya kecamatan Mengantar. Pilih kecamatan tujuan.</p> : null}
+                  <AreaPicker label="Kecamatan tujuan" value={f.area} onChange={f.setArea} error={f.errors.destinationAreaId} />
+                  {!recipient ? <p className="text-xs text-muted-foreground">Tarif muncul di bagian 4. Setelah pelanggan setuju, pilih atau tambah penerima di kecamatan ini.</p> : null}
                 </div>
-              </dl>
-              {owner && card.providerNetShippingIdr !== undefined ? (
-                <dl className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs tabular-nums">
-                  <div><dt className="text-muted-foreground">Modal Mengantar</dt><dd className="text-sm font-medium text-slate-800">{rp(card.providerNetShippingIdr)}</dd></div>
-                  <div><dt className="text-muted-foreground">Estimasi laba</dt><dd className="text-sm font-semibold text-safe">{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
-                </dl>
+              ) : !recipient ? (
+                <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setAreaOnly(true)}>
+                  <MapPinnedIcon aria-hidden /> Cek kecamatan tujuan saja dulu
+                </Button>
               ) : null}
-            </div>
-            <fieldset disabled={pending} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
-              {alreadyPaid ? (
-                <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">Pembayaran sudah tercatat lunas di INV {frozen!.slug.toUpperCase()}. Tekan tombol di bawah untuk menerbitkan resi.</p>
-              ) : due > 0 ? (
-                <div className="flex flex-col gap-2.5">
-                  <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="grid w-full grid-cols-2 gap-1.5 sm:grid-cols-4">
-                    <ToggleGroupItem value="qris" className="w-full">QRIS gerai</ToggleGroupItem>
-                    <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
-                    <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
-                    <ToggleGroupItem value="later" className="w-full">Bayar nanti</ToggleGroupItem>
-                  </ToggleGroup>
-                  {method === "tunai" ? (
-                    <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
-                      <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
-                      <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
-                      <div className="flex flex-wrap gap-1.5">
-                        {[due, Math.ceil(due / 10000) * 10000, Math.ceil(due / 50000) * 50000, 100000].filter((v, i, a) => v >= due && a.indexOf(v) === i).slice(0, 3).map((v) => (
-                          <button key={v} type="button" onClick={() => setCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-9 md:text-xs">
-                            {v === due ? "Uang pas" : rp(v)}
-                          </button>
-                        ))}
-                      </div>
-                      {cashNum >= due ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : <p className="text-xs text-muted-foreground">Masukkan uang diterima atau tekan Uang pas untuk melanjutkan.</p>}
-                      {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
-                    </Field>
-                  ) : null}
-                  {method === "qris" || method === "transfer" ? <p className="text-xs text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
-              )}
-              <CheckboxField checked={ack} onCheckedChange={setAck}>
-                Isi paket bukan barang terlarang atau berbahaya
-              </CheckboxField>
-              {errors.prohibitedAck ? <p role="alert" className="text-xs text-danger">{errors.prohibitedAck}</p> : null}
-              {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
-              {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
-              {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
-              <Button className="hidden w-full md:inline-flex" size="lg" onClick={submit} disabled={disabled}>
-                <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
-              </Button>
-            </fieldset>
+            </PartyStep>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
-        )}
-      </Panel>
+
+          <Panel className="flex min-w-0 flex-col gap-3" aria-labelledby="paket-judul">
+            <StepTitle n={3} id="paket-judul" title="Detail Paket" />
+            <PackageFields
+              f={f}
+              disclosure
+              extraFilled={!!note}
+              extra={
+                <Field data-invalid={errors.deliveryInstruction ? true : undefined}>
+                  <FieldLabel htmlFor="instruksi">Instruksi kurir / patokan (opsional)</FieldLabel>
+                  <Textarea id="instruksi" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} placeholder="Contoh: Titip ke satpam, rumah pagar hijau" />
+                  {errors.deliveryInstruction ? <FieldError>{errors.deliveryInstruction}</FieldError> : null}
+                </Field>
+              }
+            >
+              <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-3">
+                <Field data-invalid={errors.content ? true : undefined}>
+                  <FieldLabel htmlFor="isi">Isi paket</FieldLabel>
+                  <Input id="isi" value={content} onChange={(e) => setContent(e.target.value)} maxLength={100} placeholder="Contoh: Pakaian" />
+                  {errors.content ? <FieldError>{errors.content}</FieldError> : null}
+                </Field>
+                <Field data-invalid={errors.quantity ? true : undefined}>
+                  <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
+                  <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
+                  {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
+                </Field>
+              </div>
+            </PackageFields>
+          </Panel>
+
+          <CourierResults
+            f={f}
+            n={4}
+            empty="Pilih penerima (atau cek kecamatan saja) dan isi berat — ongkir semua ekspedisi muncul otomatis di sini."
+            select={{
+              selected: card?.serviceCode ?? null,
+              onSelect: (req, c) => {
+                if (pending) return
+                setSel({ req, card: frozen && frozen.sig === JSON.stringify([req, c.serviceCode]) ? frozen.card : c })
+              },
+            }}
+          />
+        </div>
+
+        {/* Right column: sticky live summary, payment & checkout */}
+        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20">
+          <Panel className="flex flex-col gap-4 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto" aria-labelledby="ringkasan-judul">
+            <StepTitle n={5} id="ringkasan-judul" title="Ringkasan & Pembayaran" action={frozen ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">INV {frozen.slug.toUpperCase()}</span> : null} />
+
+            {/* Compact live checklist so operator immediately sees what is filled */}
+            <ul className="flex flex-col gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 text-xs">
+              <SummaryCheck
+                done={!!sender}
+                label="Pengirim"
+                value={sender ? (sender.display_brand_name ?? sender.true_name ?? "Terpilih") : "Belum dipilih"}
+              />
+              <SummaryCheck
+                done={!!recipient}
+                label="Penerima"
+                value={recipient ? `${recipient.name ?? "Terpilih"}${recipient.subdistrict_name ? ` · ${recipient.subdistrict_name}` : ""}` : form.areaLabel ? `Cek tarif · ${form.areaLabel}` : "Belum dipilih"}
+              />
+              <SummaryCheck
+                done={!!content.trim()}
+                label="Paket"
+                value={`${(f.gram / 1000).toLocaleString("id-ID")} kg${content.trim() ? ` · ${content.trim()}` : " · isi belum diisi"}`}
+              />
+            </ul>
+
+            {card && sel ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200/80 bg-white p-2.5">
+                  <CourierLogo code={card.courierCode ?? card.serviceCode} name={card.courierName || card.name} decorative />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900">{card.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                      {form.areaLabel ? `ke ${form.areaLabel} · ` : ""}
+                      {(card.billableWeightGram / 1000).toLocaleString("id-ID")} kg{card.eta ? ` · ${card.eta}` : ""}
+                    </span>
+                  </span>
+                </div>
+
+                <dl className="flex flex-col gap-1.5 text-sm tabular-nums">
+                  <Row label="Ongkir publish" value={rp(card.publishShippingIdr)} />
+                  {sel.req.packingIdr ? <Row label="Packing" value={rp(sel.req.packingIdr)} /> : null}
+                  {sel.req.serviceFeeIdr ? <Row label="Biaya layanan loket" value={rp(sel.req.serviceFeeIdr)} /> : null}
+                  {cod ? (
+                    <>
+                      <Row label="Ditagih kurir ke penerima" value={rp(card.codCollectionTotalIdr)} />
+                      {sel.req.mode !== "dfod" ? <Row label="Estimasi cair ke pengirim" value={rp(card.senderCodPayableIdr)} /> : null}
+                    </>
+                  ) : null}
+                  <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-dashed border-slate-300 pt-2.5">
+                    <dt className="text-sm font-semibold text-slate-900">Bayar di loket</dt>
+                    <dd className="text-2xl font-bold text-slate-950">{rp(due)}</dd>
+                  </div>
+                </dl>
+
+                {owner && card.providerNetShippingIdr !== undefined ? (
+                  <dl className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs tabular-nums">
+                    <div><dt className="text-muted-foreground">Modal Mengantar</dt><dd className="text-sm font-medium text-slate-800">{rp(card.providerNetShippingIdr)}</dd></div>
+                    <div><dt className="text-muted-foreground">Estimasi laba</dt><dd className="text-sm font-semibold text-safe">{rp(card.estimatedProfitIdr ?? 0)}</dd></div>
+                  </dl>
+                ) : null}
+
+                <fieldset disabled={pending} className="m-0 flex min-w-0 flex-col gap-3.5 border-t border-slate-100 p-0 pt-3.5">
+                  {alreadyPaid ? (
+                    <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">Pembayaran sudah tercatat lunas di INV {frozen!.slug.toUpperCase()}. Tekan tombol di bawah untuk menerbitkan resi.</p>
+                  ) : due > 0 ? (
+                    <div className="flex flex-col gap-2.5">
+                      <span className="text-xs font-medium text-slate-700">Cara bayar</span>
+                      <ToggleGroup value={[method]} onValueChange={(v) => v[0] && setMethod(v[0] as Method)} variant="outline" aria-label="Cara bayar" className="grid w-full grid-cols-2 gap-1.5">
+                        <ToggleGroupItem value="qris" className="w-full">QRIS gerai</ToggleGroupItem>
+                        <ToggleGroupItem value="tunai" className="w-full">Tunai</ToggleGroupItem>
+                        <ToggleGroupItem value="transfer" className="w-full">Transfer</ToggleGroupItem>
+                        <ToggleGroupItem value="later" className="w-full">Bayar nanti</ToggleGroupItem>
+                      </ToggleGroup>
+                      {method === "tunai" ? (
+                        <Field data-invalid={errors.cashReceivedIdr ? true : undefined}>
+                          <FieldLabel htmlFor="uang">Uang diterima</FieldLabel>
+                          <Input id="uang" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "") ? Number(e.target.value.replace(/\D/g, "")).toLocaleString("id-ID") : "")} className="tabular-nums" />
+                          <div className="flex flex-wrap gap-1.5">
+                            {[due, Math.ceil(due / 10000) * 10000, Math.ceil(due / 50000) * 50000, 100000].filter((v, i, a) => v >= due && a.indexOf(v) === i).slice(0, 3).map((v) => (
+                              <button key={v} type="button" onClick={() => setCash(v.toLocaleString("id-ID"))} className="h-11 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-600 tabular-nums hover:bg-slate-50 md:h-9 md:text-xs">
+                                {v === due ? "Uang pas" : rp(v)}
+                              </button>
+                            ))}
+                          </div>
+                          {cashNum >= due ? <p className="text-sm font-medium text-safe tabular-nums">Kembalian {rp(cashNum - due)}</p> : <p className="text-xs text-muted-foreground">Masukkan uang diterima atau tekan Uang pas untuk melanjutkan.</p>}
+                          {errors.cashReceivedIdr ? <FieldError>{errors.cashReceivedIdr}</FieldError> : null}
+                        </Field>
+                      ) : null}
+                      {method === "qris" || method === "transfer" ? <p className="text-xs text-muted-foreground">Pastikan dana sudah masuk ke rekening/QRIS gerai sebelum menandai lunas.</p> : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Tidak ada yang dibayar di loket.</p>
+                  )}
+                  <CheckboxField checked={ack} onCheckedChange={setAck}>
+                    Isi paket bukan barang terlarang atau berbahaya
+                  </CheckboxField>
+                  {errors.prohibitedAck ? <p role="alert" className="text-xs text-danger">{errors.prohibitedAck}</p> : null}
+                  {frozen ? <p className="text-xs text-muted-foreground tabular-nums">INV {frozen.slug.toUpperCase()}{frozen.paid ? " · pembayaran tercatat" : " · draf"} · <Link to="/kiriman/$slug" params={{ slug: frozen.slug }} className="font-medium text-primary underline-offset-4 hover:underline">Buka halaman kiriman</Link></p> : null}
+                  {locked ? <p role="alert" className="rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">Ongkir berubah setelah INV {frozen!.slug.toUpperCase()} dibayar atau dipakai kode QR. Lanjutkan di halaman kiriman.</p> : null}
+                  {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
+                  <Button className="hidden w-full lg:inline-flex" size="lg" onClick={submit} disabled={disabled}>
+                    <PrinterIcon aria-hidden /> {pending ? "Memproses…" : primary}
+                  </Button>
+                </fieldset>
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-200 px-3.5 py-5 text-sm text-muted-foreground">Cek ongkir lalu pilih ekspedisi. Rincian biaya muncul di sini.</p>
+            )}
+          </Panel>
+        </aside>
+      </div>
       {card ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-slate-200/80 bg-white/95 p-3 backdrop-blur lg:hidden">
           <span className="flex flex-col text-sm tabular-nums"><span className="text-xs text-muted-foreground">Bayar di loket</span><strong className="text-base md:text-sm">{rp(due)}</strong></span>
           <Button className="flex-1" size="lg" onClick={submit} disabled={disabled}>
             {pending ? "Memproses…" : alreadyPaid ? "Terbitkan & Cetak" : needPay ? "Tandai Lunas & Cetak" : "Simpan & Cetak"}
@@ -664,6 +720,16 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
         </div>
       ) : null}
     </div>
+  )
+}
+
+function SummaryCheck({ done, label, value }: { done: boolean; label: string; value: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      {done ? <CheckCircle2Icon aria-hidden className="size-3.5 shrink-0 text-safe" /> : <CircleDashedIcon aria-hidden className="size-3.5 shrink-0 text-slate-400" />}
+      <span className="shrink-0 text-muted-foreground">{label}:</span>
+      <span className={`min-w-0 flex-1 truncate text-right font-medium ${done ? "text-slate-900" : "text-muted-foreground"}`}>{value}</span>
+    </li>
   )
 }
 

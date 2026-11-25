@@ -46,7 +46,7 @@ export async function searchAreas(env: Env, q: string): Promise<{ items: AreaIte
     }
     throw err
   }
-  const items = raw.slice(0, 50).map((a) => ({
+  const items = raw.slice(0, 100).map((a) => ({
     id: a._id,
     label: [a.SUBDISTRICT_NAME, a.DISTRICT_NAME, a.CITY_NAME, a.PROVINCE_NAME].filter(Boolean).join(", "),
     postalCode: a.ZIP_CODE ? String(a.ZIP_CODE) : null,
