@@ -4,6 +4,7 @@
 import { SELF } from "cloudflare:test"
 import { env } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
+import { TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { DEMO_DEFAULT_PASSWORD, DEMO_EMAIL } from "../../src/demo/constants"
 
 const APP = "http://app.geraiexpress.localhost"
@@ -31,6 +32,10 @@ describe("Demo Account", () => {
     expect(d1.shipments).toBe(68)
     expect(d1.senders).toBe(24)
     expect(d1.recipients).toBe(32)
+    expect(await env.DB.prepare("SELECT schema_version, state FROM tenant_schema_versions WHERE tenant_id = 'demo-tenant-001'").first()).toEqual({
+      schema_version: TENANT_SCHEMA_VERSION,
+      state: "ok",
+    })
 
     // Re-running seed stays clean and idempotent.
     const seed2 = await SELF.fetch(`${OWNER}/internal/ops/seed-demo`, {

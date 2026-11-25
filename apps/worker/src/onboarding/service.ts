@@ -3,6 +3,7 @@
 // migrates the tenant object, and enqueues exactly one `application_status` email IN THE SAME D1 batch as the state
 // change. Provisioning never creates two sellers for one tenant: `externalUserId` = tenant id (idempotent at
 // Mengantar), and an unknown outcome is resolved by reading back `sellers/list { externalUserId }`.
+import { TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { emit } from "@gx/telemetry"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { OnboardingState } from "../do/gerai-vault/connection"
@@ -293,6 +294,12 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
   // Idempotent preparation (a retry after a crash between approval and provisioning finds an unprepared object).
   const migrated = await vault.migrate(input.tenantId)
   if (!migrated.ok) throw new AppError(500, "TENANT_MIGRATION_FAILED", "Penyimpanan gerai gagal disiapkan. Coba lagi dari halaman gerai.")
+  await env.DB.prepare(
+    `INSERT INTO tenant_schema_versions (tenant_id, schema_version, state, last_error, updated_at) VALUES (?1, ?2, 'ok', NULL, ?3)
+     ON CONFLICT(tenant_id) DO UPDATE SET schema_version = excluded.schema_version, state = 'ok', last_error = NULL, updated_at = excluded.updated_at`,
+  )
+    .bind(input.tenantId, TENANT_SCHEMA_VERSION, input.now)
+    .run()
   const hasOutlet = await vault.defaultOutlet(input.tenantId)
   if (hasOutlet.ok && !hasOutlet.value) await vault.upsertDefaultOutlet(input.tenantId, { name: input.outlet.name, whatsapp: input.contactWhatsapp ?? null, picName: input.outlet.picName, picPhone: input.outlet.picPhone, areaId: input.outlet.areaId, areaLabel: input.outlet.areaLabel, street: input.outlet.streetAddress, postalCode: input.outlet.postalCode ?? null, latitude: input.outlet.latitude ?? null, longitude: input.outlet.longitude ?? null }, input.now)
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"

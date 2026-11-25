@@ -21,6 +21,8 @@
     "e2e": "playwright test",
     "db:migrate:local": "wrangler d1 migrations apply DB --local --env= --persist-to .wrangler/state-dev",
     "do:migrate": "node scripts/do-migrate/do-migrate.mjs",
+    "deploy:staging": "node scripts/deploy/deploy.mjs --env staging",
+    "deploy:production": "node scripts/deploy/deploy.mjs --env production",
     "probes": "node scripts/probes/probes.mjs",
     "ci:red-fixtures": "bash scripts/ci/red-fixtures.sh",
     "email:deliverability": "node scripts/email/deliverability.mjs",

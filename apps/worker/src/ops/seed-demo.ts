@@ -1,6 +1,7 @@
 // POST /internal/ops/seed-demo (owner host, Bearer OPS_TOKEN).
 // Idempotently provisions or refreshes the locked read-only demo account (`demo@geraiexpress.com` / `geraiexpress123`)
 // with a complete 45-day shipment history, contacts, analytics, Book 1/Book 2 finance, returns, claims, and mini-site.
+import { TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { hashPassword } from "../auth/password"
 import { timingSafeEqualStr } from "../crypto"
 import { DEMO_DEFAULT_PASSWORD, DEMO_EMAIL, DEMO_TENANT_NAME, DEMO_TENANT_SLUG } from "../demo/constants"
@@ -69,7 +70,14 @@ export async function handleSeedDemo(request: Request, env: Env): Promise<Respon
   ])
 
   const vault = vaultFor(env, tenantId)
-  await vault.migrate(tenantId)
+  const migrated = await vault.migrate(tenantId)
+  if (!migrated.ok) return fail(500, "SEED_FAILED", "Gagal menyiapkan skema penyimpanan demo.")
+  await env.DB.prepare(
+    `INSERT INTO tenant_schema_versions (tenant_id, schema_version, state, last_error, updated_at) VALUES (?1, ?2, 'ok', NULL, ?3)
+     ON CONFLICT(tenant_id) DO UPDATE SET schema_version = excluded.schema_version, state = 'ok', last_error = NULL, updated_at = excluded.updated_at`,
+  )
+    .bind(tenantId, TENANT_SCHEMA_VERSION, now)
+    .run()
   const seeded = await vault.seedDemo(tenantId, userId, now)
   if (!seeded.ok) return fail(500, "SEED_FAILED", "Gagal mengisi data demo.")
 

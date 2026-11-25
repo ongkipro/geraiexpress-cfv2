@@ -92,4 +92,23 @@ describe("do:migrate ops endpoint (TASK-103, spec 07 §6)", () => {
     expect(await env.DB.prepare("SELECT schema_version, state FROM tenant_schema_versions WHERE tenant_id = 'r-1'").first()).toEqual({ schema_version: TENANT_SCHEMA_VERSION, state: "ok" })
     expect((await env.DB.prepare("SELECT routing_version FROM tenants WHERE id = 'r-1'").first<{ routing_version: number }>())?.routing_version).toBe(before!.routing_version)
   })
+
+  it("zero-downtime: healthy behind tenant auto-upgrades on first RPC and do:migrate reconciles stale D1 version", async () => {
+    await seed(["z-1"], "zero")
+    const stub = vaultFor(env, "z-1")
+    const prev = TENANT_SCHEMA_VERSION - 1
+    expect(await stub.migrate("z-1", prev)).toMatchObject({ ok: true, to: prev })
+    await env.DB.prepare("INSERT INTO tenant_schema_versions (tenant_id, schema_version, state, updated_at) VALUES ('z-1', ?, 'ok', 1)").bind(prev).run()
+
+    // Serves immediately without 503 and advances DO schema to TENANT_SCHEMA_VERSION.
+    expect(await stub.allocateSlug("z-1", "draft")).toMatchObject({ ok: true })
+    expect(await stub.schemaState()).toMatchObject({ version: TENANT_SCHEMA_VERSION, state: "ok" })
+
+    // Post-deploy do:migrate sweep still updates D1 schema_version from prev -> current even though D1 state was already 'ok'.
+    await walk({ batch: 50 })
+    expect(await env.DB.prepare("SELECT schema_version, state FROM tenant_schema_versions WHERE tenant_id = 'z-1'").first()).toEqual({
+      schema_version: TENANT_SCHEMA_VERSION,
+      state: "ok",
+    })
+  })
 })

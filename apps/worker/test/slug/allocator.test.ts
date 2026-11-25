@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { runInDurableObject } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
+import { TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { isSlug } from "@gx/domain/slug"
 import type { GeraiVaultDO } from "../../src/do/gerai-vault"
 import { vaultFor } from "../../src/do/gerai-vault/stub"
@@ -56,12 +57,23 @@ describe("INV slug allocator in GeraiVaultDO (TASK-108, DEC-211)", () => {
     expect(await a.slugExists("slug-lookup", "2222222")).toEqual({ ok: true, value: false })
   })
 
-  it("refuses a foreign tenant id, an unprovisioned object and an outdated schema", async () => {
+  it("refuses foreign tenant id, unprovisioned/recovery objects, and zero-downtime auto-upgrades healthy behind schemas", async () => {
     await provisioned("slug-own")
     expect(await vaultFor(env, "slug-own").slugExists("slug-other", "8k4m2p7")).toEqual({ ok: false, refused: "TENANT_MISMATCH" })
     expect(await vaultFor(env, "slug-none").allocateSlug("slug-none", "draft")).toEqual({ ok: false, refused: "TENANT_NOT_PROVISIONED" })
+
+    // Healthy provisioned object behind TENANT_SCHEMA_VERSION lazy-upgrades seamlessly on first RPC (zero downtime).
     const v1 = vaultFor(env, "slug-v1")
     expect(await v1.migrate("slug-v1", 1)).toMatchObject({ ok: true, to: 1 })
-    expect(await v1.allocateSlug("slug-v1", "draft")).toEqual({ ok: false, refused: "TENANT_NOT_READY" })
+    const allocated = await v1.allocateSlug("slug-v1", "draft")
+    expect(allocated.ok).toBe(true)
+    expect(await v1.schemaState()).toMatchObject({ version: TENANT_SCHEMA_VERSION, state: "ok" })
+
+    // Objects in `recovery` never auto-retry and still refuse with TENANT_NOT_READY.
+    const rec = await provisioned("slug-rec")
+    await runInDurableObject(rec, (_i: GeraiVaultDO, s) => {
+      s.storage.sql.exec("UPDATE schema_version SET state = 'recovery', last_error = 'boom' WHERE id = 1")
+    })
+    expect(await rec.allocateSlug("slug-rec", "draft")).toEqual({ ok: false, refused: "TENANT_NOT_READY" })
   })
 })

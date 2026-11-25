@@ -27,26 +27,26 @@ export async function handleDoMigrate(request: Request, env: Env): Promise<Respo
   const cursor = typeof body.cursor === "string" ? body.cursor : ""
   const dryRun = body.dryRun === true
   const rows = await env.DB.prepare(
-    `SELECT t.id, v.state AS d1_state FROM tenants t LEFT JOIN tenant_schema_versions v ON v.tenant_id = t.id
+    `SELECT t.id, v.schema_version AS d1_version, v.state AS d1_state FROM tenants t LEFT JOIN tenant_schema_versions v ON v.tenant_id = t.id
      WHERE t.status IN ('active','suspended','pending_review') AND t.id > ? ORDER BY t.id LIMIT ?`,
   )
     .bind(cursor, batch + 1)
-    .all<{ id: string; d1_state: Progress | null }>()
+    .all<{ id: string; d1_version: number | null; d1_state: Progress | null }>()
   const page = rows.results.slice(0, batch)
   const nextCursor = rows.results.length > batch ? (page.at(-1)?.id ?? null) : null
   const report: string[] = []
   let migrated = 0
   let alreadyCurrent = 0
-  for (const { id, d1_state } of page) {
+  for (const { id, d1_version, d1_state } of page) {
     const stub = vaultFor(env, id)
     const state = await stub.schemaState()
     const objectCurrent = state.version === TENANT_SCHEMA_VERSION && state.state === "ok" && state.tenantId === id
     if (objectCurrent) {
       alreadyCurrent++
-      // Reconcile D1 when an earlier run died between the RPC and the D1 write, or the object was repaired.
-      if (!dryRun && d1_state !== "ok") {
+      // Reconcile D1 when an earlier run died between the RPC and the D1 write, the object lazy-upgraded, or it was repaired.
+      if (!dryRun && (d1_state !== "ok" || d1_version !== TENANT_SCHEMA_VERSION)) {
         await setProgress(env, id, TENANT_SCHEMA_VERSION, "ok", null, d1_state === "recovery")
-        report.push(`${id}: D1 progress ${d1_state ?? "missing"} → ok`)
+        report.push(`${id}: D1 progress ${d1_state ?? "missing"}(v${d1_version ?? 0}) → ok(v${TENANT_SCHEMA_VERSION})`)
       }
       continue
     }

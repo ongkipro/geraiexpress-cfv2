@@ -49,10 +49,14 @@ journal lives in the DO while the shipment row lives in D1.
    alarm until acknowledged), so the index is eventually consistent and **never authoritative**.
    Every push from an object to D1 (shipment index, risk index, daily stats) is an idempotent **absolute, versioned
    upsert**, never an increment, so outbox retries are safe.
-4. **Schema migrations per object.** Forward-only SQL files shared by every object, applied by an explicit
-   `migrate(targetVersion)` RPC (not in the constructor), with `PRAGMA`-free version tracking in a `schema_version`
-   table. A failing object enters `recovery` alone; the deploy pipeline migrates objects in batches and records
-   progress in D1 (`tenant_schema_versions`).
+4. **Schema migrations per object.** Forward-only SQL files shared by every object, applied by `migrate(targetVersion)`
+   RPC (never in the constructor), with `PRAGMA`-free version tracking in a `schema_version` table.
+   *(Amended 2026-11-25, DEC-254:)* To guarantee 0 ms `503 TENANT_NOT_READY` downtime across deploys and gradual
+   rollouts, `GeraiVaultDO.refusal()` synchronously applies pending forward-only migrations on first RPC for an
+   **already-provisioned, healthy** object (`version > 0 && state = 'ok' && version < TENANT_SCHEMA_VERSION`).
+   Unprovisioned objects (`version = 0`), objects in `recovery`, and objects ahead of code (`version > TENANT_SCHEMA_VERSION`)
+   still refuse. A failing step rolls back alone and enters `recovery` for that tenant only; the post-deploy
+   `pnpm do:migrate` pipeline sweeps idle objects and reconciles D1 (`tenant_schema_versions`).
 5. **Analytics across tenants** (Super Admin `Ringkasan`) read per-tenant daily totals that each object recomputes and
    pushes to D1 (`tenant_daily_stats`, absolute values keyed by `(tenant_id, day)` with a version), not live fan-out
    queries.

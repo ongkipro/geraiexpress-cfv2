@@ -313,13 +313,23 @@ export class GeraiVaultDO extends DurableObject<Env> {
   /**
    * Guard every feature RPC: right tenant, current schema, not in recovery. Returns a refusal code instead of throwing,
    * so a refusal crosses the RPC boundary as data (no remote exception, no partial work).
+   *
+   * Zero-downtime forward upgrade (ADR-0006 §4 amendment / DEC-254): an already-provisioned, healthy object
+   * (`version > 0 && state === "ok"`) behind `TENANT_SCHEMA_VERSION` upgrades synchronously on first RPC so deploys
+   * incur 0 ms `503 TENANT_NOT_READY` downtime. Unprovisioned objects (`version === 0`), objects in `recovery`, and
+   * objects ahead of code (`version > TENANT_SCHEMA_VERSION`) still refuse.
    */
   protected refusal(tenantId: string): VaultRefusal | null {
     const bound = this.tenantId()
     if (bound !== tenantId) return bound ? "TENANT_MISMATCH" : "TENANT_NOT_PROVISIONED"
     const s = readSchemaState(this.ctx.storage)
-    if (s.state !== "ok" || s.version !== TENANT_SCHEMA_VERSION) return "TENANT_NOT_READY"
-    return null
+    if (s.state !== "ok") return "TENANT_NOT_READY"
+    if (s.version === TENANT_SCHEMA_VERSION) return null
+    if (s.version > 0 && s.version < TENANT_SCHEMA_VERSION) {
+      const r = applyTenantMigrations(this.ctx.storage, TENANT_MIGRATIONS, TENANT_SCHEMA_VERSION)
+      if (r.ok) return null
+    }
+    return "TENANT_NOT_READY"
   }
 
   /** Allocates one INV slug (feature tasks call `allocateSlug` inside their own transaction instead). */
