@@ -1,7 +1,7 @@
 # 08 — Period Filter (Presets + Date Range) & Settings Sub-Navigation
 
 - **Related:** `DEC-221` (period filter), `DEC-223` (settings navigation), `DEC-220` (payment record), `DEC-222`
-  (palette), `docs/visual/07` (shell and page inventory), `design/admin-contract.json` (comfort sizes)
+  (palette), `docs/visual/07` (shell and page inventory), `design/admin-contract.json` (desk-scale sizes, DEC-239)
 - **Component source:** shadcn (base) — `popover`, `calendar` (react-day-picker), `button`, `input`, `field`,
   `card`, `switch`, `separator`, `sidebar` menu primitives. Discover with `shadcn docs <name>`; never hand-roll.
 - All visible strings are normative Indonesian. Dates and "today" are always Asia/Jakarta (WIB).
@@ -10,7 +10,7 @@
 
 ## 1. Period filter (`PeriodFilter`)
 
-Used on: Dashboard, Kiriman, Keuangan (Mutasi, Laba per INV, Kas & Shift), Super Admin Ringkasan and Pengawasan.
+Used on: Dashboard and Kiriman (the only two screens that import `PeriodFilter` today); Keuangan and the Super Admin console do not use it.
 One component, one behaviour everywhere.
 
 ### 1.1 Trigger (closed)
@@ -84,8 +84,8 @@ One component, one behaviour everywhere.
 
 `Popover` (desktop) / `Drawer` (phone) → left `RadioGroup`-style preset list (desktop) or `ToggleGroup` chips
 (phone) → `Calendar mode="range" numberOfMonths={2|1}` with `disabled={{ after: todayWib }}` and Indonesian
-locale → two `Input` in `Field` → footer `Button` outline `Batal` + `Button` `Terapkan`. Sizes from the comfort
-contract (day cells ≥ 40 px desktop, ≥ 44 px phone; 16 px text).
+locale → two `Input` in `Field` → footer `Button` outline `Batal` + `Button` `Terapkan`. Sizes from the desk
+contract (day cells about 31 px on desktop, 44 px on phones; 12 px day numbers).
 
 ---
 
@@ -120,7 +120,8 @@ Replaces the six horizontal tabs (`DEC-223`). Each item is its own route and its
 │                     │                                                                           │
 └─────────────────────┴───────────────────────────────────────────────────────────────────────────┘
    rail: white Card, group labels 12 px uppercase, rows = 32 px icon tile + 14 px title + 12 px subtitle,
-   current row primary tint + aria-current="page", amber dot on Mengantar while the webhook is inactive;
+   current row primary tint + aria-current="page", amber dot on Mengantar only while the webhook is secret_mismatch or paused (subtitle then reads
+   "Webhook perlu diperiksa", truncated when the row is narrow);
    no summary card (DEC-243: identity and Mengantar state already sit in the shell sidebar). Content:
    flush-left, max 896 px, SectionCards with 2-col form grids.
 ```
@@ -156,7 +157,7 @@ on `/kasir` uses the same bound.
 │ Akun & Akses                         │
 │ ┌──────────────────────────────────┐ │
 │ │ Anggota              3 orang    ›│ │
-│ │ Mengantar  ⚠ Webhook belum aktif›│ │
+│ │ Mengantar ⚠ Webhook perlu diper…›│ │
 │ │ API & MCP            1 kunci    ›│ │
 │ └──────────────────────────────────┘ │
 └──────────────────────────────────────┘
@@ -175,18 +176,18 @@ on `/kasir` uses the same bound.
 | `/pengaturan/label-privasi` | Operasional | O | `Aktifkan masking label` switch; presets the counter may offer (`Standar Gerai` always; `Dropship Toko`, `Privasi Penerima COD`, `Full Nama Gerai` optional); default preset; mask recipient phone on COD by default (DEC-231). Disabled with an explanation when the Super Admin kill-switch is off | Save bar |
 | `/pengaturan/packing` | Operasional | O | Packing add-on catalogue (Plastik, Bubble, Kardus S/M/L) with price; optional `Biaya Layanan Loket` (`Aktifkan` switch + default amount `Rp1.000–Rp200.000`, Non-COD and COD Ongkir only, printed as its own line — DEC-225) | Save bar |
 | `/pengaturan/anggota` | Akun & Akses | O | Members table, invite Kasir (email), revoke, last activity; switch `Kasir boleh bayar COD` (spec 03 §1.2) | Row actions with confirm |
-| `/pengaturan/mengantar` | Akun & Akses | O | Connection status, webhook status + copy URL + paste secret (PR-02b), pickup `area_id`, last sync | Save bar (secret only) |
+| `/pengaturan/mengantar` | Akun & Akses | O | Connection status with `Periksa Status` (`POST /settings/mengantar/poll`, 3 per minute), own API key (BYOK) with `Sinkronkan API Key` (`POST /settings/mengantar/sync-key`, 3 per minute), and the webhook form (copy URL + paste secret, PR-02b) collapsed under `Opsi Lanjutan: Webhook Real-Time Mengantar (Opsional)`. Statuses arrive by hourly polling with no setup; there is no pickup `area_id` field | Save bar (secret only) |
 | `/pengaturan/api-mcp` | Akun & Akses | O | Keys table (name, scopes, last used), `Buat Kunci` dialog (shown once), revoke, links to `/api/v1/docs` and `/mcp` | Dialog per action |
 
 Kasir sees only `Printer & Struk` (device part); every other route returns the 403 page with
-`Menu ini khusus pemilik gerai`.
+`Menu ini hanya untuk pemilik gerai`.
 
 ### 2.4 Rules
 
 1. One form per page; never more than ~6 fields per `Card`; labels above inputs; helper text only where it
    prevents a mistake.
 2. Never mix instant toggles and Save in one `Card` (Pajamas/Shopify rule in `admin-product-ux`).
-3. Save bar appears only when the form is dirty; leaving a dirty page asks `Buang perubahan?`.
+3. Save bar appears only when the form is dirty; closing or reloading a dirty page triggers the browser's own leave prompt (`beforeunload`); there is no in-app `Buang perubahan?` dialog.
 4. Danger actions (revoke key, remove member, disconnect Mengantar) sit in a separate `Zona berbahaya` card at the
    bottom with a confirm dialog that names the object.
 5. Status hints in the menu (⚠) only for something that blocks operation (webhook inactive, printer missing,
@@ -196,7 +197,7 @@ Kasir sees only `Printer & Struk` (device part); every other route returns the 4
 ### 2.5 shadcn mapping
 
 Settings rail (DEC-240): a white `Card` (`p-2`) with group labels and `Link` rows (icon tile + title + subtitle),
-inside a sticky, viewport-bounded, independently scrolling `aside` (DEC-242), plus the owner summary `Card`; phone
+inside a sticky, viewport-bounded, independently scrolling `aside` (DEC-242), with no summary card (DEC-243); phone
 directory: `Card` rows with the same icon tile, subtitle and a trailing chevron; switches: `ToggleRow`; copyable
 values: `CopyField`; forms: `Card` + `FieldGroup` + `Field` + `Input` / `Select` / `RadioGroup` / `Switch`;
 save bar: sticky footer `div` with `Button` outline `Batal` + `Button` `Simpan`; confirmations: `AlertDialog`.

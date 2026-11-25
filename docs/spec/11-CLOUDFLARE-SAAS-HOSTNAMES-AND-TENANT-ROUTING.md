@@ -28,14 +28,16 @@ Plans, prices and limits change: re-read the linked Cloudflare page at M6 provis
 4. Proxied `CNAME cname → fallback.geraimitra.com` (the customer-facing target).
 5. Worker route `*/*` on `geraimitra.com` → the production Worker; add `cname.geraimitra.com/*` → Worker explicitly (O2O safety).
    Staging: the route `*-stg.geraimitra.com/*` → the **staging** Worker (more specific routes win), so `<slug>-stg` hosts never
-   reach production bindings. Staging does not create custom hostnames; custom-domain flows are tested in staging with
-   a separate test zone owned by the team.
+   reach production bindings. Custom-domain creation is **disabled in staging** (DEC-255, TASK-709): `env.staging` sets
+   `CF_SAAS_ZONE_ID = "disabled"`, omits `CF_SAAS_API_TOKEN`, and both `hostnames/service.ts` (`requestDomain` →
+   `403 CUSTOM_DOMAIN_DISABLED_IN_STAGING`, `createAtCloudflare` → `"skipped"`) and `hostnames/cloudflare.ts`
+   (`saasClient` → `unconfigured`) fail closed with zero D1 writes and zero Cloudflare API calls.
 6. API token for the Worker: zone-scoped to `geraimitra.com`, custom-hostname edit + quota read only; stored as secret
    `CF_SAAS_API_TOKEN`. Never an account-wide token.
 
 ## 3. Request routing (the security boundary — R4)
 
-Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
+Order inside `classify()` (`apps/worker/src/host/classify.ts`), before any tenant query or cache read:
 
 1. Pass through `/.well-known/acme-challenge/*` and `/.well-known/pki-validation/*` untouched (HTTP DCV).
    `GET /.well-known/geraiexpress-probe/<nonce>` is answered **for pending hosts too** (not for suspended tenants or
@@ -47,8 +49,9 @@ Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
    step and are not `relay.`/other platform subdomains.
 3. Exact match on platform hosts → platform context (ARCHITECTURE §3), no tenant.
 4. `*.geraimitra.com` (one label) or any other host → **authoritative D1 lookup** in `tenant_hostnames` (in-isolate cache
-   of at most 30 s, keyed by host and the tenant's `routing_version`):
-   - unknown, `pending`, `purged` → neutral Indonesian 404 (no tenant data, no hint that a tenant exists);
+   of at most 30 s, keyed by host and cleared in that isolate when a hostname changes state):
+   - unknown, `pending`, `failed`, `moved`, `purged`, or a tenant that is not `active` → neutral Indonesian 404 (no
+     tenant data, no hint that a tenant exists);
    - tenant `suspended` → 403 `Gerai sedang tidak aktif`;
    - tenant `recovery` → 503 with `Retry-After`;
    - `active` → tenant context.
@@ -60,7 +63,9 @@ Order inside `hostClassifierMiddleware`, before any tenant query or cache read:
 `hostname` (PK, normalised), `tenant_id`, `kind` (`platform_subdomain | custom`), `role` (`primary | redirect`),
 `state` (`pending | active | failed | moved | suspended | purged`), `cf_custom_hostname_id`, `cf_status`,
 `cf_ssl_status`, `verification_errors_json`, `dns_branch` (`subdomain | root_primary | www_primary`),
-`created_at`, `activated_at`, `last_checked_at`, `probe_ok_at`, `deleted_at`. A hostname belongs to at most one
+`created_at`, `activated_at`, `last_checked_at`, `probe_ok_at`, `deleted_at`, plus `ssl_method`, `dns_records_json`,
+`state_changed_at`, `probe_failures` (control `0012`) and `request_id` (control `0016`). The Cloudflare quota snapshot
+lives in `custom_hostname_quota`. A hostname belongs to at most one
 tenant; `tenants.routing_version` increments on any change.
 
 ## 5. Custom-domain lifecycle (Pro)
@@ -73,7 +78,7 @@ tenant; `tenants.routing_version` increments on any change.
 | 4 | Worker (Cron every 10 min + `Periksa Lagi` button) | `GET` status; the button sends `PATCH` with the same `ssl` method to restart validation. |
 | 5 | Worker | When `status = active` **and** `ssl.status = active`, the Worker requests `https://<host>/.well-known/geraiexpress-probe/<random nonce>` and compares the response with its own `HMAC(probe_secret, host ":" nonce)`; only a match proves the host reaches this deployment, then it sets `state = active` and bumps `routing_version`. Every other path on a pending host stays a neutral 404 (lifecycle test). |
 | 6 | Worker | Canonical URLs, QR posters and receipts switch to the custom host only after step 5. A failed probe keeps `<slug>.geraimitra.com` primary. |
-| 7 | Worker (daily reaper) | Delete hostnames `pending`/`failed` for 7 days, `moved`, or of churned/purged tenants: `DELETE` the custom hostname (stops billing), set `purged`. Never rely on Cloudflare's own deletion. |
+| 7 | Worker (daily reaper) | Delete hostnames `pending`/`failed` for 7 days (by `state_changed_at`), `moved`, or of a gerai suspended for at least 30 days; root and `www` are purged together: `DELETE` the custom hostname (stops billing), set `purged`. Never rely on Cloudflare's own deletion. |
 
 Remedies shown to the owner (Indonesian copy in the page): CNAME not pointed yet → show the exact record; HTTP DCV
 blocked (customer WAF/redirect/O2O rules) → switch to `txt` and show the TXT record; CAA error → allow Google Trust

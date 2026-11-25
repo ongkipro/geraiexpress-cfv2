@@ -18,7 +18,7 @@ This specification defines exact integer arithmetic for weights, customer tariff
    - Sub-kilogram parcels (`raw_weight_gram < 1000`): for explicit sub-kg services (e.g., iDexpress `< 500` g half-fare tier where `route_min_weight_gram < 1000`), send `raw_weight_gram / 1000` decimal kg; for standard 1 kg-minimum couriers (`route_min_weight_gram == 1000`), send integer `billed_kg = 1`. Upon creation, provider echo `WEIGHT` is recorded in `provider_echoed_weight_kg_text` and flagged if mismatched.
 4. **Cargo Service Isolation (`NON_COD` Only at Launch):**
    - Cargo rows (`JNECargo`, `SiCepatCargo`, `SapCargo`, `iDexpressCargo`) read **only** cargo-specific provider fields (`cargoPrice`, `cargoDiscount`, `cargoEstimatedSpecialPrice`, `minimumWeightCargo`), require `cargoEstimatedPrice == cargoPrice`, and dispatch with base courier + `orders[].cargo: true`.
-   - **Cargo COD Exclusion:** because `SapCargo` is officially Non-COD only and cargo COD fee deltas in Mengantar public responses remain unverified (`geraiexpress-mengantar-public-api.md`), all cargo services are quoted and dispatched **strictly as `NON_COD`** until authenticated sandbox cargo COD read-back evidence is established.
+   - **Cargo COD Exclusion:** because `SapCargo` is officially Non-COD only and cargo COD fee deltas in Mengantar public responses remain unverified (device-local research note `geraiexpress-mengantar-public-api.md`), all cargo services are quoted and dispatched **strictly as `NON_COD`** until authenticated sandbox cargo COD read-back evidence is established.
 
 ---
 
@@ -29,7 +29,7 @@ This specification defines exact integer arithmetic for weights, customer tariff
 | **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `assigned_bps` is the **requested** discount (≤ `max_discount_bps`, §2.1); the **effective** discount for cost is always `effective_bps = min(assigned_bps, provider_observed_bps)`, so a requested rate Mengantar has not applied yet never lowers cost (no subsidy, DEC-226/230). `gerai_shipping_cost_idr` (the **commercial estimate** `M`) = `provider_net_shipping_idr` when `assigned_bps >= provider_observed_bps`, else `publish_shipping_idr - floor(publish_shipping_idr * assigned_bps / 10000)`. |
 | **2. Counter Packing Add-On (`packing_addon_idr`)** | **Gerai Admin** (shop cardboard/bubble catalog) | **Outlet 100%** (stays in shop cash drawer) | Added as an explicit receipt line item; never sent to Mengantar. |
 | **3. Counter Promo / Voucher (`promo_discount_idr`)** | **Gerai Admin** (outlet-funded only at launch; platform-funded campaigns are deferred until a settlement ledger exists) | **Walk-in Sender / Reseller** | Subtracted from the counter part only; capped so `counter_due_idr >= 0` **before** it is stored (`V <= P + I0 + K + S` for `none`, `V <= K + S` otherwise). |
-| **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | Recorded `PENDING` at dispatch; transitions to `RELEASED` 24h after `delivered` if no dispute exists; `CLAWBACK` on `RTS` or `cancelled`. |
+| **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | **Config/display-only at launch (DEC-255, TASK-713b):** stored in `tenant_discount_rules.cashback_bps` and displayed in Super Admin tariff tables; automated ledger accrual (`PENDING` → `RELEASED` 24h after `delivered` → `CLAWBACK` on `RTS`/`cancelled`) is deferred post-launch. |
 
 > **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. **All money flows and margins in §3 use the provider amount `N = provider_net_shipping_idr`**, because that is what Mengantar actually debits; `M` is shown only as the Super Admin's commercial reference and the gap `M - N` as `Selisih tarif` (§2.1). Once DEC-226's provider-enforced target is active, Mengantar bills the assigned rate, so `N = M` by construction. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
 
@@ -50,10 +50,13 @@ This specification defines exact integer arithmetic for weights, customer tariff
   normal (`Belum diterapkan`); the verifier checks at `requested_at + 15 min`, `+ 60 min` and `+ 120 min`, then daily.
 - **Observed discount, per service class:** regular services use `discount + discountExtra` over `price` (or
   `discountPercent + discountExtraPercent`); cargo services use the cargo fields only (`cargoDiscount / cargoPrice`,
-  §1 item 4). Both are normalised to `observed_bps = floor(discount × 10000 / price)` and stored per quote with the
-  service class. Mengantar v2.0.0 may add an extra promo (`discountExtra`, e.g. 5 %) on top of the seller rate;
-  `estimatedSpecialPrice` already nets both, so `N` is unchanged, and counting the extra keeps a promo from turning a
-  rule `Selisih` (DEC-238). `raw_discount_percent` stores `"20+5"` when an extra applies.
+  §1 item 4). When Mengantar supplies `discountPercent` (or `cargoDiscountPercent`) and `round(price × percent / 100)`
+  agrees with the observed Rupiah discount within ±1 Rp rounding, `observed_bps` snaps to the exact declared percent
+  (`round((base + extra) × 100)`) so dynamic per-expedition discounts on small tariffs never drift by ±1 bp; any larger
+  gap falls back to `floor(discount × 10000 / price)` so real discrepancies are never masked. Mengantar v2.0.0 may add
+  an extra promo (`discountExtra`, e.g. 5 %) on top of the seller rate; `estimatedSpecialPrice` already nets both, so
+  `N` is unchanged, and counting the extra keeps a promo from turning a rule `Selisih` (DEC-238). `raw_discount_percent`
+  stores `"20+5"` when an extra applies.
 - **Verification states** (scheduled checks above plus every quote; tolerance `|assigned − observed| ≤ 1` bp):
 
   | From | Condition | To |
@@ -83,6 +86,14 @@ This specification defines exact integer arithmetic for weights, customer tariff
 - **Guards:** `min_discount_bps <= assigned_bps <= max_discount_bps` is the only validation on saving a rule. The requested value may differ
   from what Mengantar currently gives in any state; cost always uses `effective_bps` (§2 table) and flows use `N`
   (§3), so no subsidy is ever booked.
+- **Adopt from Mengantar (`Tarik & Terapkan dari Mengantar`, DEC-255 amends DEC-233):** for a gerai with a connected
+  seller key, Super Admin can read the live per-service discount from that gerai's Mengantar account and adopt it
+  (`POST /api/owner/tarif/gerai/:tenantId/tarik-mengantar`, `owner_recent` + reason, 6 per minute per admin, audit
+  action `pricing.sync_from_mengantar`). Each service with a usable observation gets `assigned_bps = observed_bps` and
+  state `Sesuai`; services without one are skipped and keep their rule. Because Mengantar discounts are dynamic and
+  differ per expedition, adopted values (0–10000 bps) are stored as-is — including values outside the default 20 %–30 %
+  platform band (covered by `apps/worker/test/pricing/rules.test.ts`). A later manual edit of such a rule remains
+  validated against the courier/platform band (`422 DISCOUNT_OUT_OF_BAND`).
 
 ---
 
@@ -125,7 +136,7 @@ in the POS, OpenAPI (`POST /api/v1/quotes`, `/shipments`) and MCP tools.
   (`expected_provider_cod_credit_idr`, later `reconciled_provider_cod_credit_idr` from `typeReconciliation`
   `subItem.amount`). The outlet then owes the walk-in sender `sender_cod_payable_idr` and keeps the rest (its shipping
   spread). The sender payout is recorded in the counter book when the outlet actually pays the sender
-  (`counter_ledger_entries.type = 'cod_payout_to_sender'`).
+  (`counter_receipts.event = 'sender_cod_payout'`).
 - **Guard for `cod_all_in`:** reject the quote when `G < P + I0 + F + 1000` (`COD all-in tidak cukup menutup ongkir dan
   biaya COD`). Never store a negative payable.
 - **Bounds:** `G` for COD Barang `Rp10.000–Rp5.000.000`. `D` (declared value) limits are **per courier/service from

@@ -15,7 +15,7 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
 - Feel: calm, legible, exact. Motion: subtle (state feedback only).
 - References: `design/refs/` — shadcn `dashboard-01` and `sidebar-07` (shell, sidebar, data table), Polaris
   resource index (tabs over a list, 16 px body on phones). Transfer: composition and density only.
-- Won't do: 12–13 px text, icon-tile KPI cards, gradients/glass, card-in-card, more than one primary per screen,
+- Won't do: text below 12 px (12 is the floor for labels and captions, DEC-239), icon-tile KPI cards, gradients/glass, card-in-card, more than one primary per screen,
   English UI strings, locked browser zoom.
 
 ### Composition contract
@@ -33,7 +33,7 @@ download) and C (Geist + teal — loses the Mengantar-network identity). Gate ev
 - C2: phone shell = 64 px header + 64 px bottom bar with a center `＋`; POS (`/kasir`, `/kiriman/:slug`) replaces the
   bottom bar with a sticky checkout bar; the menu opens as a Sheet with the same tree (visual 07 §1.3).
 - C3: list pages = title → in-page tabs with counts → filter bar → table; tables become cards under 768 px.
-- C4: POS = 60/40 split at ≥ 1024 px (inputs left, sticky `Ringkasan & Pembayaran` right); single column on phones;
+- C4: POS = two columns at ≥ 1024 px (fluid inputs left; sticky `Ringkasan & Pembayaran` right, 352 px wide, 392 px at ≥ 1280 px); single column on phones;
   one primary issues without leaving `/kasir` (DEC-237).
 - C5: dashboard (owner) = period filter: presets + calendar range (default 7 hari terakhir, visual 08 §1) → one strip of
   6 KPI tiles (Kiriman, Tercatat dibayar, Belum dibayar, Saldo aman, Estimasi Laba, Laba Kas — the two profits never
@@ -66,7 +66,7 @@ Status pairs as in `docs/visual/01` §2 (safe, warn, danger, pickup-warn).
 System UI stack (`-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif`); mono only for INV,
 AWB and thermal preview. Desk scale (DEC-239): 12 (labels, captions, table heads uppercase, badges — the floor) · 14
 (body, inputs, buttons, sidebar, table cells) · 16 (card titles) · 24 (page title `h1`, KPI figures, bold tabular). On
-phones inputs stay 16 and every control 44 px; controls 36 px on desktop (32/40 allowed), table head 40, rows 48.
+phones inputs stay 16 and every control 44 px; controls 36 px on desktop (buttons 32/36/40, inputs 36/40), table head 40, rows 48.
 `tabular-nums` for money and weights. User text size: 100 / 112 / 125 % via root rem.
 
 ### Radius

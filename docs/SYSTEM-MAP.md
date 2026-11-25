@@ -1,120 +1,335 @@
 # System Map — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-One-screen navigation map of what exists **in code today**. Refreshed at every milestone close (TASK-x99) and at the
-end of M6 code. Contracts live in `docs/spec/`, decisions in `DECISIONS.md`, state in `STATUS.md`.
+Navigation map of what exists **in code today**: where each concern lives, which host serves what, what is stored
+where, and which command proves it. It states facts read from the tree; it owns no contract, decision or status.
 
-Updated: 2026-11-19 — **DEC-251** (live after GPT-6.2 Sol R4 APPROVE): `Kiriman Satuan` in counter order (`1. Pengirim · 2. Penerima · 3. Detail Paket` → auto-quoted, cheapest-first `4. Pilihan Ekspedisi` → `5. Ringkasan, Pembayaran & Cetak`; the recipient's Mengantar area is the destination; `useQuoteForm` shared with Cek Ongkir Cepat), `Titik Jemput` chip from `GET /pos-config`, Paket Massal courier logo grid + Cargo + zero-dependency `.xlsx` reader (`lib/xlsx-reader.ts`), `/kiriman` `?macet=2|3|5|7` stuck filter, mini-site Cek Ongkir → Kirim dari Rumah prefill. **DEC-250**: `AuthSplit`-parity split-studio auth on app + owner (arrow-free mark, pill switcher, wizard bar, live domain pill, silent `interaction-only` Turnstile, `/daftar-akun` session guard), stacked semantic `.tbl` cards and a scroll-snap bento at 390 px (home 7,794 px), mini-site `gram | kg` toggle (no raw `<select>` on public surfaces). **DEC-249**: slim home (≤ 6,200 px at 1440; the 3D hero byte-identical), courier marquee, Raka storefront section + eight store types; the layered showcase and proof band moved to the top of `/fitur`; geometric `GE` logo (792 B, Bézier, no traced steps) and favicons; dev velocity (`pnpm check:fast`, `GX_SKIP_BUILD`, `GX_REUSE_SERVER`, `GX_VITEST_WORKERS`, `pnpm clean:e2e-state`). **DEC-248** (live: staging `60497461`, production `c7fb0d25`): one auth stage for both SPAs (white viewport, no footer, no page scroll, `Lihat`/`Sembunyikan`), register `1 · Akun — 2 · Gerai — 3 · Titik Jemput` (keyboard combobox, consent names the Mengantar email, reserved 65 px Turnstile slot), quiet brand closing. **DEC-247B** (live: production `2ffcc646`): brand inner pages on the `adsbook.id` architecture (centered PageHead, pillar rows, step flow + pipeline, 4fr/8fr FAQ, two contact panels, custom listboxes on `/simulasi-kasir`), compact footer, mini-site rules (attribution only on `*.geraimitra.com`, WhatsApp out of the header, dropship tracking masks the outlet), `CourierLogo` + nine official tracking links in the workspace, Indonesian validation nets (`form-validation-id.ts`, brand, mini-site; ownership by setter). **DEC-247A**: borderless white-gallery brand site, `produk-kasir-loket.webp` in `BRAND_ASSETS`. Relay on `99ribu-prod` (`149.28.129.53`) healthy; production probes 6/6.
-2026-11-18 — **TASK-701**: Layar Pelanggan (`/kasir/layar-pelanggan` outside the shell, `/api/app/customer-display/*`, tenant `0024` `customer_display_sessions` + outlet QRIS). **DEC-246**: Super Admin `/akun` (profile, password, email, sessions), 8 single-use recovery codes (control `0019`), recovery login + gap-free authenticator rotation. 2026-11-17 — **DEC-245**: multi-page brand landing on the apex (ten SSR pages, 3D studio hero on `/`, courier logos, `BRAND_ASSETS` allow-list). **DEC-244**: `/status` + status icons, account public links, Select dropdown, Super Admin recheck/sync endpoints, official logo. **DEC-243**: single-card settings rail, open counter trees, zero-shift 3-column topbar, compact period popover. **DEC-240/241/242**: Pengaturan TokoPhi rail (sticky, independently scrolling) + settings pages, one sidebar taxonomy (job menus, query-aware sub-trees) for both consoles, Shift Loket UI deferred (TASK-704). Earlier: **DEC-239**: desk-scale visual precision for both consoles (AdsBookCMS / TokoPhi / dashboard-01: 14/12/24 px, `#F6F7F9` canvas, `⌘K` topbar + account chip, grouped sidebar, KPI tiles, selectable POS courier rows). **DEC-236/237/238**: one shadcn/ui `base-nova` admin kit for both consoles (`apps/web-app/src/components/admin/`), `Buat Pengiriman` sidebar tree + single-screen 60/40 POS on `/kasir`, Mengantar Public API v2.0.0 parity (pickup `time_id`/`volume`, `PICKUP_PIC`, pinpoint, `SAP`/`JTEco`, courier limits, Pos COD guard, `discountExtra`, receiver score, dropshippers, sandbox simulation). Earlier: DEC-234/235 (`geraimitra.com`, relay on `99ribu-prod`). Production steps and TASK-604 await the owner (`STATUS.md`).
+| Need | Owner |
+|---|---|
+| Rules and invariants | [`AGENTS.md`](../AGENTS.md) |
+| Current state, evidence, blockers | [`STATUS.md`](../STATUS.md) |
+| Work queue | [`TASKS.md`](../TASKS.md) |
+| Decisions | [`DECISIONS.md`](../DECISIONS.md), [`docs/adr/`](adr/) |
+| Contracts | [`ARCHITECTURE.md`](../ARCHITECTURE.md), [`docs/spec/`](spec/), [`docs/visual/`](visual/) |
+| Diagrams (context, ERD, sequences, state machines) | [`docs/DIAGRAMS.md`](DIAGRAMS.md) |
+| Change history per release | [`BUILD-LOG.md`](../BUILD-LOG.md) |
+| How to change, verify, review, release | [`docs/WORKFLOW.md`](WORKFLOW.md) |
 
-## 1. Repository layout (real counts, ts/tsx/mjs/mts/sql/sh)
+**Verified against** `e43804d` (2026-11-25). Every count, table, route and command below was read from that commit.
+When the map and the code disagree, the code wins: fix the map in the same change. Refresh it at every milestone close
+and whenever a host, binding, migration, route family or script is added or removed. §10 lists the commands that
+regenerate the numbers.
+
+## 1. Where to look
+
+| Task | Start here |
+|---|---|
+| Which host serves a request | `apps/worker/src/index.ts` → `host/classify.ts`, `host/lookup.ts` |
+| Add or change a workspace API route | `apps/worker/src/api/app.ts` (`r(method, path, auth, projection, handler)`), `api/registry.ts`, `dto/projection.ts` |
+| Add or change a Super Admin API route | `apps/worker/src/api/owner.ts`, `admin/{overview,gerai,monitor,audit,mengantar,legal}/`, `pricing/rules/routes.ts` |
+| Sign-in, sessions, cookies, CSRF, TOTP, recovery codes | `apps/worker/src/auth/` (`flows.ts`, `session.ts`, `cookies.ts`, `csrf.ts`, `throttle.ts`, `turnstile.ts`, `account/`, `totp/`, `recovery/`) |
+| Tenant data and every balance-affecting step | `apps/worker/src/do/gerai-vault/index.ts` (RPC surface) and its feature folders; address it only through `do/gerai-vault/stub.ts` |
+| Mengantar calls (Public API, Partner API, relay, mock) | `packages/mengantar-sdk/`, `apps/worker/src/mengantar/{factory,mock}.ts`, `do/partner-quota/` |
+| Webhook ingest and status combination | `apps/worker/src/webhooks/{ingest,verify,settings}.ts`, `do/gerai-vault/status/`, `packages/domain/src/status/` |
+| Quotes, discount rules, cashback | `apps/worker/src/pricing/quote/{engine,service,messages}.ts`, `pricing/rules/`, `packages/domain/src/{money,cashback,weight}/` |
+| Labels, receipts, printing | `packages/thermal-print/`, `apps/worker/src/labels/build.ts`, `apps/web-app/src/print/` |
+| Finance sync and reconciliation | `apps/worker/src/cron/finance/`, `do/gerai-vault/finance/` |
+| Mini-site and brand site (public SSR) | `apps/worker/src/minisite/{index,html}.ts`, `do/gerai-vault/minisite/`, `apps/worker/src/brand/` |
+| Custom domains (Cloudflare for SaaS) | `apps/worker/src/hostnames/{service,cloudflare}.ts` |
+| Partner API and MCP | `apps/worker/src/api-v1/{index,keys}.ts`, `mcp/{protocol,outlet,public}.ts` |
+| Transactional email | `apps/worker/src/email/{templates,outbox,mailer}.ts` |
+| Operator checks, alerts, probes | `apps/worker/src/telemetry/{checks,alerts}.ts`, `packages/telemetry/`, `scripts/probes/` |
+| Backups and restore | `apps/worker/src/cron/backup/`, `do/gerai-vault/backup/`, `ops/backup.ts` |
+| Outlet map pin and geocoding | `apps/web-app/src/components/location-pin-picker.tsx`, `apps/worker/src/lib/geocode.ts`, `packages/domain/src/geo.ts` |
+| Read-only demo account | `apps/worker/src/demo/{constants,seed-vault}.ts`, `ops/seed-demo.ts` |
+| Schema change | `packages/db/migrations/{control,tenant}/`, `packages/db/src/tenant.ts` (`TENANT_MIGRATIONS`) |
+| Workspace screens, sidebar, shared admin kit | `apps/web-app/src/router.tsx`, `shell/app-shell.tsx`, `components/admin/`, `lib/api.ts` |
+| Super Admin screens | `apps/web-owner/src/router.tsx`, `shell/console-shell.tsx` (reuses the admin kit from `apps/web-app`) |
+
+## 2. Repository layout
+
+Tracked `ts`, `tsx`, `mjs`, `mts`, `sql`, `sh` files.
 
 | Path | What | Files · lines |
 |---|---|---|
-| `apps/worker/src` | the one Cloudflare Worker: host classifier, SPA serving, `/api/app`, `/api/owner`, `/api/v1` Partner API + API keys, MCP (outlet + public), `hooks.` ingest, auth + `Akun Saya`, email outbox, onboarding, couriers, pricing (rules + quote engine), labels, bulk queue, finance cron fan-out, analytics, mini-site + brand SSR, custom domains (Cloudflare for SaaS), Super Admin console APIs, ops (migrate, bootstrap, backup export/restore, alert drill), operator checks + telemetry, daily backups, `GeraiVaultDO`, `PartnerQuotaDO` | 102 · 18,603 |
-| `apps/worker/test` | Workers Vitest in `workerd`: host, auth, account, Super Admin, email, migrations/drift, slug, telemetry, isolation, onboarding, webhooks/status, key rotation, couriers, pricing/quote, contacts/media, dispatch/payment, masking, labels, shift/payout, bulk/Cek Resi, analytics, settings, listing, finance (sync, recovery, determinism), pickup, returns, exceptions, mini-site, brand, `/api/v1`, MCP, custom-domain lifecycle, backups, operator checks, CI route scan | 69 · 9,047 |
-| `apps/web-app/src` | Vite + React 19 SPA for `app.`: shell, Dashboard + `PeriodFilter`, Buat Pengiriman (sidebar tree: 60/40 POS `Kiriman Satuan`, Paket Massal, Cek Ongkir Cepat, Cek Resi, Shift Loket), `/kiriman` hub (list, Pickup & Manifest scan mode, Meja Retur, Kendala & Klaim, Riwayat Massal, Cetak Resi Massal, detail/checkout), Kontak, Keuangan (dual book), Pengaturan (10 pages incl. Mini-Site/Domain Sendiri and API & MCP), Akun Saya, Bantuan, print client | 107 · 14,716 |
-| `apps/web-owner/src` | Vite + React 19 SPA for `owner.`: login, TOTP, console shell (5 menus), Ringkasan, Gerai (+ Domain Mitra, Pro toggle), Tarif & Kurir, Pengawasan, Sistem & Audit | 23 · 2,740 |
-| `packages/domain` | pure integer money / weight / INV slug / status combine / cashback / contacts / masking / bulk CSV / WIB period / courier claim windows | 21 · 1,839 |
-| `packages/db` | Drizzle schemas + forward-only SQL: `migrations/control` (D1), `migrations/tenant` (every `GeraiVaultDO`) | 49 · 2,665 |
-| `packages/mengantar-sdk` | Public API client v2.0.0 (redacting transport, Zod passthrough, order/address/time slots, receiver score, dropshippers, sandbox simulation, Pos COD refusal parser) + Partner client (direct/relay, `maybe_sent`) | 8 · 1,015 |
+| `apps/worker/src` | the one Cloudflare Worker: host classifier, SPA serving, `/api/app`, `/api/owner`, `/api/v1` Partner API + API keys, MCP (outlet + public), `hooks.` ingest, auth + `Akun Saya`, email outbox, onboarding, couriers + area search, pricing (rules + quote engine), labels, bulk queue, finance cron fan-out, analytics, operational status, mini-site + brand SSR, custom domains, Super Admin console APIs (incl. Mengantar Partner config), demo seeder, ops (migrate, bootstrap, backup export/restore, alert drill), operator checks, geocoding (`lib/geocode.ts`), `GeraiVaultDO`, `PartnerQuotaDO` | 108 · 21,439 |
+| `apps/worker/test` | Workers Vitest in `workerd`, one folder per concern (auth, account, admin, host, isolation, migrations, storage, slug, onboarding, partner, webhooks, status, key-rotation, couriers, pricing, contacts, dispatch, masking, labels, shift, bulk, listing, finance, pickup, returns, exceptions, minisite, brand, api-v1, mcp, mengantar-v2, hostnames, backup, telemetry, notifications, email, settings, analytics, customer-display, demo, dto, lib, ci route scan) | 72 · 9,801 |
+| `apps/web-app/src` | Vite + React 19 SPA for `app.`: shell, Dashboard + `PeriodFilter`, `/kasir` (Kiriman Satuan, Paket Massal, Cek Ongkir, Cek Resi, Shift Loket, Layar Pelanggan), `/kiriman` hub (list, pickup + Surat Jalan, Meja Retur, Kendala & Klaim, Riwayat Massal, Cetak Resi Massal, detail), Kontak (+ per-contact shipment history), Keuangan (dual book), Pengaturan (10 pages), Status Operasional, Akun Saya, Bantuan, print client, admin kit (`components/admin/`, incl. `PageNav` pagination), stale-chunk recovery (`lib/chunk-recovery.ts`, shared with the owner SPA) | 117 · 22,332 |
+| `apps/web-owner/src` | Vite + React 19 SPA for `owner.`: login, TOTP, console shell, Ringkasan, Gerai, Tarif & Kurir, Pengawasan, Sistem & Audit, Akun | 23 · 3,406 |
+| `packages/domain` | pure functions: integer money, weight, INV slug, status combine, cashback, contacts, masking, bulk CSV, WIB period, courier claim windows, geo (`geo.ts`: coordinate parsing, Indonesia bounds, pin validation) | 23 · 1,984 |
+| `packages/db` | forward-only SQL: `migrations/control` (D1), `migrations/tenant` (every `GeraiVaultDO`); Drizzle schemas in `src/schema/` cover only part of the tables, so the SQL is the reference | 51 · 2,737 |
+| `packages/mengantar-sdk` | Public API client v2.0.0 (redacting transport, Zod passthrough, order/address/time slots, receiver score, dropshippers, sandbox simulation, Pos COD refusal parser) + Partner client (direct or relay, `maybe_sent`) | 8 · 1,056 |
 | `packages/telemetry` | structured events, redaction, Public API anomaly evaluators | 2 · 294 |
-| `packages/thermal-print` | Code128 + QR (incl. SVG for the mini-site), exact-size label PDFs (10×15 with stub, 10×10, 10×15), 58 mm ESC/POS roll, A4 Surat Jalan | 13 · 1,045 |
-| `infra/partner-relay` | stateless static-egress relay (Node, 66-line core + 20-line server), digest-pinned Dockerfile, compose, `verify.mjs` (spec 10 §6) (DEC-219) | 6 · 344 |
-| `scripts/` | `ci/` (bundle audit, route + `/api/v1` + non-impersonation scans, red fixtures, integrated gate), `do-migrate`, `probes`, `email` deliverability, `dev/seed-preview`, `backup/d1-local-dump` | 19 · 794 |
-| `e2e/` | Playwright (390/768/1280), 27 specs: accounts, Super Admin, onboarding, shell, contacts, quote, checkout (< 45 s), masking, print, shift, bulk + Cek Resi, dashboard, settings, Kiriman, Keuangan, recovery, pickup, returns, Kendala, mini-site, brand, API keys, custom domain | 29 · 2,948 |
-| `.github/workflows` | `ci.yml`, `deploy-staging.yml` (protected env), `deploy-production.yml` (manual) | 3 |
+| `packages/thermal-print` | Code128, QR (PDF and SVG), label pages as PDF and SVG preview (`label_10x15_with_stub`, `label_10x10`, `label_10x15`), vector courier marks, 58 mm ESC/POS roll, A4 Surat Jalan | 14 · 1,693 |
+| `infra/partner-relay` | stateless static-egress relay (Node: `relay.mjs` + `server.mjs`), digest-pinned `Dockerfile`, `compose.yaml`, `verify.mjs` (spec 10 §6) | 6 · 347 |
+| `scripts/` | `ci/` (bundle audit, route scan library, non-impersonation scan, red fixtures, integrated gate, staging `deploy-dispatch-gate`), `do-migrate/`, `probes/`, `email/` deliverability, `dev/` (`seed-preview`, `clean-e2e-state`), `deploy/deploy.mjs`, `backup/d1-local-dump` | 23 · 1,437 |
+| `e2e/` | Playwright, 27 specs + `fixtures.ts` + `helpers.ts`, three projects (`phone-390`, `tablet-768`, `desktop-1280`) | 29 · 4,039 |
+| `.github/workflows` | `ci.yml` (push to `main` and every PR: `pnpm check` + `pnpm e2e`), `deploy-staging.yml` (owner-dispatched, secret-less `verify` gate, environment `staging-deploy`, DEC-253), `deploy-production.yml` (manual, environment `production`) | 3 |
 
-Tests: 211 unit + 469 Workers cases + 27 Playwright specs (each over 3 viewports). Migrations — control: `0000_baseline`
-… `0010_daily_stats`, `0011_api_keys`, `0012_custom_domains`, `0013_public_api_events`, `0014_decision_nonce`, `0015_api_key_spend_items`, `0016_hostname_request`, `0017_retire_api_key_spend`, `0018_courier_v2_limits`, `0019_super_admin_recovery_codes`; tenant (v24): `0001_baseline` … `0014_settings`,
-`0015_finance`, `0016_pickup`, `0017_returns`, `0018_claims`, `0019_minisite`, `0020_quote_fees`, `0021_finance_backfill`, `0022_rescan_and_api_spend`, `0023_mengantar_v2`, `0024_customer_display`.
+Tests enumerated without running them: **304** unit cases in 31 files, **491** Workers cases in 67 files, **222**
+Playwright tests (74 per viewport) in 27 files.
 
-## 2. Runtime hosts and audiences (one Worker, `wrangler.jsonc`: local, `env.staging`, `env.production`)
+Migrations — control (D1): `0000_baseline` … `0020_partner_api_and_notifications` (21 files). Tenant: `0001_baseline` …
+`0025_contact_history_and_events`; `TENANT_SCHEMA_VERSION` = 25 (the length of `TENANT_MIGRATIONS`).
 
-| Host (prod · local) | Context | Audience | Served today |
+## 3. Runtime hosts
+
+One Worker (`wrangler.jsonc`: top level = local, `env.staging`, `env.production`), pinned to `aws:ap-southeast-1`
+on the remote environments.
+
+| Host (production · staging · local) | Context | Audience | Served |
 |---|---|---|---|
-| `geraiexpress.com` · `geraiexpress.localhost:8787` | `MARKETING_APEX` | public | brand SSR (DEC-245, ten pages): `/`, `/fitur`, `/ekspedisi`, `/cara-kerja`, `/biaya-dan-paket`, `/simulasi-kasir`, `/tanya-jawab`, `/hubungi-kami`, `/ketentuan`, `/privasi`, `sitemap.xml`, `robots.txt`; brand static files from `ASSETS /app/*` via the `BRAND_ASSETS` allow-list (logo, favicons, OG card, `three.min.js`, `hero-studio-3d.min.js`, `couriers/*.svg`); no cookies, no `/api` |
-| `app.geraiexpress.com` · `app.geraiexpress.localhost` | `GERAI_WORKSPACE` | owner, Kasir; integrations | SPA + `/api/app/*`; `/api/v1/*` + `/mcp` (Bearer `gx_live_` keys only) |
-| `owner.geraiexpress.com` · `owner.geraiexpress.localhost` | `PLATFORM_OWNER` | Super Admin | SPA + `/api/owner/*` + `/internal/ops/*` |
-| `hooks.geraiexpress.com` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `POST /webhooks/mengantar/:token` (bodiless 404 otherwise) |
-| `<slug>.geraimitra.com` / custom · `<slug>.geraimitra.localhost` | `TENANT_MINISITE` | public | mini-site SSR (`/`, `/kirim`, `/kirim/:slug`, `/lacak`, `/lacak/:slug/buka`, `/area`, robots/sitemap), public `/mcp`; custom `www` twin → 301 to the root; canonical = active custom host |
-| `relay.geraiexpress.com` | — | Worker → relay container on `99ribu-prod` (Reserved IPv4 `149.28.129.53`, DEC-235) | never served by the Worker (404, also `/healthz`) |
+| `geraiexpress.com` · `staging.geraiexpress.com` · `geraiexpress.localhost:8787` | `MARKETING_APEX` | public | brand SSR, ten pages: `/`, `/fitur`, `/ekspedisi`, `/cara-kerja`, `/biaya-dan-paket`, `/simulasi-kasir`, `/tanya-jawab`, `/hubungi-kami`, `/ketentuan`, `/privasi`; `sitemap.xml`, `robots.txt`; static files from `ASSETS /app/*` through the `BRAND_ASSETS` allow-list; no cookies, no `/api`. `www.geraiexpress.com` (production only) → 301 to the apex |
+| `app.` · `app-staging.` · `app.geraiexpress.localhost` | `GERAI_WORKSPACE` | gerai owner, Kasir; integrations | SPA + `/api/app/*`; `/api/v1/*` and `POST /mcp` (Bearer `gx_live_` keys only) |
+| `owner.` · `owner-staging.` · `owner.geraiexpress.localhost` | `PLATFORM_OWNER` | Super Admin | SPA + `/api/owner/*` + `/internal/ops/*` |
+| `hooks.` · `hooks-staging.` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `POST /webhooks/mengantar/:token`; everything else is a bodiless 404 |
+| `<slug>.geraimitra.com` or an active custom domain · `<slug>-stg.geraimitra.com` · `<slug>.geraimitra.localhost` | tenant (`TENANT_MINISITE`) | public | mini-site SSR: `/` (Cek Ongkir), `/kirim` (form), `/kirim/:slug` (QR card), `/lacak?q=<INV or AWB>`, `/lacak/:slug` (302 → `/lacak?q=`), `POST /lacak/:slug/buka`, `/area` (JSON area search), `/logo`, `/favicon.ico`, `/couriers/<code>.svg`, `robots.txt`, `sitemap.xml`; public `POST /mcp`; a custom `www` twin → 301 to the root once the root is active; canonical = the active custom host |
+| `relay.geraiexpress.com` | — | Worker → relay container (DEC-235, `docs/runbooks/partner-relay-production.md`) | never served by the Worker (404, including `/healthz`) |
 
-Request order (`apps/worker/src/index.ts`): `/healthz` on eligible hosts → `host/classify.ts` (normalise, shape, DCV,
-platform match, D1 `tenant_hostnames` ≤ 30 s cache, 404/403/503) → context router (foreign API families → 404).
+Request order (`apps/worker/src/index.ts`): `GET|HEAD /healthz` on eligible hosts, no storage → `classify` (normalise,
+shape, DCV pass-through, HMAC probe, platform match, D1 `tenant_hostnames` with a ≤ 30 s per-isolate cache; outcomes
+404, 403 suspended, 503 recovery) → context router. A path family that belongs to another context (`/api/`,
+`/webhooks/`, `/internal/`, `/mcp`) is a neutral 404.
 
-## 3. Control plane (D1 `DB`) vs tenant data (`GeraiVaultDO`)
+## 4. Bindings and configuration
 
-| D1 control tables | Tenant object tables |
-|---|---|
-| keys: `tenant_api_keys` · ops: `public_api_events` · domains: `custom_hostname_quota` (+ `tenants.custom_domain_enabled`, `tenant_hostnames` lifecycle columns) · identity: `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins` (+`risk_review`), `super_admin_recovery_codes` · tenancy: `tenants`, `tenant_members`, `tenant_hostnames`, `tenant_schema_versions`, `tenant_applications`, `tenant_onboarding` · routing: `webhook_routes` · pricing: `courier_service_catalog`, `platform_pricing_policy`, `courier_discount_policy`, `tenant_discount_rules` · indexes: `shipment_index`, `recipient_risk_index` · ops: `audit_logs`, `alert_state`, `email_outbox`, `email_suppressions`, `platform_legal_profile` | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `audit_logs`, `outbox`, `inv_slugs`, `mengantar_connections` (encrypted key + webhook secret, rotation fence, previous token 24 h), `shipments` (status + checkout + masking + print + bulk columns), `shipment_events`, `webhook_inbox`, `vault_timers`, `tenant_courier_prefs`, `notifications`, `sender_contacts`, `recipient_contacts`, `media_objects`, `quote_snapshots`, `dispatch_journal`, `counter_receipts`, `vault_rate`, `masking_usage`, `cashier_shifts`, `bulk_import_batches`, `bulk_import_rows`, `packing_items`, `mengantar_invoice_mirror`, `mengantar_invoice_subitems`, `finance_discrepancies`, `finance_sync_state`, `pickup_batches`, `pickup_batch_items`, `return_intakes`, `shipment_claims`, `minisite_drafts`, `api_key_spend` (API key daily cap ledger, per INV), `customer_display_sessions` (paired customer displays, token hash only; `tenant_outlets.qris_media_id`) (+ `schema_version`, `vault_identity`) |
-
-`GeraiVaultDO` (`apps/worker/src/do/gerai-vault/`): only via `vaultFor(env, tenantId)` (`locationHint: apac`); binds its
-tenant on first `migrate`; refusals as data. RPC groups: core (`migrate`, `schemaState`, `flushOutbox`, `runTimers`,
-`alarm`), slugs, Mengantar connection (`connectionView`, `recordOnboarding`), webhooks/status (`ensureWebhookToken`,
-`saveWebhookSecret`, `webhookStatus`, `ingestWebhook`, `applyWebhook`, `sweepInbox`, `pollStatus`), key rotation fence
-(`beginKeyRotation` … `completeKeyRotation`, `resolveKeyRotation`, `probeDispatchFence`), couriers (`courierPrefs`,
-`setCourierPref`), discount observation (`observeRates`), notifications, contacts + media, quotes (`estimateRates`,
-`freezeQuote`, `defaultOutlet`), checkout (`shipmentDetail`, `setShipmentParties`, `recordPayment`, `dispatchShipment`,
-`reconcileDispatch`, `payUnpaid`, `cancelShipment`), masking, printing (`preparePrint`, `printableList`), shift + COD
-payout (`shiftOp`, `payoutOp`), Paket Massal (`bulkCreate` … `bulkDispatch` serialized, `bulkPay` atomic,
-`bulkCancelUnissued`), Cek Resi (`trackLookup`), dashboard, settings (`settingsView`/`settingsWrite`, NPWP encrypted),
-Kiriman list + CSV, finance sync (`financeSync` bounded/serialized, `recoverUnpaid`, `financeView`, Saldo Aman reserve), pickup manifests (`pickupOp`, `manifestData`), Meja Retur (`returnsOp`), Kendala & Klaim (`exceptionsOp`, `claimPacket`), mini-site (`minisiteProfile`, `createMinisiteDraft`, `minisiteTrack`, `minisiteUnlock`, `claimMinisiteDraft`), backups (`exportBackup`, `restoreBackup` into an empty `drill-*` object), operator health (`healthSnapshot`). One DO alarm serves the outbox and the named timers (`status_poll`, `inbox_sweep`,
-`key_rotation_check`, `daily_stats`, `finance_sync` +60 s after mutations, `claim_expiry`). DO → D1 via the versioned absolute-upsert `outbox` (`shipment_index`,
-`recipient_risk_index`, `tenant_daily_stats`). `PartnerQuotaDO` (global): 60 calls/min, 1,000 registrations per WIB day.
-
-Status = provider maximum (terminal, minute bucket, rank) + monotone custody + `combine` (`@gx/domain/status`).
-
-## 4. Routes in code
-
-| Host | Routes | Auth (registry) |
+| Binding | Kind | Used for |
 |---|---|---|
-| any eligible | `GET /healthz` | none, no storage |
-| tenant candidates | DCV `/.well-known/{acme-challenge,pki-validation}/*`; `GET /.well-known/geraiexpress-probe/:nonce` | none (HMAC probe) |
-| `hooks.` | `POST /webhooks/mengantar/:token` → token hash → tenant object verifies (token, HMAC, ±5 min, environment) and stores before 200 → Queue `gx-mengantar-webhooks` → `applyWebhook` | path token + signature |
-| `app.` | `/api/v1/*` (Partner OpenAPI 3.1 from one route table: areas, quotes, shipments draft/list/detail/issue/pay-unpaid/labels, labels/bulk, bulk-imports, contacts, recipient-risk, exceptions, returns, finance summary/analytics/sync; `openapi.json`, `docs`) · `POST /mcp` (11 outlet tools over the same table) | Bearer key + scope; issue needs `Idempotency-Key` + daily Rupiah cap |
-| tenant hosts | `POST /mcp` (5 public tools: outlet info, areas, publish-price quote, pre-booking, initials-only tracking) | none; per-IP + per-gerai/day caps |
-| `app.` | `GET /api/app/auth/config` (Turnstile site key), `POST /api/app/auth/{signup/request,signup/verify,signup/complete,login,password/forgot,password/reset}`, `GET /auth/invitations/:token`, `POST /auth/invitations/:token/accept`, `GET /customer-display/{view,media/:kind}?gerai&kode` (paired display: token hash in that gerai's object, no session, no cookie, failed-lookup throttle) | public allowlist |
-| `app.` | `POST /auth/logout`, `GET /auth/me` · `GET /onboarding/areas`, `POST /onboarding/application`, `GET /onboarding/status` · `GET /areas` | `app_session` / `app_member` |
-| `app.` | `GET /workspace`, `GET /pos-config` (packing, counter service fee, receipt option), `/notifications*`, `/contacts/*`, `/media*`, `POST /quotes`, `/quotes/freeze`, `/shipments` (list), `/shipments/:slug{,/parties,/payment,/dispatch,/reconcile,/pay-unpaid,/cancel,/reveal-sender,/cod-payout}`, `/shift{,s,/open,/close}`, `/print{,/settings,/list}`, `/customer-display/{pair,status,state,unpair}`, `/settings/qris`, `/masking`, `/bulk{,/services,/template.csv,/:batch{,/recheck,/rows/:row,/create,/pay,/cancel-unissued}}`, `/track`, `/dashboard`, `/pickup*` (queue, open, scan, unscan, handover, `surat-jalan.pdf`), `/returns*` (desk, intake, code, handback), `/exceptions`, `/shipments/:slug/claim`, `/claims/:id/{status,packet}` · `/account*`, `/support` | `app_member` / `app_session` (role projection strips cost, margin, balance for Kasir) |
-| `app.` | `POST /members/invitations`, `GET /members`, `POST /members/:userId/revoke`, `POST /onboarding/byok`, `GET /settings`, `POST /settings/{profile,business,receipt,packing,cashier-payout}`, `/settings/masking`, `GET /settings/mengantar`, `POST /settings/mengantar/webhook-secret`, `GET /settings/couriers`, `POST /settings/couriers/:code`, `GET /shipments-export.csv`, `GET /finance`, `POST /finance/sync`, `POST /finance/discrepancies/:id/resolve`, `POST /shipments/:slug/conflict-note`, `GET/POST /api-keys`, `POST /api-keys/:id/revoke`, `GET/POST /custom-domain`, `POST /custom-domain/{check,remove}` · local-only `POST /dev/seed-tenant`, `/dev/notify`, `/dev/mock-invoices`, `/dev/provider-status` | `app_owner` |
-| `owner.` | `POST /api/owner/auth/login` · `/auth/totp/{enrol,verify,recovery}`, `/auth/logout` · `GET /auth/me` | public · `owner_aal1` |
-| `owner.` | DEC-246 `GET /account`, `POST /account/{profile,sessions/revoke}` · `POST /account/{password,email/request,email/confirm,recovery-codes,totp/rotate-start,totp/rotate-confirm}` | `owner_aal2` · `owner_recent` (+ current password where it changes a credential) |
-| `owner.` | reads: `/overview`, `/gerai/{summary,applications,applications/:id,directory,:slug}`, `/tarif/{gerai,gerai/:id,permintaan,permintaan.csv,kebijakan}`, `/pengawasan/{kiriman,antrean}`, `/sistem/{kesehatan,admin,profil-perusahaan}`, `/domains` | `owner_aal2` |
-| `owner.` | changes + sensitive reads: approve/reject/status/masking/custom-domain/retry, `POST /domains/:hostname/delete`, `/tarif/*` edits, `/pengawasan/risiko` (+`risk_review`), `/sistem/{audit,admin/:id/risk-review,rotasi-kunci/:slug,profil-perusahaan}`, `/audit`, `/admins*` | `owner_recent` (TOTP ≤ 15 min) + reason + audit |
-| `owner.` | `POST /internal/ops/do-migrate`, `POST /internal/ops/bootstrap-admin`, `POST /internal/ops/{backup-export,backup-restore,alert-drill}`; local-only `GET /internal/dev/last-mail`, `GET /internal/dev/preview` (also on `app.`) | Bearer / query `OPS_TOKEN` |
-| `app.` / `owner.` | `GET /*` (not `/api`, `/webhooks`, `/internal`, `/mcp`) | SPA shell + hashed assets |
+| `DB` | D1 | control plane (§5) |
+| `GERAI_VAULT` | Durable Object `GeraiVaultDO` (SQLite) | one object per gerai: all tenant data |
+| `PARTNER_QUOTA` | Durable Object `PartnerQuotaDO` (SQLite) | global Partner API quota: 60 calls/min, 1,000 registrations per WIB day |
+| `BUCKET` | R2 | tenant media and daily backups, all under `t/<tenant>/…`; raw keys never leave the Worker |
+| `CACHE_KV` | KV | read-through caches only: Mengantar area search, and geocode results (7 days for a hit, 1 hour for a miss). Never host → tenant, sessions, rate limits or suspension |
+| `EMAIL` | `send_email` | transactional mail from `MAIL_FROM` |
+| `WEBHOOK_QUEUE`, `BULK_QUEUE`, `FINANCE_SYNC_QUEUE`, `HOSTNAME_QUEUE` | Queues | §7 |
+| `RATE_LIMITER` | rate limit (60 per 60 s) | `/api/v1` per key and IP |
+| `ASSETS` | static assets, `run_worker_first` | both SPAs (`/app/*`, `/owner/*`), served only on their own verified host; `*.map` refused |
 
-SPA routes — app: `/`, `/masuk`, `/daftar-akun`, `/daftar`, `/daftar/status`, `/lupa-sandi`, `/atur-sandi/:token`,
-`/undangan/:token`, `/notifikasi`, `/kasir{,/multi,/cek-cepat,/cek-resi,/shift}`, `/kasir/layar-pelanggan` (paired display, no shell, no sign-in), `/kiriman{,/:slug,/massal,/massal/:batch,/cetak-massal}`,
-`/kontak/{pengirim,penerima}`, `/pengaturan{,/profil,/mini-site,/data-usaha,/ekspedisi,/printer,/label-privasi,/packing,/anggota,/mengantar,/api-mcp}`,
-`/kiriman/pickup/:batch`, `/keuangan`, `/akun`, `/bantuan`; owner: `/`, `/masuk`, `/totp`, `/gerai`,
-`/gerai/pengajuan/:id`, `/gerai/:slug`, `/tarif`, `/tarif/:tenantId`, `/pengawasan`, `/sistem`, `/akun`.
-Cron `*/5`: email dispatch, operator checks/alerts (every OBSERVABILITY row), discount verifier, finance fan-out every 15 min, custom-hostname poll every 10 min; `0 19 * * *` (02:00 WIB): finance pending rescan, hostname reaper + Cloudflare quota, per-object R2 backup export, `public_api_events` pruning; `0 * * * *`: revoke rotated webhook routes.
-Queues (all consumed): `gx-mengantar-webhooks`, `gx-bulk` (row check + serialized dispatch), `gx-mengantar-finance-sync` (per-tenant sync), `gx-hostnames` (custom-hostname create ≤ 15/min + DCV re-read).
+Vars: `GX_ENV` (`local` · `staging` · `production`), `PLATFORM_APEX`, `TENANT_ZONE`, `MENGANTAR_PUBLIC_ORIGIN`,
+`MENGANTAR_PARTNER_ORIGIN` (`mock` locally), `PARTNER_TRANSPORT` (`relay` is mandatory in production),
+`MENGANTAR_PARTNER_ID`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `CF_SAAS_ZONE_ID` (`mock` locally).
 
-## 5. Scripts
+Required secrets (names only; values in `.dev.vars` locally, `wrangler secret` remotely): `AUTH_SESSION_PEPPER`,
+`KEK_SECRET`, `PROBE_SECRET`, `TURNSTILE_SECRET_KEY`, `MENGANTAR_PARTNER_SECRET`, `PARTNER_RELAY_URL`,
+`PARTNER_RELAY_SECRET`, `CF_SAAS_API_TOKEN`, `OPS_TOKEN`, `ALERT_WEBHOOK_URL`.
+Optional secret, not in `secrets.required`: `MENGANTAR_PUBLIC_READ_KEY` — the seller key used for area search;
+without it, area search outside mock mode answers `503 AREA_SEARCH_UNAVAILABLE` (`couriers/areas.ts`).
+
+Mengantar Partner settings resolve in `mengantar/factory.ts`: the singleton D1 row `platform_partner_config` (Super
+Admin `Sistem & Audit › Integrasi Mengantar`; secrets encrypted with `KEK_SECRET`, only a tail is ever returned)
+overrides the environment per field, with a 30 s per-isolate cache that is cleared on save.
+
+## 5. Storage: control plane (D1) and tenant data (`GeraiVaultDO`)
+
+**D1 `DB` — 32 tables**
+
+| Area | Tables |
+|---|---|
+| Identity | `users`, `sessions`, `email_otps`, `password_resets`, `invitations`, `auth_throttle`, `known_devices`, `super_admins`, `super_admin_recovery_codes` |
+| Tenancy | `tenants`, `tenant_members`, `tenant_hostnames`, `custom_hostname_quota`, `tenant_schema_versions`, `tenant_applications`, `tenant_onboarding` |
+| Routing and keys | `webhook_routes`, `tenant_api_keys` |
+| Pricing | `courier_service_catalog`, `platform_pricing_policy`, `courier_discount_policy`, `tenant_discount_rules` |
+| Cross-tenant indexes (written only by the vault outbox) | `shipment_index`, `recipient_risk_index`, `tenant_daily_stats` |
+| Platform config | `platform_partner_config`, `platform_legal_profile` |
+| Operations | `audit_logs`, `alert_state`, `public_api_events`, `email_outbox`, `email_suppressions` |
+
+**`GeraiVaultDO` — 39 migrated tables per object**, plus `schema_version`, `vault_identity` and `vault_rate`, which
+the object creates itself.
+
+| Area | Tables |
+|---|---|
+| Profile and settings | `tenant_settings`, `tenant_business_profiles`, `tenant_outlets`, `tenant_courier_prefs`, `packing_items`, `media_objects` |
+| Mengantar connection | `mengantar_connections` (encrypted seller key + webhook secret, rotation fence, previous token for 24 h), `pickup_time_slots`, `receiver_score_cache` |
+| Shipments | `inv_slugs`, `shipments`, `shipment_events` (incl. `status_text`), `quote_snapshots`, `dispatch_journal`, `counter_receipts`, `masking_usage` |
+| Status intake | `webhook_inbox`, `vault_timers` |
+| Contacts | `sender_contacts`, `recipient_contacts` |
+| Counter | `cashier_shifts`, `customer_display_sessions` (token hash only) |
+| Bulk | `bulk_import_batches`, `bulk_import_rows` |
+| Finance (Mengantar mirror book) | `mengantar_invoice_mirror`, `mengantar_invoice_subitems`, `finance_discrepancies`, `finance_sync_state` |
+| Pickup, returns, claims | `pickup_batches`, `pickup_batch_items`, `return_intakes`, `shipment_claims` |
+| Mini-site | `minisite_drafts`, `tracking_unlocks` |
+| Platform plumbing | `outbox`, `audit_logs`, `notifications`, `notification_reads`, `api_key_spend` |
+
+`GeraiVaultDO` (`apps/worker/src/do/gerai-vault/`): reached only through `vaultFor(env, tenantId)`
+(`getByName`, `locationHint: apac`); it binds its tenant on the first `migrate`. Since DEC-254 a provisioned, healthy
+object that is behind `TENANT_SCHEMA_VERSION` applies the pending migrations itself on its first RPC; an unprovisioned
+object, one in `recovery`, or one **ahead** of the deployed code refuses with `TENANT_NOT_READY`. It answers refusals as data
+(`{ ok: false, refused }`), never by throwing. About 100 RPC methods, grouped:
+
+| Group | Methods |
+|---|---|
+| Core | `migrate`, `schemaState`, `flushOutbox`, `runTimers`, `alarm`, `healthSnapshot`, `statusCounts` |
+| Slugs | `allocateSlug`, `slugExists` |
+| Mengantar connection and key rotation | `connectionView`, `recordOnboarding`, `syncSellerKeyFromPartner`, `beginKeyRotation`, `abortKeyRotation`, `markKeyRotationUnknown`, `pendingKeyRotation`, `completeKeyRotation`, `resolveKeyRotation`, `probeDispatchFence` |
+| Webhooks and status | `ensureWebhookToken`, `saveWebhookSecret`, `webhookStatus`, `ingestWebhook`, `applyWebhook`, `sweepInbox`, `pollStatus`, `syncShipmentStatus` |
+| Couriers and rates | `courierPrefs`, `setCourierPref`, `observeRates`, `estimateRates`, `freezeQuote`, `defaultOutlet`, `upsertDefaultOutlet` |
+| Checkout | `shipmentDetail`, `setShipmentParties`, `recordPayment`, `dispatchShipment`, `reconcileDispatch`, `payUnpaid`, `cancelShipment` |
+| Contacts and media | `contacts`, `receiverScore`, `recordRecipientCodOutcome`, `registerMedia`, `mediaIdsForKeys`, `mediaKey`, `outletQris`, `outletLogo` |
+| Masking and printing | `maskingState`, `maskingSettings`, `saveMaskingSettings`, `revealTrueSender`, `printSettings`, `preparePrint`, `printableList` |
+| Shift and COD payout | `shiftOp`, `payoutOp`, `setReconciledCodCredit` |
+| Customer display | `customerDisplayOp`, `customerDisplayView` |
+| Paket Massal and Cek Resi | `bulkCreate`, `bulkView`, `bulkList`, `bulkPending`, `bulkApplyCheck`, `bulkEditRow`, `bulkRemoveRow`, `bulkMaterialize`, `bulkDispatch` (serialized), `bulkPay` (atomic), `bulkCancelUnissued`, `trackLookup` |
+| Lists and settings | `shipmentList`, `shipmentCsv`, `dashboard`, `settingsView`, `settingsWrite`, `addNotification`, `listNotifications`, `markNotificationsRead` |
+| Finance | `financeSync` (bounded, serialized), `recoverUnpaid`, `financeView`, `resolveDiscrepancy` |
+| Pickup, returns, exceptions | `pickupOp`, `manifestData`, `returnsOp`, `exceptionsOp`, `claimPacket` |
+| Mini-site | `minisiteProfile`, `minisiteShell`, `minisiteLogo`, `createMinisiteDraft`, `minisiteTrack`, `minisiteUnlock`, `claimMinisiteDraft` |
+| Backups | `exportBackup`, `restoreBackup` (into an empty `drill-*` object only) |
+| Demo and simulation | `seedDemo`, `simulateProviderStatus`, `devMockSellerKey`, `devProviderStatus` |
+
+Tenant → D1 goes only through the versioned absolute-upsert `outbox` (`shipment_index`, `recipient_risk_index`,
+`tenant_daily_stats`). Status = provider maximum (terminal, minute bucket, rank) + monotone custody + `combine`
+(`@gx/domain/status`).
+
+## 6. Routes
+
+Every `/api/app/*` and `/api/owner/*` route is registered through `register()` with an auth level and a DTO
+projection; the CI route scan fails on any handler mounted another way.
+
+### 6.1 Outside the two session APIs
+
+| Host | Routes | Auth |
+|---|---|---|
+| any eligible host | `GET /healthz` | none, no storage |
+| tenant candidates | `/.well-known/{acme-challenge,pki-validation}/*` (passed to Cloudflare), `GET /.well-known/geraiexpress-probe/:nonce` | none (HMAC probe) |
+| `hooks.` | `POST /webhooks/mengantar/:token` → token hash → the tenant object verifies (token, HMAC, ±5 min, environment) and stores before 200 → `WEBHOOK_QUEUE` → `applyWebhook` | path token + signature |
+| `app.` | `/api/v1/*`: 24 operations from one route table — `areas`, `quotes`, `shipments` (draft, list, detail, `issue`, `pay-unpaid`, `labels`), `labels/bulk`, `bulk-imports` (create, view, `commit`), `contacts/{senders,recipients}` (list, create, update), `contacts/recipient-risk`, `exceptions`, `returns`, `finance/{summary,analytics,sync}`; plus `openapi.json` (OpenAPI 3.1) and `docs` | Bearer key + scope (`rates:read`, `shipments:draft`, `shipments:issue`, `tracking:read`, `contacts:read`, `contacts:write`, `finance:read`, `finance:sync`); `issue` needs `Idempotency-Key` and stays under the key's daily Rupiah cap |
+| `app.` | `POST /mcp`: 11 outlet tools, adapters over the `/api/v1` table | same Bearer key and scopes |
+| tenant hosts | `POST /mcp`: 5 public tools (outlet info, areas, publish-price quote, pre-booking, privacy-safe tracking) | none; per-IP and per-gerai daily caps |
+| `owner.` | `POST /internal/ops/{do-migrate,bootstrap-admin,seed-demo,backup-export,backup-restore,alert-drill}` | Bearer `OPS_TOKEN` |
+| `owner.` (+ `app.` for `preview`) | `GET /internal/dev/last-mail`, `GET /internal/dev/preview` | `OPS_TOKEN`, `GX_ENV = local` only |
+| `app.`, `owner.` | any other `GET` | SPA shell + hashed assets |
+
+### 6.2 `/api/app/*` — 141 routes
+
+| Auth | Routes |
+|---|---|
+| `public` (11) | `GET /auth/config` · `POST /auth/{signup/request,signup/verify,signup/complete,login,password/forgot,password/reset}` · `GET /auth/invitations/:token`, `POST /auth/invitations/:token/accept` · `GET /customer-display/{view,media/:kind}` (paired display: token hash in that gerai's object, no session, no cookie) |
+| `app_session` (14) | `GET /auth/me`, `POST /auth/logout` · `GET /account`, `POST /account/{profile,password,email/request,email/confirm,sessions/revoke}` · `GET /onboarding/{areas,status}`, `POST /onboarding/application` · `GET /geocode` · `GET /support` · `POST /dev/seed-tenant` |
+| `app_member` (78) | `GET /workspace`, `/pos-config`, `/areas`, `/dashboard`, `/track`, `/masking`, `/exceptions` · `/notifications`, `/notifications/read` · `/contacts/{senders,recipients}` (list, create, `:id`, `:id/shipments`), `/contacts/senders/:id/verify-wa`, `/contacts/{receiver-score,risk-badge}` · `/media`, `/media/:id` · `POST /quotes`, `/quotes/freeze` · `GET /shipments`, `/shipments/:slug`, `POST /shipments/:slug/{parties,payment,dispatch,reconcile,pay-unpaid,cancel,reveal-sender,cod-payout,sync,claim}` · `/claims/:id/{packet,status}` · `/shift`, `/shifts`, `/shift/{open,close}` · `/print`, `/print/{settings,list}` · `/customer-display/{status,pair,state,unpair}` · `GET /settings/{qris,logo}` · `/bulk`, `/bulk/{services,template.csv}`, `/bulk/:batch{,/recheck,/rows/:row,/create,/pay,/cancel-unissued}` · `/pickup`, `/pickup/{history,open}`, `/pickup/:batch{,/scan,/unscan,/handover,/surat-jalan.pdf}` · `/returns`, `/returns/intake`, `/returns/:slug/{code,handback}` · `POST /minisite-drafts/:slug/claim` · `POST /dev/{notify,provider-status}` |
+| `app_owner` (38) | `GET /members`, `POST /members/invitations`, `/members/:userId/revoke` · `POST /onboarding/byok` · `GET /settings`, `POST /settings/{profile,business,receipt,packing,cashier-payout}` · `GET` + `POST /settings/masking` · `GET /settings/mengantar`, `POST /settings/mengantar/{webhook-secret,sync-key,poll}` · `GET /settings/couriers`, `POST /settings/couriers/:code` · `POST /settings/{qris,logo}` · `GET /shipments-export.csv`, `POST /shipments/:slug/conflict-note` · `GET /finance`, `POST /finance/sync`, `/finance/discrepancies/:id/resolve` · `POST /contacts/{senders,recipients}/:id/archive` · `GET` + `POST /api-keys`, `POST /api-keys/:id/revoke` · `GET` + `POST /custom-domain`, `POST /custom-domain/{check,remove}` · `GET /status`, `POST /status/recheck` · `POST /dev/{mock-invoices,simulate-status}` |
+
+Role projection strips seller cost, discount, margin and Mengantar balance from `Kasir` responses on the server.
+
+`/dev/*` guards: `seed-tenant` and `notify` answer only when `GX_ENV = local`; `mock-invoices` and `provider-status`
+additionally need the mock Mengantar origin; `simulate-status` answers everywhere except production, so it is live on
+staging.
+
+Demo account: a session of the demo user, or any member of the `demo` tenant, gets `403 DEMO_READ_ONLY` on every
+non-`GET` except login, logout, `POST /quotes` and `POST /print`. The demo mini-site's `Kirim dari Rumah` form and a
+password-reset request for the demo email are refused with the same message.
+
+### 6.3 `/api/owner/*` — 62 routes
+
+| Auth | Routes |
+|---|---|
+| `public` (2) | `GET /auth/config`, `POST /auth/login` |
+| `owner_aal1` (4) | `POST /auth/totp/{enrol,verify,recovery}`, `POST /auth/logout` |
+| `owner_aal2` (27) | `GET /auth/me`, `GET /account`, `POST /account/{profile,sessions/revoke}` · `GET /overview` · `GET /gerai`, `/gerai/summary`, `/gerai/applications`, `/gerai/applications/:id`, `/gerai/:slug`, `POST /gerai/:slug/sinkron` · `GET /domains`, `POST /domains/periksa` · `GET /tarif/{gerai,gerai/:tenantId,permintaan,permintaan.csv,kebijakan}`, `POST /tarif/verifikasi-ulang` · `GET /pengawasan/{kiriman,antrean}`, `POST /pengawasan/sinkron-keuangan` · `GET /sistem/{kesehatan,admin,mengantar,profil-perusahaan}`, `POST /sistem/kesehatan/periksa` |
+| `owner_recent` (29; TOTP ≤ 15 min, reason + audit on changes) | `POST /account/{password,email/request,email/confirm,recovery-codes,totp/rotate-start,totp/rotate-confirm}` · `POST /gerai/applications/:id/{approve,reject}`, `POST /gerai/:slug/{status,masking,custom-domain,onboarding/retry,sinkron-kunci}` · `POST /domains/:hostname/delete` · `POST /tarif/gerai/:tenantId/:serviceCode`, `/tarif/gerai/:tenantId/tarik-mengantar`, `/tarif/kebijakan/{platform,kurir/:courierCode}`, `/tarif/permintaan/tandai` · `POST /pengawasan/risiko` · `GET /sistem/audit`, `GET /audit` · `POST /sistem/{mengantar,mengantar/uji,profil-perusahaan,admin/:userId/risk-review,rotasi-kunci/:slug}` · `POST /admins`, `/admins/:userId/totp-reset` |
+
+Super Admin modules are scanned for shipment and money vault RPCs by `scripts/ci/non-impersonation.test.mjs`
+(DEC-209); a vault method they call must be on the allowlist in `scripts/ci/route-scan-lib.mjs`.
+
+### 6.4 SPA routes
+
+**`app.`** — outside the shell: `/masuk`, `/daftar-akun`, `/daftar`, `/daftar/status`, `/lupa-sandi`,
+`/atur-sandi/:token`, `/undangan/:token`, `/kasir/layar-pelanggan` (paired display, no sign-in). Inside the shell:
+`/`, `/notifikasi`, `/kasir`, `/kasir/{multi,cek-cepat,cek-resi,shift}`, `/kiriman`,
+`/kiriman/{:slug,massal,massal/:batch,cetak-massal,pickup/:batch}`, `/kontak` (→ `/kontak/pengirim`),
+`/kontak/{pengirim,penerima}`, `/kontak/{pengirim,penerima}/:id`, `/keuangan`, `/pengaturan` (desktop → first page),
+`/pengaturan/{profil,mini-site,data-usaha,ekspedisi,printer,label-privasi,packing,anggota,mengantar,api-mcp}`,
+`/status`, `/akun`, `/bantuan`. Owner-only screens: `/keuangan`, `/status`, every `/pengaturan/*` page except
+`printer`.
+
+Sidebar (DEC-241), seven entries over the six server menu keys — `Cek Ongkir & Resi` shares the `Buat Pengiriman`
+key: **Utama** `Dashboard` · `Buat Pengiriman` (Kiriman Satuan, Paket Massal) · `Cek Ongkir & Resi`; **Operasional**
+`Kiriman` (Daftar Kiriman, Pickup & Surat Jalan, Cetak Resi Massal, Riwayat Massal, Meja Retur, Kendala & Klaim) ·
+`Kontak`; **Administrasi** `Keuangan` · `Pengaturan`. `/kasir/shift` is routed but not linked (TASK-704).
+
+**`owner.`** — `/masuk`, `/totp`, then `/` (Ringkasan), `/gerai`, `/gerai/pengajuan/:id`, `/gerai/:slug`, `/tarif`,
+`/tarif/:tenantId`, `/pengawasan`, `/sistem`, `/akun`. Five menus; sub-trees are `?tab=` views of the same page.
+
+## 7. Background work
+
+| Trigger | Work |
+|---|---|
+| Cron `*/5 * * * *` | email outbox dispatch (retries, expiry), operator checks + alerts, discount verifier; on minutes divisible by 15: finance sync fan-out (one message per connected gerai); on minutes divisible by 10: custom-hostname status poll |
+| Cron `0 * * * *` | revoke rotated webhook routes past their grace window |
+| Cron `0 19 * * *` (02:00 WIB) | finance pending-row rescan, hostname reaper + Cloudflare quota check, per-object R2 backup export, prune `public_api_events` older than 2 days |
+| Queue `gx-mengantar-webhooks` (batch 10, 5 retries) | apply stored webhook events (`applyWebhook`) |
+| Queue `gx-bulk` (batch 1, 3 retries) | Paket Massal row checks and serialized dispatch |
+| Queue `gx-mengantar-finance-sync` (batch 5, 3 retries) | per-tenant finance sync |
+| Queue `gx-hostnames` (batch 15, 5 retries) | custom-hostname creation (≤ 15 per minute) and DCV re-read |
+| `GeraiVaultDO` alarm | one alarm per object serves the outbox flush and the named timers `status_poll`, `inbox_sweep`, `key_rotation_check`, `daily_stats`, `finance_sync` (60 s after a mutation), `claim_expiry` |
+
+Queue names carry the suffix `-staging` or `-production` on the remote environments.
+
+## 8. External systems
+
+| System | Reached from | Notes |
+|---|---|---|
+| Mengantar Public API | `GeraiVaultDO`, plus area search in `couriers/areas.ts`, through `publicClient` | per-seller key in the URL path: never log or return upstream URLs |
+| Mengantar Partner API | `resolvePartnerClient`: onboarding and seller-key rotation / read-back reserve from `PartnerQuotaDO` before each call; the Super Admin connection test (`POST /sistem/mengantar/uji`) calls without a reservation, limited to 6 per minute per admin | production only through the relay |
+| Partner relay (`relay.geraiexpress.com`) | Worker `fetch` | static egress IP; spec 10 |
+| Cloudflare for SaaS API | `hostnames/cloudflare.ts` | custom hostnames on the `geraimitra.com` zone; in-process fake when `CF_SAAS_ZONE_ID = mock` |
+| Cloudflare Turnstile | auth pages, mini-site forms | `challenges.cloudflare.com` is the only third-party script origin in the SPA CSP |
+| Cloudflare Email Sending | `email/mailer.ts` | eight templates: `signup_otp`, `password_reset`, `kasir_invite`, `email_change_otp`, `application_status`, `security_alert`, `application_submitted`, `admin_new_application` |
+| OpenStreetMap | `GET /api/app/geocode` → `lib/geocode.ts` → Nominatim (server side, KV-cached); raster tiles from `tile.openstreetmap.org` in the `app.` SPA only | outlet pin picker; local runs answer with fixed coordinates and make no network call |
+| Owner alert webhook | `telemetry/alerts.ts`, `pnpm probes` | `ALERT_WEBHOOK_URL` |
+| API reference viewer | `/api/v1/docs` | loads its viewer script from `cdn.jsdelivr.net` |
+
+## 9. Commands
 
 | Command | Does |
 |---|---|
-| `pnpm check` | typecheck → eslint → unit → build both SPAs → Workers tests → bundle audit |
-| `pnpm check:fast` | typecheck → eslint → build → bundle audit, no test suites (DEC-249): pair it with targeted `unit` / `worker` runs, never with `pnpm check` on the same tree |
-| `GX_SKIP_BUILD=1 pnpm exec playwright test <spec> --project desktop-1280` | focused e2e reusing the last `pnpm build` (boots in seconds); `GX_REUSE_SERVER=1` attaches to a `wrangler dev` already on `GX_E2E_PORT` |
+| `pnpm dev` | build both SPAs, then run the Worker locally (`.wrangler/state-dev`) |
+| `pnpm db:migrate:local` | apply D1 control migrations to the local state |
+| `pnpm typecheck` · `pnpm lint` | regenerate Worker types, then type-check every package · ESLint with zero warnings |
+| `pnpm test:unit` · `pnpm test:worker` | unit project (Node) · Workers Vitest (`workerd`) |
+| `pnpm test:migrations` · `pnpm test:isolation` | migration and drift tests · `test/isolation` + `test/host` |
+| `pnpm check` | typecheck → lint → unit → build → Workers tests → bundle audit |
+| `pnpm check:fast` | typecheck → lint → build → bundle audit, no test suites (DEC-249): pair it with targeted `unit` / `worker` runs, never with `pnpm check` on the same tree |
+| `pnpm e2e` | Playwright on 390, 768 and 1280 against a fresh local state (per-test client IP) |
+| `GX_SKIP_BUILD=1 pnpm exec playwright test <spec> --project desktop-1280` | focused e2e reusing the last `pnpm build`; `GX_REUSE_SERVER=1` attaches to a `wrangler dev` already on `GX_E2E_PORT` |
 | `GX_VITEST_WORKERS=<n>` | cap on parallel `workerd` pools for Workers tests (default 3 locally, 4 in CI) |
-| `pnpm clean:e2e-state` | remove `.wrangler/state-e2e-*` folders older than 2 h (also runs automatically when Playwright starts) |
-| `pnpm gate <TASK-x99>` | milestone integrated run, fail-fast, every gate recorded in `delivery-ledger` |
-| `pnpm e2e` | Playwright 390/768/1280 on a fresh local state (per-test client IP) |
-| `pnpm dev` / `pnpm db:migrate:local` | local Worker + SPAs / apply D1 control migrations (`.wrangler/state-dev`) |
-| `node scripts/dev/seed-preview.mjs <port>` | local synthetic owner + application + Super Admin for rendering gates |
-| `pnpm do:migrate --env <env> [--dry-run]` | migrate every tenant object, stop at first failure |
-| `pnpm probes --env <env> [--force-fail <probe>] [--alert-dry-run]` | `OBSERVABILITY.md` probes + owner alert |
-| `pnpm ci:red-fixtures` | prove broken test / `.map` / secret literal / unprotected route each fail their gate |
-| `pnpm email:deliverability` | read-only SPF/DKIM/DMARC + received-header checks (TASK-112) |
-| `node infra/partner-relay/verify.mjs <relay URL> [--partner-*]` | spec 10 §6 relay checks (auth, allowlist, size; optional real Partner call) |
-| `node scripts/backup/d1-local-dump.mjs <db> <out.sql>` | local D1 restore drill |
+| `pnpm clean:e2e-state` | remove `.wrangler/state-e2e-*` folders older than 2 h (also runs when Playwright starts) |
+| `pnpm gate <TASK-x99>` | integrated run, sequential and fail-fast, each gate recorded in `delivery-ledger`: typecheck, lint, unit, build, worker, migrations, isolation, security, e2e |
 | `pnpm security:bundle-audit` | `*.map`, source-map comments, secret-shaped literals, client secret names |
+| `pnpm ci:red-fixtures` | prove a broken test, a `.map`, a secret literal and an unprotected route each fail their gate |
+| `node scripts/ci/deploy-dispatch-gate.mjs` | the secret-less staging deploy gate that `deploy-staging.yml` runs before the `staging-deploy` environment (DEC-253) |
+| `pnpm do:migrate --env <local\|staging\|production> [--dry-run] [--batch <n>]` | migrate every tenant object and reconcile D1 `tenant_schema_versions`, stop at the first failure |
+| `secrets-env run -- pnpm deploy:staging` · `pnpm deploy:production` (`[--skip-build] [--dry-run]`) | DEC-254 manual pipeline (`scripts/deploy/deploy.mjs`): build + bundle audit → remote D1 control migrations → `wrangler deploy` → `do:migrate` → probes. Every step is a production action that needs the owner's approval; unlike the GitHub workflows it checks neither the branch nor a green CI run |
+| `pnpm probes --env <local\|staging\|production> [--port <n>] [--force-fail <probe>] [--alert-dry-run]` | `OBSERVABILITY.md` probes + owner alert |
+| `pnpm email:deliverability` | read-only SPF, DKIM, DMARC and received-header checks |
+| `node scripts/dev/seed-preview.mjs [port]` | local synthetic owner, application and Super Admin for rendering gates |
+| `node infra/partner-relay/verify.mjs <relay URL> [--partner-sandbox\|--partner-production]` | spec 10 §6 relay checks (auth, allowlist, size; optionally one real Partner call) |
+| `node scripts/backup/d1-local-dump.mjs <db.sqlite> <out.sql>` | local D1 restore drill |
 
-## 6. Runbooks (owner-run production steps)
+Deploys, remote migrations and every other production step need the owner's approval per action
+(`docs/WORKFLOW.md` §8).
 
-`docs/runbooks/`: `email-deliverability.md` (TASK-112), `backups-and-restore.md` (TASK-603), `partner-relay-production.md`
-(TASK-601), `production-zones.md` (TASK-602). Worker routes per environment live in `wrangler.jsonc` (production: Custom
-Domains for platform hosts, `*/*` + `cname.geraimitra.com/*` on `geraimitra.com`; staging: `*-staging` hosts + `*-stg.geraimitra.com/*`).
+## 10. Regenerating the numbers
+
+```bash
+# files · lines for one area (§2)
+git ls-files <path> | grep -E '\.(ts|tsx|mjs|mts|sql|sh)$' | wc -l
+git ls-files <path> | grep -E '\.(ts|tsx|mjs|mts|sql|sh)$' | xargs cat | wc -l
+
+# test cases, enumerated without running them (§2)
+pnpm exec vitest list --project unit | wc -l
+pnpm --filter @gx/worker exec vitest list | wc -l
+pnpm exec playwright test --list | tail -1
+
+# tables created by the migrations (§5); subtract the ones a later migration drops or renames
+grep -hoE '^CREATE TABLE (IF NOT EXISTS )?[a-z_0-9]+' packages/db/migrations/control/*.sql | sort -u
+grep -hoE '^CREATE TABLE (IF NOT EXISTS )?[a-z_0-9]+' packages/db/migrations/tenant/*.sql | sort -u
+
+# registered API routes (§6.2, §6.3); one templated line in api/app.ts expands to five /settings/* routes
+grep -cE '^\s*r\(\s*"(GET|POST)"' apps/worker/src/api/app.ts
+```
+
+## 11. Runbooks (owner-run production steps)
+
+`docs/runbooks/`: `production-zones.md` (zones, Cloudflare for SaaS, account and resources), `partner-relay-production.md`
+(relay host and Mengantar allowlist), `email-deliverability.md`, `backups-and-restore.md`. Worker routes per
+environment live in `wrangler.jsonc`: production uses Custom Domains for the platform hosts plus `*/*` and
+`cname.geraimitra.com/*` on `geraimitra.com`; staging uses the `*-staging` hosts plus `*-stg.geraimitra.com/*`.

@@ -20,7 +20,7 @@ This specification refines **both** the physical paper typography of our thermal
    - Names clamped to `2–60` chars, street to `5–120` chars (max 3 wrapped lines), item description to `3–60` chars, whitespace collapsed.
    - On 58mm (`32-col`) receipts, the tracking URL splits across centered lines (`<host>` on line 1 — wrapping at the last `.` or `-` before column 32 if `len(host) > 32` for 24–30-char slugs or long custom domains — and `/lacak/<7-char-slug>` on the final line) so no URL ever clips past column 32.
 5. **Atkinson Dithering + Density Boost for Cheap Paper:**
-   - Outlet logos (max `312×64 px` monochrome) use Atkinson dithering; operators using thin economy thermal rolls can switch density from `Normal` to `Tebal (Dark)` in 1 tap.
+   - No dithering step exists: the outlet logo is a 1:1 image stored as JPEG and drawn on 100 mm labels only (a monogram tile when there is none). Operators using thin economy thermal rolls can switch density from `Normal` to `Tebal (Dark)` in 1 tap.
 
 ---
 
@@ -135,11 +135,31 @@ Cair setelah paket diterima
   The counter part (`Dibayar di Loket`) follows the DEC-220 payment-line variants above (`LUNAS · …` or inverted
   `BELUM DIBAYAR`); `Hak COD Pengirim` is `sender_cod_payable_idr` (`G`, `G − F` or `G − P − I0 − F` per mode).
 
-*(Note: On **80mm thermal rolls (`48 columns / 576 dots`)**, the exact same hierarchy expands horizontally with side-by-side key-value columns and a wider barcode, cutting paper length by ~28%.)*
+*(80 mm rolls are not supported: only the 32-column 58 mm renderer exists, `packages/thermal-print/src/roll58.ts`.)*
 
 ---
 
 ## 3. Format B — 100 mm Thermal Stickers (`DEC-224`)
+
+> **Layout as built (`packages/thermal-print/src/label.ts`, redesigned 2026-11-24/25).** The three specimens in
+> §3.1–§3.3 and the priorities in §1.2 draw the earlier layout and are kept as history; the renderer is the
+> reference. A parcel label now has six zones, top to bottom:
+>
+> 1. **Headline** — left: outlet logo (1:1 upload from `Pengaturan › Profil Gerai`, about 8–9 mm) or a two-letter
+>    monogram tile, `WA <no>` (`PENGIRIMAN GERAI` when the outlet has no WhatsApp number) and the outlet name (under a Dropship preset: `PENGIRIMAN TOKO` + the reseller's store
+>    name); right: plain bold hero `COD : Rp …` or `NON-COD`, and `Cetak <date>`.
+> 2. **Carrier band** — vector courier mark on the left; `Nomor Resi` Code 128 with the grouped AWB on the right.
+> 3. **Service line** — inverted service pill, optional `KARGO` and `DG` badges, `<KURIR> · Berat: <billable kg>`,
+>    `INV` at the right.
+> 4. **Destination** — full-width black bar `DESTINASI : <kecamatan · kota · kode pos> (<sorting code>)`; on COD an
+>    outlined notice `Dilarang buka paket sebelum bayar kurir · Konfirmasi pengirim sebelum retur`.
+> 5. **Parties** — two columns `Dari:` | `Kepada:` with no boxes or divider.
+> 6. **Contents** — `ISI PAKET:` (with dimensions and insurance), `CATATAN:`, then `Order ID` with a Code 128 of the
+>    INV. Only `10×15 · Paket saja` adds a `LACAK & BUKTI DIGITAL` strip with a QR; the compact parcel label has no QR.
+>
+> The cut line of `10×15 · Paket + Bukti` prints `POTONG DI SINI` without a scissor glyph. The 100 mm label prints
+> the billable weight in kg only; the actual gram weight appears on the 58 mm roll. The outlet logo is never printed
+> on the 58 mm roll.
 
 Three outputs on 100 mm wide **direct-thermal sticker paper** for a thermal label printer (203 dpi = 800 dots wide,
 no ink or ribbon). Paper rolls: `100×150 mm` for `10×15` formats, `100×100 mm` for `10×10`. The printer's paper
@@ -271,11 +291,14 @@ Uses the extra 50 mm for a two-line item/weight block and a separate sender line
 
 - Barcode band ≥ 14 mm tall, ≥ 3 mm quiet zone left/right, no vertical borders through it; AWB under it in
   4-character groups.
-- Smallest printed text 8 pt (≈ 2.8 mm cap height); recipient name 14 pt bold; sorting pill 18 pt bold inverted.
-- Text clamps from §1.4 apply; long addresses wrap to max 3 lines, never shrink below 8 pt.
-- Output is a vector PDF sized exactly to the paper (no margins added by the app) plus a direct ESC/POS/TSPL raster
-  for supported Bluetooth 100 mm printers; `print_count` and `first_printed_at` track duplicates (§5).
-- A4 `1/2/4 per halaman` remains a PDF fallback for outlets with only an office printer.
+- As built, sizes differ from the original targets: the smallest text is 5.6 pt (header eyebrow), the recipient name
+  is 9.4 pt (11.2 pt on `10×15 · Paket saja`), and the destination bar is 9.2–10.2 pt, shrinking to 6.6 pt for long
+  names.
+- Text clamps from §1.4 apply; the street wraps to 3 lines (2 on COD, 4 on `10×15 · Paket saja`).
+- Output is a vector PDF sized exactly to the paper (no margins added by the app) and an SVG preview of the same
+  page; 100 mm printers are driven through the OS print driver. No TSPL or raster path exists. `print_count` and
+  `first_printed_at` track duplicates (§5).
+- No A4 label layout exists (A4 is used only for the Surat Jalan manifest).
 
 ## 4. Four Masking Presets — Exact Paper Matrix
 
@@ -293,6 +316,14 @@ Uses the extra 50 mm for a two-line item/weight block and a separate sender line
 ---
 
 ## 5. In-App Print Preview & Printer Control Drawer UX
+
+> **Drawer as built (`apps/web-app/src/print/drawer.tsx`).** After issue the POS shows `Resi terbit` and a
+> `Cetak Label` button that opens the drawer with the outlet's saved format. Controls: four format cards with the
+> paper hint, a density toggle shown only for the 58 mm roll, a reprint reason of at least 3 characters when
+> `print_count >= 1`, and `Cetak` / `Buka PDF / Cetak Sistem` / `Unduh PDF`. Not built: a paired-printer indicator in
+> the top bar, the `Ctrl+Enter` shortcut, dialog-free printing, the `Isi 58 mm roll` and `Tampilkan Ongkir di Label
+> Non-COD` toggles (`showShippingFee` exists in the model but no renderer reads it), the A4 option, and the animated
+> serrated preview. The items below describe the original intent.
 
 1. **Fast Default (No Modal Friction):** When `[🟢 BT: POS-58 Siap]` is connected in the top bar, pressing `Tandai Lunas & Cetak (Ctrl+Enter)` prints immediately using the outlet's saved format (`10×15 · Paket + Bukti`, `10×10 · Paket saja`, `10×15 · Paket saja`, or the 58 mm `Label + Struk` roll).
 2. **Interactive Live Thermal Drawer (`[ 👁 Pratinjau & Atur Cetak ]`):**

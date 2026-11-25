@@ -69,8 +69,8 @@ flowchart TB
     subgraph Worker["Primary Worker (Hono, one deployment)"]
         hc["Host classifier<br/>(spec 11 §3)"]
         api["/api/app · /api/owner ·<br/>/api/v1 · /mcp"]
-        ssr["Hono JSX SSR<br/>(brand + mini-sites)"]
-        assets["Static Assets<br/>(Vite React PWAs)"]
+        ssr["Server-rendered HTML<br/>(brand + mini-sites)"]
+        assets["Static Assets<br/>(Vite React SPAs)"]
         qc["Queue consumers ·<br/>Cron handlers"]
     end
     subgraph Stores["State"]
@@ -78,8 +78,8 @@ flowchart TB
         vault[("GeraiVaultDO ×N<br/>SQLite per gerai")]
         quota[("PartnerQuotaDO")]
         r2[("R2 BUCKET<br/>t/tenant_id/…")]
-        kv[("KV CACHE_KV<br/>area search only")]
-        q[["Queues: webhooks,<br/>finance sync, bulk"]]
+        kv[("KV CACHE_KV<br/>area search + geocode cache")]
+        q[["Queues: webhooks, bulk,<br/>finance sync, hostnames"]]
     end
     email["send_email EMAIL"]
     relay["partner-relay (99ribu-prod container)"]
@@ -102,19 +102,21 @@ flowchart TB
 
 ```mermaid
 flowchart TD
-    req([Request]) --> dcv{"/.well-known/acme-challenge<br/>or pki-validation?"}
-    dcv -- yes --> pass[Pass through untouched]
-    dcv -- no --> norm["Normalise Host<br/>(lowercase, no port/dot,<br/>ignore X-Forwarded-Host)"]
-    norm --> plat{"Exact platform host?"}
+    req([Request]) --> norm["Normalise Host<br/>(lowercase, no port/dot,<br/>ignore X-Forwarded-Host)"]
+    norm --> shape{"Host this Worker<br/>may serve?"}
+    shape -- "no (relay., other platform<br/>subdomains, zone apex)" --> n404
+    shape -- yes --> dcv{"/.well-known/acme-challenge<br/>or pki-validation?"}
+    dcv -- "yes, tenant candidate,<br/>GET or HEAD" --> pass[Pass through untouched]
+    dcv -- no --> plat{"Exact platform host?"}
     plat -- "geraiexpress.com" --> brandctx[MARKETING_APEX]
     plat -- "app." --> appctx["GERAI_WORKSPACE<br/>__Host-ge_app"]
     plat -- "owner." --> ownctx["PLATFORM_OWNER<br/>__Host-ge_owner + TOTP"]
     plat -- "hooks." --> hookctx["WEBHOOK_INGEST<br/>token hash → tenant"]
-    plat -- no --> probe{"/.well-known/<br/>geraiexpress-probe/nonce?"}
-    probe -- yes --> hmac["HMAC(host + nonce)<br/>no tenant data"]
-    probe -- no --> lookup[("D1 tenant_hostnames<br/>(≤30 s isolate cache)")]
-    lookup --> st{state}
-    st -- "unknown / pending / purged" --> n404[Neutral 404]
+    plat -- no --> lookup[("D1 tenant_hostnames<br/>(≤30 s isolate cache)")]
+    lookup --> probe{"/.well-known/<br/>geraiexpress-probe/nonce?"}
+    probe -- "yes, host pending or active,<br/>tenant not suspended" --> hmac["HMAC(host : nonce)<br/>no tenant data"]
+    probe -- no --> st{state}
+    st -- "unknown / pending / failed /<br/>moved / purged / tenant not active" --> n404[Neutral 404]
     st -- suspended --> n403["403 Gerai tidak aktif"]
     st -- recovery --> n503["503 + Retry-After"]
     st -- active --> tenant["TENANT_MINISITE<br/>(tenant context)"]
@@ -131,7 +133,7 @@ erDiagram
         int created_at
     }
     SESSIONS {
-        text id PK
+        text token_hash PK
         text user_id FK
         text host_context
         int expires_at
@@ -139,9 +141,9 @@ erDiagram
     EMAIL_OTPS {
         text id PK
         text email_hash
-        text otp_hash
+        text code_hash
         int expires_at
-        int failed_attempts
+        int attempts
     }
     SUPER_ADMINS {
         text user_id PK
@@ -168,12 +170,12 @@ erDiagram
     TENANT_API_KEYS {
         text id PK
         text tenant_id FK
-        text key_hash
-        text scopes
+        text token_hash
+        text scopes_json
     }
     TENANT_DISCOUNT_RULES {
-        text id PK
-        text tenant_id FK
+        text tenant_id PK
+        text service_code PK
         text courier_code
         int assigned_bps
     }
@@ -277,10 +279,11 @@ erDiagram
         int print_count
     }
     SHIPMENT_EVENTS {
-        text id PK
-        text shipment_slug FK
+        text event_key PK
+        text slug FK
         int event_at
         text source
+        text status_text
     }
     WEBHOOK_INBOX {
         text event_key PK
@@ -308,8 +311,8 @@ erDiagram
         text driver_vehicle_no
     }
     RETURN_INTAKES {
-        text shipment_slug PK
-        text otp_hash
+        text slug PK
+        text code_hash
     }
     BULK_IMPORT_BATCHES {
         text id PK
@@ -320,11 +323,6 @@ erDiagram
         text batch_id PK
         int row_no PK
         text shipment_slug
-    }
-    COUNTER_LEDGER_ENTRIES {
-        text id PK
-        text type
-        int amount_idr
     }
     MENGANTAR_INVOICE_MIRROR {
         text invoice_id PK
@@ -343,7 +341,6 @@ erDiagram
     BULK_IMPORT_BATCHES ||--o{ BULK_IMPORT_ROWS : contains
     BULK_IMPORT_ROWS |o--o| SHIPMENTS : creates
     BULK_IMPORT_BATCHES ||--o{ COUNTER_RECEIPTS : "batch payment"
-    SHIPMENTS ||--o{ COUNTER_LEDGER_ENTRIES : "book 1"
     MENGANTAR_INVOICE_MIRROR ||--o{ SHIPMENTS : "book 2 matches"
 ```
 
@@ -400,7 +397,7 @@ sequenceDiagram
     alt unknown or revoked
         H-->>M: 404 (no body)
     else known tenant
-        H->>V: verifyWebhook(raw body, headers)
+        H->>V: ingestWebhook(raw body, headers)
         V->>V: HMAC + ±5 min · insert webhook_inbox (same tx)
         V-->>H: ok
         H->>Q: { tenant_id from D1, event_key }
@@ -425,7 +422,7 @@ sequenceDiagram
     V->>M: GET /invoices since cursor
     M-->>V: invoices + subItems + balanceAmount
     V->>V: upsert mirror (book 2) idempotently
-    V->>V: match by cnote_no · ORDER_ID · batch
+    V->>V: match by cnote_no, then ORDER_ID
     V->>V: set provider_reconciled_cost_idr / reconciled COD credit
     V->>V: Laba Kas eligible when counter paid or not_required, and provider side reconciled
     V->>V: flag Selisih Sync / quote_drift

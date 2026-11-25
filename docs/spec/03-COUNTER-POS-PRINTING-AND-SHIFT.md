@@ -8,11 +8,11 @@ This contract governs daily counter execution in `app.geraiexpress.com` so opera
 
 ### Path A — Scan or Type Pre-Booking `INV` (`< 15s`)
 1. Walk-in sender or reseller presents the QR or 7-char code (`INV 8K4M2P7`) created on `<slug>.geraimitra.com`.
-2. Cashier scans QR or types `8k4m2p7` → opens `/kiriman/8k4m2p7` with sender, masking preset, recipient, destination `area_id`, and item declaration pre-populated.
+2. Cashier scans QR or types `8k4m2p7` → the pre-booking is claimed (`POST /api/app/minisite-drafts/:slug/claim`) and `/kasir` is prefilled in place under the same slug (a code that is not an open pre-booking opens `/kiriman/8k4m2p7`) with sender, masking preset, recipient, destination `area_id`, and item declaration pre-populated.
 3. Cashier performs three physical steps:
    - places parcel on scale, verifies `actual_weight_gram` (`[ gram ● | kg ]`) + optional `P×L×T`,
    - confirms parcel contents are permitted (+ optional 1-tap scale photo),
-   - records `QRIS gerai / Tunai / Transfer / Bayar nanti` → presses **`Tandai Lunas & Cetak (Ctrl+Enter)`** (DEC-220).
+   - records `QRIS gerai / Tunai / Transfer / Bayar nanti` → presses **`Tandai Lunas & Cetak`** (DEC-220; no keyboard shortcut is built). After issue the screen shows `Resi terbit` with a `Cetak Label` button that opens the print drawer.
 
 ### Path B — Direct Walk-In POS (`< 45s`)
 
@@ -84,12 +84,12 @@ For resellers who bring many parcels at once. One sender, one set of parcels, on
    for all rows (a row may override).
 2. **Rows:** add rows manually (destination search, recipient name/phone/address, weight in gram, item, COD amount),
    **or** `Unggah Excel/CSV`:
-   - Template download `template-paket-massal.xlsx` (and `.csv`) with Indonesian headers: `Nama Penerima`, `No HP`,
+   - Template download is CSV (`GET /api/app/bulk/template.csv`; no `.xlsx` template exists) with Indonesian headers: `Nama Penerima`, `No HP`,
      `Alamat`, `Kecamatan/Kota`, `Kode Pos`, `Isi Paket`, `Berat (gram)`, `Panjang`, `Lebar`, `Tinggi`, `COD (Rp)`,
      `Nilai Barang (Rp)`, `Catatan`.
    - Max **200 rows** and 1 MB per file; parsed in the browser and validated again on the server. `.csv` needs no
-     library. The `.xlsx` reader is an M3 choice recorded as an ADR after a `native-first` review (bundle size, license,
-     maintenance); until then only `.csv` and the downloadable `.xlsx` template exist.
+     library. Upload accepts `.csv` and `.xlsx`; an `.xlsx` file is converted to CSV in the browser by the in-repo,
+     zero-dependency reader `apps/web-app/src/lib/xlsx-reader.ts` (DEC-251).
    - Destination text is matched to a Mengantar `area_id` per row; ambiguous matches become `Perlu Diperbaiki` with a
      picker, never a guess.
 3. **Check:** the server quotes rows in batches through a Queue (respecting `PartnerQuotaDO`/provider limits), and the
@@ -134,18 +134,18 @@ mm, zero margins) and opens the browser print dialog; setup requires the driver 
 counter profile (documented in the onboarding guide, never required). Android/Bluetooth (Mode 1) is a secondary path
 for outlets without a PC and for 58 mm budget printers.
 
-### 3.1 Mode 1 (secondary) — Direct Web-Bluetooth ESC/POS (58mm & 80mm Rolls)
+### 3.1 Mode 1 (secondary) — Direct Web-Bluetooth ESC/POS (58 mm rolls; no 80 mm renderer exists)
 Built for budget Bluetooth printers (`POS-5890`, Zjiang, Eppos, VSC, Bixolon, Epson) paired directly to Android Chrome or desktop Chrome/Edge:
-- **Zero-Popup Fast Path:** once a default Bluetooth printer is paired (`[🟢 BT: POS-58 Siap]`), clicking `Tandai Lunas & Cetak` (or `Simpan & Cetak` for an unpaid INV) prints immediately without extra dialogs.
-- **BLE Flow Control:** transmits encoded ESC/POS bytes in **20-byte chunks** with controlled pacing to prevent cheap printer buffer overflows, plus `beginBatch() / endBatch()` connection keep-alive during multi-parcel runs.
+- **Printing path as built:** there is no persistent pairing, no top-bar printer indicator and no dialog-free print. Each Bluetooth print calls `requestDevice`, so the browser's device chooser appears every time; `Cetak Label` opens the drawer with the outlet's saved format.
+- **BLE Flow Control:** transmits encoded ESC/POS bytes in **180-byte chunks** (`writeValueWithoutResponse` when the printer offers it, otherwise `writeValue`), with no pacing delay and no batch keep-alive API (`apps/web-app/src/print/print.ts`).
 - **Print Density Selector:** `Normal` vs `Tebal (Dark)` dithering/heating setting in `/pengaturan` so thin budget thermal rolls still produce crisp, high-contrast barcodes.
 - **One-Roll Combo (`Potong Disini`):** prints the **Parcel Label** on the top half, a clear `-------- ✂ Potong Disini --------` cut line, and the **Customer Receipt (`Struk Jujur`)** on the bottom half.
-- **Instant Browser/PDF Fallback:** if Bluetooth disconnects or iOS Safari is used, POS automatically falls back to 1-tap PDF/system print so counter lines never stall.
+- **Browser/PDF fallback (manual):** when Bluetooth is unavailable the drawer says so and the operator presses `Buka PDF / Cetak Sistem` (or `Unduh PDF`); for the 58 mm format that prints the `10×15 · Paket + Bukti` PDF. `Pengaturan › Printer & Struk` can also test-print a 58 mm sample through the browser print dialog for USB printers.
 
 ### 3.2 Mode 2 (primary) — 100 mm Thermal Stickers via PC Browser (DEC-224) & A4 Fallback
 - **Three formats:** `10×15 · Paket + Bukti` (default: 100×100 parcel label + cut line + 100×50 sender stub), `10×10 · Paket saja`, `10×15 · Paket saja` (no sender stub). Layouts: `docs/visual/04` §3.
-- Outlet default in `Pengaturan › Printer & Struk`; per-print override in the print drawer. With `Paket saja` formats the post-issue screen offers `Kirim bukti ke WA pengirim`.
-- A4 `1/2/4 per halaman` is a PDF fallback only.
+- Outlet default in `Pengaturan › Printer & Struk`; per-print override in the print drawer. Sharing the proof to the sender's WhatsApp after a `Paket saja` print is not built.
+- No A4 label layout exists: the formats are exactly `label_10x15_with_stub`, `label_10x10`, `label_10x15` and `roll_58mm` (`packages/thermal-print/src/model.ts`); A4 is used only for the Surat Jalan manifest.
 - Generates crisp vector PDFs with **borderless horizontal barcode bands** (preserving >= 3 mm left/right `Code128` quiet zones so laser scanners never misread vertical box borders).
 - Tracks `print_count` and `first_printed_at` per `INV`, warning operators before duplicate reprints so one AWB is never taped onto two boxes.
 - **Bulk Label Print (`Cetak Resi Massal`, `DEC-225`):** in `Kiriman`, operators filter by `Status Cetak` (`Belum Cetak` / `Sudah Cetak`), select up to **50 `INV`s**, and generate one merged 100 mm thermal PDF in 1 click.

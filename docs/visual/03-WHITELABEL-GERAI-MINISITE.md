@@ -1,6 +1,6 @@
 # 03 — White-Label Outlet Mini-Site (`<slug>.geraimitra.com`) & Brand Site (`geraiexpress.com`)
 
-Both public web properties render on Cloudflare Workers via Hono JSX SSR with edge caching (< 35 KB HTML+CSS) and ship 100% in friendly Indonesian.
+Both public web properties render on Cloudflare Workers as escaped HTML template strings (no JSX, no edge cache; < 35 KB HTML+CSS) and ship 100% in friendly Indonesian.
 
 ---
 
@@ -13,7 +13,7 @@ Designed for neighborhood WhatsApp groups, shopfront QR banners, and local onlin
 │ [Logo Gerai]  GERAI BERKAH JAYA — Agen Kirim Paket Multi-Ekspedisi        [💬 Chat WA Gerai]     │
 │               Jl. Merdeka No. 45, Coblong, Bandung · Buka Hari Ini 08.00–21.00 · [📍 Buka Peta]  │
 ├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│   [ ● 1. Cek Ongkir ]        [ 2. Kirim dari Rumah (QR) ]        [ 3. Lacak Paket / Struk ]      │
+│   [ ● Cek Ongkir ]           [ Kirim dari Rumah ]                [ Lacak Paket ]                 │
 │  ═════════════════════                                                                           │
 │  Kecamatan Tujuan : [ Ketik kecamatan / kota tujuan...          ]                                │
 │  Berat Paket      : [ 1000  ] [ gram ● │ kg ]   Ukuran (opsional): [  ]×[  ]×[  ] cm  [ Hitung ] │
@@ -33,12 +33,12 @@ Designed for neighborhood WhatsApp groups, shopfront QR banners, and local onlin
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Tab 2 Flow — `Kirim dari Rumah (QR)` (`<slug>.geraimitra.com/kirim/8k4m2p7`)
+### Page 2 Flow — `Kirim dari Rumah` (form at `<slug>.geraimitra.com/kirim`, QR card at `/kirim/8k4m2p7`)
 1. Visitor selects `Non-COD / COD`, fills sender details (and optional dropship store name), recipient name/phone/subdistrict/street, item description, and estimated weight in `gram` (`default: 1000`) or `kg`.
-2. Passing Turnstile immediately issues the unified short **`INV` slug (`INV 8K4M2P7`)** with a large scannable QR card + **`[ Simpan Gambar QR ]`** and **`[ Kirim ke WA Saya ]`**.
+2. Passing Turnstile immediately issues the unified short **`INV` slug (`INV 8K4M2P7`)** with a large scannable QR card + **`[ Kirim ke WA Saya ]`** and **`[ Lacak Paket ]`**; saving the image is a hint (`Simpan gambar: tekan lama pada QR lalu pilih Simpan, atau ambil tangkapan layar.`), not a button.
 3. Clear Indonesian instruction: *"Tunjukkan QR `INV 8K4M2P7` ini ke kasir Gerai Berkah Jaya dalam 48 jam. Tidak perlu antre ketik alamat — kode yang sama dipakai untuk struk & lacak paket Anda."*
 
-### Tab 3 Flow — Privacy-Safe Tracking (`<slug>.geraimitra.com/lacak/8k4m2p7`)
+### Page 3 Flow — Privacy-Safe Tracking (`<slug>.geraimitra.com/lacak?q=8K4M2P7`; `/lacak/8k4m2p7` redirects 302 to it)
 - Accepts either **`8K4M2P7`** (`INV` slug) or the courier **AWB** (`JX8829104412`).
 - Displays status stepper, courier + service, origin city → destination district/city, and masked initials (`T*** H****` → `R*** K******`).
 - **4-Digit Recipient Phone Gate:** when status is `Terkirim`, renders: *"Masukkan 4 angka terakhir No. HP Penerima `[ _ _ _ _ ]` untuk membuka rincian penerima paket (& bukti foto jika tersedia dari kurir)."*

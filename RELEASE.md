@@ -1,33 +1,35 @@
 # Release Manifest — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Release-ID: UNSET
-Base: UNSET
+Release-ID: REL-2026-11-25-doc-hygiene
+Base: e43804d
 Environment: production
-Declared-Risk: R0
-Rollback-Ref: UNSET
-Rollback-Command: UNSET
+Declared-Risk: R4
+Rollback-Ref: 46aeac71-33c4-4258-a4d7-2b21edea8792
+Rollback-Command: pnpm exec wrangler rollback 46aeac71-33c4-4258-a4d7-2b21edea8792 --env production
 Backup-Proof: NOT_REQUIRED
-Status: NOT_RELEASED
+Status: IN_PREPARATION
 
 ## Contract
 
 This file defines the current release boundary and MUST describe only the release currently being prepared.
-Nothing has been deployed: M0 (documentation and a throwaway prototype) is locked; application code starts at M1.
+Staging and production have been live since 2026-11-18; the current live production Worker is version
+`46aeac71-33c4-4258-a4d7-2b21edea8792` (deployed from `e43804d`, control `0000`–`0020`, tenant DO v25, 6/6 probes PASS;
+logged in `docs/runbooks/production-zones.md` §5.1 and `BUILD-LOG.md`).
 
-- `Base` is the last deployed/accepted commit and must be an ancestor of `HEAD`.
-- `Declared-Risk` is `R0`–`R4` as defined in `docs/WORKFLOW.md` §2.
-- `Rollback-Ref` is the Worker version to restore (`wrangler deployments list`); normally the previous production
-  version. `Rollback-Command` will be `pnpm exec wrangler rollback <version-id> --env production` (owner approval
-  per action). Tenant Durable Object migrations are expand-only within a release, so a code rollback needs no schema
-  rollback (`docs/WORKFLOW.md` §8).
-- `Backup-Proof` becomes required from the first release that migrates tenant objects or D1: a D1 Time Travel
+- `Base` is the last deployed/accepted commit (`e43804d`) and must be an ancestor of `HEAD`.
+- `Declared-Risk` is `R0`–`R4` as defined in `docs/WORKFLOW.md` §2. This release is `R4` (touches CI non-impersonation
+  allowlist, staging Cloudflare for SaaS refusal, demo isolation, and `GeraiVaultDO` dispatch/reconcile paths).
+- **Rollback rule (DEC-254, DEC-255, ADR-0006 §4, `docs/WORKFLOW.md` §8):**
+  - **Code-only releases (no `TENANT_SCHEMA_VERSION` bump — including this release):** `Rollback-Command`
+    (`pnpm exec wrangler rollback <previous-version-id> --env production`, with owner approval per action) is safe; D1
+    control migrations remain expand-only.
+  - **Releases that bump `TENANT_SCHEMA_VERSION`:** **roll-forward only.** Under DEC-254, healthy tenant objects
+    lazy-upgrade on their first request after deploy and refuse older code with `TENANT_NOT_READY`; rolling the Worker
+    back across a tenant migration takes already-upgraded gerai offline until newer code is redeployed. Fix forward and
+    redeploy instead (`scripts/deploy/deploy.mjs` warns automatically before deploy when a tenant migration is pending).
+- `Backup-Proof` is `NOT_REQUIRED` for this code-only release (no new D1 or tenant DO migration; live DO objects are
+  already on v25). It becomes required again on any future release that adds a D1 or tenant migration: a D1 Time Travel
   bookmark plus the per-object R2 export reference (ADR-0006 §7).
-- Set `Status: READY` only after the release scope is frozen, `pnpm check` and the integrated run passed, and
-  `delivery-ledger snapshot-release` recorded it; `production-gate` then decides.
-
-## First release candidates (planned, not prepared)
-
-| Milestone | Environment | Expected risk | Gate |
-|---|---|---|---|
-| M1 | staging only | R4 (host/cookie boundary, storage foundation) | TASK-109 CI + security gates, TASK-111 isolation, TASK-112 email gate, TASK-199 close |
-| M6 | production pilot | R4 (relay, custom hostnames, live Mengantar) | spec 10 §6, spec 11 §2, backup + restore drill |
+- Set `Status: READY` only after the release commits are finalized on `main`, `pnpm check` and hosted `ci.yml` pass,
+  and `delivery-ledger snapshot-release --release-id REL-2026-11-25-doc-hygiene` records it; owner approval gates
+  every deploy.

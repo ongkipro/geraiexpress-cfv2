@@ -6,11 +6,11 @@
 
 ## 1. Single-Source Schema Pipeline (`Zod → OpenAPI 3.1 + TypeScript + MCP`)
 
-1. All request/response contracts are authored once with **`@hono/zod-openapi`**.
+1. All `/api/v1` request/response contracts are Zod schemas in **one route table** (`apps/worker/src/api-v1/index.ts`) that drives validation, scope checks and `/api/v1/openapi.json` (OpenAPI 3.1 through `z.toJSONSchema`). `@hono/zod-openapi` is not used, and `/api/v1` is a plain handler, not a Hono router.
 2. That single schema generates:
    - runtime validation and role-based DTO filtering inside the Worker,
    - `/api/v1/openapi.json` (OpenAPI 3.1.0) and interactive **Scalar API Reference (`/api/v1/docs`)**,
-   - typed RPC clients for `web-app` and `web-owner`,
+   - *(not built: no generated RPC client exists; the SPAs call `/api/app` and `/api/owner` through a small fetch helper)*,
    - JSON Schema `inputSchema` and safety annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`) for **MCP Tools**.
 3. **Canonical Units Across All Schemas:**
    - Money: integer Rupiah (`_idr`, e.g., `24000`).
@@ -25,7 +25,7 @@
 | Surface | Endpoint | Consumer | Authentication |
 |---|---|---|---|
 | **1. Outlet Partner OpenAPI & MCP** | `https://app.geraiexpress.com/api/v1/*` · Docs: `/api/v1/docs` · MCP: `https://app.geraiexpress.com/mcp` | Outlet Owner's AI assistant, reseller WooCommerce/Shopify stores, shop WhatsApp bots | `Authorization: Bearer gx_live_<token>` (SHA-256 hashed in D1, managed in `Pengaturan › API & MCP` (`/pengaturan/api-mcp`)) |
-| **2. Mini-Site Public API & WebMCP** | `https://<gerai-slug>.geraimitra.com/api/public/*` · MCP: `https://<gerai-slug>.geraimitra.com/mcp` | Public buyers/resellers & public AI shopping assistants | Strict per-IP rate limiting (+ Turnstile on browser forms; capped draft quota on MCP) |
+| **2. Mini-Site Public API & WebMCP** | MCP: `https://<gerai-slug>.geraimitra.com/mcp` (no `/api/public/*` family exists; the mini-site pages are server-rendered) | Public buyers/resellers & public AI shopping assistants | Strict per-IP rate limiting (+ Turnstile on browser forms; capped draft quota on MCP) |
 | **3. Super Admin Internal Schema** | `https://owner.geraiexpress.com/api/owner/*` *(internal build artifact only; no public docs)* | `web-owner` console | `__Host-ge_owner` cookie + `aal2` TOTP |
 
 ### Granular Token Scopes (`Pengaturan › API & MCP` (`/pengaturan/api-mcp`) — Owner Only)
@@ -44,13 +44,13 @@
 | Method & Path | Required Scope | Summary |
 |---|---|---|
 | `GET /api/v1/areas?q=coblong` | `rates:read` | Search Mengantar subdistricts & postcodes (KV-cached). |
-| `POST /api/v1/quotes` | `rates:read` | Input `destination_area_id`, `weight_gram` *(default `1000`)*, optional `length_cm/width_cm/height_cm`, `cod_fee_mode` (`none`, `buyer_bears_fee`, `sender_bears_fee`, `cod_all_in`, `dfod`), `cod_goods_amount_idr`, `declared_item_value_idr` → returns active couriers, `billable_weight_gram`, customer tariffs, dynamic courier requirements, and (if `finance:read`) net cost & margin. |
-| `POST /api/v1/shipments` | `shipments:draft` | Allocates a new `INV` slug (e.g., `"8k4m2p7"`), stores draft/pre-booking, and returns QR URL. |
+| `POST /api/v1/quotes` | `rates:read` | Input `destination_area_id`, `weight_gram` *(default `1000`)*, optional `length_cm/width_cm/height_cm`, `cod_fee_mode` (`none`, `buyer_bears_fee`, `sender_bears_fee`, `cod_all_in`, `dfod`), `cod_goods_amount_idr`, `declared_value_idr` → returns active couriers, `billable_weight_gram`, customer tariffs, dynamic courier requirements, and (if `finance:read`) net cost & margin. |
+| `POST /api/v1/shipments` | `shipments:draft` | Allocates a new `INV` slug (e.g., `"8k4m2p7"`), stores draft/pre-booking, and returns `counter_url` (`https://<mini-site host>/lacak?q=<INV>`); no QR image is returned. |
 | `GET /api/v1/shipments` & `GET /api/v1/shipments/:slug` | `tracking:read` | List or fetch shipment details by `INV` slug or `?awb=`. |
 | `POST /api/v1/shipments/:slug/issue` | `shipments:issue` | Atomically dispatches order to Mengantar via `GeraiVaultDO` (`Idempotency-Key` required). |
 | `POST /api/v1/shipments/:slug/pay-unpaid` | `shipments:issue` | Completes payment via Mengantar `POST /order/pay-unpaid` after balance top-up. |
-| `POST /api/v1/shipments/:slug/labels` | `shipments:issue` | Body `{ format: label_10x15_with_stub \| label_10x10 \| label_10x15 \| roll_58mm, part?: all \| stub_only }` → PDF URL (100 mm formats) or ESC/POS bytes reference (58 mm). Increments `print_count` when the **parcel label** is generated (stub-only/receipt-only reprints do not). Second label print requires `reprint_reason`. |
-| `POST /api/v1/bulk-imports` | `shipments:issue` | Body: CSV text or rows JSON (≤ 200) + sender id → batch id; `GET /api/v1/bulk-imports/:id` returns per-row `ready`/`errors`; `POST /api/v1/bulk-imports/:id/commit` creates INVs for ready rows (queued dispatch). Same validation as POS (spec 03 §1.3). |
+| `POST /api/v1/shipments/:slug/labels` | `shipments:issue` | Body `{ format: label_10x15_with_stub \| label_10x10 \| label_10x15 \| roll_58mm, reprint_reason? }` (no `part` field) → the response body is the PDF (`application/pdf`, 100 mm formats) or the raw ESC/POS bytes (`application/octet-stream`, 58 mm). Increments `print_count` when the **parcel label** is generated (stub-only/receipt-only reprints do not). Second label print requires `reprint_reason`. |
+| `POST /api/v1/bulk-imports` | `shipments:issue` | Body: `sender_id`, `service_code`, `cod_fee_mode` (`none \| buyer_bears_fee \| sender_bears_fee \| cod_all_in`; no `dfod`) and CSV text or rows JSON (≤ 200) → batch id; `GET /api/v1/bulk-imports/:id` returns per-row `ready`/`errors`; `POST /api/v1/bulk-imports/:id/commit` creates INVs for ready rows (queued dispatch; body `{ prohibited_ack: true }`, `Idempotency-Key` required). Same validation as POS (spec 03 §1.3). |
 | `POST /api/v1/labels/bulk` | `shipments:issue` | Body `{ slugs: [...] (1–50), format }` → one merged PDF; rejects > 50 with `422 BULK_LIMIT_EXCEEDED`. |
 | *(not exposed)* | — | Counter payment and sender-payout mutations (`mark_paid`, `void_payment`, `sender_cod_payout`, `void_sender_payout`) are **POS-only** (session + device), never via API keys or MCP, so integrations cannot mark customer money as received. |
 | `GET / POST /api/v1/contacts/senders` | `contacts:*` | Manage `Kontak > Pengirim` (walk-in & reseller masking profiles). `wa_verified_*` is read-only over the API; changing `true_phone` clears it. |
@@ -91,7 +91,7 @@
 - `upsert_sender_or_recipient_contact` (`contacts:write`)
 
 ### 4.2 Public Outlet Mini-Site MCP (`https://<gerai-slug>.geraimitra.com/mcp`)
-Exposes 4 strictly public, tenant-scoped tools: `get_gerai_outlet_info`, `quote_public_shipping_rates` (`weight_gram` default `1000`), `create_public_prebooking_inv`, and `track_public_shipment_privacy_safe` (initials-only PII truncation enforced).
+Exposes 5 strictly public, tenant-scoped tools: `get_gerai_outlet_info`, `search_areas`, `quote_public_shipping_rates` (`weight_gram` default `1000`), `create_public_prebooking_inv`, and `track_public_shipment_privacy_safe` (initials-only PII truncation enforced).
 
 ---
 
@@ -104,5 +104,5 @@ Exposes 4 strictly public, tenant-scoped tools: `get_gerai_outlet_info`, `quote_
 > quoting needs an area id; drafts are capped 5/h per IP and 50/WIB day per gerai, every call 30/min per IP.
 
 ## 5. Prompt-Injection & Audit Defenses
-- Untrusted parcel/address strings returned to MCP clients are structured JSON fields; tokens lacking `finance:read` or `shipments:issue` are rejected at the Hono middleware layer regardless of LLM prompt instructions.
+- Untrusted parcel/address strings returned to MCP clients are structured JSON fields; tokens lacking `finance:read` or `shipments:issue` are rejected in the shared `invoke()` of the route table (used by REST and MCP alike) regardless of LLM prompt instructions.
 - Every API/MCP write logs `actor_type` (`api_key` | `mcp_client`) and `api_key_id` in the outlet's audit trail.

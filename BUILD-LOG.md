@@ -1486,3 +1486,63 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - Run **Uji Koneksi Partner API** on `https://owner.geraiexpress.com/sistem?tab=mengantar` once ready (Partner ID `geraiexpress` + encrypted Partner Secret already saved in production D1; `https://relay.geraiexpress.com/healthz` 200).
   - Switch `ongkipro/geraiexpress-cfv2` back to Private when public CI minutes are no longer needed.
 
+
+## 2026-11-25 — Documentation refresh against `2604a33` (R0, docs only)
+
+- **`docs/SYSTEM-MAP.md` rewritten** (was v-M6 plus an appended change log): owner table for rules/state/contracts, a
+  "where to look" index, layout with recounted files and lines, hosts per environment, bindings and configuration,
+  D1 (32) and tenant (39) tables grouped by area, the vault RPC surface by group, every `/api/app` (141) and
+  `/api/owner` (62) route by auth level, SPA routes and sidebar, background work, external systems, commands, and the
+  commands that regenerate its numbers. The per-release change log it carried is dropped: that history is this file.
+- **Method:** counts from `git ls-files`; tables from the two schemas built in memory out of the SQL migrations; routes
+  from the `r(...)` / `register(...)` declarations; tests enumerated without running them (`vitest list`,
+  `playwright test --list`): 304 unit, 489 Workers, 222 Playwright. The last path segment of every registered route
+  was checked to appear in the map (it groups routes with brace notation, so full paths are not greppable); every
+  link and repository path in it resolves.
+- **Drift fixed in the owning documents:** `README.md` (M0 status, PWA/JSX claims, menu count, document index);
+  `ARCHITECTURE.md` (no `@hono/zod-openapi`, no JSX, no Cache API, no PWA; four `gx-*` queues; real Cron duties; status
+  polling on object alarms; R2 and KV contents; `classify()`; monorepo layout); `docs/DIAGRAMS.md` (classifier order,
+  probe input, SQL column names, Book 1 entity); spec 01 (inventory note listing known differences from the schema);
+  spec 02 (counter-book reference; `Tarik & Terapkan dari Mengantar`); spec 07 (`classify()`); spec 09 (invoice
+  parameters, matching order, automatic `pay-unpaid` recovery, manual-sync limit, backfill and rescan cursors);
+  spec 10 (relay error codes, loopback port, `platform_partner_config` overrides, size); spec 11 (cache key, 404
+  states, `tenant_hostnames` columns, reaper rule); spec 07 additionally (no `drizzle-kit`, real commands, secrets
+  versus vars, sender address, `HOSTNAME_QUEUE`, CI triggers and viewports); spec 12 (eight templates, outbox lease
+  and states, `dispatchDue` / `sendOne`); `OBSERVABILITY.md` (status, 17 drill keys plus `partner_api_deactivated`);
+  runbooks (optional `MENGANTAR_PUBLIC_READ_KEY`, 17 drill messages, relay origin and D1 overrides on rotation, apex
+  sending domain); `RELEASE.md` (deployed since 2026-11-18, no release snapshot recorded); `docs/WORKFLOW.md` (desk
+  contract, viewports, review archive path, nine gates); `DESIGN.md` and visual 01 (12 px floor, control heights,
+  canvas and border tokens, primary colour, POS columns); `PRD.md` PR-21 (no `@hono/zod-openapi`); spec 03 (QR claim flow, CSV template
+  and in-repo `.xlsx` reader, Bluetooth transport as built, no 80 mm or A4 label); spec 05 (demo account, Partner
+  secrets in D1, no `/api/public/*`); spec 06 (reserved slugs, counter entry flow, settings items, Super Admin tabs and
+  recent-TOTP actions, mini-site paths); spec 08 (one Zod route table, labels and bulk-import bodies, five public
+  MCP tools); visual 03 (three pages, QR card buttons); visual 04 (as-built notes for the redesigned 100 mm label
+  and the print drawer; the old specimens are kept as history); visual 07 and 08 (bottom bar, headers, contact
+  pages, tabs, webhook warning, period-filter scope); `ROADMAP.md`, `AGENTS.md` (stale milestone wording, menu
+  count).
+- **Handed over:** findings F1–F8 with evidence in `docs/review/2026-11-25-docs-refresh-findings.md`; task contracts
+  TASK-706..TASK-713 in `TASKS.md`. Counts in the system map re-read at `e43804d` (DEC-254).
+- **Findings that are not documentation and are left open** (recorded in `STATUS.md`): hosted `ci.yml` red on `main`
+  since `aa40187`, currently on the non-impersonation scan (`syncSellerKeyFromPartner` not allowlisted); 21 commits
+  after the 2026-11-23 checkpoint without task, decision, ledger run or review; `Tarik & Terapkan dari Mengantar`
+  stores discounts outside the DEC-233 band; staging shares the production Cloudflare for SaaS zone id (spec 11 §2).
+- **Left as is:** the three 100 mm label specimens and the 58 mm receipt specimen in visual 04 (they need redrawing
+  from a rendered sample, not from prose); column-by-column lists in spec 01 §2 (the inventory note lists the
+  differences instead); `TASKS.md` and `DECISIONS.md` history, including five backticked paths that name files outside
+  the repository or since renamed.
+- **Not verified:** Mermaid rendering (no Mermaid CLI on this device; block structure checked only); anything live
+  (deployed versions, remote schema version, relay state). No code, test or configuration file was changed.
+
+## 2026-11-25 — TASK-706..TASK-713 + Kasir UX & `pollStatus` auto-reconcile (DEC-255)
+
+- **Scope:** Resolved all F1–F8 findings from `docs/review/2026-11-25-docs-refresh-findings.md` per owner decisions (`DEC-255`), plus Kasir counter UX upgrades and `pollStatus` auto-reconcile:
+  - **TASK-706 (R4):** allowlisted `syncSellerKeyFromPartner` in `scripts/ci/route-scan-lib.mjs` with exact write classification (`docs/review/task-706/`, `claude` APPROVE).
+  - **TASK-707 (R4):** independent `cx/gpt-6.2-sol` R1–R4 review of `53aee8f..e43804d` (`docs/review/unrecorded-2026-11-25/`, APPROVE) — fixed 2 P1 + 3 P2: scoped `seed-demo` throttle delete to demo `emailHash` only, masked `counterparty_area` in recipient history when sender is masked, minimized Nominatim queries + SHA-256 `geocode:v3:` KV keys, moved default discount rule inserts into atomic post-fetch `env.DB.batch`, and verified authoritative DO/D1 writes in `markRestricted`.
+  - **TASK-708 (R3):** amended DEC-233 (`DEC-255`) for dynamic per-expedition Mengantar discounts; added ±Rp1 exact-percent snap (guarded by integer `0..price`) in `observedRegularBps`/`observedCargoBps`; verified bounded manual edits and updated Super Admin hints + spec 02 §2.1.
+  - **TASK-709 (R4):** disabled custom-domain creation on staging (`wrangler.jsonc` `CF_SAAS_ZONE_ID = "disabled"`, dropped staging `CF_SAAS_API_TOKEN`, fail-closed in `hostnames/service.ts` and `hostnames/cloudflare.ts`, 0 D1 writes, 0 CF calls).
+  - **TASK-710 (R4):** codified **roll-forward only** for releases bumping `TENANT_SCHEMA_VERSION` (`ADR-0006 §4`, `docs/WORKFLOW.md §8`, `RELEASE.md`), added ahead-version refusal test (`do-migrate.test.ts`), added `--json` to `scripts/do-migrate/do-migrate.mjs` and pre-deploy pending/unknown rollback warning to `scripts/deploy/deploy.mjs`.
+  - **TASK-711 (R3):** reserved `"demo"` in `RESERVED_SLUGS`, added `409 DEMO_SLUG_CONFLICT` guard + key cleanup in `seed-demo.ts`, and blocked canonical `DEMO_TENANT_ID` (`isDemoTenantId`) on `POST /api-keys`, `/api/v1`, and `/mcp`.
+  - **TASK-712 (R0/R1):** populated `RELEASE.md`, confirmed `TASK-601` DONE, archived completed history verbatim to `docs/archive/{STATUS-HISTORY,TASKS-M1-M5}-2026-11-25.md` (`STATUS.md` 7.4 KB < 12 KB, `TASKS.md` 15.0 KB < 50 KB), and added clean-tree / `main`-branch / completed-green-`ci.yml` guards to `scripts/deploy/deploy.mjs`.
+  - **TASK-713 (R2/R3):** recorded `entry_channel = 'api_mcp'` in `ensureDraft`, documented cashback config/display-only (`DEC-255`), required `MENGANTAR_PUBLIC_READ_KEY` + `areaSearchKeyConfigured` alert check, reserved `PartnerQuotaDO` in `POST /sistem/mengantar/uji`, and fixed stale comments/paths.
+  - **Kasir UX & auto-reconcile:** `pollStatus` auto-reconciles up to 5 `reconciliation_needed` shipments with fairness rotation (`updated_at` bump on unresolved); colored `Pengirim Baru`/`Penerima Baru` CTAs, zero-match inline registration with name/phone prefill, generation guard on both single & bulk Kasir, and comfortable mobile modal bottom scroll padding.
+- **Evidence:** `pnpm typecheck` 8/8 PASS, `eslint . --max-warnings=0` PASS, `pnpm test:unit` 31/31 PASS, `pnpm build` + `security:bundle-audit` PASS (111 files, 0 maps, 0 secrets), `pnpm test:worker` 67/67 (497/497 tests PASS), `e2e/{pos-guards,checkout}.spec.ts` 12/12 PASS; independent R4 reviews `claude` APPROVE (`task-706`) & `cx/gpt-6.2-sol` R4 APPROVE (`unrecorded-2026-11-25`, `task-708-713`).

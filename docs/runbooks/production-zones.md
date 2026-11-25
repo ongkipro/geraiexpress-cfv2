@@ -17,6 +17,8 @@ explicit authorization (record in §5). Order: TASK-109 staging first, then prod
 Secrets (`wrangler secret put <NAME> --env production`, values from the owner's vault, never in Git):
 `AUTH_SESSION_PEPPER`, `KEK_SECRET`, `PROBE_SECRET`, `TURNSTILE_SECRET_KEY`, `MENGANTAR_PARTNER_SECRET`,
 `PARTNER_RELAY_URL`, `PARTNER_RELAY_SECRET`, `CF_SAAS_API_TOKEN`, `OPS_TOKEN`, `ALERT_WEBHOOK_URL`.
+Optional, outside `secrets.required` but needed for area search outside mock mode: `MENGANTAR_PUBLIC_READ_KEY`
+(without it `GET /api/app/areas` and the onboarding area picker answer `503 AREA_SEARCH_UNAVAILABLE`).
 Vars to set: `TURNSTILE_SITE_KEY` (widget for `*.geraimitra.com` + `geraiexpress.com`), `CF_SAAS_ZONE_ID` (`geraimitra.com` zone id).
 
 ## 2. Zone setup — spec 11 §2 steps 1–6
@@ -41,7 +43,7 @@ approval flow (which would also call the live Partner API):
 1. `deploy-production.yml` (manual, protected environment) on the verified SHA; D1 migrations; `pnpm do:migrate --env production`.
 2. `pnpm probes --env production` → all 6 probes PASS (brand, app, owner, hooks, minisite-probe, relay).
 3. Alert drill: `curl -X POST -H "authorization: Bearer $OPS_TOKEN" https://owner.geraiexpress.com/internal/ops/alert-drill`
-   → the owner confirms 15 `[DRILL]` messages arrive (one per alert key of OBSERVABILITY.md); record in `BUILD-LOG.md`.
+   → the owner confirms 17 `[DRILL]` messages arrive (one per entry of `ALERT_KEYS` in `apps/worker/src/ops/alert-drill.ts`); record in `BUILD-LOG.md`.
 4. Synthetic breach per check (staging first): `pnpm probes --env production --force-fail app-health` (probe alert);
    the operator checks are proven by `apps/worker/test/telemetry/operator-checks.test.ts` (each threshold ± 1).
 5. `RELEASE.md` snapshot → `production-gate` (docs/WORKFLOW.md §8).
@@ -107,6 +109,8 @@ so a rollback means `wrangler delete` of the env Worker after owner approval.
 | 2026-11-19 | DEC-249 slim home, Raka 3D counter, courier marquee, geometric `GE` logo, dev velocity (`6d79d70`, Sol R5 APPROVE) | — | `26bc21eb-d95c-4939-bd13-e7b49ee5a63f` | `ff3d1957-6c5b-42df-adef-61c006b424a5` |
 | 2026-11-19 | DEC-250 split-studio auth (app + owner), stacked semantic tables + bento track at 390, mini-site unit toggle (`cd28823`, Sol R5 APPROVE) | — | `4777f25b-9760-4407-aa0d-f7ef7577e5b5` | `c2b8b772-ce20-40af-9684-a74024748e2c` |
 | 2026-11-23 | Dedicated Cloudflare account migration (`f235ecdb5517054b386c6d413569a103`), DEC-251/253 live, apex Email Sending `noreply@geraiexpress.com` | `0000`–`0019` (fresh APAC D1 + probe DO v24) | `605615b7-6212-42c1-92d9-57ee2e2af93d` | `c94b8ae9-455f-4f06-8bb1-d6e6cac4f654` |
+| 2026-11-23 | `6106b91` — Partner API v2.0.0 alignment + Super Admin `Integrasi Mengantar` UI + Coolify `partner-relay` `RELAY VERIFY PASS 6/6` | `0020` applied (staging + prod) | `daebcae9` | `9c469926` |
+| 2026-11-25 | `e43804d` — Zero-downtime lazy DO forward migration (DEC-254) + map pinpoint + demo account + contact history + seller-key sync + `Tarik & Terapkan` | `0000`–`0020` current; tenant `0025` applied via `pnpm do:migrate` (staging 2/2, prod 4/4 on DO v25) | `pnpm deploy:staging` PASS (5/5 probes) | `46aeac71-33c4-4258-a4d7-2b21edea8792` (`pnpm deploy:production` PASS, 6/6 probes) |
 
 ## 6. Live record — 2026-11-23 (dedicated `GeraiExpress` account `f235ecdb5517054b386c6d413569a103`)
 

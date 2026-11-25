@@ -57,6 +57,10 @@ journal lives in the DO while the shipment row lives in D1.
    Unprovisioned objects (`version = 0`), objects in `recovery`, and objects ahead of code (`version > TENANT_SCHEMA_VERSION`)
    still refuse. A failing step rolls back alone and enters `recovery` for that tenant only; the post-deploy
    `pnpm do:migrate` pipeline sweeps idle objects and reconciles D1 (`tenant_schema_versions`).
+   *(Rollback rule, DEC-255:)* Because healthy objects upgrade on their first request after a deploy and refuse code
+   older than their schema with `TENANT_NOT_READY`, **releases that bump `TENANT_SCHEMA_VERSION` are roll-forward only**
+   (fix forward and redeploy rather than running `wrangler rollback`); code-only releases without a tenant migration
+   remain safe to roll back with `wrangler rollback`.
 5. **Analytics across tenants** (Super Admin `Ringkasan`) read per-tenant daily totals that each object recomputes and
    pushes to D1 (`tenant_daily_stats`, absolute values keyed by `(tenant_id, day)` with a version), not live fan-out
    queries.

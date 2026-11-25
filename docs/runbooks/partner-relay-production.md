@@ -1,7 +1,9 @@
 # Runbook — Partner relay in production (TASK-601, DEC-219, DEC-232, DEC-235, spec 10 §3–7)
 
 Every step below that touches Vultr, Coolify, Cloudflare DNS/WAF or Mengantar is a **production action: the owner
-approves each one** before it runs. Nothing here has been executed against production yet.
+approves each one** before it runs. `BUILD-LOG.md` (2026-11-23) records the relay rolled out on `99ribu-prod` with
+`RELAY VERIFY PASS (6 checks)` and `relay-health` passing; `STATUS.md` still lists TASK-601 as awaiting the owner, so
+the owner has to close or correct that row.
 
 ## 0. Inputs
 
@@ -32,7 +34,8 @@ approves each one** before it runs. Nothing here has been executed against produ
 
 1. New application `partner-relay` from this repository, build pack Dockerfile, base directory `infra/partner-relay`,
    commit pinned to the verified SHA. Domain `https://relay.geraiexpress.com`; port 8080; **no published host ports**.
-2. Environment: `RELAY_SECRET`, `MENGANTAR_PARTNER_ORIGIN` (production Partner origin confirmed with Mengantar),
+2. Environment: `RELAY_SECRET`, `MENGANTAR_PARTNER_ORIGIN` (production: `https://app.mengantar.com` — `api-public.mengantar.com` answers Partner
+   routes with a 301 and the relay never follows redirects),
    `PORT=8080`. Leave `RELAY_SECRET_PREVIOUS` empty except during a rotation.
 3. Resource limits: memory 128 MB; read-only root filesystem; drop all capabilities; non-root user (`node`);
    restart `unless-stopped`. Own project `geraiexpress-relay`, never inside the `99ribu` project.
@@ -73,6 +76,9 @@ reachable.
 ## 6. Operations
 
 - Secret rotation, IP change and disaster procedures: spec 10 §7 (unchanged). Rotation: set `RELAY_SECRET_PREVIOUS`
-  = old, `RELAY_SECRET` = new, redeploy relay, update the Worker secret, remove `RELAY_SECRET_PREVIOUS` after 10 min.
+  = old, `RELAY_SECRET` = new, redeploy relay, update the Worker secret, remove `RELAY_SECRET_PREVIOUS` after 10 min. Since control `0020` the
+  Worker reads relay URL, relay secret, Partner id and Partner secret from D1 `platform_partner_config` first
+  (Super Admin `Sistem & Audit › Integrasi Mengantar`) and only then from the Worker var or secret: when an override
+  is saved there, rotate the value there, otherwise the Worker-secret update has no effect.
 - Rollback: redeploy the previous image digest in Coolify; the Worker has no direct-fetch fallback in production
   (spec 10 §4.3), so onboarding pauses (`registration_pending`) while the relay is down; counters keep working.

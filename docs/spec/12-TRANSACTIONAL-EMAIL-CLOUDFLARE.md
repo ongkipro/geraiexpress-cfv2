@@ -18,6 +18,8 @@ Transactional only (Cloudflare permits no marketing or bulk mail on this service
 | `email_change_otp` | `Akun Saya › Ganti Email` | new email |
 | `application_status` | Super Admin approves/rejects an outlet application | owner email |
 | `security_alert` | new-device login of an owner or Super Admin | account email |
+| `application_submitted` | an outlet application is submitted or resubmitted (control `0020`) | applicant email |
+| `admin_new_application` | the same event | each active Super Admin (at most 10) |
 
 No receipts, shipment updates or promotions by email (receipts go to WhatsApp links; promotions are out of scope).
 
@@ -38,10 +40,14 @@ No receipts, shipment updates or promotions by email (receipts go to WhatsApp li
 1. The auth flow writes an `email_outbox` row in D1 (`id`, `template_id`, `to_email_hash`, `to_email_encrypted`,
    `payload_encrypted` — AES-256-GCM with `KEK_SECRET`, holding the rendered variables including the plain OTP or
    invite link so a retry after a crash can rebuild the message —, `expires_at` (= the OTP/link expiry), `state`,
-   `attempts`, `next_attempt_at`, `created_at`, `sent_at`, `provider_message_id`, `last_error_code`) in the same D1
-   batch as the OTP hash/invite. `payload_encrypted` is nulled on `sent`, on terminal failure and at `expires_at`.
-2. One function `sendMail(env, message)` (the only caller of `env.EMAIL.send`) builds subject, `text` **and** `html`
-   from the Indonesian template, sends, and records the result.
+   `attempts`, `next_attempt_at`, `lease_until`, `created_at`, `sent_at`, `provider_message_id`, `last_error_code`) in
+   the same D1 batch as the OTP hash/invite. `state` is `queued | sending | sent | failed | expired | suppressed`.
+   `payload_encrypted` and `to_email_encrypted` are nulled on every terminal state (`sent`, `failed`, `expired`,
+   `suppressed`).
+2. `dispatchDue(env)` (`apps/worker/src/email/mailer.ts`) claims due rows with a 60 s lease — a row left `sending`
+   by a crash is claimed again once its lease expires — and `sendOne` (the only caller of `env.EMAIL.send`) builds
+   subject, `text` **and** `html` from the Indonesian template, sends, and records the result. It runs from the `*/5`
+   Cron and through `waitUntil` right after an enqueue.
 3. Retry: transient errors back off (30 s, 2 min, 5 min; max 4 attempts) and **never after `expires_at`** (an expired
    OTP is not sent; the user requests a new one). `E_RECIPIENT_SUPPRESSED` and hard bounces are terminal and shown as
    `Email tidak dapat menerima pesan. Periksa alamat email.`

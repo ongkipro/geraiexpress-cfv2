@@ -3,7 +3,7 @@
 Every engineer and AI agent working in `geraiexpress-cfv2` must follow these rules.
 
 ## 1. Authority Order
-1. Executed code, SQL migrations, and passing automated tests on disk (once M1 begins).
+1. Executed code, SQL migrations, and passing automated tests on disk.
 2. `DECISIONS.md` and `docs/adr/ADR-*.md` (explicit owner decisions).
 3. `ARCHITECTURE.md` and domain specifications in `docs/spec/*.md`.
 4. `PRD.md` and UI/print specifications in `docs/visual/*.md`.
@@ -37,7 +37,7 @@ How to change, verify, review and release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md
    - **Never emit or serve `*.map` source maps** in production client assets.
    - Never bundle `MENGANTAR_PARTNER_SECRET`, seller API keys (note: Mengantar Public API places the seller key in the URL path — **never log, return, or trace raw upstream request URLs**), or `PARTNER_RELAY_SECRET` into client code.
 6. **Indonesian Counter Ergonomics (35–55+ Operators):**
-   - Desk scale per `design/admin-contract.json` (DEC-239, supersedes the 16px comfort scale): desktop 14px body/inputs/table cells, 12px floor for labels and captions, 24px figures and page titles, 36px controls; on phones inputs stay 16px and every control/target stays `>= 44px` (`h-11 md:h-9`). Operators can raise the root size in the account menu (`Ukuran Teks` 100/112/125%) and browser zoom is never locked. High-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menus on Gerai workspace, 5 menus on Super Admin).
+   - Desk scale per `design/admin-contract.json` (DEC-239, supersedes the 16px comfort scale): desktop 14px body/inputs/table cells, 12px floor for labels and captions, 24px figures and page titles, 36px controls; on phones inputs stay 16px and every control/target stays `>= 44px` (`h-11 md:h-9`). Operators can raise the root size in the account menu (`Ukuran Teks` 100/112/125%) and browser zoom is never locked. High-contrast input borders (`>= 3:1`), `tabular-nums` on all prices/weights, and compact navigation (6 menu keys on Gerai workspace, shown as 7 sidebar entries since DEC-241; 5 menus on Super Admin).
 
 ## Example data policy
 

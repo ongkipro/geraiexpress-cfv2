@@ -2,7 +2,14 @@
 
 Owner-approved live steps. Production sign-up stays closed until every check below is recorded in `BUILD-LOG.md`.
 
-## Current state (read-only check, 2026-11-16)
+## Current state
+
+The sending domain is the apex `geraiexpress.com` (`noreply@geraiexpress.com`, the default of
+`pnpm email:deliverability`); `docs/runbooks/production-zones.md` §6 records it onboarded on 2026-11-23 with selector
+`cf-bounce` and SPF/DKIM/DMARC passing. The check below is the earlier read-only run against the subdomain that was
+planned at the time and is kept as history.
+
+### Read-only check, 2026-11-16 (superseded)
 
 `pnpm email:deliverability --domain mail.geraiexpress.com`:
 

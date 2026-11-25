@@ -35,7 +35,8 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
    - State-changing requests on `/api/app/*` and `/api/owner/*` enforce Hono `Origin` / CSRF verification.
    - Programmatic `/api/v1/*` and `/mcp` routes accept **`Authorization: Bearer` tokens exclusively** and ignore browser cookies completely.
 3. **Envelope Encryption for Mengantar Credentials (`AES-256-GCM`):**
-   - Seller `apiKey` and `webhookSecret` values and the tenant's `encrypted_npwp` (DEC-218) are encrypted with `AES-256-GCM` (random 96-bit IV per ciphertext) using Worker secret `KEK_SECRET` before they are written to the tenant's `GeraiVaultDO` storage (ADR-0006); the platform's own NPWP in `platform_legal_profile` (D1) uses the same encryption.
+   - Seller `apiKey` and `webhookSecret` values and the tenant's `encrypted_npwp` (DEC-218) are encrypted with `AES-256-GCM` (random 96-bit IV per ciphertext) using Worker secret `KEK_SECRET` before they are written to the tenant's `GeraiVaultDO` storage (ADR-0006); the platform's own NPWP in `platform_legal_profile` (D1) uses the same encryption, and so do the platform's Mengantar Partner secret and relay secret when a Super Admin saves them in D1 `platform_partner_config` (control `0020`; responses carry only a masked four-character tail).
+   - **Read-only demo account (`apps/worker/src/demo/constants.ts`, DEC-255):** one shared login bound to reserved tenant `demo` (intentionally enabled in production as a public read-only showcase), which has its own isolated `GeraiVaultDO`, simulated rates and no live seller key. The server refuses every non-`GET` on `/api/app/*` with `403 DEMO_READ_ONLY` except login, logout, `POST /quotes` and a non-recording `POST /print`; the demo mini-site refuses `Kirim dari Rumah` submissions; `POST /api-keys` is refused and `/api/v1` + `/mcp` reject any `gx_live_` key belonging to `demo`; `seed-demo` refuses `409 DEMO_SLUG_CONFLICT` if slug `demo` belongs to any non-demo tenant. Login lockout and new-device alerts are skipped for this account and a password-reset request for it is refused. The workspace shows a `Mode Demo (Hanya Baca)` banner. The demo credentials are constants in the repository, so the account must never hold real data.
    - Plaintext keys are never returned to any UI or API response and are redacted from all upstream URL logs.
 
 ---
@@ -44,7 +45,7 @@ This contract enforces role permissions, Cloudflare Worker cryptography, Indones
 
 Competitor reviews document widespread fraud where COD buyers receive scam WhatsApp transfer requests because public tracking endpoints expose recipient names, phones, or street addresses.
 
-In `geraiexpress-cfv2`, `GET /api/public/track/:code` **truncates PII on the server before serialization**:
+In `geraiexpress-cfv2`, public tracking is server-rendered on the mini-site (`GET /lacak?q=<INV or AWB>`, unlock `POST /lacak/:slug/buka`) and offered to agents through the public MCP tool `track_public_shipment_privacy_safe`; no `/api/public/*` JSON family exists (every `/api/` path on a tenant host is a 404, ADR-0002). Both paths **truncate PII on the server before rendering or serialization**:
 - **Returned to anonymous visitors:** `INV` slug, AWB, courier & service name, current status badge, hub scan timeline (timestamp + hub city), origin city → destination district/city, ETA, and outlet help contact (omitted when `RESELLER_DROPSHIP` preset is active, showing reseller store name instead).
 - **Masked on server:** sender and recipient names reduced to initials (`Rina Kartika` → `R*** K******`).
 - **Physically omitted from anonymous JSON:** sender/recipient/driver phone numbers, street/RT/RW lines, COD Rupiah amount, item descriptions, and POD photo URLs.

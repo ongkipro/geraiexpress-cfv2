@@ -19,7 +19,7 @@
 | Partner API production refuses any source IP not on the partner allowlist: `403 IP_NOT_ALLOWED`, "whatever it is signed with". | **Observed** | Mengantar Partner docs `#content-get-started`, `#content-authentication` (operations contract §1, accessed 2026-10-28) |
 | Sandbox may not enforce the allowlist. | **Observed** | same |
 | "Tell Mengantar before you change hosting or add a server." | **Observed** | same |
-| Public API production reads succeeded from a non-allowlisted machine. | **Observed** (2026-10-14) | `geraiexpress-mengantar-public-api.md` |
+| Public API production reads succeeded from a non-allowlisted machine. | **Observed** (2026-10-14) | device-local research note `geraiexpress-mengantar-public-api.md` |
 | Public API label generation lists "Request IP is not allowed" as a 403 cause; whether it applies to Partner-created seller keys or to writes is **unknown**. | **Unknown — Q23** | Public docs `#content-label-generation-access` |
 | Mengantar webhooks come from no fixed IP; our receiver cannot allowlist them by IP. | **Observed** | Public docs `#content-webhook` |
 | Cloudflare Workers egress from shared, changing addresses. A dedicated Cloudflare egress IP needs the Zero Trust Enterprise add-on. | **Documented** | Cloudflare dedicated egress docs (research note §2) |
@@ -130,8 +130,11 @@ signature: <Mengantar Partner SHA-256 signature, produced by the Worker>
    The partner-wide 60/min and 1,000 registrations/day limits are enforced in the Worker by `PartnerQuotaDO`.
 5. **Logging:** method, target path, upstream status, latency, `X-Relay-Id`. **Never** bodies or headers:
    `api-key` responses contain seller API keys and callback secrets.
-6. **Errors:** relay refusals use `relay_*` codes (`relay_auth_failed`, `relay_target_denied`, `relay_duplicate`,
-   `relay_upstream_timeout`) so they are never confused with Mengantar's `403 IP_NOT_ALLOWED`.
+6. **Errors:** relay refusals use `relay_*` codes so they are never confused with Mengantar's `403 IP_NOT_ALLOWED`:
+   `relay_auth_failed`, `relay_target_denied`, `relay_duplicate`, `relay_upstream_timeout`, `relay_upstream_error`,
+   `relay_not_found`, `relay_body_too_large` (413), `relay_response_too_large`, `relay_busy` (503 while four calls are
+   in flight), and from the HTTP wrapper `relay_bad_request` and `relay_internal_error`. An upstream answer is passed
+   back with its `content-type` and, when present, its `Retry-After` header.
 7. **Health:** `GET /healthz` → `200 {"ok":true}` without calling Mengantar.
 8. **Edge protection:** a Cloudflare WAF rate-limiting rule on `relay.geraiexpress.com` (e.g. 30 requests/min
    per IP) blocks brute-force noise before it reaches the relay host. No Cloudflare Access app is needed.
@@ -173,17 +176,28 @@ The VPS polling the Worker for jobs (no public endpoint) was considered and reje
 
 ## 5. Deployment shape (co-hosted on `99ribu-prod`, DEC-235)
 
-- Coolify application `partner-relay`, image pinned by digest, no published host ports (Traefik routes
-  `relay.geraiexpress.com` to the container), `restart: unless-stopped`, memory limit 128 MB, read-only root
+- Coolify application `partner-relay`, image pinned by digest, no public host port (Traefik routes
+  `relay.geraiexpress.com` to the container; the repository's `compose.yaml` publishes the port on host loopback only,
+  `127.0.0.1:8080`), `restart: unless-stopped`, memory limit 128 MB, read-only root
   filesystem, non-root user.
 - Relay env (Coolify): `RELAY_SECRET`, optional `RELAY_SECRET_PREVIOUS` (rotation only), `MENGANTAR_PARTNER_ORIGIN`. Worker secrets: `PARTNER_RELAY_URL`,
-  `PARTNER_RELAY_SECRET` (same value as `RELAY_SECRET`), `MENGANTAR_PARTNER_ID`, `MENGANTAR_PARTNER_SECRET`.
+  `PARTNER_RELAY_SECRET` (same value as `RELAY_SECRET`), `MENGANTAR_PARTNER_SECRET`; `MENGANTAR_PARTNER_ID` is a plain
+  Worker var.
+- **Super Admin overrides (control `0020`, `apps/worker/src/mengantar/factory.ts`):** when the D1 singleton
+  `platform_partner_config` holds a value, it replaces the Worker var or secret for that field: Partner id, Partner
+  secret, relay URL and relay secret (the two secrets encrypted with `KEK_SECRET`; only a four-character tail is ever
+  returned). Edited in `Sistem & Audit › Integrasi Mengantar` (`owner_recent`, audited, field names only). So the
+  Partner Secret can now live in D1 as ciphertext, not only in the Worker secret store. In relay transport the
+  upstream host is decided by the relay's own `MENGANTAR_PARTNER_ORIGIN`, not by the Worker: production points it at
+  `https://app.mengantar.com`, because `api-public.mengantar.com` answers Partner routes with a 301 and the relay
+  never follows redirects (§4.3).
 - DNS: `relay.geraiexpress.com` A record, proxied, to `149.28.129.53`; covered by the existing
   `*.geraiexpress.com` Origin CA certificate; zone SSL mode Full (strict).
 - `apps/worker` binds explicit hostnames only (`app.`, `owner.`, `hooks.`, apex, `*.geraimitra.com`), **never**
   `*.geraiexpress.com/*`, so a Worker `fetch` to `relay.` reaches the relay host instead of the Worker itself.
 - Traefik access logs for this router stay at the default (no headers, no bodies).
-- Size target: ≤ 80 lines of Node or Go, zero runtime dependencies beyond the standard library.
+- Size: Node, about 100 lines in two files (`relay.mjs` 70, `server.mjs` 32), zero runtime dependencies beyond the
+  standard library.
 
 ---
 

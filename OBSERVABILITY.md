@@ -1,7 +1,7 @@
 # Observability Contract — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Updated: 2026-11-15
-Status: REQUIRED (planned; no host is deployed yet — every probe below becomes mandatory when its host first goes live)
+Updated: 2026-11-25
+Status: REQUIRED (staging and production hosts are deployed, `docs/runbooks/production-zones.md` §5.1; every probe below is mandatory)
 
 Probe format:
 
@@ -24,7 +24,7 @@ Run: `pnpm probes --env <local|staging|production> [--port 8787]` (exit 1 on any
 to `ALERT_WEBHOOK_URL` (the owner's chat incoming webhook) or prints it with `--alert-dry-run`; `--force-fail <name>`
 is the synthetic-breach drill.
 
-**Operator checks (TASK-602):** `apps/worker/src/telemetry/checks.ts` evaluates every row of the table below on the `*/5` cron from D1 and each tenant object's read-only `healthSnapshot` (≤ 200 tenants per tick); Public API outcomes are counted per tenant/minute in D1 `public_api_events` (no key or URL) and `IP_NOT_ALLOWED` alerts at once. Alert keys: `issue_reconciliation_rate`, `issue_failed_streak`, `webhook_inbox_age`, `finance_sync_age`, `public_api_ip_not_allowed`, `public_api_auth_spike`, `public_api_issue_volume_spike`, `relay_down`, `discount_overdue`, `discount_selisih.*`, `email_failure_rate`, `hostname_quota`, `hostname_probe.*`, `tenant_recovery`, `tenant_backup_failed`. Drill: `POST /internal/ops/alert-drill` (OPS_TOKEN) sends one `[DRILL]` message per key (`drill.` prefix, never suppresses a real alert).
+**Operator checks (TASK-602):** `apps/worker/src/telemetry/checks.ts` evaluates every row of the table below on the `*/5` cron from D1 and each tenant object's read-only `healthSnapshot` (≤ 200 tenants per tick); Public API outcomes are counted per tenant/minute in D1 `public_api_events` (no key or URL) and `IP_NOT_ALLOWED` alerts at once. Alert keys: `issue_reconciliation_rate`, `issue_failed_streak`, `webhook_inbox_age`, `finance_sync_age`, `public_api_ip_not_allowed`, `partner_api_ip_not_allowed`, `public_api_auth_spike`, `public_api_issue_volume_spike`, `relay_down`, `discount_overdue`, `discount_selisih.*`, `email_failure_rate`, `email_bounce_rate`, `hostname_quota`, `hostname_probe.*`, `tenant_recovery`, `tenant_backup_failed`. Drill: `POST /internal/ops/alert-drill` (OPS_TOKEN) sends one `[DRILL]` message per key (`drill.` prefix, never suppresses a real alert).
 
 **Alert channel (TASK-110):** the Worker's `*/5` cron runs the operator checks in `apps/worker/src/telemetry/checks.ts`
 and sends each alert once per 30 min per key (`alert_state` in D1) to the `ALERT_WEBHOOK_URL` secret; without it the
@@ -44,7 +44,7 @@ hosts of spec 07 §7.
 | Are provider statuses fresh? | webhook inbox age (oldest `received` row), applied events per minute, polling floor lag per tenant bucket | oldest `received` > 15 min → alert |
 | Is money in sync? | finance sync last success age, `Selisih Sync` and `quote_drift` counts, `provider_status_conflict` count | last sync > 60 min for any active tenant |
 | Is a seller key being misused? | `401/403` per tenant on Public API, issue volume vs 7-day baseline, any `403 IP_NOT_ALLOWED` on Public API (DEC-232) | any Public API `IP_NOT_ALLOWED`; issue volume > 3× baseline in 1 h |
-| Is the Partner relay usable? | relay `/healthz`, Partner call outcome by route, `409 relay_duplicate`, `403 IP_NOT_ALLOWED` | any `IP_NOT_ALLOWED`, or relay down 5 min |
+| Is the Partner relay usable? | relay `/healthz`, Partner call outcome by route, `409 relay_duplicate`, `403 IP_NOT_ALLOWED`, `403 PARTNER_DEACTIVATED` | any `IP_NOT_ALLOWED`, `PARTNER_DEACTIVATED` (alert key `partner_api_deactivated`, sent from `mengantar/factory.ts`, not part of the drill list), or relay down 5 min |
 | Are discounts applied at Mengantar? | rules by `verification_state` (`belum_diterapkan`, `sesuai`, `selisih`) and age (DEC-230) | `belum_diterapkan` older than 2 × `apply_sla_minutes` (default 2 h) becomes `selisih`; any `selisih` → Super Admin |
 | Can people sign up and log in? | `email_outbox` sent/failed/expired counts, delivery latency, OTP verify success rate | failed or expired > 5 % per hour; bounce > 5 % per day (spec 12 §7) |
 | Are custom domains healthy? | hostnames by state, quota `used/allocated`, probe failures (`hostname.lifecycle` events; D1 `custom_hostname_quota`, `tenant_hostnames.probe_failures`) | quota ≥ 80 % (`hostname_quota`, daily 02:00 WIB); an active host fails its probe 3 polls in a row (`hostname_probe.<host>`, 10-min poll) |

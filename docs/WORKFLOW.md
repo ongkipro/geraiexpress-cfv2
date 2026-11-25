@@ -45,7 +45,7 @@ R3/R4 always get an independent review.
   outcome is read back, never replayed (ADR-0004). No live Mengantar call without explicit sandbox keys.
 - **Tenant scope:** tenant comes only from the verified host + session (spec 11 §3); every RPC to `GeraiVaultDO` is
   addressed by that tenant id, never by an id from the request body.
-- **UI:** Bahasa Indonesia labels and errors; comfort size contract (`design/admin-contract.json`); every submit has a
+- **UI:** Bahasa Indonesia labels and errors; desk-scale size contract (`design/admin-contract.json`, DEC-239); every submit has a
   pending state and duplicate-click guard; money/destructive actions confirm.
 - **No public source maps**; no secret literals in `dist/` (bundle audit).
 
@@ -57,7 +57,7 @@ R3/R4 always get an independent review.
 | Worker, DO, D1, Queue, Cron change | `pnpm test:worker <file>` (Workers Vitest integration; DO RPC + SQLite state; alarms via test helpers) |
 | Tenant migration | `pnpm test:worker test/migrations/tenant.test.ts` (fresh object + upgrade from previous version) |
 | Host/cookie/auth change (R4) | the isolation suite `test/isolation/**` (spec 11 §8) |
-| UI change | focused Playwright spec at 390 and 1366, `dotuiux check --surface admin`, `admin-geometry.mjs` with `design/admin-contract.json`; look at the screenshot |
+| UI change | focused Playwright spec at 390 and 1280 (`--project phone-390`, `--project desktop-1280`), `dotuiux check --surface admin`, `admin-geometry.mjs` with `design/admin-contract.json`; look at the screenshot |
 | Before merge | `pnpm check` (typecheck + lint + unit + worker + bundle audit) |
 | Milestone boundary | ONE integrated run (§5) |
 
@@ -78,6 +78,8 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
 1. Clean tracked tree on the release branch; `delivery-ledger start` with the checks declared up front
    (`--require-check typecheck --require-check unit --require-check worker --require-check migrations
    --require-check isolation --require-check e2e`).
+   `pnpm gate <TASK-id>` (`scripts/ci/integrated-gate.sh`) then runs and records nine gates in this order: typecheck,
+   lint, unit, build, worker, migrations, isolation, security, e2e.
 2. Gates run **sequentially, fail-fast**; after a failure later gates are reported NOT RUN, never PASS.
 3. A gate passes only when the ledger prints `RECORDED <gate>=PASS`, not when the recording command exits 0.
 4. Evidence goes to a fresh immutable directory per run; never overwrite or relabel evidence from another head.
@@ -91,7 +93,8 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
   implementer, given a diff artifact for the range. On this project the owner names the reviewer.
 - A REQUEST_CHANGES review is answered with fixes and a re-review of the delta. A fix wave lists fixed, skipped (with
   reason) and deferred findings; loosened assertions are called out.
-- Reviews are archived in `docs/review/<date>-<reviewer>-round<n>-review.md`.
+- Reviews are archived in `docs/review/<dec-or-task>/R<n>-<reviewer>.md` with a `DISPOSITION.md` beside them (earlier
+  rounds: `docs/review/<date>-<reviewer>-round<n>-review.md`).
 
 ## 7. Parallel work
 
@@ -115,8 +118,14 @@ Heavy runs (worker pool, Playwright, builds) go through the device's shared-reso
 - Release order per milestone: staging Worker (`env.staging`) → smoke (`/healthz` on every host, one synthetic tenant
   flow) → owner approval → production deploy → `OBSERVABILITY.md` checks → `RELEASE.md` snapshot
   (`delivery-ledger snapshot-release`) → `production-gate`.
-- Rollback: `wrangler rollback` to the previous version; tenant migrations are expand-only within a release, so code
-  rollback never needs a schema rollback.
+- Rollback (DEC-254, DEC-255):
+  - **Code-only releases (no `TENANT_SCHEMA_VERSION` bump):** `wrangler rollback` to the previous Worker version is
+    safe; D1 control migrations remain expand-only.
+  - **Releases that bump `TENANT_SCHEMA_VERSION`:** **roll-forward only.** Under DEC-254, healthy tenant objects
+    lazy-upgrade on their first request after deploy and refuse code older than their schema with `TENANT_NOT_READY`;
+    rolling the Worker back across a tenant migration takes already-upgraded gerai offline until newer code is
+    redeployed. Fix forward and redeploy instead. `scripts/deploy/deploy.mjs` warns before deploy whenever a tenant DO
+    migration is pending.
 
 ## 9. Known traps
 
