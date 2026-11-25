@@ -28,9 +28,9 @@ describe("Demo Account", () => {
     expect(seed1.status).toBe(201)
     const d1 = ((await seed1.json()) as { data: { shipments: number; senders: number; recipients: number; slug: string } }).data
     expect(d1.slug).toBe("demo")
-    expect(d1.shipments).toBe(42)
-    expect(d1.senders).toBe(12)
-    expect(d1.recipients).toBe(24)
+    expect(d1.shipments).toBe(68)
+    expect(d1.senders).toBe(24)
+    expect(d1.recipients).toBe(32)
 
     // Re-running seed stays clean and idempotent.
     const seed2 = await SELF.fetch(`${OWNER}/internal/ops/seed-demo`, {
@@ -75,18 +75,57 @@ describe("Demo Account", () => {
     expect(dash.data.topSenders.length).toBeGreaterThanOrEqual(3)
 
     const todayDash = ((await (await get("/dashboard?periode=hari-ini")).json()) as { data: { kind: string; data: { kpi: { shipments: number } } } }).data
-    expect(todayDash.data.kpi.shipments).toBe(5)
+    expect(todayDash.data.kpi.shipments).toBe(8)
 
-    const list = ((await (await get("/shipments?tab=semua")).json()) as { data: { items: Array<{ slug: string; print_count: number }> } }).data
-    expect(list.items.length).toBeGreaterThanOrEqual(20)
-    const senders = ((await (await get("/contacts/senders")).json()) as { data: { items: unknown[] } }).data
-    expect(senders.items.length).toBe(12)
-    const recipients = ((await (await get("/contacts/recipients")).json()) as { data: { items: unknown[] } }).data
-    expect(recipients.items.length).toBe(24)
-    const returns = ((await (await get("/returns")).json()) as { data: { open: unknown[]; returned: unknown[] } }).data
-    expect(returns.open.length).toBeGreaterThanOrEqual(2)
+    // 20/page pagination works across shipments (>50 in 30d => 3 pages), senders (24 => 2 pages), recipients (32 => 2 pages).
+    const list = ((await (await get("/shipments?tab=semua&page=1&limit=20")).json()) as {
+      data: { items: Array<{ slug: string; print_count: number }>; total: number; page: number; totalPages: number }
+    }).data
+    expect(list.items.length).toBe(20)
+    expect(list.total).toBeGreaterThanOrEqual(50)
+    expect(list.totalPages).toBeGreaterThanOrEqual(3)
+
+    const senders = ((await (await get("/contacts/senders?page=1&limit=20")).json()) as { data: { items: Array<{ id: string; shipments_count: number }>; total: number; totalPages: number } }).data
+    expect(senders.items.length).toBe(20)
+    expect(senders.total).toBe(24)
+    expect(senders.totalPages).toBe(2)
+
+    // Contact history endpoint returns actual shipments & rich checkpoint text for the top reseller sender.
+    const senderHist = ((await (await get("/contacts/senders/demo-snd-01/shipments?page=1&limit=20")).json()) as {
+      data: { items: Array<{ slug: string; latest_event_text: string | null }>; summary: { total: number } }
+    }).data
+    expect(senderHist.summary.total).toBeGreaterThanOrEqual(5)
+    expect(senderHist.items[0]!.latest_event_text).toBeTruthy()
+
+    const recipients = ((await (await get("/contacts/recipients?page=1&limit=20")).json()) as { data: { items: unknown[]; total: number; totalPages: number } }).data
+    expect(recipients.items.length).toBe(20)
+    expect(recipients.total).toBe(32)
+    expect(recipients.totalPages).toBe(2)
+
+    const returns = ((await (await get("/returns")).json()) as { data: { open: unknown[]; incoming: unknown[]; returned: unknown[] } }).data
+    expect(returns.open.length).toBeGreaterThanOrEqual(3)
+    expect(returns.incoming.length).toBeGreaterThanOrEqual(2)
+    expect(returns.returned.length).toBeGreaterThanOrEqual(2)
+
     const exc = ((await (await get("/exceptions?bucket=tidak_bergerak")).json()) as { data: { rows: unknown[] } }).data
-    expect(exc.rows.length).toBeGreaterThanOrEqual(2)
+    expect(exc.rows.length).toBeGreaterThanOrEqual(3)
+
+    const pickupHist = ((await (await get("/pickup/history")).json()) as { data: { batches: Array<{ id: string }> } }).data
+    expect(pickupHist.batches.length).toBe(4)
+    expect((await get(`/pickup/${pickupHist.batches[0]!.id}`)).status).toBe(200)
+    expect((await get(`/pickup/${pickupHist.batches[0]!.id}/surat-jalan.pdf`)).status).toBe(200)
+
+    const bulkHist = ((await (await get("/bulk")).json()) as { data: { items: Array<{ id: string }> } }).data
+    expect(bulkHist.items.length).toBe(3)
+    expect((await get(`/bulk/${bulkHist.items[0]!.id}`)).status).toBe(200)
+
+    const finance = ((await (await get("/finance")).json()) as { data: { mutations: unknown[]; profits: unknown[]; discrepancies: unknown[] } }).data
+    expect(finance.mutations.length).toBeGreaterThanOrEqual(35)
+    expect(finance.profits.length).toBeGreaterThanOrEqual(50)
+    expect(finance.discrepancies.length).toBe(2)
+
+    const notif = ((await (await get("/notifications")).json()) as { data: { items: unknown[] } }).data
+    expect(notif.items.length).toBe(24)
 
     // 4. Simulated Cek Ongkir works without touching live Mengantar.
     const quoteRes = await post("/quotes", { destinationAreaId: "5fc62f5df8f44b34aa4c0d8d", mode: "none", weightGram: 1000 })

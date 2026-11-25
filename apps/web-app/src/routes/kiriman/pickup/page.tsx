@@ -34,12 +34,12 @@ export function PickupQueue() {
   const load = useCallback(() => {
     Promise.all([
       api<{ groups: Group[] }>("/pickup"),
-      api<{ items: HistoryBatch[] }>("/pickup/history").catch(() => ({ items: [] })),
+      api<{ batches: HistoryBatch[] }>("/pickup/history").catch(() => ({ batches: [] })),
     ])
       .then(([d, h]) => {
         setError(null)
         setGroups(d.groups)
-        setHistory(h.items ?? [])
+        setHistory(h.batches ?? [])
       })
       .catch((e) => setError(e instanceof ApiError ? e.body.message : "Antrean pickup tidak dapat dimuat."))
   }, [])
