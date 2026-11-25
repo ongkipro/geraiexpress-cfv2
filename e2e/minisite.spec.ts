@@ -132,7 +132,8 @@ test("Mini-site DEC-247: logo, peta, ekspedisi aktif, kargo + volume, COD tanpa 
     await expect(menu).toBeHidden()
     expect(await page.evaluate(() => scrollY)).toBe(y)
   }
-  expect(await page.locator('link[rel="icon"]').getAttribute("href")).toMatch(/^data:image\/svg\+xml,.*%3EG%3C%2Ftext%3E/)
+  expect(await page.locator('link[rel="icon"]').getAttribute("href")).toMatch(/^\/favicon\.ico\?v=[0-9a-f]{8}$/)
+  expect(await page.locator('link[rel="apple-touch-icon"]').getAttribute("href")).toMatch(/^\/logo\?v=[0-9a-f]{8}$/)
   const strip = page.locator("ul.strip img")
   await expect(strip).toHaveCount(8)
   await expect(page.locator('ul.strip img[src="/couriers/spx.svg"]')).toHaveCount(0)

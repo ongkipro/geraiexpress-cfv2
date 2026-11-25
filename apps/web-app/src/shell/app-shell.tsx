@@ -7,7 +7,7 @@ import { CalloutAlert } from "../components/admin/page"
 import { Button } from "../components/ui/button"
 import { useSidebar } from "../components/ui/sidebar"
 import { api } from "../lib/api"
-import { COUNTER_STATUS_EVENT, useWorkspace } from "./workspace"
+import { COUNTER_STATUS_EVENT, TENANT_LOGO_EVENT, useWorkspace } from "./workspace"
 import { LinkButton } from "../components/admin/link-button"
 import { OperationalStatusIcon } from "../components/admin/operational-status"
 import { loadGeraiOps, opsCacheKey } from "../routes/status/page"
@@ -256,6 +256,16 @@ function CounterStatus({ owner }: { owner: boolean }) {
 
 export function AppShell() {
   const w = useWorkspace()
+  const [logoOverride, setLogoOverride] = useState<{ tenantId: string; url: string | null } | null>(null)
+  useEffect(() => {
+    const onLogo = (ev: Event) => {
+      const url = (ev as CustomEvent<string | null>).detail ?? null
+      setLogoOverride({ tenantId: w.tenant.id, url })
+    }
+    window.addEventListener(TENANT_LOGO_EVENT, onLogo)
+    return () => window.removeEventListener(TENANT_LOGO_EVENT, onLogo)
+  }, [w.tenant.id])
+  const brandLogoUrl = logoOverride?.tenantId === w.tenant.id ? logoOverride.url : (w.tenant.logoUrl ?? null)
   const path = useRouterState({ select: (s) => s.location.pathname })
   const tab = useRouterState({ select: (s) => (s.location.search as { tab?: unknown }).tab })
   const tabStr = typeof tab === "string" ? tab : undefined
@@ -311,6 +321,8 @@ export function AppShell() {
       brand={
         <ShellBrand
           mark={w.tenant.name.slice(0, 1).toUpperCase()}
+          logoSrc={brandLogoUrl ?? undefined}
+          squareLogo
           title={w.tenant.name}
           subtitle={w.tenant.miniSiteHost}
         />

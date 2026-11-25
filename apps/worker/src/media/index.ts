@@ -11,6 +11,8 @@ export const MEDIA_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image
 export const MEDIA_MAX_BYTES = 5 * 1024 * 1024
 /** The outlet QRIS shown on the customer display: an image of at most 2 MB (spec 03 §5.4). */
 export const QRIS_MAX_BYTES = 2 * 1024 * 1024
+/** Outlet 1:1 square icon/logo (mini-site logo + favicon, workspace, customer display, thermal label): max 2 MB. */
+export const LOGO_MAX_BYTES = 2 * 1024 * 1024
 export const SIGNED_URL_TTL_MS = 10 * 60_000
 
 export const mediaKeyFor = (tenantId: string, purpose: MediaPurpose, id: string, ext: string) => `t/${tenantId}/${purpose}/${id}.${ext}`

@@ -521,13 +521,17 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
 }
 
 /** Sidebar brand: rounded-xl mark + name + secondary line; only the mark on the icon rail. */
-export function ShellBrand({ title, subtitle, mark, logoSrc }: { title: string; subtitle: ReactNode; mark: string; logoSrc?: string }) {
+export function ShellBrand({ title, subtitle, mark, logoSrc, squareLogo = false }: { title: string; subtitle: ReactNode; mark: string; logoSrc?: string; squareLogo?: boolean }) {
   return (
     <div className="flex h-12 items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
       {/* Console: the GeraiExpress logo (DEC-244), frameless and sized to the two-line title stack (DEC-246). Gerai
-          workspace: the tenant's own initial (white-label, DEC-202). */}
+          workspace: the tenant's own 1:1 uploaded icon/logo or initial monogram (white-label, DEC-202). */}
       {logoSrc ? (
-        <img src={logoSrc} alt="" aria-hidden className="h-7 w-auto shrink-0 group-data-[collapsible=icon]:h-5" />
+        squareLogo ? (
+          <img src={logoSrc} alt="" aria-hidden className="size-9 shrink-0 rounded-xl border border-slate-200/80 bg-white object-cover group-data-[collapsible=icon]:size-8" />
+        ) : (
+          <img src={logoSrc} alt="" aria-hidden className="h-7 w-auto shrink-0 group-data-[collapsible=icon]:h-5" />
+        )
       ) : (
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground group-data-[collapsible=icon]:size-8">
           {mark}

@@ -3,7 +3,7 @@ import { createContext, useContext } from "react"
 // Workspace session as served by `GET /api/app/workspace` (already projected per role by the server).
 export interface Workspace {
   user: { id: string; name: string; email: string }
-  tenant: { id: string; name: string; slug: string; miniSiteHost: string }
+  tenant: { id: string; name: string; slug: string; miniSiteHost: string; logoUrl?: string | null }
   role: "gerai_admin" | "cashier"
   menus: string[]
   badges: { kiriman: number; notifications: number }
@@ -33,6 +33,8 @@ export type TextSize = (typeof TEXT_SIZES)[number]["id"]
 /** The sidebar counter status (shift, label format) listens for this after a mutation that changes it. */
 export const COUNTER_STATUS_EVENT = "gx:counter-status"
 export const refreshCounterStatus = () => window.dispatchEvent(new Event(COUNTER_STATUS_EVENT))
+export const TENANT_LOGO_EVENT = "gx:tenant-logo"
+export const refreshTenantLogo = (url: string | null) => window.dispatchEvent(new CustomEvent(TENANT_LOGO_EVENT, { detail: url }))
 export const TEXT_SIZE_EVENT = "gx:text-size"
 
 export function applyTextSize(size: TextSize) {

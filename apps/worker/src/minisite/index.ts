@@ -22,7 +22,7 @@ import { AppError } from "../http/envelope"
 import { parseQuoteInput, runQuote } from "../pricing/quote/service"
 import { medals } from "../pricing/quote/engine"
 import { activeCatalog, mergeCouriers } from "../couriers/catalog"
-import { AREA_SCRIPT, COD_SCRIPT, COURIER_KEYS, COURIER_LOGOS, courierImg, onTenantZone, page, rp, turnstile, TURNSTILE_SCRIPT, type Shell } from "./html"
+import { AREA_SCRIPT, COD_SCRIPT, COURIER_KEYS, COURIER_LOGOS, courierImg, initials, onTenantZone, page, rp, turnstile, TURNSTILE_SCRIPT, type Shell } from "./html"
 
 // `canonicalHost` = the gerai's custom domain once active and probed, else `<slug>.<zone>` (spec 11 §5 step 6).
 type Ctx = { tenantId: string; tenantSlug: string; host: string; canonicalHost?: string }
@@ -88,7 +88,7 @@ async function enabledCouriers(env: Env, tenantId: string): Promise<string[]> {
     .map((c) => c.courierCode)
 }
 
-const dimField = (name: string, label: string, v: Record<string, string>) => `<input id="${name}" name="${name}" value="${e(v[name] ?? "")}" inputmode="numeric" pattern="[0-9]{1,3}" data-msg-invalid="Isi ukuran dalam cm, 1–300." aria-label="${label}" placeholder="${label[0]}">`
+const dimField = (name: string, label: string, v: Record<string, string>) => `<input id="${name}" name="${name}" value="${e(v[name] ?? "")}" inputmode="numeric" maxlength="3" pattern="[0-9]{1,3}" data-msg-invalid="Isi ukuran dalam cm, 1–300." aria-label="${label}" placeholder="${label[0]}">`
 
 async function ongkir(env: Env, c: Ctx, request: Request): Promise<Response> {
   const [s, couriers] = await Promise.all([
@@ -238,15 +238,15 @@ async function kirimForm(env: Env, c: Ctx, request: Request, url: URL): Promise<
 <label><input type="radio" name="cod" value="0"${v.cod !== "1" ? " checked" : ""}> Non-COD</label><label><input type="radio" name="cod" value="1"${v.cod === "1" ? " checked" : ""}> COD (bayar di tempat)</label></div></fieldset>
 <div class="grid2"><div><h3>Pengirim</h3>
 ${field("senderName", "Nama pengirim", { value: v.senderName, error: errors.senderName, attrs: ' autocomplete="name" required minlength="2" maxlength="80"' })}
-${field("senderPhone", "No. WhatsApp pengirim", { value: v.senderPhone, error: errors.senderPhone, type: "tel", attrs: ' inputmode="tel" autocomplete="tel" required maxlength="20"' })}
+${field("senderPhone", "No. WhatsApp pengirim", { value: v.senderPhone, error: errors.senderPhone, type: "tel", attrs: ' inputmode="tel" autocomplete="tel" required maxlength="20" pattern="[0-9+\\s\\-().]{9,20}" data-msg-invalid="Masukkan nomor HP Indonesia, contoh 0812-3456-7890."' })}
 ${field("senderStore", "Nama toko (opsional)", { value: v.senderStore, hint: "Untuk dropshipper: nama toko yang dicetak di label.", attrs: ' maxlength="60"' })}</div>
 <div><h3>Penerima</h3>
 ${field("recipientName", "Nama penerima", { value: v.recipientName, error: errors.recipientName, attrs: ' required minlength="2" maxlength="80"' })}
-${field("recipientPhone", "No. HP penerima", { value: v.recipientPhone, error: errors.recipientPhone, type: "tel", attrs: ' inputmode="tel" required maxlength="20"' })}
+${field("recipientPhone", "No. HP penerima", { value: v.recipientPhone, error: errors.recipientPhone, type: "tel", attrs: ' inputmode="tel" required maxlength="20" pattern="[0-9+\\s\\-().]{9,20}" data-msg-invalid="Masukkan nomor HP Indonesia, contoh 0857-1234-5678."' })}
 ${areaField("recipient", "Kecamatan penerima", v, errors.recipientAreaId)}
-${field("recipientStreet", "Alamat lengkap", { value: v.recipientStreet, error: errors.recipientStreet, attrs: ' required minlength="5"' })}</div></div>
+<label for="recipientStreet">Alamat lengkap</label><textarea id="recipientStreet" name="recipientStreet" rows="3" required minlength="5" maxlength="200" placeholder="Nama jalan, nomor rumah, RT/RW, patokan"${errors.recipientStreet ? ' aria-invalid="true" aria-describedby="recipientStreet-err"' : ""}>${e(v.recipientStreet ?? "")}</textarea>${errors.recipientStreet ? `<p class="err" id="recipientStreet-err">${e(errors.recipientStreet)}</p>` : ""}</div></div>
 <h3>Paket</h3><div class="grid2"><div>${field("content", "Isi paket", { value: v.content, error: errors.content, attrs: ' required minlength="3" maxlength="60"' })}</div>
-<div>${field("weight", "Perkiraan berat (gram)", { value: v.weight, error: errors.weightGram, attrs: ' inputmode="numeric" required pattern="[0-9]{2,6}" data-msg-invalid="Isi berat dalam gram, contoh 1000."' })}</div></div>
+<div>${field("weight", "Perkiraan berat (gram)", { value: v.weight, error: errors.weightGram, attrs: ' inputmode="numeric" required maxlength="6" pattern="[0-9]{2,6}" data-msg-invalid="Isi berat dalam gram, contoh 1000."' })}</div></div>
 <div id="codBox">${field("codGoods", "Harga barang COD (Rp)", { value: v.codGoods, error: errors.codGoodsIdr, hint: "Isi hanya untuk kiriman COD: harga barang yang ditagih ke penerima.", attrs: ' inputmode="numeric"' })}</div>
 ${turnstile(s.turnstileSiteKey)}
 ${errors.form ? `<p class="err" role="alert">${e(errors.form)}</p>` : Object.keys(errors).length ? `<p class="err" role="alert">Periksa kembali isian yang ditandai.</p>` : ""}
@@ -372,6 +372,20 @@ async function logo(env: Env, c: Ctx, method: string): Promise<Response> {
   return new Response(method === "HEAD" ? null : obj.body, { headers: { ...STATIC_HEADERS, "content-type": m.contentType, "cache-control": "public, max-age=3600" } })
 }
 
+/** Mini-site `/favicon.ico`: auto-serves the outlet's uploaded 1:1 logo, or its white-label initial SVG when unset. */
+async function faviconIco(env: Env, c: Ctx, method: string): Promise<Response> {
+  const r = await vaultFor(env, c.tenantId).minisiteLogo(c.tenantId)
+  const m = r.ok ? r.value : null
+  const obj = m && m.key.startsWith(`t/${c.tenantId}/logo/`) ? await env.BUCKET.get(m.key) : null
+  if (m && obj) {
+    return new Response(method === "HEAD" ? null : obj.body, { headers: { ...STATIC_HEADERS, "content-type": m.contentType, "cache-control": "public, max-age=3600" } })
+  }
+  const sh = await vaultFor(env, c.tenantId).minisiteShell(c.tenantId)
+  const name = sh.ok && sh.value ? sh.value.name : c.tenantSlug
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0B4FE3"/><text x="16" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">${e(initials(name, 1))}</text></svg>`
+  return new Response(method === "HEAD" ? null : svg, { headers: { ...STATIC_HEADERS, "content-type": "image/svg+xml; charset=utf-8", "cache-control": "public, max-age=3600" } })
+}
+
 const COURIER_PATH = /^\/couriers\/([a-z]+)\.svg$/
 
 /** Courier logos from the app bundle (`/app/couriers/*.svg`), same-origin on the mini-site; strict allow-list. */
@@ -403,6 +417,7 @@ export async function handleMinisite(request: Request, env: Env, c: Ctx): Promis
       return Response.json({ items: [], error: message }, { status, headers: { "cache-control": "no-store" } })
     }
   }
+  if (path === "/favicon.ico" && (m === "GET" || m === "HEAD")) return faviconIco(env, c, m)
   if ((path === "/logo" || COURIER_PATH.test(path)) && (m === "GET" || m === "HEAD")) return path === "/logo" ? logo(env, c, m) : courierLogo(env, url, path)
   if (path === "/" && (m === "GET" || m === "HEAD" || m === "POST")) return ongkir(env, c, request)
   if (path === "/kirim" && (m === "GET" || m === "HEAD" || m === "POST")) return kirimForm(env, c, request, url)

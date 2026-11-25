@@ -114,3 +114,46 @@ test("Pengaturan: rail tetap diam saat form digulir dan bisa digulir sendiri", a
   expect(await rail.evaluate((el) => (el as unknown as { __gxSameRail?: boolean }).__gxSameRail)).toBe(true)
   expect(Math.abs((await rail.boundingBox())!.x - beforeRailX)).toBeLessThan(1)
 })
+
+const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64")
+
+test("Profil Gerai: unggah logo 1:1 (max 2 MB) → logo gerai & favicon mini-site + sanitasi HP & alamat 3 baris", async ({ page, context, request }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "profile logo + input sanitisation checked once on desktop")
+  const email = uniqueEmail("e2e-logo-profil")
+  const api = context.request
+  const h = { origin: APP, "content-type": "application/json" }
+  const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
+  const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Logo Profil", password: "logo-profil-kuat-1" } })
+  const slug = `lp${Date.now().toString(36)}`
+  expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug, name: "Gerai Express 88", connect: true } })).status()).toBe(201)
+
+  await page.goto(`${APP}/pengaturan/profil`)
+  await expect(page.getByRole("heading", { name: "Logo & Ikon Gerai (1:1)" })).toBeVisible()
+
+  // Rejects > 2 MB client-side before upload.
+  await page.getByLabel("Pilih logo gerai 1:1").setInputFiles({ name: "big.png", mimeType: "image/png", buffer: Buffer.alloc(2 * 1024 * 1024 + 16, 1) })
+  await expect(page.getByText("Ukuran gambar maksimal 2 MB.")).toBeVisible()
+
+  // Uploads valid image → normalises to 1:1 JPEG → active immediately in card, sidebar, and mini-site favicon/logo.
+  await page.getByLabel("Pilih logo gerai 1:1").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: PNG_1PX })
+  await expect(page.getByText("Logo 1:1 sudah terpasang.")).toBeVisible()
+  await expect(page.getByRole("img", { name: "Logo Gerai Express 88" })).toBeVisible()
+
+  // Reload confirms persistence from server.
+  await page.reload()
+  await expect(page.getByText("Logo 1:1 sudah terpasang.")).toBeVisible()
+
+  // Input discipline: WhatsApp strips letters while keeping digits & dashes; Alamat lengkap is a 3-row textarea.
+  const wa = page.getByLabel("WhatsApp gerai")
+  await wa.fill("abc0812-3456-7890xyz")
+  await expect(wa).toHaveValue("0812-3456-7890")
+  const street = page.getByLabel("Alamat lengkap")
+  await expect(street).toHaveJSProperty("tagName", "TEXTAREA")
+  await expect(street).toHaveAttribute("rows", "3")
+
+  // Delete logo cleanly via confirmation AlertDialog.
+  await page.getByRole("button", { name: "Hapus", exact: true }).click()
+  await page.getByRole("alertdialog").getByRole("button", { name: "Ya, Hapus" }).click()
+  await expect(page.getByText("Belum ada logo — memakai inisial nama gerai.")).toBeVisible()
+})

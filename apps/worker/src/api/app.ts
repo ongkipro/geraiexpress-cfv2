@@ -22,7 +22,7 @@ import type { ContactOp, GeraiVaultDO } from "../do/gerai-vault"
 import { publicationSeq, type DisplayState } from "../do/gerai-vault/customer-display"
 import { STUCK_DAYS, TABS, type ListQuery, type Tab } from "../do/gerai-vault/listing"
 import type { RecipientInput, SenderInput } from "../do/gerai-vault/contacts"
-import { MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, OWNER_MEDIA, QRIS_MAX_BYTES, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
+import { LOGO_MAX_BYTES, MEDIA_MAX_BYTES, MEDIA_PURPOSES, MEDIA_TYPES, mediaKeyFor, OWNER_MEDIA, QRIS_MAX_BYTES, signMediaUrl, sniffType, verifyMediaSignature, type MediaPurpose } from "../media"
 import { listCouriers, updateCourier } from "../couriers/catalog"
 import { enqueue, parseRow, parseRows } from "../bulk/service"
 import { hashApiToken, newApiToken, parseScopes, SCOPES } from "../api-v1/keys"
@@ -284,17 +284,19 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const status = await c.env.DB.prepare("SELECT status FROM tenants WHERE id = ?").bind(m.tenantId).first<{ status: string }>()
     if (status?.status !== "active") throw new AppError(403, "NO_MEMBERSHIP", "Gerai Anda belum aktif.")
     const vault = vaultFor(c.env, m.tenantId)
-    const [notes, webhook, memberships, miniSiteHost] = await Promise.all([
+    const [notes, webhook, memberships, miniSiteHost, logoIdRes] = await Promise.all([
       vault.listNotifications(m.tenantId, { userId: s.user.id, role: m.role }, 1),
       m.role === "gerai_admin" ? vault.webhookStatus(m.tenantId) : Promise.resolve(null),
       c.env.DB.prepare("SELECT t.id, t.name, t.slug FROM tenant_members tm JOIN tenants t ON t.id = tm.tenant_id WHERE tm.user_id = ? AND tm.status = 'active' AND t.status = 'active' ORDER BY t.name").bind(s.user.id).all<{ id: string; name: string; slug: string }>(),
       primaryHost(c.env, m.tenantId, m.tenantSlug),
+      vault.outletLogo(m.tenantId),
     ])
+    const logoUrl = logoIdRes.ok && logoIdRes.value ? await signMediaUrl(c.env.KEK_SECRET, m.tenantId, logoIdRes.value, now()) : null
     const menus = ["dashboard", "buat-pengiriman", "kiriman", "kontak", ...(m.role === "gerai_admin" ? ["keuangan"] : []), "pengaturan"]
     return ok(
       projectFor(m.role, {
         user: { id: s.user.id, name: s.user.name, email: s.user.email },
-        tenant: { id: m.tenantId, name: m.tenantName, slug: m.tenantSlug, miniSiteHost },
+        tenant: { id: m.tenantId, name: m.tenantName, slug: m.tenantSlug, miniSiteHost, logoUrl },
         role: m.role,
         menus,
         badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
@@ -1115,7 +1117,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const purpose = c.req.query("purpose") as MediaPurpose
     if (!MEDIA_PURPOSES.includes(purpose)) throw new AppError(422, "INVALID_PURPOSE", "Jenis berkas tidak dikenal.")
     if (OWNER_MEDIA.includes(purpose) && m.role !== "gerai_admin") throw new AppError(403, "FORBIDDEN", purpose === "qris" ? "QRIS gerai hanya bisa diganti pemilik." : "Logo gerai hanya bisa diganti pemilik.")
-    const max = purpose === "qris" ? QRIS_MAX_BYTES : MEDIA_MAX_BYTES
+    const max = purpose === "qris" ? QRIS_MAX_BYTES : purpose === "logo" ? LOGO_MAX_BYTES : MEDIA_MAX_BYTES
     const tooLarge = () => new AppError(413, "FILE_TOO_LARGE", `Ukuran berkas maksimal ${max / 1024 / 1024} MB.`)
     if (Number(c.req.header("content-length") ?? "0") > max) throw tooLarge()
     const bytes = new Uint8Array(await c.req.arrayBuffer())
@@ -1124,6 +1126,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const type = sniffType(bytes)
     if (!type) throw new AppError(415, "UNSUPPORTED_FILE", "Hanya foto JPG, PNG, WEBP atau PDF.")
     if (purpose === "qris" && !type.startsWith("image/")) throw new AppError(415, "UNSUPPORTED_FILE", "QRIS harus berupa gambar JPG, PNG atau WEBP.")
+    if (purpose === "logo" && !type.startsWith("image/")) throw new AppError(415, "UNSUPPORTED_FILE", "Logo gerai harus berupa gambar JPG, PNG atau WEBP.")
     const id = crypto.randomUUID()
     const key = mediaKeyFor(m.tenantId, purpose, id, MEDIA_TYPES[type]!)
     await c.env.BUCKET.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { tenant: m.tenantId } })
@@ -1258,6 +1261,19 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
     const b = await body(c)
     if (b.mediaId !== null && (typeof b.mediaId !== "string" || !/^[0-9a-f-]{36}$/.test(b.mediaId))) throw new AppError(422, "QRIS_NOT_FOUND", "Gambar QRIS tidak ditemukan. Unggah ulang gambarnya.")
     return ok(await qrisView(c, { mediaId: b.mediaId as string | null, actorId: c.get("session").user.id }))
+  })
+  // Outlet 1:1 square icon/logo (Profil Gerai): drives mini-site logo + favicon, workspace brand, customer display & thermal label.
+  const logoView = async (c: AppCtx, set?: { mediaId: string | null; actorId: string }) => {
+    const m = c.get("membership")!
+    const r = await vaultFor(c.env, m.tenantId).outletLogo(m.tenantId, set)
+    if (!r.ok) return vaultErr(r)
+    return { hasLogo: !!r.value, url: r.value ? await signMediaUrl(c.env.KEK_SECRET, m.tenantId, r.value, now()) : null }
+  }
+  r("GET", "/settings/logo", "app_member", "role", async (c) => ok(await logoView(c)))
+  r("POST", "/settings/logo", "app_owner", "role", async (c) => {
+    const b = await body(c)
+    if (b.mediaId !== null && (typeof b.mediaId !== "string" || !/^[0-9a-f-]{36}$/.test(b.mediaId))) throw new AppError(422, "LOGO_NOT_FOUND", "Logo gerai tidak ditemukan. Unggah ulang gambarnya.")
+    return ok(await logoView(c, { mediaId: b.mediaId as string | null, actorId: c.get("session").user.id }))
   })
 
   // Pengaturan › Ekspedisi Aktif (TASK-206, DEC-223): instant-save toggles and pickup mode.

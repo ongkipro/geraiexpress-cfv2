@@ -62,8 +62,8 @@ main{padding:20px 0 8px}.stage{background:var(--tile);border-radius:24px;padding
 @media(min-width:720px){.stage{padding:28px}.card{padding:28px}.lead h2{font-size:38px}}@media(min-width:900px){.hero{grid-template-columns:5fr 7fr;align-items:start;gap:40px}.lead{padding-top:24px;position:sticky;top:96px}}
 h2{font-size:20px;line-height:1.25;margin:0 0 4px}h3{font-size:17px;margin:24px 0 0}
 label,legend{display:block;color:var(--ink);font-weight:500;font-size:15px;margin:16px 0 6px;padding:0}fieldset{border:0;margin:0;padding:0;min-width:0}
-input,select{width:100%;min-height:44px;font:inherit;font-size:16px;padding:8px 12px;border:1px solid var(--field);border-radius:10px;color:var(--ink);background:#fff}
-input[aria-invalid=true]{border-color:var(--danger)}:focus-visible{outline:3px solid #93B4FA;outline-offset:2px}
+input,select,textarea{width:100%;min-height:44px;font:inherit;font-size:16px;padding:8px 12px;border:1px solid var(--field);border-radius:10px;color:var(--ink);background:#fff}textarea{min-height:88px;resize:vertical;line-height:1.45}
+input[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger)}:focus-visible{outline:3px solid #93B4FA;outline-offset:2px}
 .grid2{display:grid;gap:0 16px}@media(min-width:640px){.grid2{grid-template-columns:1fr 1fr}}.grid2.pair{grid-template-columns:3fr 2fr}
 .dims{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:6px;align-items:center}.dims span{color:var(--faint)}
 .hint{color:var(--muted);font-size:14px;margin:6px 0 0;overflow-wrap:anywhere}.hint.sub{margin:0}.err{color:var(--danger);font-weight:500;font-size:15px;margin:6px 0 0}
@@ -170,11 +170,15 @@ export function page(s: Shell, body: string, scripts = "", after = ""): string {
       ? `<section class="sec" id="lokasi" aria-labelledby="visit"><div class="visit"><div><h2 id="visit">Lokasi &amp; Jam Buka</h2>${where ? `<p>${e(where)}</p>` : ""}${o.openingHours ? `<p>Buka ${e(o.openingHours)}</p>` : ""}</div>${map || chat ? `<div class="acts">${map ? `<a class="btn white" href="${e(map)}" target="_blank" rel="noopener">Buka Peta</a>` : ""}${chat}</div>` : ""}</div></section>`
       : ""
   const mark = masked ? '<span class="mark mono" aria-hidden="true">#</span>' : o.logoVersion ? `<img class="mark" src="/logo?v=${e(o.logoVersion)}" alt="Logo ${e(o.name)}" width="44" height="44">` : `<span class="mark mono" aria-hidden="true">${e(initials(o.name))}</span>`
+  const iconTags =
+    !masked && o.logoVersion
+      ? `<link rel="icon" href="/favicon.ico?v=${e(o.logoVersion)}"><link rel="apple-touch-icon" href="/logo?v=${e(o.logoVersion)}">`
+      : `<link rel="icon" type="image/svg+xml" href="${e(favicon(masked ? "" : o.name))}">`
   const kec = masked ? null : district(o.area)
   const shown = masked ? "Lacak Paket" : o.name
   const cur = (id: Shell["tab"]) => (s.tab === id ? ' aria-current="page"' : "")
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${e(s.title)}</title><link rel="icon" type="image/svg+xml" href="${e(favicon(masked ? "" : o.name))}"><meta name="description" content="${e(s.description)}"><link rel="canonical" href="${e(s.canonical)}">
+<title>${e(s.title)}</title>${iconTags}<meta name="description" content="${e(s.description)}"><link rel="canonical" href="${e(s.canonical)}">
 ${s.noindex ? '<meta name="robots" content="noindex">' : ""}<meta name="theme-color" content="#FFFFFF"><meta property="og:title" content="${e(s.title)}"><meta property="og:description" content="${e(s.description)}"><meta property="og:type" content="website">
 <style>${CSS}</style></head><body>
 <header class="hdr"><div class="wrap bar"><a class="brand" href="/">${mark}<span><h1>${e(shown)}</h1>${kec ? `<small>${e(kec)}</small>` : ""}</span></a>

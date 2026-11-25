@@ -607,6 +607,24 @@ export class GeraiVaultDO extends DurableObject<Env> {
     return { ok: true, value: sql.exec<{ q: string | null }>("SELECT qris_media_id AS q FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]?.q ?? null }
   }
 
+  /** Outlet 1:1 logo & mini-site favicon (`Pengaturan › Profil Gerai`): read, or set/clear with a media id of purpose `logo`. */
+  async outletLogo(tenantId: string, set?: { mediaId: string | null; actorId: string }, now: number = Date.now()): Promise<{ ok: true; value: string | null } | { ok: false; refused?: VaultRefusal; error?: { status: number; code: string; message: string } }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const sql = this.ctx.storage.sql
+    if (set) {
+      if (set.mediaId !== null && !sql.exec("SELECT 1 FROM media_objects WHERE id = ? AND purpose = 'logo'", set.mediaId).toArray().length) {
+        return { ok: false, error: { status: 422, code: "LOGO_NOT_FOUND", message: "Logo gerai tidak ditemukan. Unggah ulang gambarnya." } }
+      }
+      if (!sql.exec("SELECT 1 FROM tenant_outlets WHERE is_default = 1").toArray().length) return { ok: false, error: { status: 409, code: "OUTLET_REQUIRED", message: "Lengkapi Profil Gerai dulu." } }
+      this.ctx.storage.transactionSync(() => {
+        sql.exec("UPDATE tenant_outlets SET logo_media_id = ?, updated_at = ? WHERE is_default = 1", set.mediaId, now)
+        this.audit(tenantId, now, "user", set.actorId, set.mediaId ? "settings.logo.set" : "settings.logo.clear", {})
+      })
+    }
+    return { ok: true, value: sql.exec<{ l: string | null }>("SELECT logo_media_id AS l FROM tenant_outlets WHERE is_default = 1 LIMIT 1").toArray()[0]?.l ?? null }
+  }
+
   // ---- Notifications (TASK-301) -------------------------------------------------------------------------------------
 
   async addNotification(tenantId: string, n: { kind: NotificationKind; audience: "all" | "owner"; title: string; body?: string | null; link?: string | null; dedupeKey?: string }, now: number = Date.now()): Promise<VaultResult<string>> {
