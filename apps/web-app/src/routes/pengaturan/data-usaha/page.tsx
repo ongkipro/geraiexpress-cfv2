@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
+import { Textarea } from "../../../components/ui/textarea"
 import { Button } from "../../../components/ui/button"
+import { sanitizeDigits, sanitizeNpwp, sanitizePhone } from "../../../lib/input"
 import { ErrorState, LoadingState } from "../../../shell/states"
 import { Notice, SaveBar, SettingsLayout, useSettingsForm, type SettingsView } from "../index/shared"
 import { ChoiceGroup, SectionCard, StatusBadge } from "../../../components/admin/page"
@@ -37,10 +39,10 @@ export function DataUsahaPage() {
   if (!s.form) return <SettingsLayout title="Data Usaha"><LoadingState label="Memuat data usaha" /></SettingsLayout>
   const f = s.form
   const set = (p: Partial<Form>) => s.setForm({ ...f, ...p })
-  const field = (id: keyof Form & string, label: string, props: Record<string, unknown> = {}) => (
+  const field = (id: keyof Form & string, label: string, props: Record<string, unknown> = {}, transform?: (v: string) => string) => (
     <Field data-invalid={s.fields[id] ? true : undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} value={f[id] as string} onChange={(e) => set({ [id]: e.target.value } as Partial<Form>)} aria-invalid={s.fields[id] ? true : undefined} {...props} />
+      <Input id={id} value={f[id] as string} onChange={(e) => set({ [id]: transform ? transform(e.target.value) : e.target.value } as Partial<Form>)} aria-invalid={s.fields[id] ? true : undefined} {...props} />
       {s.fields[id] ? <FieldError>{s.fields[id]}</FieldError> : null}
     </Field>
   )
@@ -56,10 +58,23 @@ export function DataUsahaPage() {
             <ChoiceGroup label="Bentuk usaha" layout="grid" className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" value={f.entityType || null} onValueChange={(v) => set({ entityType: v })} choices={ENTITIES.map(([id, label]) => ({ value: id, label }))} />
           </fieldset>
           <div className="grid gap-4 sm:grid-cols-2">
-            {field("legalName", "Nama resmi")}
-            {field("brandName", "Nama merek")}
+            {field("legalName", "Nama resmi", { maxLength: 120 })}
+            {field("brandName", "Nama merek", { maxLength: 80 })}
           </div>
-          {field("registeredAddress", "Alamat terdaftar")}
+          <Field data-invalid={s.fields.registeredAddress ? true : undefined}>
+            <FieldLabel htmlFor="registeredAddress">Alamat terdaftar</FieldLabel>
+            <Textarea
+              id="registeredAddress"
+              rows={3}
+              className="min-h-[5.5rem]"
+              value={f.registeredAddress}
+              onChange={(e) => set({ registeredAddress: e.target.value })}
+              maxLength={240}
+              placeholder="Alamat resmi sesuai akta atau NIB"
+              aria-invalid={s.fields.registeredAddress ? true : undefined}
+            />
+            {s.fields.registeredAddress ? <FieldError>{s.fields.registeredAddress}</FieldError> : null}
+          </Field>
         </div>
       </SectionCard>
       <SectionCard
@@ -69,10 +84,10 @@ export function DataUsahaPage() {
       >
         <div className="flex flex-col gap-3">
           <div className="grid items-start gap-4 sm:grid-cols-2">
-            {field("nib", "NIB", { inputMode: "numeric", className: "tabular-nums" })}
+            {field("nib", "NIB", { inputMode: "numeric", maxLength: 13, className: "tabular-nums" }, (v) => sanitizeDigits(v, 13))}
             <Field data-invalid={s.fields.npwp ? true : undefined}>
               <FieldLabel htmlFor="npwp">{f.npwpMasked ? "Ganti NPWP" : "NPWP"}</FieldLabel>
-              <Input id="npwp" type={showNpwp ? "text" : "password"} autoComplete="off" inputMode="numeric" value={f.npwp} onChange={(e) => set({ npwp: e.target.value, clearNpwp: false })} className="tabular-nums" />
+              <Input id="npwp" type={showNpwp ? "text" : "password"} autoComplete="off" inputMode="numeric" maxLength={24} value={f.npwp} onChange={(e) => set({ npwp: sanitizeNpwp(e.target.value), clearNpwp: false })} className="tabular-nums" />
               {s.fields.npwp ? <FieldError>{s.fields.npwp}</FieldError> : <FieldDescription>15 atau 16 angka. Kosongkan bila tidak ingin mengubah.</FieldDescription>}
             </Field>
           </div>
@@ -85,10 +100,10 @@ export function DataUsahaPage() {
       </SectionCard>
       <SectionCard title="Penanggung jawab" description="Orang yang dihubungi untuk urusan administrasi.">
         <div className="grid gap-4 sm:grid-cols-2">
-          {field("picName", "Nama")}
-          {field("picRole", "Jabatan")}
+          {field("picName", "Nama", { maxLength: 80 })}
+          {field("picRole", "Jabatan", { maxLength: 60 })}
           {field("picEmail", "Email", { type: "email" })}
-          {field("picPhone", "No HP", { inputMode: "tel" })}
+          {field("picPhone", "No HP", { type: "tel", inputMode: "tel", autoComplete: "tel", maxLength: 20 }, sanitizePhone)}
         </div>
       </SectionCard>
       <Notice msg={s.msg} />

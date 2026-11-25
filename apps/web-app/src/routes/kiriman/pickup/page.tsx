@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
 import { api, ApiError } from "../../../lib/api"
+import { sanitizePhone } from "../../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../../shell/states"
 import { SectionCard, Panel } from "../../../components/admin/page"
 
@@ -281,9 +282,9 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
     <SectionCard id="serah" className="mt-6" title="Serah terima ke kurir">
       <div className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-3">
-        <Field data-invalid={fields.driverName ? true : undefined}><FieldLabel htmlFor="drv-name">Nama kurir</FieldLabel><Input id="drv-name" value={name} onChange={(e) => setName(e.target.value)} />{fields.driverName ? <FieldError>{fields.driverName}</FieldError> : null}</Field>
-        <Field data-invalid={fields.driverPhone ? true : undefined}><FieldLabel htmlFor="drv-phone">No HP kurir</FieldLabel><Input id="drv-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />{fields.driverPhone ? <FieldError>{fields.driverPhone}</FieldError> : null}</Field>
-        <Field data-invalid={fields.vehicleNo ? true : undefined}><FieldLabel htmlFor="drv-plate">No. polisi</FieldLabel><Input id="drv-plate" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} placeholder="D 1234 ABC" />{fields.vehicleNo ? <FieldError>{fields.vehicleNo}</FieldError> : null}</Field>
+        <Field data-invalid={fields.driverName ? true : undefined}><FieldLabel htmlFor="drv-name">Nama kurir</FieldLabel><Input id="drv-name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />{fields.driverName ? <FieldError>{fields.driverName}</FieldError> : null}</Field>
+        <Field data-invalid={fields.driverPhone ? true : undefined}><FieldLabel htmlFor="drv-phone">No HP kurir</FieldLabel><Input id="drv-phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={phone} onChange={(e) => setPhone(sanitizePhone(e.target.value))} />{fields.driverPhone ? <FieldError>{fields.driverPhone}</FieldError> : null}</Field>
+        <Field data-invalid={fields.vehicleNo ? true : undefined}><FieldLabel htmlFor="drv-plate">No. polisi</FieldLabel><Input id="drv-plate" maxLength={12} value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} placeholder="D 1234 ABC" />{fields.vehicleNo ? <FieldError>{fields.vehicleNo}</FieldError> : null}</Field>
       </div>
       <div className="flex flex-col gap-2">
         <p className="text-base md:text-sm font-medium">Tanda tangan kurir</p>

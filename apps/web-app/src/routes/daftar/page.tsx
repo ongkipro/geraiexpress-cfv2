@@ -6,7 +6,9 @@ import { TextField } from "../../components/auth/text-field"
 import { Button } from "../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
+import { Textarea } from "../../components/ui/textarea"
 import { api, ApiError } from "../../lib/api"
+import { sanitizePhone } from "../../lib/input"
 import { CheckboxField } from "../../components/admin/page"
 
 interface Area {
@@ -440,7 +442,7 @@ export function DaftarPage() {
               </div>
             ) : null}
           </div>
-          <TextField label="WhatsApp gerai" name="whatsapp" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={whatsapp} onChange={setWhatsapp} error={fieldErrors.contactWhatsapp} required />
+          <TextField label="WhatsApp gerai" name="whatsapp" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} placeholder="08xx-xxxx-xxxx" value={whatsapp} onChange={(v) => setWhatsapp(sanitizePhone(v))} error={fieldErrors.contactWhatsapp} required />
           <TextField label="Email untuk akun Mengantar" name="sellerEmail" type="email" inputMode="email" placeholder="gerai@gmail.com" value={sellerEmail} onChange={(v) => { setSellerEmail(v); setConsent(false) }} error={fieldErrors.sellerEmail} hint="Satu-satunya jalan masuk ke akun Mengantar." required />
           <Button type="submit" size="lg">Lanjut ke Titik Jemput →</Button>
         </form>
@@ -747,10 +749,25 @@ export function DaftarPage() {
               </Field>
             </div>
           ) : null}
-          <TextField label="Alamat lengkap titik jemput" name="street" placeholder="Jl. Merdeka No. 12, RT 02/RW 05 (dekat patokan)" value={street} onChange={setStreet} error={fieldErrors.streetAddress} required maxLength={300} />
+          <Field data-invalid={fieldErrors.streetAddress ? true : undefined}>
+            <FieldLabel htmlFor="daftar-street">Alamat lengkap titik jemput</FieldLabel>
+            <Textarea
+              id="daftar-street"
+              name="street"
+              rows={2}
+              className="min-h-14"
+              placeholder="Jl. Merdeka No. 12, RT 02/RW 05 (dekat patokan)"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+              required
+              maxLength={200}
+              aria-invalid={fieldErrors.streetAddress ? true : undefined}
+            />
+            {fieldErrors.streetAddress ? <FieldError>{fieldErrors.streetAddress}</FieldError> : null}
+          </Field>
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <TextField label="PIC penjemputan" name="picName" placeholder="Nama penanggung jawab" value={picName} onChange={setPicName} error={fieldErrors.picName} required maxLength={80} />
-            <TextField label="HP PIC" name="picPhone" inputMode="numeric" placeholder="08xx-xxxx-xxxx" value={picPhone} onChange={(v) => { setPicPhone(v); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
+            <TextField label="HP PIC" name="picPhone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} placeholder="08xx-xxxx-xxxx" value={picPhone} onChange={(v) => { setPicPhone(sanitizePhone(v)); setPicPhoneEdited(true) }} error={fieldErrors.picPhone} required />
           </div>
           <CheckboxField id={consentId} align="start" checked={consent} onCheckedChange={setConsent}>
             <span className="text-sm leading-snug">Saya setuju GeraiExpress membuatkan akun seller Mengantar untuk gerai ini dengan email <strong className="font-semibold [overflow-wrap:anywhere] text-[#0F172A]" data-seller-email>{sellerEmail}</strong>, serta menyetujui Syarat & Ketentuan dan Kebijakan Privasi Mengantar. Saldo dan COD gerai dipegang di akun tersebut.</span>

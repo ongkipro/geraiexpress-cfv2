@@ -75,7 +75,10 @@ const COD_FEE_MODES: Array<{ id: Mode; label: string }> = [
 ]
 
 const kindOf = (m: Mode | undefined, cod: number): Kind => (m === "dfod" ? "cod_shipping" : (m && m !== "none") || cod ? "cod_goods" : "non_cod")
-const money = (v: string) => (v.replace(/\D/g, "") ? Number(v.replace(/\D/g, "")).toLocaleString("id-ID") : "")
+const money = (v: string) => {
+  const d = v.replace(/\D/g, "").slice(0, 9)
+  return d ? Number(d).toLocaleString("id-ID") : ""
+}
 /** Auto-quote waits this long after the last edit (typing a weight never fires one request per digit). */
 export const AUTO_QUOTE_MS = 500
 
@@ -303,7 +306,7 @@ export function PackageFields({ f, disclosure, children, extra, extraFilled = fa
         <FieldLabel>Ukuran P × L × T (cm, opsional)</FieldLabel>
         <div className="grid grid-cols-3 gap-1.5">
           {(["l", "w", "h"] as const).map((k, i) => (
-            <Input key={k} aria-label={["Panjang", "Lebar", "Tinggi"][i]} placeholder={["P", "L", "T"][i]} inputMode="numeric" value={f.dims[k]} onChange={(e) => f.setDims({ ...f.dims, [k]: e.target.value.replace(/\D/g, "") })} className="tabular-nums" />
+            <Input key={k} aria-label={["Panjang", "Lebar", "Tinggi"][i]} placeholder={["P", "L", "T"][i]} inputMode="numeric" maxLength={3} value={f.dims[k]} onChange={(e) => f.setDims({ ...f.dims, [k]: e.target.value.replace(/\D/g, "").slice(0, 3) })} className="tabular-nums" />
           ))}
         </div>
         {f.errors.dims ? <FieldError>{f.errors.dims}</FieldError> : null}

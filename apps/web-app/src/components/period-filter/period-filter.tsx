@@ -8,6 +8,7 @@ import { Calendar } from "../ui/calendar"
 import { Field, FieldError, FieldLabel } from "../ui/field"
 import { Input } from "../ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { sanitizeDateDmy } from "../../lib/input"
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "../ui/sheet"
 import { useIsMobile } from "../../hooks/use-mobile"
 
@@ -113,12 +114,12 @@ function Body({ value, onPick, onCancel, months, chips }: { value: Period; onPic
     <>
       <Field className={chips ? "w-36" : "w-28 gap-1"}>
         <FieldLabel htmlFor="periode-dari" className={chips ? undefined : "text-xs text-muted-foreground"}>Dari</FieldLabel>
-        <Input id="periode-dari" value={dari} inputMode="numeric" placeholder="dd/mm/yyyy" className={chips ? undefined : "md:h-8 md:text-xs tabular-nums"} onChange={(e) => { setDari(e.target.value); setError(null) }} />
+        <Input id="periode-dari" value={dari} inputMode="numeric" maxLength={10} placeholder="dd/mm/yyyy" className={chips ? undefined : "md:h-8 md:text-xs tabular-nums"} onChange={(e) => { setDari(sanitizeDateDmy(e.target.value)); setError(null) }} />
       </Field>
       {chips ? null : <span aria-hidden className="pb-1.5 text-xs text-muted-foreground">–</span>}
       <Field className={chips ? "w-36" : "w-28 gap-1"}>
         <FieldLabel htmlFor="periode-sampai" className={chips ? undefined : "text-xs text-muted-foreground"}>Sampai</FieldLabel>
-        <Input id="periode-sampai" value={sampai} inputMode="numeric" placeholder="dd/mm/yyyy" className={chips ? undefined : "md:h-8 md:text-xs tabular-nums"} onChange={(e) => { setSampai(e.target.value); setError(null) }} />
+        <Input id="periode-sampai" value={sampai} inputMode="numeric" maxLength={10} placeholder="dd/mm/yyyy" className={chips ? undefined : "md:h-8 md:text-xs tabular-nums"} onChange={(e) => { setSampai(sanitizeDateDmy(e.target.value)); setError(null) }} />
       </Field>
     </>
   )

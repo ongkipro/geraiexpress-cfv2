@@ -4,10 +4,12 @@ import { PrinterIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
+import { Textarea } from "../../../components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
 import { AreaPicker, type Area } from "../../../components/area-picker"
 import { api, ApiError } from "../../../lib/api"
+import { sanitizeDigits, sanitizePhone } from "../../../lib/input"
 import { fetchPrint, printPdf, PrintError } from "../../../print/print"
 import { ErrorState, LoadingState, PageTitle } from "../../../shell/states"
 import { isOwner, useWorkspace } from "../../../shell/workspace"
@@ -173,12 +175,12 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
         <AreaPicker label="Cari kecamatan tujuan" value={area} onChange={setArea} />
       ) : null}
       <div className="grid gap-3 md:grid-cols-3">
-        <Field><FieldLabel htmlFor={`fn${r.row_no}`}>Nama penerima</FieldLabel><Input id={`fn${r.row_no}`} value={cells.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor={`fp${r.row_no}`}>No HP</FieldLabel><Input id={`fp${r.row_no}`} inputMode="tel" value={cells.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor={`fa${r.row_no}`}>Alamat</FieldLabel><Input id={`fa${r.row_no}`} value={cells.street ?? ""} onChange={(e) => set("street", e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor={`fi${r.row_no}`}>Isi paket</FieldLabel><Input id={`fi${r.row_no}`} value={cells.content ?? ""} onChange={(e) => set("content", e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor={`fb${r.row_no}`}>Berat (gram)</FieldLabel><Input id={`fb${r.row_no}`} inputMode="numeric" className="tabular-nums" value={cells.weightGram ?? ""} onChange={(e) => set("weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
-        <Field><FieldLabel htmlFor={`fc${r.row_no}`}>COD (Rp)</FieldLabel><Input id={`fc${r.row_no}`} inputMode="numeric" className="tabular-nums" value={cells.codIdr ?? ""} onChange={(e) => set("codIdr", e.target.value.replace(/\D/g, ""))} /></Field>
+        <Field><FieldLabel htmlFor={`fn${r.row_no}`}>Nama penerima</FieldLabel><Input id={`fn${r.row_no}`} maxLength={80} value={cells.name ?? ""} onChange={(e) => set("name", e.target.value)} /></Field>
+        <Field><FieldLabel htmlFor={`fp${r.row_no}`}>No HP</FieldLabel><Input id={`fp${r.row_no}`} type="tel" inputMode="tel" maxLength={20} value={cells.phone ?? ""} onChange={(e) => set("phone", sanitizePhone(e.target.value))} /></Field>
+        <Field><FieldLabel htmlFor={`fi${r.row_no}`}>Isi paket</FieldLabel><Input id={`fi${r.row_no}`} maxLength={60} value={cells.content ?? ""} onChange={(e) => set("content", e.target.value)} /></Field>
+        <Field className="md:col-span-3"><FieldLabel htmlFor={`fa${r.row_no}`}>Alamat</FieldLabel><Textarea id={`fa${r.row_no}`} rows={3} className="min-h-[5.5rem]" maxLength={200} value={cells.street ?? ""} onChange={(e) => set("street", e.target.value)} /></Field>
+        <Field><FieldLabel htmlFor={`fb${r.row_no}`}>Berat (gram)</FieldLabel><Input id={`fb${r.row_no}`} inputMode="numeric" maxLength={6} className="tabular-nums" value={cells.weightGram ?? ""} onChange={(e) => set("weightGram", sanitizeDigits(e.target.value, 6))} /></Field>
+        <Field><FieldLabel htmlFor={`fc${r.row_no}`}>COD (Rp)</FieldLabel><Input id={`fc${r.row_no}`} inputMode="numeric" maxLength={9} className="tabular-nums" value={cells.codIdr ?? ""} onChange={(e) => set("codIdr", sanitizeDigits(e.target.value, 9))} /></Field>
       </div>
       {msg ? <p role="alert" className="text-base md:text-sm text-danger">{msg}</p> : null}
       <div className="flex flex-wrap gap-2">

@@ -580,7 +580,7 @@ function KasirScreen({ claim, displayButton, onDisplay, onClaim, onReset }: { cl
                 </Field>
                 <Field data-invalid={errors.quantity ? true : undefined}>
                   <FieldLabel htmlFor="jumlah">Jumlah barang</FieldLabel>
-                  <Input id="jumlah" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
+                  <Input id="jumlah" inputMode="numeric" maxLength={3} value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, "").slice(0, 3))} className="tabular-nums" />
                   {errors.quantity ? <FieldError>{errors.quantity}</FieldError> : null}
                 </Field>
               </div>

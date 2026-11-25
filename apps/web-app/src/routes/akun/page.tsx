@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { FormAlert } from "../../components/auth/auth-card"
 import { api, ApiError } from "../../lib/api"
+import { sanitizeDigits, sanitizePhone } from "../../lib/input"
 import { ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { applyTextSize, storedTextSize, TEXT_SIZE_EVENT, TEXT_SIZES, type TextSize } from "../../shell/workspace"
 
@@ -78,8 +79,8 @@ function ProfileCard({ p, onSaved }: { p: Account["profile"]; onSaved: () => voi
     <SectionCard title="Profil" description="Nama tampil di log aktivitas gerai.">
       <form onSubmit={save} className="flex flex-col gap-4" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="ak-name">Nama</FieldLabel><Input id="ak-name" value={name} onChange={(e) => setName(e.target.value)} />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
-          <Field data-invalid={fields.phone ? true : undefined}><FieldLabel htmlFor="ak-phone">No HP</FieldLabel><Input id="ak-phone" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />{fields.phone ? <FieldError>{fields.phone}</FieldError> : null}</Field>
+          <Field data-invalid={fields.name ? true : undefined}><FieldLabel htmlFor="ak-name">Nama</FieldLabel><Input id="ak-name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />{fields.name ? <FieldError>{fields.name}</FieldError> : null}</Field>
+          <Field data-invalid={fields.phone ? true : undefined}><FieldLabel htmlFor="ak-phone">No HP</FieldLabel><Input id="ak-phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={phone} onChange={(e) => setPhone(sanitizePhone(e.target.value))} />{fields.phone ? <FieldError>{fields.phone}</FieldError> : null}</Field>
         </div>
         {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
         <div className="flex justify-end"><Button type="submit" disabled={!dirty || pending}>{pending ? "Menyimpan…" : "Simpan"}</Button></div>
@@ -178,7 +179,7 @@ function EmailCard({ current, onChanged }: { current: string; onChanged: () => v
     <SectionCard title="Ganti Email" description={<>Email sekarang: <span className="font-medium text-slate-700">{current}</span>. Kode verifikasi dikirim ke email baru.</>}>
         {otpId ? (
           <form onSubmit={confirm} className="flex flex-col gap-4" noValidate>
-            <Field data-invalid={fields.code ? true : undefined}><FieldLabel htmlFor="em-code">Kode dari email baru</FieldLabel><Input id="em-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="w-40 tabular-nums" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />{fields.code ? <FieldError>{fields.code}</FieldError> : null}</Field>
+            <Field data-invalid={fields.code ? true : undefined}><FieldLabel htmlFor="em-code">Kode dari email baru</FieldLabel><Input id="em-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="w-40 tabular-nums" value={code} onChange={(e) => setCode(sanitizeDigits(e.target.value, 6))} />{fields.code ? <FieldError>{fields.code}</FieldError> : null}</Field>
             {msg ? <FormAlert tone={msg.tone}>{msg.text}</FormAlert> : null}
             <div className="flex justify-end gap-2"><Button variant="ghost" type="button" disabled={pending} onClick={() => { setOtpId(null); setCode(""); setFields({}); setMsg(null) }}>Batal</Button><Button type="submit" disabled={code.length !== 6 || pending}>{pending ? "Memeriksa…" : "Konfirmasi"}</Button></div>
           </form>

@@ -6,6 +6,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "../../../compon
 import { Input } from "../../../components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
 import { api, ApiError } from "../../../lib/api"
+import { sanitizeDigits, sanitizePhone } from "../../../lib/input"
 import { PageTitle } from "../../../shell/states"
 import { PartyPicker, type Contact } from "../../kiriman/detail"
 import { SectionCard } from "../../../components/admin/page"
@@ -255,13 +256,13 @@ export function PaketMassalPage() {
               {rows.map((r, i) => (
                 <li key={r.id} className="grid gap-3 py-4 md:grid-cols-6">
                   <p className="text-base md:text-sm font-medium md:col-span-6">Baris {i + 1}</p>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`n${r.id}`}>Nama penerima</FieldLabel><Input id={`n${r.id}`} value={r.name} onChange={(e) => set(i, "name", e.target.value)} /></Field>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`p${r.id}`}>No HP</FieldLabel><Input id={`p${r.id}`} inputMode="tel" value={r.phone} onChange={(e) => set(i, "phone", e.target.value)} /></Field>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`k${r.id}`}>Kecamatan/Kota</FieldLabel><Input id={`k${r.id}`} value={r.areaText} onChange={(e) => set(i, "areaText", e.target.value)} /></Field>
-                  <Field className="md:col-span-2"><FieldLabel htmlFor={`a${r.id}`}>Alamat</FieldLabel><Input id={`a${r.id}`} value={r.street} onChange={(e) => set(i, "street", e.target.value)} /></Field>
-                  <Field><FieldLabel htmlFor={`i${r.id}`}>Isi paket</FieldLabel><Input id={`i${r.id}`} value={r.content} placeholder="Pakaian" maxLength={100} onChange={(e) => set(i, "content", e.target.value)} /></Field>
-                  <Field><FieldLabel htmlFor={`b${r.id}`}>Berat (gram)</FieldLabel><Input id={`b${r.id}`} inputMode="numeric" className="tabular-nums" value={r.weightGram} onChange={(e) => set(i, "weightGram", e.target.value.replace(/\D/g, ""))} /></Field>
-                  <Field><FieldLabel htmlFor={`c${r.id}`}>COD (Rp)</FieldLabel><Input id={`c${r.id}`} inputMode="numeric" className="tabular-nums" disabled={mode === "none" || !!codLock} placeholder={mode === "none" || codLock ? "Non-COD" : "0"} value={mode === "none" || codLock ? "" : r.codIdr} onChange={(e) => set(i, "codIdr", e.target.value.replace(/\D/g, ""))} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`n${r.id}`}>Nama penerima</FieldLabel><Input id={`n${r.id}`} maxLength={80} value={r.name} onChange={(e) => set(i, "name", e.target.value)} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`p${r.id}`}>No HP</FieldLabel><Input id={`p${r.id}`} type="tel" inputMode="tel" maxLength={20} value={r.phone} onChange={(e) => set(i, "phone", sanitizePhone(e.target.value))} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`k${r.id}`}>Kecamatan/Kota</FieldLabel><Input id={`k${r.id}`} maxLength={120} value={r.areaText} onChange={(e) => set(i, "areaText", e.target.value)} /></Field>
+                  <Field className="md:col-span-2"><FieldLabel htmlFor={`a${r.id}`}>Alamat</FieldLabel><Input id={`a${r.id}`} maxLength={200} value={r.street} onChange={(e) => set(i, "street", e.target.value)} /></Field>
+                  <Field><FieldLabel htmlFor={`i${r.id}`}>Isi paket</FieldLabel><Input id={`i${r.id}`} value={r.content} placeholder="Pakaian" maxLength={60} onChange={(e) => set(i, "content", e.target.value)} /></Field>
+                  <Field><FieldLabel htmlFor={`b${r.id}`}>Berat (gram)</FieldLabel><Input id={`b${r.id}`} inputMode="numeric" maxLength={6} className="tabular-nums" value={r.weightGram} onChange={(e) => set(i, "weightGram", sanitizeDigits(e.target.value, 6))} /></Field>
+                  <Field><FieldLabel htmlFor={`c${r.id}`}>COD (Rp)</FieldLabel><Input id={`c${r.id}`} inputMode="numeric" maxLength={9} className="tabular-nums" disabled={mode === "none" || !!codLock} placeholder={mode === "none" || codLock ? "Non-COD" : "0"} value={mode === "none" || codLock ? "" : r.codIdr} onChange={(e) => set(i, "codIdr", sanitizeDigits(e.target.value, 9))} /></Field>
                   <div className="flex items-end">
                     <Button variant="ghost" aria-label={`Hapus baris ${i + 1}`} disabled={rows.length === 1} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}><Trash2Icon aria-hidden /> Hapus</Button>
                   </div>

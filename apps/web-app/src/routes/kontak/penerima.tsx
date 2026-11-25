@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { Textarea } from "../../components/ui/textarea"
 import { api, ApiError } from "../../lib/api"
+import { sanitizePhone } from "../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { ContactDialog, RiskChip, type RiskBadge } from "./shared"
@@ -177,7 +178,7 @@ export function RecipientForm({
       <div className="flex flex-col gap-4 px-6 py-5">
         <div className="grid gap-3.5 sm:grid-cols-2">
           <TextField label="Nama penerima" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
-          <TextField label="Nomor HP penerima" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0857-1234-5678" required />
+          <TextField label="Nomor HP penerima" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={phone} onChange={(v) => setPhone(sanitizePhone(v))} error={errors.phone} hint="Contoh: 0857-1234-5678" required />
         </div>
         <PreciseAreaPicker
           kecamatanLabel="Kecamatan tujuan"
@@ -193,7 +194,8 @@ export function RecipientForm({
           <Textarea
             id="recipient-street"
             name="street"
-            rows={2}
+            rows={3}
+            className="min-h-[5.5rem]"
             value={street}
             onChange={(e) => setStreet(e.target.value)}
             maxLength={200}

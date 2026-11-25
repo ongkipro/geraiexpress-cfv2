@@ -2,6 +2,7 @@ import { useRef, useState, type ClipboardEvent, type PointerEvent } from "react"
 import { ExternalLinkIcon, LocateFixedIcon, MapPinIcon, MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
 import { googleMapsPinUrl, ID_BOUNDS, INDONESIA_DEFAULT_CENTER, isInIndonesia, parseCoordinate, parseLocationInput } from "@gx/domain/geo"
 import { api } from "../lib/api"
+import { sanitizeCoord } from "../lib/input"
 import { Button } from "./ui/button"
 import { Field, FieldError, FieldLabel } from "./ui/field"
 import { Input } from "./ui/input"
@@ -375,7 +376,7 @@ export function LocationPinPicker({
             onPaste={handleSmartPaste}
             onChange={(e) => {
               setStatus(null)
-              onChange(e.target.value, longitude)
+              onChange(sanitizeCoord(e.target.value), longitude)
             }}
             aria-invalid={latError ? true : undefined}
           />
@@ -393,7 +394,7 @@ export function LocationPinPicker({
             onPaste={handleSmartPaste}
             onChange={(e) => {
               setStatus(null)
-              onChange(latitude, e.target.value)
+              onChange(latitude, sanitizeCoord(e.target.value))
             }}
             aria-invalid={lngError ? true : undefined}
           />

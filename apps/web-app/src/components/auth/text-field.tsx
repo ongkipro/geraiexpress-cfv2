@@ -9,7 +9,7 @@ export function TextField(props: {
   value: string
   onChange: (v: string) => void
   autoComplete?: string
-  inputMode?: "text" | "email" | "numeric" | "decimal"
+  inputMode?: "text" | "email" | "tel" | "numeric" | "decimal"
   placeholder?: string
   error?: string
   hint?: string

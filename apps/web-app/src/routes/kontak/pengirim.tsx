@@ -4,11 +4,14 @@ import { PreciseAreaPicker, type Area } from "../../components/area-picker"
 import { TextField } from "../../components/auth/text-field"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
+import { Field, FieldDescription, FieldError, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { Switch } from "../../components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
+import { Textarea } from "../../components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { api, ApiError } from "../../lib/api"
+import { sanitizePhone } from "../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
 import { ContactDialog, rupiah } from "./shared"
@@ -253,8 +256,8 @@ export function SenderForm({
           <ToggleGroupItem value="reseller_dropship" className="w-full">Toko Reseller / Dropship</ToggleGroupItem>
         </ToggleGroup>
         <div className="grid gap-3.5 sm:grid-cols-2">
-          <TextField label="Nama pengirim asli" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
-          <TextField label="Nomor WhatsApp (untuk retur & COD)" name="phone" inputMode="numeric" value={phone} onChange={setPhone} error={errors.phone} hint="Contoh: 0812-3456-7890" required />
+          <TextField label="Nama pengirim asli" name="name" value={name} onChange={setName} error={errors.name} hint="Boleh huruf dan angka." required maxLength={80} />
+          <TextField label="Nomor WhatsApp (untuk retur & COD)" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={phone} onChange={(v) => setPhone(sanitizePhone(v))} error={errors.phone} hint="Contoh: 0812-3456-7890" required />
         </div>
         {sender ? (
           <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -280,7 +283,7 @@ export function SenderForm({
           <div className="flex flex-col gap-3.5 rounded-lg border border-slate-200/90 bg-slate-50/55 p-3.5">
             <div className="grid gap-3.5 sm:grid-cols-2">
               <TextField label="Nama toko tercetak di label" name="brandName" value={brand} onChange={setBrand} error={errors.brandName} maxLength={60} required />
-              <TextField label="Nomor HP tercetak di label (opsional)" name="brandPhone" inputMode="numeric" value={brandPhone} onChange={setBrandPhone} error={errors.brandPhone} />
+              <TextField label="Nomor HP tercetak di label (opsional)" name="brandPhone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={brandPhone} onChange={(v) => setBrandPhone(sanitizePhone(v))} error={errors.brandPhone} />
             </div>
             <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-base md:min-h-9 md:text-sm">
               <span>Sembunyikan nama gerai di label</span>
@@ -298,7 +301,21 @@ export function SenderForm({
           postalError={errors.postalCode}
           optional
         />
-        <TextField label="Alamat pengirim (opsional)" name="street" value={street} onChange={setStreet} error={errors.street} maxLength={200} />
+        <Field data-invalid={errors.street ? true : undefined}>
+          <FieldLabel htmlFor="sender-street">Alamat pengirim (opsional)</FieldLabel>
+          <Textarea
+            id="sender-street"
+            name="street"
+            rows={3}
+            className="min-h-[5.5rem]"
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+            maxLength={200}
+            placeholder="Nama jalan, nomor rumah/toko, RT/RW"
+            aria-invalid={errors.street ? true : undefined}
+          />
+          {errors.street ? <FieldError>{errors.street}</FieldError> : <FieldDescription>Opsional; berguna untuk alamat retur.</FieldDescription>}
+        </Field>
         {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
       </div>
       <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-6 py-3.5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { Field, FieldDescription, FieldError, FieldLabel } from "./ui/field"
 import { Input } from "./ui/input"
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group"
+import { sanitizeDecimal } from "../lib/input"
 
 // DEC-215: integer grams, default 1000, `[ gram ● | kg ]` with live conversion and unit-mistake guards.
 const fmtKg = (g: number) => `${(g / 1000).toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg`
@@ -48,7 +49,7 @@ export function WeightInput({ gram, onChange, error }: { gram: number; onChange:
     <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>Berat paket</FieldLabel>
       <div className="flex flex-wrap items-center gap-2">
-        <Input id={id} inputMode="decimal" value={text} onChange={(e) => set(e.target.value)} className="w-24 tabular-nums" aria-describedby={`${id}-h`} />
+        <Input id={id} inputMode="decimal" value={text} onChange={(e) => set(sanitizeDecimal(e.target.value))} className="w-24 tabular-nums" aria-describedby={`${id}-h`} />
         <ToggleGroup
           value={[unit]}
           onValueChange={(v) => {
