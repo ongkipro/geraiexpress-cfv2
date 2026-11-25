@@ -36,7 +36,9 @@ const SSL = (method: "http" | "txt") => ({ method, type: "dv", settings: { min_t
 export function saasClient(env: Pick<Env, "CF_SAAS_API_TOKEN" | "GX_ENV"> & { CF_SAAS_ZONE_ID: string }, fetchImpl: typeof fetch = fetch): SaasClient {
   const zone = env.CF_SAAS_ZONE_ID ?? ""
   if (zone === "mock" && env.GX_ENV === "local") return mockSaas
-  // Not provisioned (staging/production before the owner sets the zone id + token): fail closed, never the fake.
+  // DEC-255 (TASK-709): staging never creates or mutates custom hostnames in the production SaaS zone.
+  if (env.GX_ENV === "staging") return unconfigured
+  // Not provisioned (production before the owner sets the zone id + token): fail closed, never the fake.
   if (!/^[0-9a-f]{32}$/.test(zone) || !env.CF_SAAS_API_TOKEN) return unconfigured
   const base = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(zone)}/custom_hostnames`
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {

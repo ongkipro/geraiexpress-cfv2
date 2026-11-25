@@ -311,19 +311,9 @@ export async function syncDiscountsFromMengantar(
   const tenant = await env.DB.prepare("SELECT id, status FROM tenants WHERE id = ?").bind(input.tenantId).first<{ id: string; status: string }>()
   if (!tenant) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
 
-  // Ensure every active catalog service has a rule row for this tenant before adopting observed Mengantar discounts.
+  // Validate area and fetch live Mengantar rates BEFORE writing any default rule rows so a failed sync never leaves
+  // unaudited tenant_discount_rules rows behind (TASK-707 Sol P2).
   const policy = await platformPolicy(env.DB)
-  await env.DB.prepare(
-    `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, cashback_bps, effective_from, apply_channel,
-       requested_at, verification_state, next_check_at, check_step, updated_at, updated_by)
-     SELECT ?1, c.service_code, c.courier_code, c.service_class, COALESCE(p.default_discount_bps, ?2), 0, ?3, 'mengantar_team', ?3, 'belum_diterapkan', ?4, 0, ?3, 'system'
-     FROM courier_service_catalog c LEFT JOIN courier_discount_policy p ON p.courier_code = c.courier_code
-     WHERE c.is_active = 1
-     ON CONFLICT(tenant_id, service_code) DO NOTHING`,
-  )
-    .bind(input.tenantId, policy.defaultBps, input.now, verificationCheckAt(input.now, 0))
-    .run()
-
   const { vaultFor } = await import("../../do/gerai-vault/stub")
   const vault = vaultFor(env, input.tenantId)
   const [outlet, appRow, rulesRes] = await Promise.all([
@@ -331,8 +321,16 @@ export async function syncDiscountsFromMengantar(
     env.DB.prepare("SELECT json_extract(outlet_json, '$.areaId') AS area_id FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY created_at DESC LIMIT 1")
       .bind(input.tenantId)
       .first<{ area_id: string | null }>(),
-    env.DB.prepare("SELECT service_code, service_class, assigned_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ?")
-      .bind(input.tenantId)
+    env.DB.prepare(
+      `SELECT c.service_code, c.service_class,
+              COALESCE(r.assigned_bps, p.default_discount_bps, ?2) AS assigned_bps,
+              COALESCE(r.verification_state, 'belum_diterapkan') AS verification_state
+       FROM courier_service_catalog c
+       LEFT JOIN courier_discount_policy p ON p.courier_code = c.courier_code
+       LEFT JOIN tenant_discount_rules r ON r.tenant_id = ?1 AND r.service_code = c.service_code
+       WHERE c.is_active = 1`,
+    )
+      .bind(input.tenantId, policy.defaultBps)
       .all<{ service_code: string; service_class: "regular" | "cargo"; assigned_bps: number; verification_state: VerificationState }>(),
   ])
   const areaId = (outlet?.ok ? outlet.value?.areaId : null) ?? appRow?.area_id ?? null
@@ -345,7 +343,16 @@ export async function syncDiscountsFromMengantar(
   }
 
   const nextDaily = input.now + 24 * 3600_000
-  const stmts: D1PreparedStatement[] = []
+  const stmts: D1PreparedStatement[] = [
+    env.DB.prepare(
+      `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, cashback_bps, effective_from, apply_channel,
+         requested_at, verification_state, next_check_at, check_step, updated_at, updated_by)
+       SELECT ?1, c.service_code, c.courier_code, c.service_class, COALESCE(p.default_discount_bps, ?2), 0, ?3, 'mengantar_team', ?3, 'belum_diterapkan', ?4, 0, ?3, 'system'
+       FROM courier_service_catalog c LEFT JOIN courier_discount_policy p ON p.courier_code = c.courier_code
+       WHERE c.is_active = 1
+       ON CONFLICT(tenant_id, service_code) DO NOTHING`,
+    ).bind(input.tenantId, policy.defaultBps, input.now, verificationCheckAt(input.now, 0)),
+  ]
   const changes: Array<{ serviceCode: string; fromBps: number; toBps: number }> = []
   let synced = 0
   let unchanged = 0

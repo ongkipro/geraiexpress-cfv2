@@ -17,7 +17,7 @@ import { api, ApiError } from "../../lib/api"
 import { sanitizePhone } from "../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
-import { ContactDialog, rupiah } from "./shared"
+import { ContactDialog, prefillContactQuery, rupiah } from "./shared"
 import { Panel } from "../../components/admin/page"
 
 // Kontak › Pengirim (visual 06 §2, visual 07, DEC-212): walk-in senders and reseller/dropship brands. Deposit column
@@ -244,16 +244,19 @@ export function SenderForm({
   onSaved,
   onCancel,
   onVerified,
+  initialQuery,
 }: {
   sender: Sender | null
   owner: boolean
   onSaved: (saved?: Sender) => void
   onCancel?: () => void
   onVerified?: () => void
+  initialQuery?: string
 }) {
+  const pre = sender ? null : prefillContactQuery(initialQuery)
   const [kind, setKind] = useState<Sender["sender_kind"]>(sender?.sender_kind ?? "walk_in")
-  const [name, setName] = useState(sender?.true_name ?? "")
-  const [phone, setPhone] = useState(sender?.true_phone ?? "")
+  const [name, setName] = useState(sender?.true_name ?? pre?.name ?? "")
+  const [phone, setPhone] = useState(sender?.true_phone ?? pre?.phone ?? "")
   const [street, setStreet] = useState(sender?.true_street ?? "")
   const [area, setArea] = useState<Area | null>(sender?.true_area_id ? { id: sender.true_area_id, label: sender.true_area_label ?? "", postalCode: sender.true_postal_code ?? null } : null)
   const [postalCode, setPostalCode] = useState(sender?.true_postal_code ?? "")
@@ -333,7 +336,7 @@ export function SenderForm({
   const wa = waDigits ? `62${waDigits.replace(/^(62|0)/, "")}` : ""
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
-      <div className="flex flex-col gap-4 px-6 py-5">
+      <div className="flex flex-col gap-4 px-5 pt-5 pb-12 sm:px-6 sm:pb-8">
         <ToggleGroup value={[kind]} onValueChange={(v) => v[0] && setKind(v[0] as Sender["sender_kind"])} aria-label="Jenis pengirim" variant="outline" spacing={0} className="grid w-full grid-cols-2">
           <ToggleGroupItem value="walk_in" className="w-full">Walk-in</ToggleGroupItem>
           <ToggleGroupItem value="reseller_dropship" className="w-full">Toko Reseller / Dropship</ToggleGroupItem>
@@ -401,7 +404,7 @@ export function SenderForm({
         </Field>
         {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
       </div>
-      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-6 py-3.5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-5 pt-3.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
         <div>
           {sender && owner ? <Button type="button" variant="outline" disabled={pending} onClick={archive}>Arsipkan</Button> : null}
         </div>

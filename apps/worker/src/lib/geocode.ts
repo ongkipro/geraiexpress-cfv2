@@ -1,4 +1,5 @@
 import { isInIndonesia } from "@gx/domain/geo"
+import { sha256Hex } from "../crypto"
 
 export interface GeocodePoint {
   lat: number
@@ -25,13 +26,28 @@ const LOCAL_CITIES: Array<{ re: RegExp; point: GeocodePoint }> = [
   { re: /bogor|cibinong|sentul/i, point: { lat: -6.5971, lng: 106.806, label: "" } },
 ]
 
+/** Strips phone numbers, RT/RW, and unit/house numbers before forwarding a query upstream or caching it. */
+export function minimizeGeocodeQuery(raw: string): string {
+  return raw
+    .replace(/(?:\+?62[\s\-().]*|0)8[\d\s\-().]{7,16}/g, " ")
+    .replace(/\b(?:rt|rw)\s*\.?\s*\d+(?:\s*\/\s*(?:rw\s*\.?\s*)?\d+)?/gi, " ")
+    .replace(/\b(?:no|nomor|blok|lt|lantai|unit|kav|kavling)\s*\.?\s*[a-z0-9/-]+(?:\s+\d+[a-z]?)*/gi, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/^[\s,]+|[\s,]+$/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 160)
+}
+
 /** Builds progressively broader fallback queries for comma-separated Indonesian addresses. */
 export function buildGeocodeQueries(q: string): string[] {
-  const parts = q
+  const clean = minimizeGeocodeQuery(q)
+  if (!clean) return []
+  const parts = clean
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean)
-  const queries = [q]
+  const queries = [clean]
   if (parts.length >= 3) {
     const withoutFirst = parts.slice(1).join(", ")
     if (withoutFirst.length >= 3 && !queries.includes(withoutFirst)) queries.push(withoutFirst)
@@ -65,15 +81,15 @@ async function queryNominatim(q: string, fetcher: typeof fetch): Promise<Geocode
     const dedupKey = `${lat},${lng}`
     if (seen.has(dedupKey)) continue
     seen.add(dedupKey)
-    out.push({ lat, lng, label: item?.display_name?.trim() || q })
+    out.push({ lat, lng, label: item?.display_name?.trim() || "Indonesia" })
   }
   return out
 }
 
 /**
  * KV-cached Indonesian Nominatim forward geocoder.
- * Stores a wrapped `{ point, candidates }` envelope under `geocode:v2:` so a KV cache miss (`null`)
- * is never mistaken for a cached negative lookup.
+ * Minimizes address granularity before upstream lookup and hashes the KV key under `geocode:v3:` so raw customer
+ * addresses are never retained in KV keys or values; wraps `{ point, candidates }` so a miss (`null`) is distinct.
  */
 export async function geocodeIndonesia(
   env: Pick<Env, "GX_ENV" | "CACHE_KV">,
@@ -81,7 +97,7 @@ export async function geocodeIndonesia(
   waitUntil?: (p: Promise<unknown>) => void,
   fetcher: typeof fetch = fetch,
 ): Promise<GeocodeResult> {
-  const q = rawQuery.trim().replace(/\s+/g, " ").slice(0, 160)
+  const q = minimizeGeocodeQuery(rawQuery)
   if (q.length < 3) return { point: null, candidates: [] }
 
   if (env.GX_ENV === "local") {
@@ -92,7 +108,7 @@ export async function geocodeIndonesia(
     return { point, candidates: [point] }
   }
 
-  const key = `geocode:v2:${q.toLowerCase()}`
+  const key = `geocode:v3:${await sha256Hex(q.toLowerCase())}`
   const cached = await env.CACHE_KV.get<GeocodeResult>(key, "json").catch(() => null)
   if (cached && typeof cached === "object" && "point" in cached && Array.isArray(cached.candidates)) {
     return cached

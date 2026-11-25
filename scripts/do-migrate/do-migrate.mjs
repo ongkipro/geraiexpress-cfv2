@@ -11,6 +11,7 @@ const { values } = parseArgs({
   options: {
     env: { type: "string", default: "local" },
     "dry-run": { type: "boolean", default: false },
+    json: { type: "boolean", default: false },
     batch: { type: "string", default: "25" },
     origin: { type: "string" },
     port: { type: "string", default: "8787" },
@@ -47,6 +48,8 @@ const batch = Math.max(1, Math.min(100, Number(values.batch) || 25))
 let cursor = null
 let migrated = 0
 let alreadyCurrent = 0
+let pending = 0
+const allReport = []
 for (;;) {
   const res = await fetch(`${origin}/internal/ops/do-migrate`, {
     method: "POST",
@@ -62,7 +65,11 @@ for (;;) {
   const d = body.data
   migrated += d.migrated
   alreadyCurrent += d.alreadyCurrent
-  for (const line of d.report) console.log(`  ${line}`)
+  if (values["dry-run"]) pending += d.report.length
+  allReport.push(...d.report)
+  if (!values.json) {
+    for (const line of d.report) console.log(`  ${line}`)
+  }
   if (d.failed) {
     console.error(`do:migrate: STOPPED at tenant ${d.failed.tenantId} (now in recovery): ${d.failed.error}`)
     process.exit(1)
@@ -70,4 +77,8 @@ for (;;) {
   if (!d.nextCursor) break
   cursor = d.nextCursor
 }
-console.log(`do:migrate: ${values["dry-run"] ? "DRY RUN " : ""}PASS (${values.env}) — migrated ${migrated}, already current ${alreadyCurrent}`)
+if (values.json) {
+  console.log(JSON.stringify({ env: values.env, dryRun: values["dry-run"], pending, migrated, alreadyCurrent, report: allReport }))
+} else {
+  console.log(`do:migrate: ${values["dry-run"] ? "DRY RUN " : ""}PASS (${values.env}) — migrated ${migrated}, already current ${alreadyCurrent}`)
+}

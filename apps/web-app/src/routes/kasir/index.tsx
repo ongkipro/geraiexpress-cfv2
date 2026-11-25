@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, CopyIcon, MapPinnedIcon, MessageCircleIcon, PlusIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon } from "lucide-react"
+import { CheckCircle2Icon, CheckIcon, CircleDashedIcon, CopyIcon, MapPinnedIcon, MessageCircleIcon, PrinterIcon, QrCodeIcon, RotateCcwIcon, UserPlusIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Field, FieldError, FieldLabel } from "../../components/ui/field"
@@ -194,9 +194,11 @@ function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initi
   // closed (Escape / X) and maybe reopened answers to an old generation and neither closes the new sheet nor picks.
   const sheetGen = useRef(0)
   const [sheetId, setSheetId] = useState(0)
-  function setSheet(open: boolean) {
+  const [prefillQuery, setPrefillQuery] = useState("")
+  function setSheet(open: boolean, initialQ = "") {
     sheetGen.current++
     setSheetId(sheetGen.current)
+    setPrefillQuery(open ? initialQ : "")
     setAdding(open)
   }
   function savedIf(id: number, item?: Contact) {
@@ -210,17 +212,31 @@ function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initi
         id={`pihak-${kind}`}
         title={label}
         action={
-          <Button type="button" variant="outline" size="sm" disabled={locked} onClick={() => setSheet(true)} aria-label={`${label} baru`}>
-            <PlusIcon aria-hidden /> Baru
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={locked}
+            onClick={() => setSheet(true, "")}
+            aria-label={`${label} baru`}
+            className="border-primary/30 bg-primary/10 font-semibold text-primary shadow-2xs hover:border-primary/45 hover:bg-primary/15 hover:text-primary"
+          >
+            <UserPlusIcon aria-hidden /> {label} Baru
           </Button>
         }
       />
-      {value ? <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onUpdate ?? onPick} locked={locked} /> : <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0"><PartyPicker kind={kind} value={value} onPick={onPick} limit={4} /></fieldset>}
+      {value ? (
+        <ChosenParty c={value} kind={kind} destinationId={destination?.destinationAreaId ?? null} onClear={() => onPick(null)} onChange={onUpdate ?? onPick} locked={locked} />
+      ) : (
+        <fieldset disabled={locked} className="m-0 min-w-0 border-0 p-0">
+          <PartyPicker kind={kind} value={value} onPick={onPick} onCreateNew={(q) => setSheet(true, q)} disabled={locked} limit={4} />
+        </fieldset>
+      )}
       {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {children}
       <ContactDialog
         open={adding}
-        onOpenChange={setSheet}
+        onOpenChange={(open) => setSheet(open)}
         title={`Tambah ${label} Baru`}
         description={
           kind === "recipients"
@@ -230,9 +246,9 @@ function PartyStep({ kind, value, onPick, onUpdate, error, destination, n, initi
       >
         {adding ? (
           kind === "senders" ? (
-            <SenderForm key={sheetId} sender={null} owner={isOwner(w)} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} />
+            <SenderForm key={sheetId} sender={null} owner={isOwner(w)} initialQuery={prefillQuery} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} />
           ) : (
-            <RecipientForm key={sheetId} recipient={null} canArchive={false} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} initialArea={initialArea ?? null} />
+            <RecipientForm key={sheetId} recipient={null} canArchive={false} initialQuery={prefillQuery} onSaved={(item) => savedIf(sheetId, item)} onCancel={() => setSheet(false)} initialArea={initialArea ?? null} />
           )
         ) : null}
       </ContactDialog>

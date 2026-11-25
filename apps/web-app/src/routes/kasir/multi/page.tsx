@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon, Trash2Icon, UploadIcon, UserPlusIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../../../components/ui/field"
 import { Input } from "../../../components/ui/input"
@@ -9,6 +9,8 @@ import { api, ApiError } from "../../../lib/api"
 import { sanitizeDigits, sanitizePhone } from "../../../lib/input"
 import { PageTitle } from "../../../shell/states"
 import { PartyPicker, type Contact } from "../../kiriman/detail"
+import { SenderForm } from "../../kontak/pengirim"
+import { ContactDialog } from "../../kontak/shared"
 import { SectionCard } from "../../../components/admin/page"
 import { CourierLogo } from "../../../components/admin/courier-logo"
 import { PickupChip } from "../pickup-chip"
@@ -46,6 +48,27 @@ export function PaketMassalPage() {
   const [servicesError, setServicesError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [addingSender, setAddingSender] = useState(false)
+  const [senderPrefill, setSenderPrefill] = useState("")
+  const [senderSheetKey, setSenderSheetKey] = useState(0)
+  const senderModalGenRef = useRef(0)
+  const openNewSender = (q: string) => {
+    senderModalGenRef.current += 1
+    setSenderPrefill(q)
+    setSenderSheetKey(senderModalGenRef.current)
+    setAddingSender(true)
+  }
+  const closeNewSender = () => {
+    senderModalGenRef.current += 1
+    setSenderSheetKey(senderModalGenRef.current)
+    setAddingSender(false)
+    setSenderPrefill("")
+  }
+  const savedSenderIf = (gen: number, item?: Contact) => {
+    if (gen !== senderModalGenRef.current) return
+    closeNewSender()
+    if (item) setSender(item)
+  }
   const svcGen = useRef(0)
   // Sol R2-4: the services may arrive after the operator already opened the Cargo tab — the default comes from the tab
   // open at that moment (none when that tab is empty), never a hidden Reguler service.
@@ -168,16 +191,53 @@ export function PaketMassalPage() {
         <PickupChip outlet={cfg?.outlet} owner={isOwner(w)} loaded={cfg !== null} />
       </PageTitle>
       <div className="flex flex-col gap-4 md:gap-5">
-        <SectionCard id="pengirim" title="1. Pengirim">
+        <SectionCard
+          id="pengirim"
+          title="1. Pengirim"
+          action={
+            !sender ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => openNewSender("")}
+                aria-label="Pengirim baru"
+                className="border-primary/30 bg-primary/10 font-semibold text-primary shadow-2xs hover:border-primary/45 hover:bg-primary/15 hover:text-primary"
+              >
+                <UserPlusIcon aria-hidden /> Pengirim Baru
+              </Button>
+            ) : undefined
+          }
+        >
           {sender ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-base md:text-sm"><span className="font-medium">{sender.display_brand_name ?? sender.true_name}</span> <span className="text-muted-foreground tabular-nums">{sender.true_phone}</span></p>
               <Button variant="outline" onClick={() => setSender(null)}>Ganti</Button>
             </div>
           ) : (
-            <PartyPicker kind="senders" value={sender} onPick={setSender} />
+            <PartyPicker kind="senders" value={sender} onPick={setSender} onCreateNew={(q) => openNewSender(q)} />
           )}
           {errors.senderId ? <p role="alert" className="mt-2 text-base md:text-sm text-danger">{errors.senderId}</p> : null}
+          <ContactDialog
+            open={addingSender}
+            onOpenChange={(o) => {
+              if (!o) closeNewSender()
+              else setAddingSender(true)
+            }}
+            title="Tambah Pengirim Baru"
+            description="Data tersimpan ke buku kontak dan langsung dipilih untuk paket massal ini."
+          >
+            {addingSender ? (
+              <SenderForm
+                key={senderSheetKey}
+                sender={null}
+                owner={isOwner(w)}
+                initialQuery={senderPrefill}
+                onSaved={(item) => savedSenderIf(senderSheetKey, item)}
+                onCancel={closeNewSender}
+              />
+            ) : null}
+          </ContactDialog>
         </SectionCard>
 
         <SectionCard id="layanan" title="2. Ekspedisi & COD untuk semua baris">

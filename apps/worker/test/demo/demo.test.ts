@@ -167,5 +167,78 @@ describe("Demo Account", () => {
     })
     expect(forgotRes.status).toBe(403)
     expect(((await forgotRes.json()) as { error: { code: string } }).error.code).toBe("DEMO_READ_ONLY")
+
+    // 8. Demo account cannot create a gx_live_ API key, and even a directly injected key for demo is rejected on /api/v1 and /mcp (TASK-711).
+    const keyCreate = await post("/api-keys", { name: "Demo Key", scopes: ["rates:read"] })
+    expect(keyCreate.status).toBe(403)
+    expect(((await keyCreate.json()) as { error: { code: string } }).error.code).toBe("DEMO_READ_ONLY")
+
+    const { hashApiToken, newApiToken } = await import("../../src/api-v1/keys")
+    const injectedToken = newApiToken()
+    await env.DB.prepare(
+      "INSERT INTO tenant_api_keys (id, tenant_id, name, token_hash, token_prefix, scopes_json, created_by, created_at) VALUES (?, 'demo-tenant-001', 'Injected', ?, ?, ?, 'demo-user-001', ?)",
+    )
+      .bind("demo-key-injected", await hashApiToken(env.AUTH_SESSION_PEPPER, injectedToken), injectedToken.slice(0, 12), JSON.stringify(["rates:read", "shipments:draft", "tracking:read"]), Date.now())
+      .run()
+    expect((await SELF.fetch(`${APP}/api/v1/shipments`, { headers: { authorization: `Bearer ${injectedToken}` } })).status).toBe(401)
+    expect(
+      (
+        await SELF.fetch(`${APP}/mcp`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${injectedToken}`, "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+        })
+      ).status,
+    ).toBe(401)
+    // Re-running seed cleans up any stray demo API key rows and preserves unrelated users' login throttles (TASK-707 Sol P1).
+    await env.DB.prepare("INSERT OR REPLACE INTO auth_throttle (key, count, window_started_at) VALUES ('login-lock:unrelated-user', 5, ?)").bind(Date.now()).run()
+    const reseed = await SELF.fetch(`${OWNER}/internal/ops/seed-demo`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.OPS_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    })
+    expect(reseed.status).toBe(201)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tenant_api_keys WHERE tenant_id = 'demo-tenant-001'").first<{ n: number }>()).toEqual({ n: 0 })
+    expect(await env.DB.prepare("SELECT count FROM auth_throttle WHERE key = 'login-lock:unrelated-user'").first<{ count: number }>()).toEqual({ count: 5 })
+  })
+
+  it("reserves 'demo' on onboarding, refuses overwriting a non-demo tenant, and works in GX_ENV=production (TASK-711, DEC-255)", async () => {
+    const { slugProblem } = await import("../../src/onboarding/service")
+    const { handleSeedDemo } = await import("../../src/ops/seed-demo")
+
+    // 1. Registering a gerai with slug 'demo' is refused.
+    expect(slugProblem("demo")).toBeTruthy()
+
+    // 2. Seeder succeeds when GX_ENV === 'production' (intended public read-only demo in production).
+    const prodRes = await handleSeedDemo(
+      new Request(`${OWNER}/internal/ops/seed-demo`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.OPS_TOKEN}`, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+      { ...env, GX_ENV: "production" },
+    )
+    expect(prodRes.status).toBe(201)
+    expect(await env.DB.prepare("SELECT environment FROM tenant_onboarding WHERE tenant_id = 'demo-tenant-001'").first()).toEqual({ environment: "production" })
+
+    // 3. Seeder refuses 409 DEMO_SLUG_CONFLICT if slug 'demo' belongs to another tenant.
+    await env.DB.prepare("UPDATE tenants SET slug = 'demo-prev' WHERE id = 'demo-tenant-001'").run()
+    await env.DB.prepare("INSERT INTO tenants (id, slug, name, status, created_at, updated_at) VALUES ('real-tenant-999', 'demo', 'Toko Asli', 'active', 1, 1)").run()
+    try {
+      const conflict = await handleSeedDemo(
+        new Request(`${OWNER}/internal/ops/seed-demo`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${env.OPS_TOKEN}`, "content-type": "application/json" },
+          body: JSON.stringify({}),
+        }),
+        env,
+      )
+      expect(conflict.status).toBe(409)
+      expect(((await conflict.json()) as { error: { code: string } }).error.code).toBe("DEMO_SLUG_CONFLICT")
+      expect(await env.DB.prepare("SELECT id, name FROM tenants WHERE slug = 'demo'").first()).toEqual({ id: "real-tenant-999", name: "Toko Asli" })
+    } finally {
+      await env.DB.prepare("DELETE FROM tenants WHERE id = 'real-tenant-999'").run()
+      await env.DB.prepare("UPDATE tenants SET slug = 'demo' WHERE id = 'demo-tenant-001'").run()
+    }
   })
 })

@@ -26,14 +26,17 @@ export type KeySyncOutcome =
 
 async function markRestricted(env: Env, tenantId: string, sellerId: string | null, code: string, now: number): Promise<void> {
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"
-  await vaultFor(env, tenantId).recordOnboarding(tenantId, { environment, state: "provider_restricted", sellerId }).catch(() => undefined)
+  // Authoritative tenant DO must persist the restriction before we report `restricted` (TASK-707 Sol P2).
+  const doRes = await vaultFor(env, tenantId).recordOnboarding(tenantId, { environment, state: "provider_restricted", sellerId })
+  if (!doRes.ok) {
+    throw new AppError(503, "TENANT_NOT_READY", "Gagal mencatat pembatasan akun seller pada data gerai. Coba lagi sebentar lagi.")
+  }
   await env.DB.prepare(
     `INSERT INTO tenant_onboarding (tenant_id, environment, onboarding_state, seller_id, external_user_id, last_error_code, updated_at) VALUES (?1, ?2, 'provider_restricted', ?3, ?1, ?4, ?5)
      ON CONFLICT(tenant_id) DO UPDATE SET onboarding_state = 'provider_restricted', seller_id = COALESCE(excluded.seller_id, tenant_onboarding.seller_id), last_error_code = excluded.last_error_code, updated_at = excluded.updated_at`,
   )
     .bind(tenantId, environment, sellerId, code, now)
     .run()
-    .catch(() => undefined)
 }
 
 /** Registers the new path token as `active` and the previous one as `rotating` (idempotent). */

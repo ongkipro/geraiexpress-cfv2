@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useParams } from "@tanstack/react-router"
-import { AlertTriangleIcon, ArrowLeftIcon, CheckCircle2Icon, CheckIcon, ClockIcon, CopyIcon, ExternalLinkIcon, MapPinIcon, PackageIcon, PrinterIcon, RefreshCwIcon, RotateCcwIcon, TruckIcon, UserIcon } from "lucide-react"
+import { AlertTriangleIcon, ArrowLeftIcon, CheckCircle2Icon, CheckIcon, ClockIcon, CopyIcon, ExternalLinkIcon, MapPinIcon, PackageIcon, PrinterIcon, RefreshCwIcon, RotateCcwIcon, TruckIcon, UserIcon, UserPlusIcon } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
 import { Button } from "../../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
@@ -141,7 +141,22 @@ function Summary({ d, owner }: { d: Detail; owner: boolean }) {
 }
 
 /** `limit`: how many recent/matching contacts to list (the POS cards show 4, DEC-251A). */
-export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders" | "recipients"; value: Contact | null; onPick: (c: Contact) => void; limit?: number }) {
+export function PartyPicker({
+  kind,
+  value,
+  onPick,
+  onCreateNew,
+  disabled = false,
+  limit = 6,
+}: {
+  kind: "senders" | "recipients"
+  value: Contact | null
+  onPick: (c: Contact) => void
+  /** Opens the quick-create popup prefilled with the current search query when no contact matches. */
+  onCreateNew?: (query: string) => void
+  disabled?: boolean
+  limit?: number
+}) {
   const [q, setQ] = useState("")
   const key = `${kind}:${limit}:${q}`
   const [res, setRes] = useState<{ key: string; items: Contact[]; err: string | null }>({ key: "", items: [], err: null })
@@ -167,6 +182,8 @@ export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders
     }
   }, [q, kind, limit, key])
   const label = kind === "senders" ? "Pengirim" : "Penerima"
+  const trimmedQ = q.trim()
+  const shortQ = trimmedQ.length > 26 ? `${trimmedQ.slice(0, 26)}…` : trimmedQ
   return (
     <div className="flex flex-col gap-2">
       <Input aria-label={`Cari ${label.toLowerCase()}`} placeholder={`Cari ${label.toLowerCase()} (nama atau nomor HP)`} value={q} onChange={(e) => setQ(e.target.value)} type="search" />
@@ -179,7 +196,38 @@ export function PartyPicker({ kind, value, onPick, limit = 6 }: { kind: "senders
             </button>
           </li>
         ))}
-        {err ? <li className="px-3 py-2 text-base md:text-sm text-danger">{err}</li> : loading ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Memuat {label.toLowerCase()}…</li> : items.length === 0 ? <li className="px-3 py-2 text-base md:text-sm text-muted-foreground">Tidak ada {label.toLowerCase()} cocok. Tambah baru di tombol + Baru atau menu Kontak.</li> : null}
+        {err ? (
+          <li className="px-3 py-2.5 text-base md:text-sm text-danger">{err}</li>
+        ) : loading ? (
+          <li className="px-3 py-2.5 text-base md:text-sm text-muted-foreground">Memuat {label.toLowerCase()}…</li>
+        ) : items.length === 0 ? (
+          <li className="flex flex-col gap-2 bg-slate-50/75 px-3.5 py-3">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm font-medium text-slate-800">
+                {trimmedQ
+                  ? `Data ${label.toLowerCase()} “${shortQ}” belum tercatat di gerai.`
+                  : `Belum ada data ${label.toLowerCase()} tersimpan.`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {onCreateNew
+                  ? "Klik tombol di bawah untuk langsung menambahkan data baru."
+                  : `Tambahkan dulu melalui tombol + ${label} Baru atau menu Kontak.`}
+              </p>
+            </div>
+            {onCreateNew ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={disabled}
+                onClick={() => onCreateNew(trimmedQ)}
+                className="w-full justify-center"
+              >
+                <UserPlusIcon aria-hidden />
+                {trimmedQ ? `Daftarkan “${shortQ}” Sekarang` : `Daftarkan ${label} Pertama`}
+              </Button>
+            ) : null}
+          </li>
+        ) : null}
       </ul>
     </div>
   )

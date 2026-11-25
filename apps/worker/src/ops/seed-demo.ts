@@ -4,8 +4,9 @@
 import { TENANT_SCHEMA_VERSION } from "@gx/db/tenant"
 import { hashPassword } from "../auth/password"
 import { timingSafeEqualStr } from "../crypto"
-import { DEMO_DEFAULT_PASSWORD, DEMO_EMAIL, DEMO_TENANT_NAME, DEMO_TENANT_SLUG } from "../demo/constants"
+import { DEMO_DEFAULT_PASSWORD, DEMO_EMAIL, DEMO_TENANT_ID, DEMO_TENANT_NAME, DEMO_TENANT_SLUG } from "../demo/constants"
 import { vaultFor } from "../do/gerai-vault/stub"
+import { emailHash } from "../email/outbox"
 import { platformHostOf } from "../host/lookup"
 import { fail, ok } from "../http/envelope"
 
@@ -25,7 +26,11 @@ export async function handleSeedDemo(request: Request, env: Env): Promise<Respon
   const userId = existingUser?.id ?? "demo-user-001"
 
   const existingTenant = await env.DB.prepare("SELECT id FROM tenants WHERE slug = ?").bind(DEMO_TENANT_SLUG).first<{ id: string }>()
-  const tenantId = existingTenant?.id ?? "demo-tenant-001"
+  if (existingTenant && existingTenant.id !== DEMO_TENANT_ID) {
+    return fail(409, "DEMO_SLUG_CONFLICT", "Slug 'demo' dimiliki gerai lain; seeder ditolak.")
+  }
+  const tenantId = DEMO_TENANT_ID
+  const demoEh = await emailHash(env.AUTH_SESSION_PEPPER, DEMO_EMAIL)
   const hostname = platformHostOf(env, DEMO_TENANT_SLUG)
   const environment = env.GX_ENV === "production" ? "production" : "sandbox"
 
@@ -65,8 +70,9 @@ export async function handleSeedDemo(request: Request, env: Env): Promise<Respon
        FROM courier_service_catalog WHERE is_active = 1
        ON CONFLICT(tenant_id, service_code) DO UPDATE SET verification_state = 'sesuai', observed_bps = excluded.observed_bps, observed_at = ?2, updated_at = ?2`,
     ).bind(tenantId, now),
-    // Clear any stale throttle lock for the demo account.
-    env.DB.prepare("DELETE FROM auth_throttle WHERE key LIKE 'login-%'"),
+    // Clear only the demo account's own login throttle keys (never wipe other users' throttles) and guarantee zero API keys.
+    env.DB.prepare("DELETE FROM auth_throttle WHERE key IN (?1, ?2)").bind(`login-fail:${demoEh}`, `login-lock:${demoEh}`),
+    env.DB.prepare("DELETE FROM tenant_api_keys WHERE tenant_id = ?").bind(tenantId),
   ])
 
   const vault = vaultFor(env, tenantId)

@@ -37,7 +37,7 @@ import { changePassword, confirmEmailChange, listSessions, requestEmailChange, r
 import { templateCsv } from "@gx/domain/bulk"
 import { periodFromParams, previousOf, resolveCustom, resolvePreset } from "@gx/domain/period"
 import { vaultFor } from "../do/gerai-vault/stub"
-import { DEMO_READ_ONLY_MESSAGE, isDemoAllowedAppPost, isDemoEmail, isDemoTenantSlug } from "../demo/constants"
+import { DEMO_READ_ONLY_MESSAGE, isDemoAllowedAppPost, isDemoEmail, isDemoTenantId, isDemoTenantSlug } from "../demo/constants"
 
 export interface Membership {
   tenantId: string
@@ -773,6 +773,7 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
   r("POST", "/api-keys", "app_owner", "role", async (c) => {
     const m = c.get("membership")!
+    if (isDemoTenantId(m.tenantId)) throw new AppError(403, "DEMO_READ_ONLY", DEMO_READ_ONLY_MESSAGE)
     const b = await body(c)
     const name = typeof b.name === "string" ? b.name.replace(/\s+/g, " ").trim() : ""
     const scopes = parseScopes(b.scopes)

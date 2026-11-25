@@ -105,6 +105,9 @@ describe("/api/v1", () => {
     expect((await v1(`/shipments/${issued[0]}/issue`, reseller.token, { method: "POST", headers: { "idempotency-key": `api-again` } })).status).toBe(200)
     const actorTypes = await runInDurableObject(t.vault, (_i, s) => s.storage.sql.exec<{ actor_type: string }>("SELECT DISTINCT actor_type FROM audit_logs WHERE action = 'shipment.dispatch'").toArray().map((x) => x.actor_type))
     expect(actorTypes).toEqual(["api_key"])
+    // TASK-713a: shipments created through `/api/v1` (and `/mcp`) record `entry_channel = 'api_mcp'`.
+    const channels = await runInDurableObject(t.vault, (_i, s) => s.storage.sql.exec<{ entry_channel: string }>("SELECT DISTINCT entry_channel FROM shipments WHERE slug = ?", issued[0]!).toArray().map((x) => x.entry_channel))
+    expect(channels).toEqual(["api_mcp"])
     const detail = await (await v1(`/shipments/${issued[0]}`, reseller.token)).json()
     expect(ownerOnlyKeysIn(detail)).toEqual([])
   })

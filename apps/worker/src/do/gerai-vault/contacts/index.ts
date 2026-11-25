@@ -396,7 +396,8 @@ export function contactShipmentHistory(
               THEN NULL ELSE s.sender_contact_id END AS counterparty_id,
          CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
               THEN json_extract(s.mask_snapshot_json, '$.sender.name') ELSE COALESCE(c.display_brand_name, c.true_name) END AS counterparty_name,
-         c.true_area_label AS counterparty_area`
+         CASE WHEN s.mask_preset IS NOT NULL AND s.mask_preset != 'standar_gerai' AND s.dispatch_state NOT IN ('draft','failed')
+              THEN NULL ELSE c.true_area_label END AS counterparty_area`
   const items = sql
     .exec<ContactShipmentRow>(
       `SELECT s.slug, s.created_at, s.issued_at, s.courier_code, s.service_code, s.awb_number, s.status, s.dispatch_state,

@@ -129,7 +129,7 @@ export function GeraiDetailPage() {
                 variant="outline"
                 path={`/tarif/gerai/${data.id}/tarik-mengantar`}
                 onDone={reload}
-                hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan seluruh aturan tarif gerai ke angka tersebut."
+                hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan aturan tarif ke angka tersebut — termasuk nilai di luar batas default 20%–30%. Layanan tanpa estimasi aktif dilewati."
               />
             ) : null}
             <Link

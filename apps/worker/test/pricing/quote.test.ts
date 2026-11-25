@@ -118,8 +118,9 @@ describe("quick check, freeze, rate limit, observations, projection", () => {
     await quote(t.cookie, { mode: "none", weightGram: 7000 })
     const rows = await env.DB.prepare("SELECT service_code, observed_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ? AND service_code IN ('JT','JNECargo')").bind(t.tenantId).all<{ service_code: string; observed_bps: number; verification_state: string }>()
     const by = Object.fromEntries(rows.results.map((r) => [r.service_code, r]))
-    // Mock JT discount = floor(12.500 × 1990 / 10000) = 2.487 → floor(2.487 × 10000 / 12.500) = 1.989 (lossy floor, spec 02 §2).
-    expect(by.JT).toMatchObject({ observed_bps: 1989 })
+    // DEC-255 (TASK-708): mock JT discount = floor(12.500 × 1990 / 10000) = 2.487 (within ±1 Rp of 19.90%),
+    // so exact-percent snap preserves 1990 bps without ±1 bp rounding drift.
+    expect(by.JT).toMatchObject({ observed_bps: 1990 })
     expect(by.JNECargo).toMatchObject({ observed_bps: 2500 })
   })
 

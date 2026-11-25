@@ -170,5 +170,104 @@ describe("sync actual Mengantar discounts per expedition (BYOK / varied discount
     }
     expect(detail.data.discounts.summary.selisih).toBe(0)
     expect(detail.data.discounts.items.find((x) => x.service_code === "SiCepat")).toMatchObject({ assigned_bps: 3200, observed_bps: 3200 })
+
+    // DEC-255 (TASK-708): a later manual edit on an adopted out-of-band rule is still bounded by the platform/courier band.
+    const manualOob = await ownerPost(`/tarif/gerai/${g.tenantId}/JT`, g.admin, { assignedBps: 1600, reason: "coba ubah manual di luar batas" })
+    expect(manualOob.status).toBe(422)
+    expect(((await manualOob.json()) as { error: { code: string } }).error.code).toBe("DISCOUNT_OUT_OF_BAND")
+    const manualInBand = await ownerPost(`/tarif/gerai/${g.tenantId}/JT`, g.admin, { assignedBps: 2500, reason: "ubah manual dalam batas" })
+    expect(manualInBand.status).toBe(200)
+  })
+
+  it("preserves exact per-expedition Mengantar discount bps without ±1 bp rounding drift while never masking real discrepancies", () => {
+    // Rp 7.500 * 12.5% = 937.5 -> Mengantar rounds discount to Rp 938; naive floor(938*10000/7500) = 1250, Rp 939 would be 1252.
+    expect(
+      observedBpsOf("regular", {
+        price: 7500,
+        discount: 938,
+        discountPercent: 12.5,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: null,
+        cargoDiscount: null,
+        cargoDiscountPercent: null,
+        cargoDiscountExtra: null,
+        cargoDiscountExtraPercent: null,
+      }),
+    ).toBe(1250)
+    // Rp 9.000 * 17.5% = 1575; Rp 11.500 * 22.5% = 2587.5 -> rounded to 2588 (naive floor = 2250, 2587 = 2249 -> snaps cleanly to 2250).
+    expect(
+      observedBpsOf("regular", {
+        price: 11500,
+        discount: 2587,
+        discountPercent: 22.5,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: null,
+        cargoDiscount: null,
+        cargoDiscountPercent: null,
+        cargoDiscountExtra: null,
+        cargoDiscountExtraPercent: null,
+      }),
+    ).toBe(2250)
+    // Base + extra promo snaps cleanly when Rupiah total matches within ±1 Rp.
+    expect(
+      observedBpsOf("cargo", {
+        price: null,
+        discount: null,
+        discountPercent: null,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: 43_000,
+        cargoDiscount: 9_675,
+        cargoDiscountPercent: 22.5,
+        cargoDiscountExtra: 2_150,
+        cargoDiscountExtraPercent: 5,
+      }),
+    ).toBe(2750)
+    // Real discrepancy (> 1 Rp difference between declared percent and Rupiah discount) is NEVER masked.
+    expect(
+      observedBpsOf("regular", {
+        price: 10_000,
+        discount: 2500,
+        discountPercent: 20,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: null,
+        cargoDiscount: null,
+        cargoDiscountPercent: null,
+        cargoDiscountExtra: null,
+        cargoDiscountExtraPercent: null,
+      }),
+    ).toBe(2500)
+    // Invalid Rupiah discount (< 0 or > price) is rejected (null), never snapped to 0 or 10000 bps.
+    expect(
+      observedBpsOf("regular", {
+        price: 10_000,
+        discount: -1,
+        discountPercent: 0,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: null,
+        cargoDiscount: null,
+        cargoDiscountPercent: null,
+        cargoDiscountExtra: null,
+        cargoDiscountExtraPercent: null,
+      }),
+    ).toBeNull()
+    expect(
+      observedBpsOf("regular", {
+        price: 10_000,
+        discount: 10_001,
+        discountPercent: 100,
+        discountExtra: null,
+        discountExtraPercent: null,
+        cargoPrice: null,
+        cargoDiscount: null,
+        cargoDiscountPercent: null,
+        cargoDiscountExtra: null,
+        cargoDiscountExtraPercent: null,
+      }),
+    ).toBeNull()
   })
 })

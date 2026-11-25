@@ -14,7 +14,7 @@ import { api, ApiError } from "../../lib/api"
 import { sanitizePhone } from "../../lib/input"
 import { EmptyState, ErrorState, LoadingState, PageTitle } from "../../shell/states"
 import { isOwner, useWorkspace } from "../../shell/workspace"
-import { ContactDialog, RiskChip, type RiskBadge } from "./shared"
+import { ContactDialog, prefillContactQuery, RiskChip, type RiskBadge } from "./shared"
 import { Panel } from "../../components/admin/page"
 
 // Kontak › Penerima (visual 06 §2): address book with live shipment count, COD history badge, and 20/page pagination.
@@ -208,6 +208,7 @@ export function PenerimaPage() {
 
 export function RecipientForm({
   initialArea,
+  initialQuery,
   recipient,
   canArchive,
   onSaved,
@@ -218,9 +219,11 @@ export function RecipientForm({
   onSaved: (saved?: Recipient) => void
   onCancel?: () => void
   initialArea?: Area | null
+  initialQuery?: string
 }) {
-  const [name, setName] = useState(recipient?.name ?? "")
-  const [phone, setPhone] = useState(recipient?.phone ?? "")
+  const pre = recipient ? null : prefillContactQuery(initialQuery)
+  const [name, setName] = useState(recipient?.name ?? pre?.name ?? "")
+  const [phone, setPhone] = useState(recipient?.phone ?? pre?.phone ?? "")
   const [street, setStreet] = useState(recipient?.street_address ?? "")
   const [note, setNote] = useState(recipient?.address_note ?? "")
   const [area, setArea] = useState<Area | null>(recipient?.mengantar_area_id ? { id: recipient.mengantar_area_id, label: recipient.subdistrict_name ?? "", postalCode: recipient.postal_code } : (initialArea ?? null))
@@ -255,7 +258,7 @@ export function RecipientForm({
   }
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
-      <div className="flex flex-col gap-4 px-6 py-5">
+      <div className="flex flex-col gap-4 px-5 pt-5 pb-12 sm:px-6 sm:pb-8">
         <div className="grid gap-3.5 sm:grid-cols-2">
           <TextField label="Nama penerima" name="name" value={name} onChange={setName} error={errors.name} required maxLength={80} />
           <TextField label="Nomor HP penerima" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} value={phone} onChange={(v) => setPhone(sanitizePhone(v))} error={errors.phone} hint="Contoh: 0857-1234-5678" required />
@@ -288,7 +291,7 @@ export function RecipientForm({
         <TextField label="Patokan (opsional)" name="note" value={note} onChange={setNote} maxLength={200} hint="Contoh: Rumah pagar hijau sebelah minimarket" />
         {msg ? <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm font-medium text-danger">{msg}</p> : null}
       </div>
-      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-6 py-3.5 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200/80 bg-slate-50/95 px-5 pt-3.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
         <div>
           {recipient && canArchive ? (
             <Button

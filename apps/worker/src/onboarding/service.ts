@@ -18,7 +18,7 @@ import { platformPolicy, seedRulesOnApproval } from "../pricing/rules"
 export const RESERVED_SLUGS = new Set([
   "www", "app", "api", "owner", "admin", "hq", "hooks", "relay", "custom", "mcp", "docs", "mail", "mengantar",
   "jne", "jnt", "sicepat", "spx", "pos", "lion", "sap", "paxel", "anteraja", "idexpress", "ninja", "tiki",
-  "cname", "fallback", "probe", "staging", "static", "assets", "status",
+  "cname", "fallback", "probe", "staging", "static", "assets", "status", "demo",
 ])
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/
 

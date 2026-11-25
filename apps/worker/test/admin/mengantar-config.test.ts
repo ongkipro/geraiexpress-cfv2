@@ -72,10 +72,21 @@ describe("Super Admin Mengantar Partner API config & registration notifications"
     expect(audit!.reason).toBe("Isi kredensial produksi resmi Mengantar")
     expect(audit!.metadata_json).not.toContain(secret)
 
-    // Connection test runs cleanly against the configured client (mock locally) and audits.
+    // Connection test runs cleanly against the configured client (mock locally), reserves PartnerQuotaDO, and audits.
+    const { quotaFor, PER_MINUTE } = await import("../../src/do/partner-quota")
+    const beforeUsage = await quotaFor(env).usage(Date.now())
     const testRes = await ownerPost("/sistem/mengantar/uji", cookie, {})
     expect(testRes.status).toBe(200)
     expect(await testRes.json()).toMatchObject({ ok: true, data: { ok: true, state: "connected" } })
+    const afterUsage = await quotaFor(env).usage(Date.now())
+    expect(afterUsage.minute).toBeGreaterThanOrEqual(beforeUsage.minute + 1)
+
+    // TASK-713d: when PartnerQuotaDO minute budget is full, POST /sistem/mengantar/uji refuses with 429 RATE_LIMITED.
+    const now = Date.now()
+    for (let i = afterUsage.minute; i < PER_MINUTE; i++) await quotaFor(env).reserve("call", now)
+    const throttled = await ownerPost("/sistem/mengantar/uji", cookie, {})
+    expect(throttled.status).toBe(429)
+    expect(((await throttled.json()) as { error: { code: string } }).error.code).toBe("RATE_LIMITED")
   })
 
   it("enqueues both applicant confirmation and Super Admin notification emails on new outlet registration", async () => {

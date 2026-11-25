@@ -76,26 +76,41 @@ export function priceOf(serviceClass: "regular" | "cargo", r: ObservedRate): { P
 }
 
 /**
+ * Snaps an observed Rupiah discount to Mengantar's exact declared percentage when the Rupiah amount agrees within ±1 Rp
+ * rounding (eliminating ±1 bp drift on small tariffs across varied per-expedition discounts), while never masking a
+ * real discrepancy between declared percent and actual Rupiah discount.
+ */
+function preciseObservedBps(totalDiscount: number | null, price: number | null, basePct: number | null | undefined, extraPct: number | null | undefined): number | null {
+  const hasPct = typeof basePct === "number" && basePct >= 0 && basePct <= 100
+  const pctBps = hasPct ? Math.round((basePct + (extraPct ?? 0)) * 100) : null
+  if (totalDiscount !== null && price !== null && price > 0) {
+    if (!Number.isSafeInteger(totalDiscount) || totalDiscount < 0 || totalDiscount > price) return null
+    if (pctBps !== null && pctBps >= 0 && pctBps <= 10_000 && Math.abs(Math.round((price * pctBps) / 10_000) - totalDiscount) <= 1) {
+      return pctBps
+    }
+    return observedBpsFromDiscount(totalDiscount, price)
+  }
+  return pctBps !== null && pctBps >= 0 && pctBps <= 10_000 ? pctBps : null
+}
+
+/**
  * Observed seller discount on a regular row: the extra promo counts (Mengantar grants it on top of the seller rate),
  * so an extra 5 % never makes the TASK-207 verifier report `Selisih` against the assigned rate.
  */
 export function observedRegularBps(r: Pick<ObservedRate, "price" | "discount" | "discountPercent" | "discountExtra" | "discountExtraPercent">): number | null {
-  if (r.discount !== null && r.price !== null && r.price > 0) return observedBpsFromDiscount(r.discount + (r.discountExtra ?? 0), r.price)
-  if (r.discountPercent !== null && r.discountPercent >= 0 && r.discountPercent <= 100) return Math.round((r.discountPercent + (r.discountExtraPercent ?? 0)) * 100)
-  return null
+  return preciseObservedBps(r.discount !== null ? r.discount + (r.discountExtra ?? 0) : null, r.price, r.discountPercent, r.discountExtraPercent)
 }
 
 /** Observed cargo discount: base + the v2.0.0 extra cargo promo, over the cargo publish price (or percent fallback). */
 export function observedCargoBps(
   r: Pick<ObservedRate, "cargoPrice" | "cargoDiscount" | "cargoDiscountPercent" | "cargoDiscountExtra" | "cargoDiscountExtraPercent">,
 ): number | null {
-  if (r.cargoDiscount !== null && r.cargoPrice !== null && r.cargoPrice > 0) {
-    return observedBpsFromDiscount(r.cargoDiscount + (r.cargoDiscountExtra ?? 0), r.cargoPrice)
-  }
-  if (r.cargoDiscountPercent !== null && r.cargoDiscountPercent !== undefined && r.cargoDiscountPercent >= 0 && r.cargoDiscountPercent <= 100) {
-    return Math.round((r.cargoDiscountPercent + (r.cargoDiscountExtraPercent ?? 0)) * 100)
-  }
-  return null
+  return preciseObservedBps(
+    r.cargoDiscount !== null ? r.cargoDiscount + (r.cargoDiscountExtra ?? 0) : null,
+    r.cargoPrice,
+    r.cargoDiscountPercent,
+    r.cargoDiscountExtraPercent,
+  )
 }
 
 const rawDiscountText = (r: Pick<ObservedRate, "discountPercent" | "discountExtraPercent">) => (r.discountPercent === null ? null : r.discountExtraPercent ? `${r.discountPercent}+${r.discountExtraPercent}` : String(r.discountPercent))

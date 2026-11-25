@@ -2,6 +2,7 @@
 // route; payment/payout mutations have no scope at all (POS-only). Keys never authenticate browser routes and cookies
 // never authenticate `/api/v1` (Bearer only).
 import { sha256Hex } from "../crypto"
+import { isDemoTenantId } from "../demo/constants"
 
 export const SCOPES = ["rates:read", "finance:read", "finance:sync", "contacts:read", "contacts:write", "shipments:draft", "shipments:issue", "tracking:read"] as const
 export type Scope = (typeof SCOPES)[number]
@@ -40,7 +41,7 @@ export async function authenticate(env: Env, request: Request, now: number): Pro
   )
     .bind(await hashApiToken(env.AUTH_SESSION_PEPPER, m[1]!))
     .first<{ id: string; tenant_id: string; scopes_json: string; daily_issue_cap_idr: number | null; last_used_at: number | null; slug: string }>()
-  if (!row) return null
+  if (!row || isDemoTenantId(row.tenant_id)) return null
   if (!row.last_used_at || now - row.last_used_at > 60_000) await env.DB.prepare("UPDATE tenant_api_keys SET last_used_at = ? WHERE id = ?").bind(now, row.id).run()
   return { keyId: row.id, tenantId: row.tenant_id, tenantSlug: row.slug, scopes: new Set(JSON.parse(row.scopes_json) as Scope[]), dailyIssueCapIdr: row.daily_issue_cap_idr }
 }

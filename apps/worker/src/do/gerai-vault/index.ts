@@ -3539,10 +3539,31 @@ export class GeraiVaultDO extends DurableObject<Env> {
     const sql = this.ctx.storage.sql
     const conn = readConnection(sql)
     const candidates = pollCandidates(sql, POLL_BATCH)
+    const unresolved = sql
+      .exec<{ slug: string }>("SELECT slug FROM shipments WHERE dispatch_state = 'reconciliation_needed' ORDER BY updated_at ASC LIMIT 5")
+      .toArray()
     let polled = 0
     let changed = 0
     let failed = 0
     const key = conn ? await this.sellerKey(tenantId) : null
+    if (key && unresolved.length > 0) {
+      for (const u of unresolved) {
+        if (this.dispatching.has(u.slug)) continue
+        const rec = await this.reconcileNow(tenantId, u.slug, now)
+        if (rec.ok) {
+          polled++
+          if (rec.value.state !== "reconciliation_needed") {
+            changed++
+          } else {
+            // Rotate unresolved row to the back of `ORDER BY updated_at ASC LIMIT 5` so it never starves newer shipments.
+            sql.exec("UPDATE shipments SET updated_at = ? WHERE slug = ? AND dispatch_state = 'reconciliation_needed'", now, u.slug)
+          }
+        } else {
+          failed++
+          sql.exec("UPDATE shipments SET updated_at = ? WHERE slug = ? AND dispatch_state = 'reconciliation_needed'", now, u.slug)
+        }
+      }
+    }
     if (key && candidates.length > 0) {
       const client = publicClient(this.env, key.key, tenantId)
       for (const s of candidates) {
@@ -3559,7 +3580,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
     }
     const active = readConnection(sql)?.webhook_state === "active"
-    const fenced = candidates.length > 0 && !key
+    const fenced = (candidates.length > 0 || unresolved.length > 0) && !key
     this.ctx.storage.transactionSync(() => {
       flagStuck(sql, now)
       expireClaims(sql, now)
@@ -3570,7 +3591,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
       // pollCandidates orders by oldest poll first: if the next one is still overdue, the batch did not cover all.
       const next = candidates.length >= POLL_BATCH ? pollCandidates(sql, 1)[0] : undefined
       const backlog = !!next && Number((next as { last_polled_at?: number | null }).last_polled_at ?? 0) <= now - interval
-      if (pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", now + (fenced ? 10 * 60_000 : backlog ? 60_000 : interval))
+      const stillUnresolved = sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM shipments WHERE dispatch_state = 'reconciliation_needed'").one().c > 0
+      if (pollCandidates(sql, 1).length > 0 || stillUnresolved) setTimer(sql, "status_poll", now + (fenced ? 10 * 60_000 : backlog || stillUnresolved ? 60_000 : interval))
       else sql.exec("DELETE FROM vault_timers WHERE name = 'status_poll'")
     })
     await this.armOutbox()

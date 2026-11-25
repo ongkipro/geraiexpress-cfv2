@@ -94,8 +94,9 @@ export function ensureDraft(sql: SqlStorage, tenantId: string, slug: string, act
     q.counter_service_fee_idr ?? 0,
     q.promo_discount_idr ?? 0,
   )
-  // An INV that started as a mini-site QR pre-booking keeps that entry channel (dashboard "Sumber order").
+  // An INV that started as a mini-site QR pre-booking or Partner API / MCP call keeps its entry channel (dashboard "Sumber order").
   sql.exec("UPDATE shipments SET entry_channel = 'minisite_qr' WHERE slug = ? AND EXISTS (SELECT 1 FROM minisite_drafts WHERE slug = ?)", slug, slug)
+  sql.exec("UPDATE shipments SET entry_channel = 'api_mcp' WHERE slug = ? AND entry_channel = 'counter_pos' AND EXISTS (SELECT 1 FROM inv_slugs WHERE slug = ? AND purpose = 'api')", slug, slug)
   return { ok: true, value: readShipment(sql, slug)! }
 }
 

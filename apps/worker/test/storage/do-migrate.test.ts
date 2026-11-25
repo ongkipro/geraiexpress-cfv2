@@ -111,4 +111,16 @@ describe("do:migrate ops endpoint (TASK-103, spec 07 §6)", () => {
       state: "ok",
     })
   })
+
+  it("roll-forward only (TASK-710, DEC-254/255): a tenant DO 1 version ahead of deployed code refuses RPCs with TENANT_NOT_READY", async () => {
+    await seed(["a-1"], "ahead")
+    const stub = vaultFor(env, "a-1")
+    expect(await stub.migrate("a-1")).toMatchObject({ ok: true })
+    // Simulate a Worker rollback after this tenant DO already migrated to TENANT_SCHEMA_VERSION + 1.
+    await runInDurableObject(stub, (_i, s) => {
+      s.storage.sql.exec("UPDATE schema_version SET version = ? WHERE id = 1", TENANT_SCHEMA_VERSION + 1)
+    })
+    expect(await stub.allocateSlug("a-1", "draft")).toEqual({ ok: false, refused: "TENANT_NOT_READY" })
+    expect(await stub.schemaState()).toMatchObject({ version: TENANT_SCHEMA_VERSION + 1, state: "ok" })
+  })
 })

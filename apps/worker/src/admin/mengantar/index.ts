@@ -153,6 +153,10 @@ export function registerMengantarAdmin(app: Hono<any>): void {
       return ok({ ok: false, state: "secret_missing", message: "Partner Secret belum diisi. Simpan Partner Secret terlebih dahulu sebelum menguji koneksi.", latencyMs: 0, relay: null })
     }
     const relay = await relayHealth({ PARTNER_RELAY_URL: cfg.relayUrl, PARTNER_TRANSPORT: cfg.transport, GX_ENV: c.env.GX_ENV })
+    const quota = await quotaFor(c.env).reserve("call", now)
+    if (!quota.ok) {
+      throw new AppError(429, "RATE_LIMITED", "Kuota panggilan Partner API sedang penuh. Coba lagi dalam beberapa saat.")
+    }
     const t0 = Date.now()
     const client = await resolvePartnerClient(c.env, { bypassCache: true })
     const res = await client.list({ externalUserId: "gx-config-check" })

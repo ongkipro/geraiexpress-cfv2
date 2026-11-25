@@ -79,6 +79,9 @@ export async function domainRows(env: Env, tenantId: string): Promise<DomainRow[
 
 /** Step 1: the owner's request. One custom domain per Pro gerai (root + www count as one). */
 export async function requestDomain(env: Env2, tenantId: string, raw: unknown, rootChoice: unknown, now: number): Promise<DomainRow[]> {
+  if (env.GX_ENV === "staging") {
+    throw new AppError(403, "CUSTOM_DOMAIN_DISABLED_IN_STAGING", "Domain sendiri tidak diaktifkan di lingkungan staging. Gunakan alamat bawaan *-stg.geraimitra.com.")
+  }
   const t = await env.DB.prepare("SELECT custom_domain_enabled, status FROM tenants WHERE id = ?").bind(tenantId).first<{ custom_domain_enabled: number; status: string }>()
   if (!t || t.status !== "active") throw new AppError(409, "TENANT_NOT_ACTIVE", "Gerai belum aktif.")
   if (t.custom_domain_enabled !== 1) throw new AppError(403, "PRO_REQUIRED", "Domain sendiri tersedia untuk gerai Pro. Hubungi tim GeraiExpress untuk mengaktifkan.")
@@ -126,6 +129,7 @@ function errorsOf(cf: CfHostname): string | null {
 
 /** Queue step 2: create at Cloudflare (idempotent: a row that already has an id only refreshes). */
 export async function createAtCloudflare(env: Env2, hostname: string, now: number, saas: SaasClient = saasClient(env)): Promise<"created" | "skipped" | "throttled"> {
+  if (env.GX_ENV === "staging") return "skipped"
   const row = await env.DB.prepare(`SELECT ${COLS} FROM tenant_hostnames WHERE hostname = ? AND kind = 'custom'`).bind(hostname).first<DomainRow>()
   if (!row || row.state !== "pending" || row.cf_custom_hostname_id) return "skipped"
   const slot = await hit(env.DB, "cf-saas-issue", ISSUE_PER_MINUTE, 60_000, now)

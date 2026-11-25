@@ -275,4 +275,47 @@ describe("custom domain lifecycle", () => {
     expect(await row("www.tokobalap.id")).toMatchObject({ state: "pending", request_id: "pemenang" })
     expect((await row("tokobalap.id"))!.state).toBe("purged")
   })
+
+  it("staging refuses custom-domain creation with zero D1 writes and zero Cloudflare API calls (TASK-709, DEC-255)", async () => {
+    const { requestDomain, createAtCloudflare } = await import("../../src/hostnames/service")
+    const { saasClient } = await import("../../src/hostnames/cloudflare")
+    const t = await pro("cdstaging")
+    const now = Date.now()
+    let cfCalls = 0
+    const stagingEnv = {
+      ...env,
+      GX_ENV: "staging" as const,
+      CF_SAAS_ZONE_ID: "b7f7b727dd2c0a81dce48509f25e7fcd" as const,
+      CF_SAAS_API_TOKEN: "should-never-be-used-in-staging",
+    }
+    await expect(requestDomain(stagingEnv, t.tenantId, "kirim.tokostaging.id", undefined, now)).rejects.toMatchObject({
+      status: 403,
+      code: "CUSTOM_DOMAIN_DISABLED_IN_STAGING",
+    })
+    expect(await row("kirim.tokostaging.id")).toBeNull()
+    // Defense in depth: even if a queue message or direct saasClient call ran in staging, zero Cloudflare calls go out.
+    const spySaas = {
+      create: async () => {
+        cfCalls++
+        throw new Error("should not call create")
+      },
+      get: async () => null,
+      patch: async () => {
+        throw new Error("should not call patch")
+      },
+      remove: async () => undefined,
+      quota: async () => {
+        throw new Error("should not call quota")
+      },
+    }
+    expect(await createAtCloudflare(stagingEnv, "kirim.tokostaging.id", now, spySaas)).toBe("skipped")
+    expect(cfCalls).toBe(0)
+    await expect(
+      saasClient(stagingEnv, async () => {
+        cfCalls++
+        return new Response("unexpected", { status: 500 })
+      }).create("kirim.tokostaging.id", "http"),
+    ).rejects.toThrow(/not configured/i)
+    expect(cfCalls).toBe(0)
+  })
 })

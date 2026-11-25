@@ -44,11 +44,20 @@ describe("geocodeIndonesia", () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(first.point).toEqual({ lat: -6.891512, lng: 107.610746, label: "Coblong, Kota Bandung, Jawa Barat, Indonesia" })
     expect(first.candidates).toHaveLength(1)
-    expect(store.has("geocode:v2:coblong, bandung")).toBe(true)
+    expect(store.size).toBe(1)
+    const [storedKey] = [...store.keys()]
+    expect(storedKey).toMatch(/^geocode:v3:[0-9a-f]{64}$/)
+    expect(storedKey).not.toContain("coblong")
 
     const second = await geocodeIndonesia(env, "Coblong, Bandung", undefined, fetcher)
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(second).toEqual(first)
+  })
+
+  it("strips phone numbers, RT/RW, and house/block numbers before querying Nominatim", () => {
+    expect(buildGeocodeQueries("Jl. Dago No. 14 RT 03/RW 05 Blok A 12, +62 812-3456-7890, Coblong, Kota Bandung, Jawa Barat")[0]).toBe(
+      "Jl. Dago, Coblong, Kota Bandung, Jawa Barat",
+    )
   })
 
   it("falls back to broader kecamatan/city query when subdistrict query returns empty", async () => {

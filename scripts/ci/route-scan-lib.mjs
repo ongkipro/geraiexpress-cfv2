@@ -71,6 +71,8 @@ export const OWNER_ALLOWED_VAULT_CALLS = new Set([
   "pendingKeyRotation",
   "resolveKeyRotation",
   "completeKeyRotation",
+  // read-back key sync from Partner API: updates mengantar_connections key/version (+ webhook_state->secret_mismatch, status_poll timer) and audit; no shipment or money mutation
+  "syncSellerKeyFromPartner",
 ])
 
 /** Read-only cross-tenant views (GET) are allowed; any mutating method on a shipment/payment path is not. */

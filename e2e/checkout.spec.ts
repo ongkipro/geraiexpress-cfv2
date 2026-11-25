@@ -133,4 +133,24 @@ test("Kasir popup Tambah Penerima: tidak tutup saat klik luar, Batal menutup, ca
   // Auto-quote runs for the newly added recipient's exact subdistrict.
   await expect(page.getByRole("radio", { name: /^J&T Express/ })).toBeVisible({ timeout: 20_000 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+
+  // Zero-match search in Pengirim / Penerima offers 1-click create CTA that prefills name or phone into ContactDialog.
+  await page.getByLabel("Cari pengirim").fill("Toko Baru Nusantara")
+  await expect(page.getByText(/belum tercatat di gerai/i)).toBeVisible()
+  await page.getByRole("button", { name: /Daftarkan “Toko Baru Nusantara” Sekarang/i }).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel("Nama pengirim asli")).toHaveValue("Toko Baru Nusantara")
+  await dialog.getByRole("button", { name: "Batal" }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.locator('[aria-labelledby="pihak-recipients"]').getByRole("button", { name: "Ganti" }).click()
+  await page.getByLabel("Cari penerima").fill("081999887766")
+  await page.getByRole("button", { name: /Daftarkan “081999887766” Sekarang/i }).click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel("Nomor HP penerima")).toHaveValue("081999887766")
+
+  // Small phone viewport: ContactDialog has zero horizontal overflow and comfortable bottom spacing when scrolled.
+  await page.setViewportSize({ width: 390, height: 700 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  await dialog.getByRole("button", { name: "Batal" }).click()
 })

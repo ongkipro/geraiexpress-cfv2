@@ -1,4 +1,4 @@
-// Six transactional templates in Bahasa Indonesia (spec 12 §1, §4). Plain text always; simple HTML; links only to
+// Eight transactional templates in Bahasa Indonesia (spec 12 §1, §4). Plain text always; simple HTML; links only to
 // geraiexpress.com hosts; no images, pixels or attachments. The footer reads only filled legal fields (DEC-218).
 
 export type TemplateId =

@@ -78,4 +78,33 @@ describe("owner alert channel (TASK-110)", () => {
     }
     expect(exports.default).toBeDefined()
   })
+
+  it("alerts when MENGANTAR_PUBLIC_READ_KEY is missing or placeholder in non-local mode (TASK-713c)", async () => {
+    const { areaSearchKeyConfigured } = await import("../../src/telemetry/checks")
+    const dummyCtx = { snapshots: async () => [], fetchImpl: fetch }
+    const missing = await areaSearchKeyConfigured(
+      { DB: env.DB, GX_ENV: "production", MENGANTAR_PUBLIC_ORIGIN: "https://api-public.mengantar.com" },
+      1,
+      dummyCtx,
+    )
+    expect(missing?.key).toBe("area_search_key_missing")
+    const placeholder = await areaSearchKeyConfigured(
+      { DB: env.DB, GX_ENV: "staging", MENGANTAR_PUBLIC_ORIGIN: "https://sandbox.mengantar.com", MENGANTAR_PUBLIC_READ_KEY: "placeholder-public-read-key" },
+      1,
+      dummyCtx,
+    )
+    expect(placeholder?.key).toBe("area_search_key_missing")
+    const okReal = await areaSearchKeyConfigured(
+      { DB: env.DB, GX_ENV: "production", MENGANTAR_PUBLIC_ORIGIN: "https://api-public.mengantar.com", MENGANTAR_PUBLIC_READ_KEY: "real-seller-read-key-123456" },
+      1,
+      dummyCtx,
+    )
+    expect(okReal).toBeNull()
+    const okLocal = await areaSearchKeyConfigured(
+      { DB: env.DB, GX_ENV: "local", MENGANTAR_PUBLIC_ORIGIN: "mock" },
+      1,
+      dummyCtx,
+    )
+    expect(okLocal).toBeNull()
+  })
 })

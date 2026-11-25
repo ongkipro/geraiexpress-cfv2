@@ -212,6 +212,23 @@ describe("review fixes (final Carbon pass)", () => {
     expect(((await detail(t.cookie, slug)).shipment as { issued_at: number }).issued_at).toBe(before.issued_at)
   })
 
+  it("background pollStatus automatically reconciles stuck reconciliation_needed shipments without manual retry", async () => {
+    const t = await checkoutGerai("pollrekon")
+    const slug = await readyInv(t)
+    mockFaults.order = "timeout_after_create"
+    mockFaults.readBack = "timeout"
+    const res = await post(`/shipments/${slug}/dispatch`, t.cookie, {})
+    expect(res.status).toBe(503)
+    expect((await detail(t.cookie, slug)).shipment).toMatchObject({ dispatch_state: "reconciliation_needed" })
+
+    // Connectivity returns; background status poll reconciles the order via destinationMark automatically.
+    const poll = await t.vault.pollStatus(t.tenantId, Date.now())
+    expect(poll).toMatchObject({ ok: true, value: { polled: 1, changed: 1, failed: 0 } })
+    const after = (await detail(t.cookie, slug)).shipment as { dispatch_state: string; awb_number: string | null }
+    expect(after.dispatch_state).toBe("issued")
+    expect(after.awb_number).toBeTruthy()
+  })
+
   it("pay-unpaid after an unknown outcome reads back first instead of paying again", async () => {
     const t = await checkoutGerai("bayarbelum")
     const slug = await readyInv(t)

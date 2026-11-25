@@ -1,7 +1,7 @@
 // GeraiExpress v2 — one Worker for every host (ARCHITECTURE §3, spec 07 §3).
 // Top-level resource identifiers are placeholders for local development. `env.staging` and `env.production` carry the
 // real APAC resources on the dedicated GeraiExpress Cloudflare account (`f235ecdb5517054b386c6d413569a103`, migrated
-// 2026-11-23, docs/runbooks/production-zones.md §5); both pin the Worker to Singapore (`aws:ap-southeast-1`) so D1 and
+// 2026-11-23, docs/runbooks/production-zones.md §6); both pin the Worker to Singapore (`aws:ap-southeast-1`) so D1 and
 // Durable Object round trips stay in APAC.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -114,11 +114,12 @@
         "MAIL_FROM": "noreply@geraiexpress.com",
         // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
         "TURNSTILE_SITE_KEY": "0x4AAAAAAGOkYvbfRzshNuOg",
-        // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
-        "CF_SAAS_ZONE_ID": "b7f7b727dd2c0a81dce48509f25e7fcd"
+        // DEC-255 (TASK-709): custom domains are disabled in staging so staging never touches the production SaaS zone;
+        // staging mini-sites continue to run on `*-stg.geraimitra.com`.
+        "CF_SAAS_ZONE_ID": "disabled"
       },
       "secrets": {
-        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
+        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "MENGANTAR_PUBLIC_READ_KEY", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
       },
       "d1_databases": [
         {
@@ -187,11 +188,11 @@
         "MAIL_FROM": "noreply@geraiexpress.com",
         // Turnstile widget covering geraiexpress.com, app/owner (+ -staging) and geraimitra.com (public site key).
         "TURNSTILE_SITE_KEY": "0x4AAAAAAGOkYvbfRzshNuOg",
-        // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); staging mini-sites live on `*-stg.geraimitra.com`.
+        // Cloudflare for SaaS zone `geraimitra.com` (spec 11 §2); production custom hostnames live here.
         "CF_SAAS_ZONE_ID": "b7f7b727dd2c0a81dce48509f25e7fcd"
       },
       "secrets": {
-        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
+        "required": ["AUTH_SESSION_PEPPER", "KEK_SECRET", "PROBE_SECRET", "TURNSTILE_SECRET_KEY", "MENGANTAR_PARTNER_SECRET", "MENGANTAR_PUBLIC_READ_KEY", "PARTNER_RELAY_URL", "PARTNER_RELAY_SECRET", "CF_SAAS_API_TOKEN", "OPS_TOKEN", "ALERT_WEBHOOK_URL"]
       },
       "d1_databases": [
         {

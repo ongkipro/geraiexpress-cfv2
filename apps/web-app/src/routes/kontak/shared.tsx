@@ -1,6 +1,16 @@
 import type { ReactNode } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
+import { sanitizePhone } from "../../lib/input"
+
+/** Splits a contact search query into initial `name` or `phone` so zero-match quick-create prefills automatically. */
+export function prefillContactQuery(raw?: string | null): { name: string; phone: string } {
+  const s = (raw ?? "").trim()
+  if (!s) return { name: "", phone: "" }
+  const digits = s.replace(/\D/g, "")
+  if (digits.length >= 5 && /^[+\d\s\-().]+$/.test(s)) return { name: "", phone: sanitizePhone(s) }
+  return { name: s.slice(0, 80), phone: "" }
+}
 
 export type RiskBadge = "baru" | "hijau" | "kuning" | "merah"
 export const RISK: Record<RiskBadge, { dot: string; label: string }> = {
@@ -54,12 +64,12 @@ export function ContactDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-        <DialogHeader className="shrink-0 border-b border-slate-200/80 px-6 py-4 pr-12">
+      <DialogContent className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-0 sm:max-h-[90dvh] sm:max-w-xl sm:pb-0">
+        <DialogHeader className="shrink-0 border-b border-slate-200/80 px-5 py-4 pr-12 sm:px-6">
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
       </DialogContent>
     </Dialog>
   )

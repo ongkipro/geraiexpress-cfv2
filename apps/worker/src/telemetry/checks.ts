@@ -7,9 +7,10 @@ import { authFailureSpikeAlert, emit, issueVolumeSpikeAlert } from "@gx/telemetr
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { HealthSnapshot } from "../do/gerai-vault"
 import { relayHealth } from "../admin/audit"
+import { isPlaceholderSecret } from "../mengantar/factory"
 import { sendAlert, type Alert } from "./alerts"
 
-export type AlertEnv = Pick<Env, "DB" | "GX_ENV"> & Partial<Pick<Env, "GERAI_VAULT" | "PARTNER_RELAY_URL" | "PARTNER_TRANSPORT">> & { ALERT_WEBHOOK_URL?: string }
+export type AlertEnv = Pick<Env, "DB" | "GX_ENV"> & Partial<Pick<Env, "GERAI_VAULT" | "PARTNER_RELAY_URL" | "PARTNER_TRANSPORT" | "MENGANTAR_PUBLIC_ORIGIN" | "MENGANTAR_PUBLIC_READ_KEY">> & { ALERT_WEBHOOK_URL?: string }
 type Check = (env: AlertEnv, now: number, ctx: CheckCtx) => Promise<Alert | null>
 type CheckCtx = { snapshots: () => Promise<Array<{ tenantId: string; s: HealthSnapshot }>>; fetchImpl: typeof fetch }
 
@@ -113,7 +114,19 @@ export const discountOverdue: Check = async (env, now) => {
   return r && r.n > 0 ? { key: "discount_overdue", severity: "warn", text: `${r.n} aturan diskon belum diterapkan Mengantar lewat 2× SLA (${sla} menit). Periksa Tarif & Kurir.` } : null
 }
 
-export const CHECKS: Check[] = [tenantsInRecovery, issueReconciliationRate, issueFailedStreak, webhookInboxAge, financeSyncAge, issueVolumeSpike, publicApiAuthSpike, relayDown, emailFailureRate, emailBounceRate, discountOverdue]
+/** Area search (`GET /address/search`) requires a real `MENGANTAR_PUBLIC_READ_KEY` outside local/mock mode (TASK-713c). */
+export const areaSearchKeyConfigured: Check = async (env) => {
+  if (env.GX_ENV === "local" || !env.MENGANTAR_PUBLIC_ORIGIN || env.MENGANTAR_PUBLIC_ORIGIN === "mock") return null
+  const key = env.MENGANTAR_PUBLIC_READ_KEY?.trim() ?? ""
+  if (key && !isPlaceholderSecret(key)) return null
+  return {
+    key: "area_search_key_missing",
+    severity: "error",
+    text: "Secret MENGANTAR_PUBLIC_READ_KEY belum terpasang atau masih placeholder; pencarian wilayah (/address/search) akan gagal 503.",
+  }
+}
+
+export const CHECKS: Check[] = [tenantsInRecovery, issueReconciliationRate, issueFailedStreak, webhookInboxAge, financeSyncAge, issueVolumeSpike, publicApiAuthSpike, relayDown, emailFailureRate, emailBounceRate, discountOverdue, areaSearchKeyConfigured]
 
 /** Bounded per-tenant fan-out, computed once per tick and shared by every check. */
 function snapshotLoader(env: AlertEnv, now: number): CheckCtx["snapshots"] {
