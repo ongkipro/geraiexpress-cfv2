@@ -79,7 +79,8 @@ export function parseLocationInput(raw: string): { lat: number; lng: number } | 
   }
   const patterns: RegExp[] = [
     /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
-    /[?&](?:q|query|ll|destination|center)=(-?\d+(?:\.\d+)?)(?:%2C|,|\s+)(-?\d+(?:\.\d+)?)/i,
+    /[?&](?:q|query|ll|destination|center)=(-?\d+(?:\.\d+)?)(?:(?:%2C|,)(?:\+|%20|\s)*|(?:\+|%20|\s)+)(-?\d+(?:\.\d+)?)/i,
+    /\/maps\/(?:search|place)\/(-?\d+(?:\.\d+)?)(?:(?:%2C|,)(?:\+|%20|\s)*|(?:\+|%20|\s)+)(-?\d+(?:\.\d+)?)/i,
     /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
     /#map=\d+\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)/i,
     /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i,

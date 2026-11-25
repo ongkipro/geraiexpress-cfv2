@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../../components/ui/alert-dialog"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
@@ -31,8 +31,16 @@ const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { day
 export function Kendala() {
   const w = useWorkspace()
   const owner = isOwner(w)
-  const [bucket, setBucket] = useState<Bucket>("tidak_bergerak")
-  const [page, setPage] = useState(1)
+  const search = useSearch({ strict: false }) as { tab?: string; bucket?: string }
+  const navigate = useNavigate()
+  const bucket: Bucket = BUCKETS.some((b) => b.id === search.bucket) ? (search.bucket as Bucket) : "tidak_bergerak"
+  const [pageState, setPageState] = useState<{ bucket: Bucket; page: number }>({ bucket, page: 1 })
+  const page = pageState.bucket === bucket ? pageState.page : 1
+  const setPage = (nextPage: number) => setPageState({ bucket, page: nextPage })
+  const selectBucket = (next: Bucket) => {
+    setPageState({ bucket: next, page: 1 })
+    void navigate({ to: "/kiriman", search: { ...search, tab: "kendala", bucket: next } as never, replace: true })
+  }
   const [d, setD] = useState<{ counts: Record<Bucket, number>; rows: Row[] } | null>(null)
   const [loadedBucket, setLoadedBucket] = useState<Bucket | null>(null)
   const [busy, setBusy] = useState(false)
@@ -80,7 +88,7 @@ export function Kendala() {
     <div className="mb-6 flex flex-col gap-4">
       <div role="group" aria-label="Jenis kendala" className="flex flex-wrap gap-2">
         {BUCKETS.map((b) => (
-          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => { setBucket(b.id); setPage(1) }} className={`h-11 rounded-full border px-4 text-base md:text-sm md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
+          <button key={b.id} type="button" aria-pressed={bucket === b.id} onClick={() => selectBucket(b.id)} className={`h-11 rounded-full border px-4 text-base md:text-sm md:h-10 ${bucket === b.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-input"}`}>
             {b.label}{d ? <span className="ml-1 tabular-nums text-muted-foreground">({d.counts[b.id]})</span> : null}
           </button>
         ))}

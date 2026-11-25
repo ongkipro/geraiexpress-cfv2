@@ -172,22 +172,36 @@ function Policy() {
   return (
     <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
       <Section title="Batas platform">
-        <BandForm initial={data.platform} sla={data.platform.applySlaMinutes} path="/tarif/kebijakan/platform" onDone={reload} />
+        <BandForm
+          key={`platform-${data.platform.minBps}-${data.platform.defaultBps}-${data.platform.maxBps}-${data.platform.applySlaMinutes}`}
+          initial={data.platform}
+          sla={data.platform.applySlaMinutes}
+          path="/tarif/kebijakan/platform"
+          onDone={reload}
+        />
       </Section>
       <Section title="Per ekspedisi">
         <ul className="divide-y">
-          {data.couriers.map((c) => (
-            <li key={c.courierCode} className="flex flex-col gap-2 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">{c.name}</span>
-                <span className="text-sm text-muted-foreground tabular-nums">{c.band ? `${pct(c.band.minBps)} – ${pct(c.band.maxBps)} · default ${pct(c.band.defaultBps)}` : "Ikut batas platform"}</span>
-              </div>
-              <details>
-                <summary className="flex h-11 cursor-pointer items-center text-sm text-primary md:h-10">Ubah batas {c.name}</summary>
-                <BandForm initial={c.band ?? data.platform} path={`/tarif/kebijakan/kurir/${encodeURIComponent(c.courierCode)}`} onDone={reload} />
-              </details>
-            </li>
-          ))}
+          {data.couriers.map((c) => {
+            const band = c.band ?? data.platform
+            return (
+              <li key={c.courierCode} className="flex flex-col gap-2 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{c.name}</span>
+                  <span className="text-sm text-muted-foreground tabular-nums">{c.band ? `${pct(c.band.minBps)} – ${pct(c.band.maxBps)} · default ${pct(c.band.defaultBps)}` : "Ikut batas platform"}</span>
+                </div>
+                <details>
+                  <summary className="flex h-11 cursor-pointer items-center text-sm text-primary md:h-10">Ubah batas {c.name}</summary>
+                  <BandForm
+                    key={`${c.courierCode}-${band.minBps}-${band.defaultBps}-${band.maxBps}`}
+                    initial={band}
+                    path={`/tarif/kebijakan/kurir/${encodeURIComponent(c.courierCode)}`}
+                    onDone={reload}
+                  />
+                </details>
+              </li>
+            )
+          })}
         </ul>
       </Section>
     </div>

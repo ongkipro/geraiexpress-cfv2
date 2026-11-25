@@ -273,8 +273,8 @@ function Actions({ a }: { a: OwnerData["actions"] }) {
   const items = ([
     { n: a.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar", tone: "warn" },
     { n: a.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo", tone: "danger" },
-    { n: a.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala", tone: "danger" },
-    { n: a.stuck, label: "Tertahan > 48 jam", to: "/kiriman?tab=kendala", tone: "warn" },
+    { n: a.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala&bucket=perlu_tindakan", tone: "danger" },
+    { n: a.stuck, label: "Tertahan > 48 jam", to: "/kiriman?tab=kendala&bucket=tidak_bergerak", tone: "warn" },
     { n: a.variance, label: "Selisih kas & rekonsiliasi", to: "/keuangan?tab=selisih", tone: "danger" },
     { n: a.readyForPickup, label: "Siap dijemput kurir", to: "/kiriman?tab=pickup", tone: "warn" },
   ] satisfies Array<{ n: number; label: string; to: string; tone: StatusTone }>).filter((x) => x.n > 0)
@@ -318,7 +318,7 @@ function CounterHome({ name }: { name: string }) {
       { n: d.actions.unpaid, label: "INV belum dibayar", to: "/kiriman?tab=belum-dibayar", tone: "warn" },
       { n: d.actions.readyForPickup, label: "Paket siap dijemput kurir", to: "/kiriman?tab=pickup", tone: "warn" },
       { n: d.actions.unpaidHold, label: "Menunggu saldo Mengantar", to: "/kiriman?tab=menunggu-saldo", tone: "danger" },
-      { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala", tone: "danger" },
+      { n: d.actions.failed, label: "Gagal diterbitkan", to: "/kiriman?tab=kendala&bucket=perlu_tindakan", tone: "danger" },
     ] as const
   ).filter((x) => x.n > 0)
   return (

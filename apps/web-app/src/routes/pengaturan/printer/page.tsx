@@ -181,6 +181,7 @@ function QrisCard({ owner }: { owner: boolean }) {
   const [q, setQ] = useState<{ hasQris: boolean; url: string | null } | null>(() => readSettingsCache<{ hasQris: boolean; url: string | null }>(cacheKey))
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [delErr, setDelErr] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const file = useRef<HTMLInputElement>(null)
@@ -219,15 +220,17 @@ function QrisCard({ owner }: { owner: boolean }) {
     }
   }
   async function remove() {
+    if (pending) return
     setPending(true)
     setMsg(null)
+    setDelErr(null)
     try {
       const next = await api<{ hasQris: boolean; url: string | null }>("/settings/qris", { body: { mediaId: null } })
       writeSettingsCache(cacheKey, next)
       setQ(next)
       setConfirm(false)
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.body.message : "Gagal menghapus. Coba lagi.")
+      setDelErr(err instanceof ApiError ? err.body.message : "Gagal menghapus. Coba lagi.")
     } finally {
       setPending(false)
     }
@@ -266,15 +269,16 @@ function QrisCard({ owner }: { owner: boolean }) {
         </div>
       </div>
       )}
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+      <AlertDialog open={confirm} onOpenChange={(o) => { if (!pending) { setConfirm(o); if (!o) setDelErr(null) } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus QRIS gerai?</AlertDialogTitle>
             <AlertDialogDescription>Layar pelanggan tidak lagi menampilkan QRIS; pelanggan diminta memindai QRIS di meja kasir.</AlertDialogDescription>
           </AlertDialogHeader>
+          {delErr ? <p role="alert" className="text-sm font-medium text-danger">{delErr}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={remove} disabled={pending}>Ya, Hapus</AlertDialogAction>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove} disabled={pending}>{pending ? "Menghapus…" : "Ya, Hapus"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -41,6 +41,15 @@ describe("dashboard", () => {
     expect(d.data.chart.reduce((x, c) => x + c.nonCod, 0)).toBe(2)
     expect(d.data.recent.map((r) => r.payment).sort()).toEqual(["paid", "unpaid"])
     expect(d.data.actions.unpaid).toBe(1)
+    // Open finance_discrepancies surface in `actions.variance` ("Selisih kas & rekonsiliasi").
+    await runInDurableObject(t.vault, (_i, st) =>
+      st.storage.sql.exec(
+        "INSERT INTO finance_discrepancies (id, invoice_id, kind, shipment_slug, expected_idr, actual_idr, detail, created_at) VALUES ('disc-1', 'inv-1', 'adjustment', '', 10000, 12000, 'Selisih berat', ?)",
+        Date.now(),
+      ),
+    )
+    const afterDisc = ((await (await dash(t.cookie)).json()) as { data: Owner }).data
+    expect(afterDisc.data.actions.variance).toBe(1)
   })
 
   it("COD Laba Kas counts only once the COD credit is reconciled and the counter side is settled", async () => {

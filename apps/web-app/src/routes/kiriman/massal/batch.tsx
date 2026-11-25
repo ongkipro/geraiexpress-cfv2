@@ -140,6 +140,7 @@ function FixRow({ batch, r, onChange }: { batch: string; r: BulkRow; onChange: (
   const [pending, setPending] = useState(false)
   const set = (k: string, val: string) => setCells((c) => ({ ...c, [k]: val }))
   async function save(remove = false) {
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {
@@ -196,6 +197,7 @@ function CreateBar({ batch, n, pendingRows, onDone }: { batch: string; n: number
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   async function create() {
+    if (pending) return
     setPending(true)
     setMsg(null)
     try {

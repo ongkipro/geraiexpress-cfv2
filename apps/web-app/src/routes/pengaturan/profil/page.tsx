@@ -96,6 +96,7 @@ function LogoCard({ outletName }: { outletName: string }) {
   const [fitMode, setFitMode] = useState<"contain" | "cover">("contain")
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: "safe" | "danger"; text: string } | null>(null)
+  const [delErr, setDelErr] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const file = useRef<HTMLInputElement>(null)
@@ -144,8 +145,10 @@ function LogoCard({ outletName }: { outletName: string }) {
   }
 
   async function remove() {
+    if (pending) return
     setPending(true)
     setMsg(null)
+    setDelErr(null)
     try {
       const next = await api<{ hasLogo: boolean; url: string | null }>("/settings/logo", { body: { mediaId: null } })
       writeSettingsCache(cacheKey, next)
@@ -154,7 +157,7 @@ function LogoCard({ outletName }: { outletName: string }) {
       setConfirm(false)
       setMsg({ tone: "safe", text: "Logo dihapus. Mini-site dan aplikasi kembali memakai inisial nama gerai." })
     } catch (err) {
-      setMsg({ tone: "danger", text: err instanceof ApiError ? err.body.message : "Gagal menghapus logo. Coba lagi." })
+      setDelErr(err instanceof ApiError ? err.body.message : "Gagal menghapus logo. Coba lagi.")
     } finally {
       setPending(false)
     }
@@ -227,15 +230,16 @@ function LogoCard({ outletName }: { outletName: string }) {
           </div>
         </div>
       )}
-      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+      <AlertDialog open={confirm} onOpenChange={(o) => { if (!pending) { setConfirm(o); if (!o) setDelErr(null) } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus logo gerai?</AlertDialogTitle>
             <AlertDialogDescription>Mini-site, favicon browser, layar pelanggan, dan label cetak akan kembali menampilkan inisial nama gerai.</AlertDialogDescription>
           </AlertDialogHeader>
+          {delErr ? <p role="alert" className="text-sm font-medium text-danger">{delErr}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={remove} disabled={pending}>Ya, Hapus</AlertDialogAction>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove} disabled={pending}>{pending ? "Menghapus…" : "Ya, Hapus"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -671,17 +671,32 @@ function IssuedView({ d, owner, reload }: { d: Detail; owner: boolean; reload: (
         {d.receipts.length > 0 ? (
           <SectionCard id="riwayat-bayar" title="Riwayat Pembayaran Loket">
             <ul className="divide-y divide-slate-100 text-sm">
-              {d.receipts.map((rc) => (
-                <li key={rc.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0 tabular-nums">
-                  <div>
-                    <span className="font-medium">{rc.event === "void" ? "Pembatalan (Void)" : `Lunas · ${METHOD_NAME[rc.method] ?? rc.method}`}</span>
-                    <span className="block text-xs text-muted-foreground">{fmtWib(rc.created_at)} WIB</span>
-                  </div>
-                  <span className={`font-semibold ${rc.event === "void" ? "text-danger" : "text-safe"}`}>
-                    {rc.event === "void" ? "-" : ""}{rp(rc.amount_idr)}
-                  </span>
-                </li>
-              ))}
+              {d.receipts.map((rc) => {
+                const isVoid = rc.event === "void_payment" || rc.event === "void"
+                const isPayout = rc.event === "sender_cod_payout"
+                const isVoidPayout = rc.event === "void_sender_payout"
+                const methodLabel = METHOD_NAME[rc.method] ?? rc.method
+                const title = isVoid
+                  ? "Pembatalan (Void)"
+                  : isPayout
+                    ? `Pencairan COD · ${methodLabel}`
+                    : isVoidPayout
+                      ? "Batal Pencairan COD"
+                      : `Lunas · ${methodLabel}`
+                const tone = isVoid || isVoidPayout ? "text-danger" : isPayout ? "text-primary" : "text-safe"
+                const prefix = isVoid || isPayout ? "-" : ""
+                return (
+                  <li key={rc.id} className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0 tabular-nums">
+                    <div>
+                      <span className="font-medium">{title}</span>
+                      <span className="block text-xs text-muted-foreground">{fmtWib(rc.created_at)} WIB</span>
+                    </div>
+                    <span className={`font-semibold ${tone}`}>
+                      {prefix}{rp(rc.amount_idr)}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           </SectionCard>
         ) : null}

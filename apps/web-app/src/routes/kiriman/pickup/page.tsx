@@ -307,6 +307,7 @@ function Handover({ batchId, onDone }: { batchId: string; onDone: () => void }) 
     setSigned(false)
   }
   async function submit(mode: "handed_over" | "dropped_at_branch") {
+    if (pending) return
     setPending(true)
     setFields({})
     setMsg(null)

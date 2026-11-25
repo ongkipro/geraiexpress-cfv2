@@ -78,6 +78,7 @@ export function KeuanganPage() {
     return () => { g.current++ }
   }, [load])
   async function sync() {
+    if (syncing) return
     setSyncing(true)
     setMsg(null)
     try {

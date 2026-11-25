@@ -1,5 +1,8 @@
-import { createRootRoute, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router"
+import { useEffect } from "react"
+import { createRootRoute, createRoute, createRouter, Link, Outlet, redirect, type ErrorComponentProps } from "@tanstack/react-router"
+import { isChunkLoadError, recoverFromChunkError } from "@shared/lib/chunk-recovery"
 import { api, ApiError } from "./lib/api"
+import { ErrorBlock } from "./components/page"
 import { OwnerMasukPage } from "./routes/masuk/page"
 import { TotpPage } from "./routes/totp/page"
 import { ConsoleShell } from "./shell/console-shell"
@@ -60,11 +63,52 @@ const consoleRoute = createRoute({
   staleTime: 60_000,
   gcTime: 5 * 60_000,
   loader: loadMe,
+  errorComponent: ConsoleError,
   component: function Console() {
     const { me, pending } = consoleRoute.useLoaderData()
     return <ConsoleShell environment={import.meta.env.MODE === "production" && location.hostname === "owner.geraiexpress.com" ? "Produksi" : "Sandbox"} userName={me.user.name} userEmail={me.user.email} pending={pending} />
   },
 })
+
+function ConsoleError({ error }: ErrorComponentProps) {
+  const stale = isChunkLoadError(error)
+  useEffect(() => {
+    if (stale) recoverFromChunkError()
+  }, [stale])
+  return (
+    <main className="flex min-h-svh items-center justify-center p-4">
+      <div className="flex w-full max-w-[440px] flex-col gap-3">
+        <ErrorBlock
+          message={
+            stale
+              ? "Aplikasi baru saja diperbarui. Muat ulang halaman untuk membuka versi terbaru."
+              : "Konsol Super Admin tidak dapat dimuat. Periksa koneksi lalu coba lagi."
+          }
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    </main>
+  )
+}
+
+function PageError({ error, reset }: ErrorComponentProps) {
+  const stale = isChunkLoadError(error)
+  useEffect(() => {
+    if (stale) recoverFromChunkError()
+  }, [stale])
+  return (
+    <div className="mx-auto max-w-lg py-6">
+      <ErrorBlock
+        message={
+          stale
+            ? "Aplikasi baru saja diperbarui. Muat ulang halaman untuk membuka versi terbaru."
+            : "Halaman ini gagal dimuat. Periksa koneksi lalu coba lagi."
+        }
+        onRetry={() => (stale ? window.location.reload() : reset())}
+      />
+    </div>
+  )
+}
 
 const indexRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/", component: RingkasanPage })
 const geraiRoute = createRoute({
@@ -115,7 +159,12 @@ export const routeTree = rootRoute.addChildren([
   masukRoute,
   totpRoute,
 ])
-export const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadStaleTime: 30_000 })
+export const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+  defaultPreloadStaleTime: 30_000,
+  defaultErrorComponent: PageError,
+})
 
 declare module "@tanstack/react-router" {
   interface Register {

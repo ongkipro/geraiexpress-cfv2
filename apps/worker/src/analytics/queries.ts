@@ -147,7 +147,9 @@ export function actionsOf(sql: SqlStorage, now: number): OwnerDashboard["actions
        FROM shipments`,
     )
     .one()
-  const variance = n(sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM cashier_shifts WHERE state = 'closed' AND variance_idr != 0 AND closed_at >= ?", now - 7 * 86_400_000).one().c)
+  const shiftVariance = n(sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM cashier_shifts WHERE state = 'closed' AND variance_idr != 0 AND closed_at >= ?", now - 7 * 86_400_000).one().c)
+  const openDiscrepancies = n(sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM finance_discrepancies WHERE resolved_at IS NULL").one().c)
+  const variance = shiftVariance + openDiscrepancies
   return { unpaid: n(r.unpaid), unpaidHold: n(r.hold), stuck: n(r.stuck), failed: n(r.failed), variance, readyForPickup: n(r.ready) }
 }
 

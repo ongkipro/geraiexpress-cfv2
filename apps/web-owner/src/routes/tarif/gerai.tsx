@@ -10,6 +10,7 @@ import { useApi } from "../../lib/use-api"
 import { pct, STATE_LABEL, verifyDone } from "./index"
 import { Textarea } from "@shared/components/ui/textarea"
 import { Panel, SectionCard } from "@shared/components/admin/page"
+import { toast } from "@shared/components/ui/sonner"
 import { ReasonAction } from "../../components/reason-dialog"
 
 // One gerai's matrix: requested vs observed discount per service, status, and an editor (TOTP + reason).
@@ -136,6 +137,7 @@ function RuleEditor({ tenantId, rule, onDone, onCancel }: { tenantId: string; ru
     setError(null)
     try {
       await api(`/tarif/gerai/${encodeURIComponent(tenantId)}/${encodeURIComponent(rule.service_code)}`, { body: { assignedBps, cashbackBps, reason } })
+      toast.success("Aturan tarif gerai tersimpan.")
       onDone()
     } catch (err) {
       if (err instanceof ApiError && err.body.code === "TOTP_RECENT_REQUIRED") return window.location.assign(`/totp?mode=required&kembali=${encodeURIComponent(window.location.pathname)}`)

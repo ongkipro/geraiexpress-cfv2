@@ -14,6 +14,7 @@ import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
 import { mengantarSettings, pollOwnStatus, saveWebhookSecret, syncOwnSellerKey } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
+import { geocodeIndonesia } from "../lib/geocode"
 import { projectFor } from "../dto/projection"
 import { escposBytes, initials, labelsPdf, labelSvg, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
 import { resolvePartnerClient } from "../mengantar/factory"
@@ -221,30 +222,8 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   // Outlet application (PR-01): pickup area search, geocode helper (KV-cached Nominatim ID proxy), submit, status.
   r("GET", "/onboarding/areas", "app_session", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
   r("GET", "/geocode", "app_session", "none", async (c) => {
-    const q = (c.req.query("q") ?? "").trim().replace(/\s+/g, " ").slice(0, 160)
-    if (q.length < 3) return ok({ point: null })
-    if (c.env.GX_ENV === "local") {
-      // Deterministic local response (no external network in dev/test): Bandung for Bandung/Coblong/Dago, Jakarta otherwise.
-      const point = /bandung|coblong|dago/i.test(q) ? { lat: -6.8915, lng: 107.6107, label: q } : { lat: -6.2297, lng: 106.8576, label: q }
-      return ok({ point })
-    }
-    const key = `geocode:v1:${q.toLowerCase()}`
-    const cached = await c.env.CACHE_KV.get<{ lat: number; lng: number; label: string } | null>(key, "json").catch(() => undefined)
-    if (cached !== undefined) return ok({ point: cached })
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=id&limit=1&q=${encodeURIComponent(q)}`
-      const res = await fetch(url, { headers: { "user-agent": "GeraiExpress/2.0 (https://geraiexpress.com)", accept: "application/json" } })
-      if (!res.ok) return ok({ point: null })
-      const arr = (await res.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>
-      const first = arr[0]
-      const lat = first?.lat ? Math.round(Number(first.lat) * 1e6) / 1e6 : NaN
-      const lng = first?.lon ? Math.round(Number(first.lon) * 1e6) / 1e6 : NaN
-      const point = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng, label: first?.display_name ?? q } : null
-      c.executionCtx.waitUntil(c.env.CACHE_KV.put(key, JSON.stringify(point), { expirationTtl: 7 * 86_400 }).catch(() => undefined))
-      return ok({ point })
-    } catch {
-      return ok({ point: null })
-    }
+    const res = await geocodeIndonesia(c.env, c.req.query("q") ?? "", (p) => c.executionCtx.waitUntil(p))
+    return ok(res)
   })
   r("POST", "/onboarding/application", "app_session", "self", async (c) => {
     const b = await body(c)

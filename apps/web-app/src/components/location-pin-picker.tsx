@@ -1,4 +1,4 @@
-import { useRef, useState, type ClipboardEvent, type PointerEvent } from "react"
+import { useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent } from "react"
 import { ExternalLinkIcon, LocateFixedIcon, MapPinIcon, MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
 import { googleMapsPinUrl, ID_BOUNDS, INDONESIA_DEFAULT_CENTER, isInIndonesia, parseCoordinate, parseLocationInput } from "@gx/domain/geo"
 import { api } from "../lib/api"
@@ -8,12 +8,20 @@ import { Field, FieldError, FieldLabel } from "./ui/field"
 import { Input } from "./ui/input"
 
 // Lightweight zero-dependency interactive slippy map pin picker (Gojek/Grab/Shopee center-pin model) built on Web
-// Mercator 256px OpenStreetMap raster tiles (no API key). Works with mouse drag, touch drag, GPS geolocation,
-// kecamatan geocoding (`/api/app/geocode`), Google Maps URL / coordinate pair paste, and direct lat/lng editing.
+// Mercator 256px OpenStreetMap raster tiles (no API key). Supports:
+// - Drag & tap/click-to-place pin on map, double-click zoom, Ctrl/Cmd+wheel zoom, and keyboard arrow nudge
+// - Inline street / landmark / kecamatan search via `/api/app/geocode` with candidate picker
+// - GPS geolocation, area-hint lookup, Google Maps URL / coordinate paste, and direct lat/lng editing
 
 const TILE_SIZE = 256
 const MIN_ZOOM = 5
 const MAX_ZOOM = 18
+
+interface GeoPoint {
+  lat: number
+  lng: number
+  label: string
+}
 
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v))
@@ -69,11 +77,15 @@ export function LocationPinPicker({
   const [fallbackCenter, setFallbackCenter] = useState<{ lat: number; lng: number }>(INDONESIA_DEFAULT_CENTER)
   const [zoom, setZoom] = useState<number>(hasValidPin ? 16 : 11)
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null)
+  const [mapQuery, setMapQuery] = useState("")
+  const [searching, setSearching] = useState(false)
+  const [candidates, setCandidates] = useState<GeoPoint[]>([])
   const [pasteText, setPasteText] = useState("")
   const [status, setStatus] = useState<{ tone: "safe" | "warn"; text: string } | null>(null)
   const [locating, setLocating] = useState(false)
   const [geocoding, setGeocoding] = useState(false)
   const dragStart = useRef<{ id: number; x: number; y: number } | null>(null)
+  const mapRef = useRef<HTMLDivElement | null>(null)
 
   const center = hasValidPin ? { lat: parsedLat, lng: parsedLng } : fallbackCenter
   const world = latLngToWorld(center.lat, center.lng, zoom)
@@ -102,13 +114,14 @@ export function LocationPinPicker({
 
   function applyCoords(lat: number, lng: number, nextZoom?: number, message?: string) {
     setFallbackCenter({ lat, lng })
-    if (nextZoom !== undefined) setZoom(nextZoom)
+    if (nextZoom !== undefined) setZoom(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM))
     onChange(String(lat), String(lng))
     setStatus(message ? { tone: "safe", text: message } : null)
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest("button")) return
+    if ((e.target as HTMLElement).closest("button, a, input")) return
+    if (e.button !== 0 && e.pointerType === "mouse") return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragStart.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
     setDrag({ dx: 0, dy: 0 })
@@ -125,9 +138,59 @@ export function LocationPinPicker({
     const dy = e.clientY - dragStart.current.y
     dragStart.current = null
     setDrag(null)
-    if (Math.hypot(dx, dy) < 2) return
+    if (Math.hypot(dx, dy) < 4) {
+      // Tap/click on map canvas places pin directly at the clicked location.
+      const rect = mapRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const offsetX = e.clientX - (rect.left + rect.width / 2)
+      const offsetY = e.clientY - (rect.top + rect.height / 2)
+      if (Math.hypot(offsetX, offsetY) < 6) return
+      const tapped = worldToLatLng(world.x + offsetX, world.y + offsetY, zoom)
+      applyCoords(tapped.lat, tapped.lng, undefined, "Pin dipindahkan ke titik yang dipilih.")
+      return
+    }
     const next = worldToLatLng(world.x - dx, world.y - dy, zoom)
     applyCoords(next.lat, next.lng, undefined, "Pin diperbarui dari peta.")
+  }
+
+  function cancelDrag(e: PointerEvent<HTMLDivElement>) {
+    if (!dragStart.current || dragStart.current.id !== e.pointerId) return
+    dragStart.current = null
+    setDrag(null)
+  }
+
+  function onDoubleClick(e: MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button, a, input")) return
+    const rect = mapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const offsetX = e.clientX - (rect.left + rect.width / 2)
+    const offsetY = e.clientY - (rect.top + rect.height / 2)
+    const nextZoom = Math.min(MAX_ZOOM, zoom + 1)
+    const target = worldToLatLng(world.x + offsetX, world.y + offsetY, zoom)
+    applyCoords(target.lat, target.lng, nextZoom, "Peta diperbesar ke titik yang dipilih.")
+  }
+
+  function onWheel(e: WheelEvent<HTMLDivElement>) {
+    if (!e.ctrlKey && !e.metaKey) return
+    e.preventDefault()
+    setZoom((z) => clamp(z + (e.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM))
+  }
+
+  function onMapKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const step = 32
+    if (e.key === "+" || e.key === "=") {
+      e.preventDefault()
+      setZoom((z) => Math.min(MAX_ZOOM, z + 1))
+    } else if (e.key === "-" || e.key === "_") {
+      e.preventDefault()
+      setZoom((z) => Math.max(MIN_ZOOM, z - 1))
+    } else if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault()
+      const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0
+      const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0
+      const next = worldToLatLng(world.x + dx, world.y + dy, zoom)
+      applyCoords(next.lat, next.lng, undefined, "Pin digeser dengan tombol arah.")
+    }
   }
 
   function locateMe() {
@@ -147,6 +210,7 @@ export function LocationPinPicker({
           setStatus({ tone: "warn", text: "Lokasi GPS terdeteksi di luar Indonesia. Geser peta atau tempel koordinat gerai." })
           return
         }
+        setCandidates([])
         applyCoords(lat, lng, 17, "Lokasi saat ini berhasil diambil. Geser peta bila perlu dirapikan.")
       },
       (err) => {
@@ -168,17 +232,49 @@ export function LocationPinPicker({
     if (geocoding || q.length < 3) return
     setGeocoding(true)
     setStatus(null)
+    setCandidates([])
     try {
-      const r = await api<{ point: { lat: number; lng: number; label: string } | null }>(`/geocode?q=${encodeURIComponent(q)}`)
+      const r = await api<{ point: GeoPoint | null; candidates?: GeoPoint[] }>(`/geocode?q=${encodeURIComponent(q)}`)
       if (r.point && isInIndonesia(r.point.lat, r.point.lng)) {
-        applyCoords(r.point.lat, r.point.lng, 15, "Peta diarahkan ke wilayah gerai. Geser pin tepat ke titik lokasi Anda.")
+        applyCoords(r.point.lat, r.point.lng, 15, "Peta diarahkan ke wilayah gerai. Klik atau geser peta tepat ke titik lokasi Anda.")
       } else {
-        setStatus({ tone: "warn", text: "Wilayah belum ditemukan di peta. Geser peta manual atau tempel koordinat Google Maps." })
+        setStatus({ tone: "warn", text: "Wilayah belum ditemukan di peta. Cari nama jalan di kotak peta atau tempel koordinat Google Maps." })
       }
     } catch {
       setStatus({ tone: "warn", text: "Gagal mencari wilayah di peta. Geser peta manual atau tempel koordinat." })
     } finally {
       setGeocoding(false)
+    }
+  }
+
+  async function searchOnMap() {
+    const q = mapQuery.trim()
+    if (searching || q.length < 3) return
+    // If operator typed/pasted raw coordinates or Google Maps link into the map search box, handle it directly.
+    const direct = parseLocationInput(q)
+    if (direct) {
+      setCandidates([])
+      setMapQuery("")
+      applyCoords(direct.lat, direct.lng, 17, "Koordinat berhasil dibaca dan pin dipindahkan.")
+      return
+    }
+    setSearching(true)
+    setStatus(null)
+    setCandidates([])
+    try {
+      const r = await api<{ point: GeoPoint | null; candidates?: GeoPoint[] }>(`/geocode?q=${encodeURIComponent(q)}`)
+      const list = (r.candidates ?? (r.point ? [r.point] : [])).filter((p) => isInIndonesia(p.lat, p.lng))
+      if (list.length > 0) {
+        const first = list[0]!
+        setCandidates(list.length > 1 ? list : [])
+        applyCoords(first.lat, first.lng, 16, `Peta diarahkan ke ${first.label.split(",").slice(0, 2).join(",")}. Klik atau geser peta untuk merapikan pin.`)
+      } else {
+        setStatus({ tone: "warn", text: "Lokasi tidak ditemukan di peta. Coba nama jalan/kecamatan lebih umum atau tempel link Google Maps." })
+      }
+    } catch {
+      setStatus({ tone: "warn", text: "Pencarian peta sedang gangguan. Geser peta manual atau tempel link Google Maps." })
+    } finally {
+      setSearching(false)
     }
   }
 
@@ -188,6 +284,7 @@ export function LocationPinPicker({
     const parsed = parseLocationInput(trimmed)
     if (parsed) {
       setPasteText("")
+      setCandidates([])
       applyCoords(parsed.lat, parsed.lng, 17, "Koordinat berhasil dibaca dan pin dipindahkan.")
       return
     }
@@ -204,6 +301,7 @@ export function LocationPinPicker({
     if (parsed) {
       e.preventDefault()
       setPasteText("")
+      setCandidates([])
       applyCoords(parsed.lat, parsed.lng, 17, "Koordinat otomatis dipisahkan ke Latitude & Longitude.")
     }
   }
@@ -236,6 +334,7 @@ export function LocationPinPicker({
               className="h-11 text-muted-foreground md:h-9"
               onClick={() => {
                 onChange("", "")
+                setCandidates([])
                 setStatus(null)
               }}
             >
@@ -245,15 +344,69 @@ export function LocationPinPicker({
         ) : null}
       </div>
 
-      {/* Interactive slippy map canvas: drag the map to place the fixed center pin onto the shop roof. */}
+      {/* Inline map search: find a street, landmark, or kecamatan right on the map */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
+            <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id={compact ? "daftar-search-map" : "profil-search-map"}
+              aria-label="Cari jalan, patokan, atau kecamatan di peta"
+              value={mapQuery}
+              onChange={(e) => setMapQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void searchOnMap()
+                }
+              }}
+              placeholder="Cari nama jalan, patokan, atau kecamatan di peta…"
+              className="pl-9"
+            />
+          </div>
+          <Button type="button" variant="outline" disabled={searching || mapQuery.trim().length < 3} onClick={() => void searchOnMap()} className="h-11 md:h-9">
+            {searching ? "Mencari…" : "Cari di Peta"}
+          </Button>
+        </div>
+        {candidates.length > 1 ? (
+          <ul role="listbox" aria-label="Hasil pencarian lokasi di peta" className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white text-xs shadow-xs">
+            {candidates.slice(0, 5).map((c) => (
+              <li key={`${c.lat},${c.lng}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCandidates([])
+                    applyCoords(c.lat, c.lng, 17, `Pin dipindahkan ke ${c.label.split(",").slice(0, 2).join(",")}.`)
+                  }}
+                  className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50 md:min-h-8"
+                >
+                  <MapPinIcon aria-hidden className="size-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      {/* Interactive slippy map canvas: click/tap or drag the map to place the fixed center pin onto the shop roof. */}
       <div
+        ref={mapRef}
         role="application"
+        tabIndex={0}
         aria-label="Peta pilih titik koordinat gerai"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
-        className={`relative w-full overflow-hidden rounded-xl border border-slate-300/90 bg-slate-100 select-none touch-none ${drag ? "cursor-grabbing" : "cursor-grab"} ${compact ? "h-48" : "h-60 sm:h-64"}`}
+        onPointerCancel={cancelDrag}
+        onDoubleClick={onDoubleClick}
+        onWheel={onWheel}
+        onKeyDown={onMapKeyDown}
+        className={`relative w-full overflow-hidden rounded-xl border border-slate-300/90 bg-slate-100 select-none touch-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none ${drag ? "cursor-grabbing" : "cursor-grab"} ${compact ? "h-48" : "h-64 sm:h-72"}`}
+        style={{
+          backgroundImage: "linear-gradient(to right, rgba(148,163,184,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.16) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
       >
         {/* Tile layer anchored at exact container center (50%, 50%) */}
         <div className="pointer-events-none absolute top-1/2 left-1/2">
@@ -264,6 +417,9 @@ export function LocationPinPicker({
               alt=""
               draggable={false}
               referrerPolicy="no-referrer-when-downgrade"
+              onError={(e) => {
+                e.currentTarget.style.opacity = "0"
+              }}
               className="max-w-none"
               style={{
                 position: "absolute",
@@ -295,7 +451,7 @@ export function LocationPinPicker({
               <span className="truncate">{parsedLat}, {parsedLng}</span>
             </span>
           ) : (
-            <span>Geser peta untuk meletakkan pin lokasi gerai</span>
+            <span>Klik atau geser peta untuk meletakkan pin lokasi gerai</span>
           )}
         </div>
 
@@ -322,8 +478,8 @@ export function LocationPinPicker({
         </div>
 
         {/* Attribution */}
-        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-white/85 px-1.5 py-0.5 text-[11px] text-slate-600">
-          © OpenStreetMap contributors
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-white/85 px-1.5 py-0.5 text-[11px] text-slate-600 tabular-nums">
+          © OpenStreetMap · Z{zoom}
         </div>
       </div>
 

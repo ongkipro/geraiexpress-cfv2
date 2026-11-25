@@ -134,6 +134,7 @@ export function PaketMassalPage() {
     }
   }
   async function submit() {
+    if (pending) return
     setPending(true)
     setMsg(null)
     setErrors({})

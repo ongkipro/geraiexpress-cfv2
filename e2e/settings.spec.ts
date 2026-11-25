@@ -267,4 +267,32 @@ test("Semua halaman ruang kerja terbuka tanpa error 'Ruang kerja tidak dapat dim
     await expect(page.getByText("Halaman ini gagal dimuat")).toHaveCount(0)
   }
   expect(pageErrors).toEqual([])
+
+  // Upgraded Map system (LocationPinPicker): inline search, click-to-place, zoom, and Google Maps `,+` URL paste.
+  await page.goto(`${APP}/pengaturan/profil`, { waitUntil: "domcontentloaded" })
+  const searchInput = page.getByLabel("Cari jalan, patokan, atau kecamatan di peta")
+  await expect(searchInput).toBeVisible()
+  await searchInput.fill("Surabaya")
+  await page.getByRole("button", { name: "Cari di Peta" }).click()
+  await expect(page.locator("#latitude")).toHaveValue("-7.2575")
+  await expect(page.locator("#longitude")).toHaveValue("112.7521")
+
+  // Paste Google Maps URL with `,+` separator (previously broken).
+  await page.getByLabel("Tempel link Google Maps atau koordinat").fill("https://maps.google.com/?q=-6.9456,+107.5703")
+  await page.getByRole("button", { name: "Terapkan" }).click()
+  await expect(page.locator("#latitude")).toHaveValue("-6.9456")
+  await expect(page.locator("#longitude")).toHaveValue("107.5703")
+
+  // Click off-center on map canvas moves the pin; zoom controls work.
+  const mapCanvas = page.getByRole("application", { name: "Peta pilih titik koordinat gerai" })
+  const box = (await mapCanvas.boundingBox())!
+  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.25)
+  await expect(page.locator("#latitude")).not.toHaveValue("-6.9456")
+  await page.getByRole("button", { name: "Perbesar peta" }).click()
+  await page.getByRole("button", { name: "Perkecil peta" }).click()
+
+  // Dashboard `Gagal diterbitkan` deep-link selects the `perlu_tindakan` bucket on Kendala.
+  await page.goto(`${APP}/kiriman?tab=kendala&bucket=perlu_tindakan`, { waitUntil: "domcontentloaded" })
+  await expect(page.getByRole("button", { name: /Gagal Terbit \/ Diperiksa/ })).toHaveAttribute("aria-pressed", "true")
+  expect(pageErrors).toEqual([])
 })

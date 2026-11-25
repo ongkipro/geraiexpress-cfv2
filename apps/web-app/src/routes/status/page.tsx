@@ -56,6 +56,7 @@ export function StatusPage() {
   }, [adopt])
   useEffect(load, [load])
   async function recheck() {
+    if (checking) return
     setChecking(true)
     try {
       adopt(await api<Status>("/status/recheck", { body: {} }))
