@@ -141,10 +141,17 @@ function RotateKey() {
     setPending(true)
     setMsg(null)
     try {
-      const r = await api<{ state: "rotated" | "unknown" | "failed"; code?: string; webhookUrlChanged?: boolean }>(`/sistem/rotasi-kunci/${encodeURIComponent(slug.trim())}`, { body: { reason } })
+      const r = await api<{ state: "rotated" | "unknown" | "failed"; code?: string; webhookUrlChanged?: boolean; secretKnown?: boolean }>(`/sistem/rotasi-kunci/${encodeURIComponent(slug.trim())}`, { body: { reason } })
       setMsg(
         r.state === "rotated"
-          ? { tone: "safe", text: r.webhookUrlChanged ? "Kunci diganti. URL webhook gerai berubah — minta pemilik memperbarui di Mengantar." : "Kunci diganti — perbarui secret webhook." }
+          ? {
+              tone: "safe",
+              text: r.webhookUrlChanged
+                ? "Kunci & Webhook Secret diganti otomatis. URL webhook gerai berubah — minta pemilik memperbarui URL webhook di Mengantar."
+                : r.secretKnown
+                  ? "Kunci & Webhook Secret diganti otomatis."
+                  : "Kunci diganti. Jika gerai memakai webhook, minta pemilik menyalin ulang Webhook Secret dari Mengantar.",
+            }
           : r.state === "unknown"
             ? { tone: "warn", text: "Hasil rotasi belum pasti. Sistem memeriksa kunci aktif otomatis; jangan ulangi rotasi." }
             : { tone: "danger", text: `Rotasi ditolak Mengantar (${r.code}). Kunci lama tetap berlaku.` },
@@ -368,6 +375,8 @@ interface MengantarConfigData {
   relaySecretSource: "database" | "env" | "placeholder"
   relaySecretMasked: string | null
   updatedAt: number | null
+  partnerQuota?: { minute: number; day: number } | null
+  partnerLimits?: { perMinute: number; registrationsPerDay: number }
 }
 
 const SOURCE_LABEL: Record<MengantarConfigData["partnerSecretSource"], string> = {
@@ -475,6 +484,9 @@ function MengantarConfigForm({ data, onSaved }: { data: MengantarConfigData; onS
             <p className="text-xs text-slate-700">
               Jalur egress: <strong>{data.transport === "relay" ? "Partner Relay (IP statis 149.28.129.53)" : "Langsung (sandbox)"}</strong>
               {" · "}Sumber secret: {SOURCE_LABEL[data.partnerSecretSource]}
+              {data.partnerQuota && data.partnerLimits
+                ? ` · Kuota ${data.partnerQuota.minute}/${data.partnerLimits.perMinute} per menit · ${data.partnerQuota.day}/${data.partnerLimits.registrationsPerDay} registrasi/hari (WIB)`
+                : ""}
               {data.updatedAt ? ` · Diperbarui ${formatDate(data.updatedAt)}` : ""}
             </p>
           </div>

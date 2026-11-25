@@ -97,8 +97,10 @@ export interface ObservedRate {
   estimatedSpecialPrice: number | null
   cargoPrice: number | null
   cargoDiscount: number | null
+  cargoDiscountPercent?: number | null
   /** v2.0.0 extra cargo promo (already netted in `cargoEstimatedSpecialPrice`). */
   cargoDiscountExtra?: number | null
+  cargoDiscountExtraPercent?: number | null
   cargoEstimatedPrice: number | null
   cargoEstimatedSpecialPrice: number | null
   minimumWeightCargo: number | null
@@ -717,10 +719,80 @@ export class GeraiVaultDO extends DurableObject<Env> {
 
   // ---- Discount verification (TASK-207) -----------------------------------------------------------------------------
 
-  /** One `courier=all` estimate (1 kg, origin = destination = the outlet area) for the discount verifier. */
+  /**
+   * Probes `courier=all` estimates for discount verification & Mengantar sync.
+   * Uses 1 kg first; in live Mengantar also runs a cross-area hub probe if any service was unsupported intra-area,
+   * and a 10 kg probe whenever cargo discount fields were absent at 1 kg.
+   */
   async observeRates(tenantId: string, areaId: string): Promise<{ ok: true; value: Record<string, ObservedRate> } | { ok: false; refused: VaultRefusal | "NO_KEY" }> {
-    const r = await this.estimateRates(tenantId, { originId: areaId, destinationId: areaId, courier: "all", weightKg: 1 })
-    return r.ok ? { ok: true, value: r.value } : { ok: false, refused: r.refused === "PROVIDER_ERROR" ? "NO_KEY" : r.refused }
+    const first = await this.estimateRates(tenantId, { originId: areaId, destinationId: areaId, courier: "all", weightKg: 1 })
+    if (!first.ok) return { ok: false, refused: first.refused === "PROVIDER_ERROR" ? "NO_KEY" : first.refused }
+    const merged: Record<string, ObservedRate> = { ...first.value }
+    const hasCargoGap = (rates: Record<string, ObservedRate>) =>
+      Object.entries(rates).some(
+        ([k, r]) =>
+          /cargo/i.test(k) &&
+          (r.unsupported || (r.cargoDiscount === null && (r.cargoDiscountPercent ?? null) === null)),
+      )
+    const hasRegularGap = (rates: Record<string, ObservedRate>) =>
+      Object.entries(rates).some(
+        ([k, r]) => !/cargo/i.test(k) && (r.unsupported || (r.discount === null && r.discountPercent === null)),
+      )
+
+    let destId = areaId
+    if (this.env.MENGANTAR_PUBLIC_ORIGIN !== "mock" && (hasRegularGap(merged) || hasCargoGap(merged))) {
+      const key = await this.sellerKey(tenantId)
+      if (key) {
+        for (const kw of ["Gambir", "Coblong"]) {
+          const hits = await publicClient(this.env, key.key, tenantId)
+            .searchArea(kw)
+            .catch(() => [])
+          const alt = hits.find((h) => h._id && h._id !== areaId)?._id
+          if (alt) {
+            destId = alt
+            break
+          }
+        }
+      }
+      if (destId !== areaId && hasRegularGap(merged)) {
+        const cross = await this.estimateRates(tenantId, { originId: areaId, destinationId: destId, courier: "all", weightKg: 1 })
+        if (cross.ok) {
+          for (const [k, r] of Object.entries(cross.value)) {
+            const cur = merged[k]
+            if (!cur || cur.unsupported || (cur.discount === null && cur.discountPercent === null)) {
+              if (!r.unsupported && (r.discount !== null || r.discountPercent !== null)) merged[k] = r
+            }
+          }
+        }
+      }
+    }
+
+    if (hasCargoGap(merged)) {
+      const cargo = await this.estimateRates(tenantId, { originId: areaId, destinationId: destId, courier: "all", weightKg: 10 })
+      if (cargo.ok) {
+        for (const [k, r] of Object.entries(cargo.value)) {
+          if (!/cargo/i.test(k)) continue
+          const hasCargoRate = !r.unsupported && (r.cargoDiscount !== null || (r.cargoDiscountPercent ?? null) !== null)
+          if (!hasCargoRate) continue
+          const cur = merged[k]
+          merged[k] = cur
+            ? {
+                ...cur,
+                unsupported: false,
+                cargoPrice: r.cargoPrice ?? cur.cargoPrice,
+                cargoDiscount: r.cargoDiscount ?? cur.cargoDiscount,
+                cargoDiscountPercent: r.cargoDiscountPercent ?? cur.cargoDiscountPercent,
+                cargoDiscountExtra: r.cargoDiscountExtra ?? cur.cargoDiscountExtra,
+                cargoDiscountExtraPercent: r.cargoDiscountExtraPercent ?? cur.cargoDiscountExtraPercent,
+                cargoEstimatedPrice: r.cargoEstimatedPrice ?? cur.cargoEstimatedPrice,
+                cargoEstimatedSpecialPrice: r.cargoEstimatedSpecialPrice ?? cur.cargoEstimatedSpecialPrice,
+                minimumWeightCargo: r.minimumWeightCargo ?? cur.minimumWeightCargo,
+              }
+            : r
+        }
+      }
+    }
+    return { ok: true, value: merged }
   }
 
   /**
@@ -760,7 +832,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
         estimatedSpecialPrice: n(r.estimatedSpecialPrice),
         cargoPrice: n(r.cargoPrice),
         cargoDiscount: n(r.cargoDiscount),
+        cargoDiscountPercent: n(r.cargoDiscountPercent),
         cargoDiscountExtra: n(r.cargoDiscountExtra),
+        cargoDiscountExtraPercent: n(r.cargoDiscountExtraPercent),
         cargoEstimatedPrice: n(r.cargoEstimatedPrice),
         cargoEstimatedSpecialPrice: n(r.cargoEstimatedSpecialPrice),
         minimumWeightCargo: n(r.minimumWeightCargo),
@@ -2857,8 +2931,9 @@ export class GeraiVaultDO extends DurableObject<Env> {
   /**
    * Read-back after an unknown outcome or a crash mid-rotation: `POST /sellers/api-key`, never `regenerate`.
    * Stores whatever key Mengantar reports as current under the fenced version. Safe to repeat.
+   * Stops retrying immediately on terminal provider refusals (`SELLER_DEACTIVATED`, `API_KEY_DISABLED`, `SELLER_NOT_FOUND`).
    */
-  async resolveKeyRotation(tenantId: string, now: number = Date.now()): Promise<VaultResult<{ state: "rotated" | "unknown" | "none"; keyVersion: number | null; code: string | null }>> {
+  async resolveKeyRotation(tenantId: string, now: number = Date.now()): Promise<VaultResult<{ state: "rotated" | "unknown" | "failed" | "none"; keyVersion: number | null; code: string | null }>> {
     const pending = await this.pendingKeyRotation(tenantId, now)
     if (!pending.ok) return pending
     if (!pending.value) return { ok: true, value: { state: "none", keyVersion: null, code: null } }
@@ -2872,13 +2947,85 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
     const key = await (await resolvePartnerClient(this.env)).apiKey(sellerId)
     if (key.kind !== "ok") {
+      const code = key.kind === "error" || key.kind === "relay_refused" ? key.code : key.reason
+      if (key.kind === "error" && (code === "SELLER_DEACTIVATED" || code === "API_KEY_DISABLED" || code === "SELLER_NOT_FOUND")) {
+        const restricted = code === "SELLER_DEACTIVATED" || code === "API_KEY_DISABLED"
+        this.ctx.storage.transactionSync(() => {
+          this.ctx.storage.sql.exec(
+            restricted
+              ? "UPDATE mengantar_connections SET rotation_state = 'idle', rotation_started_at = NULL, onboarding_state = 'provider_restricted', updated_at = ? WHERE key_version = ?"
+              : "UPDATE mengantar_connections SET rotation_state = 'idle', rotation_started_at = NULL, updated_at = ? WHERE key_version = ?",
+            now,
+            keyVersion,
+          )
+          this.ctx.storage.sql.exec("DELETE FROM vault_timers WHERE name = 'key_rotation_check'")
+          this.audit(tenantId, now, "system", null, "mengantar.key_rotation_failed", { keyVersion, code, terminal: true })
+        })
+        await this.armAlarm()
+        return { ok: true, value: { state: "failed", keyVersion, code } }
+      }
       setTimer(this.ctx.storage.sql, "key_rotation_check", now + 15 * 60_000)
       await this.armOutbox()
-      return { ok: true, value: { state: "unknown", keyVersion, code: key.kind === "error" || key.kind === "relay_refused" ? key.code : key.reason } }
+      return { ok: true, value: { state: "unknown", keyVersion, code } }
     }
     const done = await this.completeKeyRotation(tenantId, keyVersion, { apiKey: key.data.apiKey, callbackSecret: null, readBack: true }, now)
     if (!done.ok) return { ok: true, value: { state: "unknown", keyVersion, code: done.refused } }
     return { ok: true, value: { state: "rotated", keyVersion, code: null } }
+  }
+
+  /**
+   * Non-rotating key read-back sync: when a Partner-registered seller regenerated their own key inside Mengantar
+   * Seller Web, store the fetched current key without calling `regenerate`. If the key changed while webhooks were
+   * active, transition webhook state to `secret_mismatch` because Mengantar replaces the Webhook Secret on key change.
+   */
+  async syncSellerKeyFromPartner(
+    tenantId: string,
+    input: { apiKey: string; actorId: string; actorType: "user" | "super_admin"; reason: string; now: number },
+  ): Promise<{ ok: true; value: { changed: boolean; keyVersion: number; webhookSecretReset: boolean } } | { ok: false; refused: VaultRefusal | "NO_SELLER" | "KEY_ROTATING" }> {
+    const refused = this.refusal(tenantId)
+    if (refused) return { ok: false, refused }
+    const row = readConnection(this.ctx.storage.sql)
+    if (!row?.seller_id || row.onboarding_state !== "connected") return { ok: false, refused: "NO_SELLER" }
+    if (row.rotation_state !== "idle") return { ok: false, refused: "KEY_ROTATING" }
+    const oldKey = row.encrypted_api_key ? await decryptString(this.env.KEK_SECRET, row.encrypted_api_key, `seller-key:${tenantId}`) : null
+    if (oldKey === input.apiKey) {
+      this.audit(tenantId, input.now, "user", input.actorId, "mengantar.key_synced_from_partner", {
+        changed: false,
+        keyVersion: row.key_version,
+        initiatedBy: input.actorType,
+        reason: input.reason,
+      })
+      return { ok: true, value: { changed: false, keyVersion: row.key_version, webhookSecretReset: false } }
+    }
+    const encKey = await encryptString(this.env.KEK_SECRET, input.apiKey, `seller-key:${tenantId}`)
+    let result: { changed: boolean; keyVersion: number; webhookSecretReset: boolean } | null = null
+    this.ctx.storage.transactionSync(() => {
+      const sql = this.ctx.storage.sql
+      const cur = readConnection(sql)
+      if (!cur || !cur.seller_id || cur.rotation_state !== "idle") return
+      const nextVersion = cur.key_version + 1
+      const wasActive = cur.webhook_state === "active"
+      sql.exec(
+        wasActive
+          ? "UPDATE mengantar_connections SET encrypted_api_key = ?, key_version = ?, webhook_state = 'secret_mismatch', updated_at = ?"
+          : "UPDATE mengantar_connections SET encrypted_api_key = ?, key_version = ?, updated_at = ?",
+        encKey,
+        nextVersion,
+        input.now,
+      )
+      if (wasActive && pollCandidates(sql, 1).length > 0) setTimer(sql, "status_poll", input.now + POLL_INTERVAL_INACTIVE_MS, "earliest")
+      this.audit(tenantId, input.now, "user", input.actorId, "mengantar.key_synced_from_partner", {
+        changed: true,
+        keyVersion: nextVersion,
+        webhookSecretReset: wasActive,
+        initiatedBy: input.actorType,
+        reason: input.reason,
+      })
+      result = { changed: true, keyVersion: nextVersion, webhookSecretReset: wasActive }
+    })
+    if (!result) return { ok: false, refused: "KEY_ROTATING" }
+    await this.armAlarm()
+    return { ok: true, value: result }
   }
 
   /**

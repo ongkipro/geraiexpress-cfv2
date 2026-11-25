@@ -15,8 +15,8 @@ export const mockCodFeeUnstable = { on: false, n: 0 }
 
 /** Fault injection for tests: the next call to a route throws a timeout (after or before Mengantar applied it). */
 export const mockFaults: {
-  regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error"
-  apiKey?: "timeout"
+  regenerate?: "timeout_after_apply" | "timeout_before_apply" | "error" | "SELLER_DEACTIVATED" | "API_KEY_DISABLED"
+  apiKey?: "timeout" | "SELLER_DEACTIVATED" | "API_KEY_DISABLED"
   order?: "timeout_after_create" | "timeout_before_create" | "validation_error" | "replayed_5xx" | "unavailable"
   deleteOrder?: "timeout_after_delete" | "timeout_before_delete" | "refused"
   readBack?: "timeout"
@@ -71,6 +71,18 @@ const awbFor = (courier: string) => `${courier.toUpperCase().slice(0, 3)}${digit
 const sellers = new Map<string, { sellerId: string; email: string; apiKey: string; callbackSecret?: string }>()
 const takenEmails = new Set(["sudahada@contoh.test"])
 
+/** Test helper: simulates a Partner-registered seller regenerating their own API key inside Seller Web Mengantar. */
+export function mockSellerSelfRegenerate(sellerId: string, nextApiKey: string): boolean {
+  for (const s of sellers.values()) {
+    if (s.sellerId === sellerId) {
+      s.apiKey = nextApiKey
+      s.callbackSecret = `cb-${crypto.randomUUID().slice(0, 12)}`
+      return true
+    }
+  }
+  return false
+}
+
 export const mockFetch: typeof fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
   const body = init?.body ? JSON.parse(String(init.body)) : {}
@@ -100,15 +112,18 @@ export const mockFetch: typeof fetch = async (input, init) => {
       const fault = mockFaults.regenerate
       delete mockFaults.regenerate
       if (fault === "error") return json(400, { success: false, code: "SELLER_INACTIVE", message: "inactive" })
+      if (fault === "SELLER_DEACTIVATED" || fault === "API_KEY_DISABLED") return json(403, { success: false, code: fault, message: "disabled" })
       if (fault === "timeout_before_apply") throw timeout()
       entry.apiKey = `MOCK-${crypto.randomUUID().slice(0, 8)}`
       entry.callbackSecret = `cb-${crypto.randomUUID().slice(0, 12)}`
       if (fault === "timeout_after_apply") throw timeout()
       return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey, callbackSecret: entry.callbackSecret } })
     }
-    if (mockFaults.apiKey === "timeout") {
+    const keyFault = mockFaults.apiKey
+    if (keyFault) {
       delete mockFaults.apiKey
-      throw timeout()
+      if (keyFault === "timeout") throw timeout()
+      return json(403, { success: false, code: keyFault, message: "disabled" })
     }
     return json(200, { success: true, data: { sellerId: entry.sellerId, apiKey: entry.apiKey } })
   }

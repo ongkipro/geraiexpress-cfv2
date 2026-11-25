@@ -5,7 +5,7 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { hit } from "../../auth/throttle"
 import { AppError, ok } from "../../http/envelope"
-import { courierBands, listRules, runDiscountVerifier, markRequested, platformPolicy, requestList, requestListCsv, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
+import { courierBands, listRules, runDiscountVerifier, markRequested, platformPolicy, requestList, requestListCsv, syncDiscountsFromMengantar, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
   try {
@@ -47,6 +47,15 @@ export function registerPricingAdmin(app: Hono<any>): void {
     const r = await runDiscountVerifier(c.env, now, tenantId ? 1 : 20, tenantId)
     await auditStatement(c.env, { actorId: c.get("session").user.id, action: "pricing.discount_recheck", targetType: tenantId ? "tenant" : "platform", targetId: tenantId ?? undefined, tenantId, reason: "Verifikasi ulang diskon", metadata: r, now }).run()
     return ok({ ...r, checkedAt: now })
+  })
+  // Pull & adopt actual per-expedition discounts directly from the tenant's connected Mengantar account.
+  // Registered before `/:serviceCode` so Hono matches the static action segment first.
+  r("POST", "/tarif/gerai/:tenantId/tarik-mengantar", "owner_recent", async (c) => {
+    const b = await body(c)
+    const now = Date.now()
+    const lim = await hit(c.env.DB, `owner-discount-sync:${c.get("session").user.id}`, 6, 60_000, now)
+    if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum menarik diskon ulang.")
+    return ok(await syncDiscountsFromMengantar(c.env, { tenantId: c.req.param("tenantId") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), now }))
   })
   r("POST", "/tarif/gerai/:tenantId/:serviceCode", "owner_recent", async (c) => {
     const b = await body(c)

@@ -49,7 +49,7 @@ export const SETTINGS_GROUPS: Array<{ label: string; items: SettingsItem[] }> = 
     label: "Akun & Akses",
     items: [
       { to: "/pengaturan/anggota", label: "Anggota", hint: "Kasir, undangan & izin COD", icon: UsersIcon, owner: true },
-      { to: "/pengaturan/mengantar", label: "Mengantar", hint: "Koneksi & webhook", icon: WebhookIcon, owner: true },
+      { to: "/pengaturan/mengantar", label: "Mengantar", hint: "Koneksi & sinkron otomatis", icon: WebhookIcon, owner: true },
       { to: "/pengaturan/api-mcp", label: "API & MCP", hint: "Kunci API & asisten AI", icon: KeyRoundIcon, owner: true },
     ],
   },
@@ -81,7 +81,7 @@ function SettingsLink({ item, active, warn, size }: { item: SettingsItem; active
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-medium">{item.label}</span>
-        <span className={cn("truncate text-xs", active ? "text-primary/80" : "text-muted-foreground")}>{warn ? "Webhook perlu diatur" : item.hint}</span>
+        <span className={cn("truncate text-xs", active ? "text-primary/80" : "text-muted-foreground")}>{warn ? "Webhook perlu diperiksa" : item.hint}</span>
       </span>
       {size === "list" ? <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" /> : null}
     </Link>

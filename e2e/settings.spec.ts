@@ -186,3 +186,35 @@ test("Profil Gerai: unggah logo 1:1 (max 2 MB) → logo gerai & favicon mini-sit
   await page.getByRole("alertdialog").getByRole("button", { name: "Ya, Hapus" }).click()
   await expect(page.getByText("Belum ada logo — memakai inisial nama gerai.")).toBeVisible()
 })
+
+test("Pengaturan › Mengantar: sinkron otomatis aktif tanpa titik peringatan, sinkron API key, dan webhook opsional bisa dibuka", async ({ page, context, request }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "checked once on desktop + narrow resize")
+  const email = uniqueEmail("e2e-mengantar")
+  const api = context.request
+  const h = { origin: APP, "content-type": "application/json" }
+  const { otpId } = ((await (await api.post(`${APP}/api/app/auth/signup/request`, { headers: h, data: { email, turnstileToken: "ok" } })).json()) as { data: { otpId: string } }).data
+  const { ticket } = ((await (await api.post(`${APP}/api/app/auth/signup/verify`, { headers: h, data: { otpId, code: (await lastMail(request, email, "signup_otp")).code } })).json()) as { data: { ticket: string } }).data
+  await api.post(`${APP}/api/app/auth/signup/complete`, { headers: h, data: { ticket, name: "Bu Mengantar", password: "mengantar-e2e-kuat-1" } })
+  expect((await api.post(`${APP}/api/app/dev/seed-tenant`, { headers: h, data: { slug: `mg${Date.now().toString(36)}`, name: "Gerai Mengantar", connect: true } })).status()).toBe(201)
+
+  await page.goto(`${APP}/pengaturan/mengantar`)
+  await expect(page.getByRole("heading", { name: "Mengantar", level: 1 })).toBeVisible()
+  await expect(page.getByText("Sinkron otomatis aktif")).toBeVisible()
+  // No nagging amber dot on the Pengaturan rail when automatic polling handles updates.
+  await expect(page.locator("[data-settings-rail] .bg-warn")).toHaveCount(0)
+  // Webhook form is collapsed by default so normal sellers aren't forced to configure it.
+  await expect(page.getByText("Menu Webhook belum muncul di Mengantar?")).toHaveCount(0)
+
+  // Manual status poll + Partner API key sync both work inline.
+  await page.getByRole("button", { name: "Periksa Status" }).click()
+  await expect(page.getByText(/Tidak ada kiriman aktif|kiriman aktif diperiksa/)).toBeVisible()
+  await page.getByRole("button", { name: "Sinkronkan API Key" }).click()
+  await expect(page.getByText(/sudah sama dengan kunci aktif di Mengantar/)).toBeVisible()
+
+  // Expand optional Webhook card and verify zero horizontal overflow on desktop & phone.
+  await page.getByRole("button", { name: /Atur Webhook/i }).click()
+  await expect(page.getByText("Menu Webhook belum muncul di Mengantar?")).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+})

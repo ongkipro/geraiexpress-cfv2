@@ -15,6 +15,7 @@ import { CfError } from "../../hostnames/cloudflare"
 import { AppError, ok } from "../../http/envelope"
 import { hostOrigin } from "../../http/request"
 import { approveApplication, provisionSeller, reconcileRegistration, rejectApplication, type OutletInput } from "../../onboarding/service"
+import { syncSellerKey } from "../../do/gerai-vault/credentials/rotation"
 import { dispatchDue } from "../../email/mailer"
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
@@ -99,9 +100,28 @@ export function registerGeraiAdmin(app: Hono<any>): void {
       .bind(c.req.param("slug"))
       .first<{ id: string } & Record<string, unknown>>()
     if (!t) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
-    const conn = await vaultFor(c.env, t.id).connectionView(t.id)
-    const hosts = await c.env.DB.prepare("SELECT hostname, kind, state FROM tenant_hostnames WHERE tenant_id = ?").bind(t.id).all()
-    return ok({ ...t, connection: conn.ok ? conn.value : null, hostnames: hosts.results })
+    const [conn, hosts, discRows] = await Promise.all([
+      vaultFor(c.env, t.id).connectionView(t.id),
+      c.env.DB.prepare("SELECT hostname, kind, state FROM tenant_hostnames WHERE tenant_id = ?").bind(t.id).all(),
+      c.env.DB.prepare(
+        `SELECT r.service_code, c.display_name, c.courier_name, r.service_class, r.assigned_bps, r.observed_bps, r.verification_state, r.observed_at
+         FROM tenant_discount_rules r JOIN courier_service_catalog c ON c.service_code = r.service_code
+         WHERE r.tenant_id = ? ORDER BY c.sort_order`,
+      )
+        .bind(t.id)
+        .all<{ service_code: string; display_name: string; courier_name: string; service_class: string; assigned_bps: number; observed_bps: number | null; verification_state: "belum_diterapkan" | "sesuai" | "selisih"; observed_at: number | null }>(),
+    ])
+    const items = discRows.results
+    const discounts = {
+      summary: {
+        total: items.length,
+        sesuai: items.filter((r) => r.verification_state === "sesuai").length,
+        belum: items.filter((r) => r.verification_state === "belum_diterapkan").length,
+        selisih: items.filter((r) => r.verification_state === "selisih").length,
+      },
+      items,
+    }
+    return ok({ ...t, connection: conn.ok ? conn.value : null, hostnames: hosts.results, discounts })
   })
 
   // Suspend / unsuspend: bumps routing_version; the mini-site answers 403 within the 30 s isolate cache window.
@@ -259,5 +279,18 @@ export function registerGeraiAdmin(app: Hono<any>): void {
       return ok(await provisionSeller(c.env, { tenantId: t.id, name: t.name, email: t.seller_email, outlet: JSON.parse(t.outlet_json) as OutletInput, now }))
     }
     throw new AppError(409, "NOTHING_TO_RETRY", "Tidak ada proses pendaftaran yang perlu diulang.")
+  })
+
+  // Read-back current seller API key (`POST /sellers/api-key`, never regenerates): use when seller rotated key in Mengantar.
+  r("POST", "/gerai/:slug/sinkron-kunci", "owner_recent", async (c) => {
+    const b = await body(c)
+    const reason = requireReason(b.reason)
+    const t = await c.env.DB.prepare("SELECT id FROM tenants WHERE slug = ? AND status IN ('active','suspended')").bind(c.req.param("slug")).first<{ id: string }>()
+    if (!t) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
+    const actor = c.get("session").user.id
+    const now = Date.now()
+    const out = await syncSellerKey(c.env, { tenantId: t.id, actorId: actor, actorType: "super_admin", reason, now })
+    await auditStatement(c.env, { actorId: actor, action: "seller_key.sync", targetType: "tenant", targetId: t.id, tenantId: t.id, reason, metadata: out, now }).run()
+    return ok(out)
   })
 }

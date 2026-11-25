@@ -12,7 +12,7 @@ import { hostOrigin, ipHash } from "../http/request"
 import { ALLOWED_MIDDLEWARE, register, type AuthLevel } from "./registry"
 import { dispatchDue } from "../email/mailer"
 import { connectByok, submitApplication } from "../onboarding/service"
-import { mengantarSettings, saveWebhookSecret } from "../webhooks/settings"
+import { mengantarSettings, pollOwnStatus, saveWebhookSecret, syncOwnSellerKey } from "../webhooks/settings"
 import { searchAreas } from "../couriers/areas"
 import { projectFor } from "../dto/projection"
 import { escposBytes, initials, labelsPdf, labelSvg, qrSvg, rollLines, rollText, suratJalanPdf } from "@gx/thermal-print"
@@ -300,7 +300,14 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
         role: m.role,
         menus,
         badges: { kiriman: 0, notifications: notes.ok ? notes.value.unread : 0 },
-        hints: { mengantarWebhook: webhook && webhook.ok && webhook.value && webhook.value.webhookState !== "active" ? webhook.value.webhookState : null, sandboxTools: c.env.GX_ENV !== "production" && m.role === "gerai_admin" },
+        hints: {
+          // Only flag actionable webhook issues (secret mismatch or paused); normal accounts run automatically via hourly polling.
+          mengantarWebhook:
+            webhook && webhook.ok && webhook.value && (webhook.value.webhookState === "secret_mismatch" || webhook.value.webhookState === "paused")
+              ? webhook.value.webhookState
+              : null,
+          sandboxTools: c.env.GX_ENV !== "production" && m.role === "gerai_admin",
+        },
         demo: isDemoTenantSlug(m.tenantSlug) || isDemoEmail(s.user.email),
         tenants: memberships.results,
       }),
@@ -1305,11 +1312,25 @@ export function appApi(): Hono<{ Bindings: Env; Variables: Vars }> {
   })
   r("GET", "/areas", "app_member", "none", async (c) => ok({ items: (await searchAreas(c.env, c.req.query("q") ?? "")).items }))
 
-  // Pengaturan › Mengantar (PR-02b): webhook URL, secret, status chip, polling floor.
+  // Pengaturan › Mengantar (PR-02b): webhook URL, secret, status chip, polling floor, Partner key sync.
   r("GET", "/settings/mengantar", "app_owner", "role", async (c) => ok(await mengantarSettings(c.env, c.get("membership")!.tenantId, c.req.url, now())))
   r("POST", "/settings/mengantar/webhook-secret", "app_owner", "role", async (c) => {
     const b = await body(c)
     return ok(await saveWebhookSecret(c.env, c.get("membership")!.tenantId, c.get("session").user.id, b.secret, c.req.url, now()))
+  })
+  r("POST", "/settings/mengantar/sync-key", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const t = now()
+    const lim = await hit(c.env.DB, `app-sync-key:${m.tenantId}`, 3, 60_000, t)
+    if (!lim.allowed) throw new AppError(429, "RATE_LIMITED", "Tunggu sebentar sebelum menyinkronkan API key ulang.")
+    return ok(await syncOwnSellerKey(c.env, m.tenantId, c.get("session").user.id, c.req.url, t))
+  })
+  r("POST", "/settings/mengantar/poll", "app_owner", "role", async (c) => {
+    const m = c.get("membership")!
+    const t = now()
+    const lim = await hit(c.env.DB, `app-poll-status:${m.tenantId}`, 3, 60_000, t)
+    if (!lim.allowed) throw new AppError(429, "RATE_LIMITED", "Tunggu sebentar sebelum memeriksa status kiriman lagi.")
+    return ok(await pollOwnStatus(c.env, m.tenantId, c.req.url, t))
   })
 
   // Local development only: give the signed-in user an active synthetic tenant so flows that need a gerai can be

@@ -2,6 +2,7 @@
 // the Webhook Secret back. The token is created once per tenant and registered by hash in D1 `webhook_routes`.
 import { AppError } from "../http/envelope"
 import { sha256Hex } from "../crypto"
+import { syncSellerKey, type KeySyncOutcome } from "../do/gerai-vault/credentials/rotation"
 import { vaultFor } from "../do/gerai-vault/stub"
 import type { WebhookView } from "../do/gerai-vault"
 
@@ -23,6 +24,11 @@ export interface MengantarSettingsView {
   sellerId: string | null
   sellerEmail: string | null
   environment: "sandbox" | "production" | null
+  keyVersion: number
+  rotationState: "idle" | "in_flight" | "unknown"
+  lastErrorCode: string | null
+  canSyncKey: boolean
+  canManualPoll: boolean
 }
 
 async function refusal(r: { ok: false; refused: string }): Promise<never> {
@@ -44,11 +50,15 @@ export async function mengantarSettings(env: Env, tenantId: string, requestUrl: 
       .run()
     url = `${hooksOrigin(env, requestUrl)}/webhooks/mengantar/${t.value.token}`
   }
-  const [w, app] = await Promise.all([
+  const [w, app, ob] = await Promise.all([
     vault.webhookStatus(tenantId),
     env.DB.prepare("SELECT seller_email FROM tenant_applications WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1").bind(tenantId).first<{ seller_email: string }>(),
+    env.DB.prepare("SELECT last_error_code FROM tenant_onboarding WHERE tenant_id = ?").bind(tenantId).first<{ last_error_code: string | null }>(),
   ])
   if (!w.ok) return refusal(w)
+  const onboardingState = conn.value?.onboardingState ?? null
+  const sellerId = conn.value?.sellerId ?? null
+  const rotationState = conn.value?.rotationState ?? "idle"
   return {
     webhookUrl: url,
     webhookState: w.value?.webhookState ?? null,
@@ -57,10 +67,15 @@ export async function mengantarSettings(env: Env, tenantId: string, requestUrl: 
     lastFailureAt: w.value?.lastFailureAt ?? null,
     lastPolledAt: w.value?.lastPolledAt ?? null,
     lastSyncStatus: w.value?.lastSyncStatus ?? null,
-    onboardingState: conn.value?.onboardingState ?? null,
-    sellerId: conn.value?.sellerId ?? null,
+    onboardingState,
+    sellerId,
     sellerEmail: app?.seller_email ?? null,
     environment: conn.value?.environment ?? null,
+    keyVersion: conn.value?.keyVersion ?? 0,
+    rotationState,
+    lastErrorCode: ob?.last_error_code ?? null,
+    canSyncKey: onboardingState === "connected" && Boolean(sellerId) && rotationState === "idle",
+    canManualPoll: Boolean(conn.value?.hasKey) && rotationState === "idle",
   }
 }
 
@@ -76,4 +91,35 @@ export async function saveWebhookSecret(env: Env, tenantId: string, actorId: str
   const r = await vault.saveWebhookSecret(tenantId, secret, actorId)
   if (!r.ok) return refusal(r)
   return mengantarSettings(env, tenantId, requestUrl, now)
+}
+
+export async function syncOwnSellerKey(
+  env: Env,
+  tenantId: string,
+  actorId: string,
+  requestUrl: string,
+  now: number,
+): Promise<{ result: KeySyncOutcome; settings: MengantarSettingsView }> {
+  const result = await syncSellerKey(env, {
+    tenantId,
+    actorId,
+    actorType: "user",
+    reason: "Sinkronisasi API key dari Pengaturan Mengantar",
+    now,
+  })
+  const settings = await mengantarSettings(env, tenantId, requestUrl, Date.now())
+  return { result, settings }
+}
+
+export async function pollOwnStatus(
+  env: Env,
+  tenantId: string,
+  requestUrl: string,
+  now: number,
+): Promise<{ polled: number; changed: number; failed: number; settings: MengantarSettingsView }> {
+  const vault = vaultFor(env, tenantId)
+  const r = await vault.pollStatus(tenantId, now)
+  if (!r.ok) return refusal(r)
+  const settings = await mengantarSettings(env, tenantId, requestUrl, Date.now())
+  return { ...r.value, settings }
 }

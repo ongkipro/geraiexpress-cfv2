@@ -85,10 +85,17 @@ export function observedRegularBps(r: Pick<ObservedRate, "price" | "discount" | 
   return null
 }
 
-/** Observed cargo discount: base + the v2.0.0 extra cargo promo, over the cargo publish price. */
-export function observedCargoBps(r: Pick<ObservedRate, "cargoPrice" | "cargoDiscount" | "cargoDiscountExtra">): number | null {
-  if (r.cargoDiscount === null || r.cargoPrice === null || r.cargoPrice <= 0) return null
-  return observedBpsFromDiscount(r.cargoDiscount + (r.cargoDiscountExtra ?? 0), r.cargoPrice)
+/** Observed cargo discount: base + the v2.0.0 extra cargo promo, over the cargo publish price (or percent fallback). */
+export function observedCargoBps(
+  r: Pick<ObservedRate, "cargoPrice" | "cargoDiscount" | "cargoDiscountPercent" | "cargoDiscountExtra" | "cargoDiscountExtraPercent">,
+): number | null {
+  if (r.cargoDiscount !== null && r.cargoPrice !== null && r.cargoPrice > 0) {
+    return observedBpsFromDiscount(r.cargoDiscount + (r.cargoDiscountExtra ?? 0), r.cargoPrice)
+  }
+  if (r.cargoDiscountPercent !== null && r.cargoDiscountPercent !== undefined && r.cargoDiscountPercent >= 0 && r.cargoDiscountPercent <= 100) {
+    return Math.round((r.cargoDiscountPercent + (r.cargoDiscountExtraPercent ?? 0)) * 100)
+  }
+  return null
 }
 
 const rawDiscountText = (r: Pick<ObservedRate, "discountPercent" | "discountExtraPercent">) => (r.discountPercent === null ? null : r.discountExtraPercent ? `${r.discountPercent}+${r.discountExtraPercent}` : String(r.discountPercent))

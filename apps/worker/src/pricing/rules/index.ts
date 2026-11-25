@@ -204,8 +204,14 @@ export async function upsertCourierPolicy(env: Env, input: { courierCode: string
   return band
 }
 
-/** Observed discount per service class (regular: `discountPercent` or `discount/price`; cargo: `cargoDiscount/cargoPrice`). */
-export function observedBpsOf(serviceClass: "regular" | "cargo", rate: Pick<ObservedRate, "price" | "discount" | "discountPercent" | "discountExtra" | "discountExtraPercent" | "cargoPrice" | "cargoDiscount" | "cargoDiscountExtra">): number | null {
+/** Observed discount per service class (regular: `discountPercent` or `discount/price`; cargo: `cargoDiscount/cargoPrice` or percent). */
+export function observedBpsOf(
+  serviceClass: "regular" | "cargo",
+  rate: Pick<
+    ObservedRate,
+    "price" | "discount" | "discountPercent" | "discountExtra" | "discountExtraPercent" | "cargoPrice" | "cargoDiscount" | "cargoDiscountPercent" | "cargoDiscountExtra" | "cargoDiscountExtraPercent"
+  >,
+): number | null {
   return serviceClass === "cargo" ? observedCargoBps(rate) : observedRegularBps(rate)
 }
 
@@ -264,11 +270,15 @@ export async function runDiscountVerifier(env: Env, now: number, limitTenants = 
   const { vaultFor } = await import("../../do/gerai-vault/stub")
   for (const t of due) {
     const rules = (await env.DB.prepare("SELECT service_code, service_class FROM tenant_discount_rules WHERE tenant_id = ? AND next_check_at <= ?").bind(t.tenant_id, now).all<{ service_code: string; service_class: "regular" | "cargo" }>()).results
+    const vault = vaultFor(env, t.tenant_id)
+    let areaId = t.area_id
+    if (!areaId) {
+      const def = await vault.defaultOutlet(t.tenant_id).catch(() => null)
+      if (def?.ok && def.value?.areaId) areaId = def.value.areaId
+    }
     let rates: Record<string, ObservedRate> | null = null
-    if (t.area_id) {
-      const r = await vaultFor(env, t.tenant_id)
-        .observeRates(t.tenant_id, t.area_id)
-        .catch(() => null)
+    if (areaId) {
+      const r = await vault.observeRates(t.tenant_id, areaId).catch(() => null)
       if (r?.ok) rates = r.value
     }
     for (const rule of rules) {
@@ -279,4 +289,105 @@ export async function runDiscountVerifier(env: Env, now: number, limitTenants = 
     }
   }
   return { tenants: due.length, observed }
+}
+
+/**
+ * Pulls live per-expedition discounts from the tenant's connected Mengantar account (`observeRates`) and adopts them
+ * into `tenant_discount_rules` as `sesuai` (TOTP + reason + audit). Ideal for BYOK accounts or gerai with varied
+ * per-courier negotiated discounts in Mengantar.
+ */
+export async function syncDiscountsFromMengantar(
+  env: Env,
+  input: { tenantId: string; actorId: string; reason: string; now: number },
+): Promise<{
+  tenantId: string
+  total: number
+  synced: number
+  unchanged: number
+  skipped: number
+  observedAt: number
+  changes: Array<{ serviceCode: string; fromBps: number; toBps: number }>
+}> {
+  const tenant = await env.DB.prepare("SELECT id, status FROM tenants WHERE id = ?").bind(input.tenantId).first<{ id: string; status: string }>()
+  if (!tenant) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
+
+  // Ensure every active catalog service has a rule row for this tenant before adopting observed Mengantar discounts.
+  const policy = await platformPolicy(env.DB)
+  await env.DB.prepare(
+    `INSERT INTO tenant_discount_rules (tenant_id, service_code, courier_code, service_class, assigned_bps, cashback_bps, effective_from, apply_channel,
+       requested_at, verification_state, next_check_at, check_step, updated_at, updated_by)
+     SELECT ?1, c.service_code, c.courier_code, c.service_class, COALESCE(p.default_discount_bps, ?2), 0, ?3, 'mengantar_team', ?3, 'belum_diterapkan', ?4, 0, ?3, 'system'
+     FROM courier_service_catalog c LEFT JOIN courier_discount_policy p ON p.courier_code = c.courier_code
+     WHERE c.is_active = 1
+     ON CONFLICT(tenant_id, service_code) DO NOTHING`,
+  )
+    .bind(input.tenantId, policy.defaultBps, input.now, verificationCheckAt(input.now, 0))
+    .run()
+
+  const { vaultFor } = await import("../../do/gerai-vault/stub")
+  const vault = vaultFor(env, input.tenantId)
+  const [outlet, appRow, rulesRes] = await Promise.all([
+    vault.defaultOutlet(input.tenantId).catch(() => null),
+    env.DB.prepare("SELECT json_extract(outlet_json, '$.areaId') AS area_id FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY created_at DESC LIMIT 1")
+      .bind(input.tenantId)
+      .first<{ area_id: string | null }>(),
+    env.DB.prepare("SELECT service_code, service_class, assigned_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ?")
+      .bind(input.tenantId)
+      .all<{ service_code: string; service_class: "regular" | "cargo"; assigned_bps: number; verification_state: VerificationState }>(),
+  ])
+  const areaId = (outlet?.ok ? outlet.value?.areaId : null) ?? appRow?.area_id ?? null
+  if (!areaId) throw new AppError(422, "AREA_REQUIRED", "Wilayah titik jemput gerai belum diatur sehingga diskon Mengantar tidak dapat dibaca.")
+
+  const ratesRes = await vault.observeRates(input.tenantId, areaId)
+  if (!ratesRes.ok) {
+    if (ratesRes.refused === "NO_KEY") throw new AppError(409, "NOT_CONNECTED", "Gerai belum terhubung ke API Mengantar atau kunci API sedang dirotasi.")
+    throw new AppError(503, "TENANT_NOT_READY", "Gagal membaca tarif dari Mengantar. Coba lagi sebentar lagi.")
+  }
+
+  const nextDaily = input.now + 24 * 3600_000
+  const stmts: D1PreparedStatement[] = []
+  const changes: Array<{ serviceCode: string; fromBps: number; toBps: number }> = []
+  let synced = 0
+  let unchanged = 0
+  let skipped = 0
+
+  for (const rule of rulesRes.results) {
+    const rate = ratesRes.value[rule.service_code]
+    const observedBps = rate && !rate.unsupported ? observedBpsOf(rule.service_class, rate) : null
+    if (observedBps === null || !Number.isSafeInteger(observedBps) || observedBps < 0 || observedBps > 10_000) {
+      skipped++
+      continue
+    }
+    const changed = observedBps !== rule.assigned_bps || rule.verification_state !== "sesuai"
+    if (observedBps !== rule.assigned_bps) {
+      changes.push({ serviceCode: rule.service_code, fromBps: rule.assigned_bps, toBps: observedBps })
+    }
+    if (changed) synced++
+    else unchanged++
+    stmts.push(
+      env.DB.prepare(
+        `UPDATE tenant_discount_rules
+         SET assigned_bps = ?1, observed_bps = ?1, observed_at = ?2, verified_at = ?2,
+             applied_at = COALESCE(applied_at, ?2), verification_state = 'sesuai',
+             effective_from = CASE WHEN assigned_bps != ?1 THEN ?2 ELSE effective_from END,
+             next_check_at = ?3, alerted_at = NULL, updated_at = ?2, updated_by = ?4
+         WHERE tenant_id = ?5 AND service_code = ?6`,
+      ).bind(observedBps, input.now, nextDaily, input.actorId, input.tenantId, rule.service_code),
+    )
+  }
+
+  stmts.push(
+    auditStatement(env, {
+      actorId: input.actorId,
+      action: "pricing.sync_from_mengantar",
+      targetType: "tenant",
+      targetId: input.tenantId,
+      tenantId: input.tenantId,
+      reason: input.reason,
+      metadata: { total: rulesRes.results.length, synced, unchanged, skipped, changes },
+      now: input.now,
+    }),
+  )
+  await env.DB.batch(stmts)
+  return { tenantId: input.tenantId, total: rulesRes.results.length, synced, unchanged, skipped, observedAt: input.now, changes }
 }

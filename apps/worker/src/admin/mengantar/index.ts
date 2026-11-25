@@ -8,6 +8,7 @@ import { hit } from "../../auth/throttle"
 import { encryptString } from "../../crypto/aead"
 import { AppError, ok } from "../../http/envelope"
 import { clearMengantarConfigCache, loadMengantarConfig, PARTNER_SECRET_AAD, resolvePartnerClient } from "../../mengantar/factory"
+import { PER_MINUTE, quotaFor, REGISTRATIONS_PER_DAY } from "../../do/partner-quota"
 import { relayHealth } from "../audit"
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
@@ -42,7 +43,10 @@ export function registerMengantarAdmin(app: Hono<any>): void {
     register(app, { context: "owner", method, path, auth, projection: "role" }, ownerGuard, (c) => handler(c as OwnerCtx))
 
   r("GET", "/sistem/mengantar", "owner_aal2", async (c) => {
-    const cfg = await loadMengantarConfig(c.env, { bypassCache: true })
+    const [cfg, partnerQuota] = await Promise.all([
+      loadMengantarConfig(c.env, { bypassCache: true }),
+      quotaFor(c.env).usage(Date.now()).catch(() => null),
+    ])
     return ok({
       environment: c.env.GX_ENV === "production" ? "production" : c.env.GX_ENV === "staging" ? "staging" : "local",
       transport: cfg.transport,
@@ -57,6 +61,8 @@ export function registerMengantarAdmin(app: Hono<any>): void {
       relaySecretSource: cfg.relaySecretSource,
       relaySecretMasked: maskTail(cfg.relaySecretTail),
       updatedAt: cfg.updatedAt,
+      partnerQuota,
+      partnerLimits: { perMinute: PER_MINUTE, registrationsPerDay: REGISTRATIONS_PER_DAY },
     })
   })
 

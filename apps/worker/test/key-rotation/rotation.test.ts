@@ -6,11 +6,11 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { sha256Hex } from "../../src/crypto"
 import { decryptString } from "../../src/crypto/aead"
 import type { GeraiVaultDO } from "../../src/do/gerai-vault"
-import { revokeExpiredRoutes, rotateSellerKey } from "../../src/do/gerai-vault/credentials/rotation"
+import { revokeExpiredRoutes, resolveKeyRotation, rotateSellerKey, syncSellerKey } from "../../src/do/gerai-vault/credentials/rotation"
 import { hostCache } from "../../src/host/lookup"
 import { partnerClient } from "../../src/mengantar/factory"
-import { mockFaults, resetMock } from "../../src/mengantar/mock"
-import { configureWebhook, deliver, seedConnected } from "../webhooks/helpers"
+import { mockFaults, mockSellerSelfRegenerate, resetMock } from "../../src/mengantar/mock"
+import { appGet, appPost, configureWebhook, deliver, seedConnected } from "../webhooks/helpers"
 
 type Vault = Awaited<ReturnType<typeof seedConnected>>["vault"]
 
@@ -159,5 +159,61 @@ describe("webhook route rotation (spec 01 §2.7)", () => {
     await env.DB.prepare("UPDATE webhook_routes SET created_at = ? WHERE tenant_id = ? AND state = 'active'").bind(Date.now() - 25 * 3600_000, t.tenantId).run()
     expect(await revokeExpiredRoutes(env, Date.now())).toBeGreaterThanOrEqual(1)
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM webhook_routes WHERE tenant_id = ? AND state = 'rotating'").bind(t.tenantId).first<{ n: number }>())!.n).toBe(0)
+  })
+})
+
+describe("Partner API v2 key sync & terminal refusal handling", () => {
+  it("syncSellerKey fetches a seller self-regenerated key without calling regenerate, bumps key_version, and flags active webhook secret_mismatch", async () => {
+    const t = await seedRotatable("sync1")
+    const { url } = await configureWebhook(t.cookie)
+    expect((await deliver(url, { cnote_no: "X", status_category: "ON DELIVERY" })).status).toBe(200)
+    const v0 = (await conn(t.vault)).key_version
+
+    // Unchanged key is a no-op (no version bump, webhook stays active).
+    const same = await appPost("/settings/mengantar/sync-key", t.cookie, {})
+    expect(same.status).toBe(200)
+    expect(await same.json()).toMatchObject({ data: { result: { state: "synced", changed: false, keyVersion: v0, webhookSecretReset: false } } })
+    expect((await conn(t.vault)).webhook_state).toBe("active")
+
+    // Seller regenerates key inside Mengantar Seller Web → sync picks up new key and marks webhook secret_mismatch.
+    expect(mockSellerSelfRegenerate(t.sellerId, "API-SELF-ROTATED-99")).toBe(true)
+    const updated = await appPost("/settings/mengantar/sync-key", t.cookie, {})
+    expect(updated.status).toBe(200)
+    expect(await updated.json()).toMatchObject({
+      data: {
+        result: { state: "synced", changed: true, keyVersion: v0 + 1, webhookSecretReset: true },
+        settings: { webhookState: "secret_mismatch", keyVersion: v0 + 1, canSyncKey: true },
+      },
+    })
+    expect(await storedKey(t)).toBe("API-SELF-ROTATED-99")
+    expect((await conn(t.vault)).webhook_state).toBe("secret_mismatch")
+  })
+
+  it("terminal SELLER_DEACTIVATED on resolveKeyRotation stops retry loop, lifts fence, and marks provider_restricted", async () => {
+    const t = await seedRotatable("term1")
+    mockFaults.regenerate = "timeout_before_apply"
+    mockFaults.apiKey = "SELLER_DEACTIVATED"
+    const out = await rotateSellerKey(env, { tenantId: t.tenantId, actorId: "sa", reason: "uji terminal", now: Date.now() })
+    expect(out).toMatchObject({ state: "failed", code: "SELLER_DEACTIVATED" })
+    const c = await conn(t.vault)
+    expect(c.rotation_state).toBe("idle")
+    const ob = await env.DB.prepare("SELECT onboarding_state, last_error_code FROM tenant_onboarding WHERE tenant_id = ?").bind(t.tenantId).first<{ onboarding_state: string; last_error_code: string }>()
+    expect(ob).toEqual({ onboarding_state: "provider_restricted", last_error_code: "SELLER_DEACTIVATED" })
+    const timers = await runInDurableObject(t.vault, (_i: GeraiVaultDO, s) => s.storage.sql.exec<{ name: string }>("SELECT name FROM vault_timers WHERE name = 'key_rotation_check'").toArray())
+    expect(timers).toHaveLength(0)
+    await expect(resolveKeyRotation(env, t.tenantId, Date.now())).rejects.toMatchObject({ code: "NO_ROTATION_PENDING" })
+  })
+
+  it("syncSellerKey marks provider_restricted on 403 API_KEY_DISABLED and manual poll endpoint returns settings", async () => {
+    const t = await seedRotatable("sync2")
+    const poll = await appPost("/settings/mengantar/poll", t.cookie, {})
+    expect(poll.status).toBe(200)
+    expect(await poll.json()).toMatchObject({ data: { polled: 0, changed: 0, failed: 0, settings: { canManualPoll: true } } })
+
+    mockFaults.apiKey = "API_KEY_DISABLED"
+    const res = await syncSellerKey(env, { tenantId: t.tenantId, actorId: "sa-1", actorType: "super_admin", reason: "cek kunci", now: Date.now() })
+    expect(res).toEqual({ state: "restricted", code: "API_KEY_DISABLED" })
+    const view = await (await appGet("/settings/mengantar", t.cookie)).json()
+    expect(view).toMatchObject({ data: { onboardingState: "provider_restricted", lastErrorCode: "API_KEY_DISABLED", canSyncKey: false } })
   })
 })

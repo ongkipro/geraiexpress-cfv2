@@ -308,7 +308,8 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
     return { state: "registration_pending", code: quota.reason === "day" ? "DAILY_REGISTRATION_LIMIT" : "RATE_LIMITED" }
   }
   const client = await resolvePartnerClient(env)
-  const out = await client.register({ name: input.name.slice(0, 100).replace(/[^\p{L}\p{N} '\-_.@]/gu, " "), email: input.email, phone: input.outlet.picPhone, externalUserId: input.tenantId })
+  const cleanName = input.name.slice(0, 100).replace(/[^\p{L}\p{N} '\-_.@]/gu, " ").replace(/\s+/g, " ").trim() || "Gerai Mitra"
+  const out = await client.register({ name: cleanName, email: input.email, phone: input.outlet.picPhone, externalUserId: input.tenantId })
   emit("mengantar.partner_api", { route: "/sellers", status: "status" in out ? out.status : 0, outcome: out.kind }, { tenantId: input.tenantId }, { env: env.GX_ENV })
   if (out.kind === "ok" && out.data.apiKey) {
     await record("connected", { sellerId: out.data.sellerId, apiKey: out.data.apiKey })

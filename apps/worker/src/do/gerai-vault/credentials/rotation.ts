@@ -19,6 +19,23 @@ export type RotationOutcome =
   | { state: "unknown"; keyVersion: number; code: string }
   | { state: "failed"; keyVersion: number; code: string }
 
+export type KeySyncOutcome =
+  | { state: "synced"; changed: boolean; keyVersion: number; webhookSecretReset: boolean }
+  | { state: "restricted"; code: string }
+  | { state: "failed"; code: string; retryAfterSeconds?: number }
+
+async function markRestricted(env: Env, tenantId: string, sellerId: string | null, code: string, now: number): Promise<void> {
+  const environment = env.GX_ENV === "production" ? "production" : "sandbox"
+  await vaultFor(env, tenantId).recordOnboarding(tenantId, { environment, state: "provider_restricted", sellerId }).catch(() => undefined)
+  await env.DB.prepare(
+    `INSERT INTO tenant_onboarding (tenant_id, environment, onboarding_state, seller_id, external_user_id, last_error_code, updated_at) VALUES (?1, ?2, 'provider_restricted', ?3, ?1, ?4, ?5)
+     ON CONFLICT(tenant_id) DO UPDATE SET onboarding_state = 'provider_restricted', seller_id = COALESCE(excluded.seller_id, tenant_onboarding.seller_id), last_error_code = excluded.last_error_code, updated_at = excluded.updated_at`,
+  )
+    .bind(tenantId, environment, sellerId, code, now)
+    .run()
+    .catch(() => undefined)
+}
+
 /** Registers the new path token as `active` and the previous one as `rotating` (idempotent). */
 async function publishRoutes(env: Env, tenantId: string, routes: { token: string; keyVersion: number; previous: string | null }, now: number): Promise<void> {
   const stmts = [
@@ -53,6 +70,9 @@ export async function rotateSellerKey(env: Env, input: { tenantId: string; actor
   if (out.kind === "error" || out.kind === "relay_refused") {
     // Mengantar (or the relay, before Mengantar) answered: the old key is still valid.
     await vault.abortKeyRotation(input.tenantId, keyVersion, out.code)
+    if (out.kind === "error" && (out.code === "SELLER_DEACTIVATED" || out.code === "API_KEY_DISABLED")) {
+      await markRestricted(env, input.tenantId, sellerId, out.code, Date.now())
+    }
     return { state: "failed", keyVersion, code: out.code }
   }
   // maybe_sent: never call regenerate again; read the current key back.
@@ -62,11 +82,74 @@ export async function rotateSellerKey(env: Env, input: { tenantId: string; actor
 
 /** Read-back after an unknown outcome or a crash mid-rotation (`in_flight` older than 5 min). Never regenerates. */
 export async function resolveKeyRotation(env: Env, tenantId: string, now: number): Promise<RotationOutcome> {
-  const r = await vaultFor(env, tenantId).resolveKeyRotation(tenantId, now)
+  const vault = vaultFor(env, tenantId)
+  const r = await vault.resolveKeyRotation(tenantId, now)
   if (!r.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
   if (r.value.state === "none") throw new AppError(409, "NO_ROTATION_PENDING", "Tidak ada rotasi kunci yang perlu diperiksa.")
   if (r.value.state === "unknown") return { state: "unknown", keyVersion: r.value.keyVersion!, code: r.value.code ?? "UNKNOWN" }
+  if (r.value.state === "failed") {
+    const code = r.value.code ?? "UNKNOWN"
+    if (code === "SELLER_DEACTIVATED" || code === "API_KEY_DISABLED") {
+      const c = await vault.connectionView(tenantId)
+      await markRestricted(env, tenantId, c.ok ? (c.value?.sellerId ?? null) : null, code, now)
+    }
+    return { state: "failed", keyVersion: r.value.keyVersion!, code }
+  }
   return { state: "rotated", keyVersion: r.value.keyVersion!, webhookUrlChanged: false, secretKnown: false }
+}
+
+/**
+ * Fetches the current Public API key for a Partner-registered seller via `POST /sellers/api-key` (no regeneration).
+ * Use when a seller regenerated their own key inside Mengantar Seller Web so the stored copy stopped working.
+ */
+export async function syncSellerKey(
+  env: Env,
+  input: { tenantId: string; actorId: string; actorType: "user" | "super_admin"; reason: string; now: number },
+): Promise<KeySyncOutcome> {
+  const vault = vaultFor(env, input.tenantId)
+  const conn = await vault.connectionView(input.tenantId)
+  if (!conn.ok) throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+  if (!conn.value || !conn.value.sellerId || conn.value.onboardingState !== "connected") {
+    throw new AppError(
+      409,
+      "NOT_PARTNER_SELLER",
+      conn.value?.onboardingState === "byok_connected"
+        ? "Gerai ini memakai API key sendiri (BYOK). Perbarui API key langsung di formulir API key."
+        : "Sinkronisasi API key otomatis hanya tersedia untuk akun seller yang terdaftar lewat GeraiExpress.",
+    )
+  }
+  if (conn.value.rotationState !== "idle") {
+    throw new AppError(409, "ROTATION_IN_PROGRESS", "Rotasi kunci sedang berlangsung. Selesaikan pemeriksaan kunci terlebih dahulu.")
+  }
+  const quota = await quotaFor(env).reserve("call", input.now)
+  if (!quota.ok) return { state: "failed", code: "RATE_LIMITED", retryAfterSeconds: quota.retryAfterSeconds }
+  const out = await (await resolvePartnerClient(env)).apiKey(conn.value.sellerId)
+  emit("mengantar.partner_api", { route: "/sellers/api-key", status: "status" in out ? out.status : 0, outcome: out.kind }, { tenantId: input.tenantId }, { env: env.GX_ENV })
+  if (out.kind === "ok") {
+    if (!out.data.apiKey) {
+      await markRestricted(env, input.tenantId, conn.value.sellerId, "API_KEY_DISABLED", Date.now())
+      return { state: "restricted", code: "API_KEY_DISABLED" }
+    }
+    const stored = await vault.syncSellerKeyFromPartner(input.tenantId, {
+      apiKey: out.data.apiKey,
+      actorId: input.actorId,
+      actorType: input.actorType,
+      reason: input.reason,
+      now: Date.now(),
+    })
+    if (!stored.ok) {
+      if (stored.refused === "KEY_ROTATING") throw new AppError(409, "ROTATION_IN_PROGRESS", "Rotasi kunci sedang berlangsung. Coba lagi sebentar lagi.")
+      throw new AppError(503, "TENANT_NOT_READY", "Data gerai sedang diperbarui. Coba lagi sebentar lagi.")
+    }
+    return { state: "synced", ...stored.value }
+  }
+  if (out.kind === "error" && (out.code === "SELLER_DEACTIVATED" || out.code === "API_KEY_DISABLED")) {
+    await markRestricted(env, input.tenantId, conn.value.sellerId, out.code, Date.now())
+    return { state: "restricted", code: out.code }
+  }
+  if (out.kind === "error") return { state: "failed", code: out.code, ...(out.retryAfterSeconds !== undefined ? { retryAfterSeconds: out.retryAfterSeconds } : {}) }
+  if (out.kind === "relay_refused") return { state: "failed", code: out.code }
+  return { state: "failed", code: out.reason }
 }
 
 /** Revokes `rotating` routes once the tenant's newer route is older than 24 h (spec 01 §2.7 Rotation). Hourly cron. */

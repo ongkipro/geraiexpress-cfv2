@@ -360,10 +360,13 @@ export function AppShell() {
           </LinkButton>
         </div>
       ) : null}
-      {w.hints.mengantarWebhook && path === "/" ? (
+      {w.hints.mengantarWebhook && path === "/" && (w.hints.mengantarWebhook === "secret_mismatch" || w.hints.mengantarWebhook === "paused") ? (
         <div className="mb-5">
-          <CalloutAlert title="Webhook Mengantar belum aktif" action={<LinkButton variant="outline" size="sm" to="/pengaturan/mengantar">Atur sekarang</LinkButton>}>
-            Status kiriman tetap diperbarui setiap jam.
+          <CalloutAlert
+            title={w.hints.mengantarWebhook === "secret_mismatch" ? "Webhook Secret Mengantar tidak cocok" : "Webhook Mengantar sedang dijeda"}
+            action={<LinkButton variant="outline" size="sm" to="/pengaturan/mengantar">Periksa Pengaturan</LinkButton>}
+          >
+            Status kiriman tetap diperbarui otomatis setiap jam. Perbarui konfigurasi webhook di Pengaturan › Mengantar agar kabar kembali real-time.
           </CalloutAlert>
         </div>
       ) : null}

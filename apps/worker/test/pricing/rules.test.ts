@@ -136,3 +136,39 @@ describe("request list and exposure", () => {
     expect(await site.text()).not.toMatch(/assigned_bps|diskon/i)
   })
 })
+
+describe("sync actual Mengantar discounts per expedition (BYOK / varied discounts)", () => {
+  it("pulls varied per-courier regular & cargo discounts from Mengantar, adopts them as sesuai, audits, and exposes them in GET /gerai/:slug", async () => {
+    const g = await approved("tariftarik")
+    mockDiscountBps.set("JNE", 2500)
+    mockDiscountBps.set("JT", 1500)
+    mockDiscountBps.set("SiCepat", 3200)
+    mockDiscountBps.set("JNECargo", 2700)
+
+    const res = await ownerPost(`/tarif/gerai/${g.tenantId}/tarik-mengantar`, g.admin, { reason: "sinkron diskon akun BYOK" })
+    expect(res.status).toBe(200)
+    const out = (await res.json()) as { data: { synced: number; skipped: number; changes: Array<{ serviceCode: string; fromBps: number; toBps: number }> } }
+    expect(out.data.synced).toBeGreaterThanOrEqual(4)
+    expect(out.data.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ serviceCode: "JNE", toBps: 2500 }),
+        expect.objectContaining({ serviceCode: "JT", toBps: 1500 }),
+        expect.objectContaining({ serviceCode: "SiCepat", toBps: 3200 }),
+        expect.objectContaining({ serviceCode: "JNECargo", toBps: 2700 }),
+      ]),
+    )
+    expect(await ruleOf(g.tenantId, "JNE")).toMatchObject({ assigned_bps: 2500, observed_bps: 2500, verification_state: "sesuai" })
+    expect(await ruleOf(g.tenantId, "JT")).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+    expect(await ruleOf(g.tenantId, "SiCepat")).toMatchObject({ assigned_bps: 3200, observed_bps: 3200, verification_state: "sesuai" })
+    expect(await ruleOf(g.tenantId, "JNECargo")).toMatchObject({ assigned_bps: 2700, observed_bps: 2700, verification_state: "sesuai" })
+
+    const audit = await env.DB.prepare("SELECT action, reason FROM audit_logs WHERE action = 'pricing.sync_from_mengantar' AND tenant_id = ?").bind(g.tenantId).first<{ action: string; reason: string }>()
+    expect(audit).toEqual({ action: "pricing.sync_from_mengantar", reason: "sinkron diskon akun BYOK" })
+
+    const detail = (await (await ownerGet(`/gerai/tariftarik`, g.admin)).json()) as {
+      data: { discounts: { summary: { sesuai: number; selisih: number }; items: Array<{ service_code: string; assigned_bps: number; observed_bps: number | null }> } }
+    }
+    expect(detail.data.discounts.summary.selisih).toBe(0)
+    expect(detail.data.discounts.items.find((x) => x.service_code === "SiCepat")).toMatchObject({ assigned_bps: 3200, observed_bps: 3200 })
+  })
+})

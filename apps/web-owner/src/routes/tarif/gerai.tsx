@@ -10,6 +10,7 @@ import { useApi } from "../../lib/use-api"
 import { pct, STATE_LABEL, verifyDone } from "./index"
 import { Textarea } from "@shared/components/ui/textarea"
 import { Panel, SectionCard } from "@shared/components/admin/page"
+import { ReasonAction } from "../../components/reason-dialog"
 
 // One gerai's matrix: requested vs observed discount per service, status, and an editor (TOTP + reason).
 interface Rule {
@@ -38,6 +39,14 @@ export function TarifGeraiPage() {
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title={data.tenant.name} description={`${data.tenant.slug}.geraimitra.com · diskon berlaku ≤ ${data.applySlaMinutes} menit setelah diterapkan tim Mengantar`}>
         <RecheckButton label="Verifikasi Ulang Diskon" busyLabel="Memverifikasi…" path="/tarif/verifikasi-ulang" body={{ tenantId: data.tenant.id }} onDone={reload} done={verifyDone} />
+        <ReasonAction
+          label="Tarik & Terapkan dari Mengantar"
+          confirmLabel="Tarik & Terapkan"
+          variant="outline"
+          path={`/tarif/gerai/${data.tenant.id}/tarik-mengantar`}
+          onDone={reload}
+          hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan seluruh aturan tarif gerai ke angka tersebut."
+        />
       </PageHead>
       <SectionCard
         title="Diskon & cashback per layanan"
