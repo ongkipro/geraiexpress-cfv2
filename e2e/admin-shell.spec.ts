@@ -297,8 +297,8 @@ test("DEC-244: Halaman Publik Gerai, status operasional, packing select", async 
   await expect(content).toHaveAttribute("data-open", "")
   await expect.poll(async () => { const a = (await content.boundingBox())!.y; await page.waitForTimeout(80); return Math.abs((await content.boundingBox())!.y - a) }).toBeLessThan(0.1)
   const popup = (await content.boundingBox())!
-  // A dropdown below the field (alignItemWithTrigger=false), not a list laid over the trigger.
-  expect(popup.y).toBeGreaterThanOrEqual(t.y + t.height)
+  // A dropdown outside the field (alignItemWithTrigger=false: below, or flipped above near the viewport bottom), never laid over the trigger.
+  expect(popup.y >= t.y + t.height || popup.y + popup.height <= t.y).toBe(true)
   await expect(page.getByRole("option", { name: /Bubble wrap\s*\+Rp\s?3\.000/ })).toBeVisible()
   await page.keyboard.press("Escape")
 
