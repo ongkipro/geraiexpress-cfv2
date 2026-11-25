@@ -19,7 +19,7 @@ test("Meja Retur: terima → Kode Ambil → serahkan", async ({ page, context, r
   await api.post(`${APP}/api/app/dev/provider-status`, { headers: h, data: { slug, category: "RETURN" } })
 
   await page.goto(`${APP}/kiriman?tab=retur`)
-  await expect(page.getByText(`${awb} · INV ${slug.toUpperCase()}`)).toBeVisible()
+  await expect(page.locator("li", { hasText: awb }).getByText(`INV ${slug.toUpperCase()}`)).toBeVisible()
   await page.getByLabel("Pindai resi atau INV").fill(awb)
   await page.getByRole("button", { name: "Terima Paket Retur" }).click()
   await expect(page.getByText(`INV ${slug.toUpperCase()} diterima di gerai.`)).toBeVisible()

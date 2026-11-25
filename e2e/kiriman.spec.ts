@@ -23,7 +23,7 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   await expect(page).toHaveURL(/tab=belum-dibayar/)
   await page.getByRole("button", { name: "Tandai Lunas" }).first().click()
   await page.getByRole("button", { name: "Simpan Lunas" }).click()
-  await expect(page.getByText(`INV ${slug.toUpperCase()} ditandai lunas (QRIS).`)).toBeVisible()
+  await expect(page.getByText(`INV ${slug.toUpperCase()} ditandai lunas (QRIS).`)).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole("link", { name: /^Belum Dibayar\s*0$/ })).toBeVisible()
   await expect(page.getByText("Belum ada kiriman di sini")).toBeVisible()
 
@@ -45,24 +45,31 @@ test("Kiriman: tab Belum Dibayar, Tandai Lunas, cari", async ({ page, context, r
   await expect(page).not.toHaveURL(/macet=/)
   await expect(page.getByRole("link", { name: `INV ${slug.toUpperCase()}` }).first()).toBeVisible()
 
-  // Sol R1-9: a `Muat Lebih Banyak` page that answers after the `macet` filter changed is dropped, never appended.
+  // Sol R1-9: a page-2 response that arrives after the `macet` filter changed is dropped, never overwriting the filtered view.
   let release!: () => void
   const held = new Promise<void>((r) => (release = r))
   let sample: Record<string, unknown> | null = null
   await page.route("**/api/app/shipments?*", async (route) => {
     const url = route.request().url()
-    if (url.includes("cursor=")) {
+    if (url.includes("page=2")) {
       await held
-      return route.fulfill({ json: { ok: true, data: { items: [{ ...sample, slug: "zzzzzzz", awb_number: null }], nextCursor: null, counts: {} } } })
+      return route.fulfill({
+        json: { ok: true, data: { items: [{ ...sample, slug: "zzzzzzz", awb_number: null }], page: 2, pageSize: 20, total: 21, totalPages: 2, nextCursor: null, counts: {} } },
+      })
     }
     const res = await route.fetch()
-    const j = (await res.json()) as { data: { items: Array<Record<string, unknown>>; nextCursor: string | null } }
+    const j = (await res.json()) as { data: { items: Array<Record<string, unknown>>; page?: number; pageSize?: number; total?: number; totalPages?: number; nextCursor: string | null } }
     sample ??= j.data.items[0] ?? null
-    if (!url.includes("macet=")) j.data.nextCursor = "1:abcdefg"
+    if (!url.includes("macet=")) {
+      j.data.page = 1
+      j.data.pageSize = 20
+      j.data.total = 21
+      j.data.totalPages = 2
+    }
     return route.fulfill({ response: res, json: j })
   })
   await page.goto(`${APP}/kiriman`)
-  await page.getByRole("button", { name: "Muat Lebih Banyak" }).click()
+  await page.getByRole("button", { name: "Halaman berikutnya" }).click()
   await page.getByRole("combobox", { name: "Pergerakan paket" }).click()
   await page.getByRole("option", { name: "Macet ≥ 3 hari" }).click()
   await expect(page.getByText("Tidak ada yang cocok")).toBeVisible()

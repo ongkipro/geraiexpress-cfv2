@@ -107,9 +107,9 @@ const serviceOf = (c: QuoteCard) => {
 /** Step heading inside a POS card: numbered dot + 14/16px title. */
 export function StepTitle({ n, title, id, action }: { n: number; title: string; id?: string; action?: ReactNode }) {
   return (
-    <div className="flex min-h-7 items-center justify-between gap-2">
+    <div className="flex min-h-7 flex-wrap items-center justify-between gap-2">
       <h2 id={id} className="flex items-center gap-2 text-sm font-semibold text-slate-950 md:text-base">
-        <span aria-hidden className="grid size-5 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{n}</span>
+        <span aria-hidden className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{n}</span>
         {title}
       </h2>
       {action}

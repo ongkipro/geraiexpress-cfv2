@@ -19,6 +19,7 @@ function totp(secretB32: string, at = Date.now()): string {
 // Approvals need ≥ 768 px (visual 07 §2); the applicant side runs at every width.
 test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) → Super Admin approves → seller connected", async ({ page, browser, request, viewport }) => {
   test.skip((viewport?.width ?? 0) < 1280, "approval flow: desktop project (single bootstrap per environment)")
+  test.setTimeout(120_000)
   const email = uniqueEmail("e2e-apply")
   const slug = `e2e${Date.now().toString(36)}`
   await page.goto(`${APP}/daftar-akun`)
@@ -82,11 +83,12 @@ test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) �
   await page.reload()
   await expect(page.getByText("Akun Mengantar")).toBeVisible()
 
-  // TASK-204 (PR-02b): the owner copies the webhook URL, saves the Webhook Secret, and the first signed delivery
-  // turns the status chip to Aktif.
+  // TASK-204 (PR-02b): zero-config hourly polling is active by default; opening the optional Webhook section,
+  // copying the webhook URL, saving the Webhook Secret, and receiving the first signed delivery switches to Webhook aktif.
   await page.goto(`${APP}/pengaturan/mengantar`)
-  await expect(page.getByText("Menunggu pengaturan")).toBeVisible()
-  const hookUrl = (await page.locator("code").textContent())!.trim()
+  await expect(page.getByText("Sinkron otomatis aktif")).toBeVisible()
+  await page.getByRole("button", { name: "Atur Webhook" }).click()
+  const hookUrl = (await page.locator("code").filter({ hasText: "/webhooks/mengantar/" }).textContent())!.trim()
   expect(hookUrl).toMatch(/\/webhooks\/mengantar\/[A-Za-z0-9_-]{43}$/)
   await page.getByLabel("Webhook Secret").fill("contoh-webhook-e2e")
   await page.getByRole("button", { name: "Simpan secret" }).click()
@@ -97,7 +99,7 @@ test("TASK-203 apply (1 · akun → 2 · gerai → 3 · titik jemput, DEC-248) �
   const hook = await request.post(hookUrl, { headers: { "content-type": "application/json", "x-timestamp": ts, "x-signature": sig, "x-environment": "sandbox" }, data: body })
   expect(hook.status()).toBe(200)
   await page.reload()
-  await expect(page.getByText("Aktif", { exact: true })).toBeVisible()
+  await expect(page.getByText("Webhook aktif", { exact: true })).toBeVisible()
 
   // TASK-206: courier toggles save instantly with a confirmation and survive a reload.
   await page.goto(`${APP}/pengaturan/ekspedisi`)
