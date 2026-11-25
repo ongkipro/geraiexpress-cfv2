@@ -425,7 +425,7 @@ export async function handleMinisite(request: Request, env: Env, c: Ctx): Promis
   if (card && m === "GET") return kirimCard(env, c, card[1]!)
   if (path === "/lacak" && (m === "GET" || m === "HEAD")) return lacak(env, c, request, url)
   const lacakSlug = /^\/lacak\/([23456789abcdefghjkmnpqrstvwxyz]{7})$/.exec(path.toLowerCase())
-  if (lacakSlug && m === "GET") return new Response(null, { status: 302, headers: { location: `/lacak?q=${lacakSlug[1]!.toUpperCase()}` } })
+  if (lacakSlug && (m === "GET" || m === "HEAD")) return new Response(null, { status: 302, headers: { location: `/lacak?q=${lacakSlug[1]!.toUpperCase()}` } })
   const gate = /^\/lacak\/([23456789abcdefghjkmnpqrstvwxyz]{7})\/buka$/.exec(path.toLowerCase())
   if (gate && m === "POST") return unlockGate(env, c, request, gate[1]!)
   return notFoundHtml()

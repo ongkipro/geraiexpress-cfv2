@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { CheckIcon, DownloadIcon, PrinterIcon, QrCodeIcon, ScissorsIcon } from "lucide-react"
+import { qrSvg } from "@gx/thermal-print"
+import { CheckIcon, DownloadIcon, PrinterIcon, ScissorsIcon } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "../components/ui/field"
 import { Input } from "../components/ui/input"
@@ -8,6 +9,7 @@ import { Skeleton } from "../components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group"
 import { api } from "../lib/api"
 import {
+  code128Svg,
   connectBluetooth,
   deviceDensity,
   fetchPrint,
@@ -26,65 +28,73 @@ import {
 // thermal density toggle, duplicate-print guard (`Cetak Ulang Label (sudah dicetak n×)` + reason), and instant PDF fallback.
 const FORMATS: Format[] = ["label_10x15_with_stub", "label_10x10", "label_10x15", "roll_58mm"]
 
-export function RollPaperPreview({ lines, density }: { lines: RollPreviewLine[]; density: "normal" | "tebal" }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-100/90 p-4">
-      <div
-        aria-label="Pratinjau label 58 mm"
-        className={`mx-auto max-w-[292px] rounded-sm border border-slate-200 bg-white px-3 py-3.5 font-mono text-[11px] leading-[1.35] text-slate-950 shadow-sm ${density === "tebal" ? "font-semibold" : ""}`}
-      >
-        {lines.map((line, i) => {
-          if ("cut" in line) {
-            return (
-              <div key={i} className="my-2 flex items-center gap-1.5 border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-500">
-                <ScissorsIcon className="size-3 shrink-0" aria-hidden />
-                <span>Potong kertas di sini</span>
-              </div>
-            )
-          }
-          if ("barcode" in line) {
-            return (
-              <div key={i} className="my-1.5 flex flex-col items-center py-1" aria-label={`Barcode ${line.barcode}`}>
-                <div
-                  className="h-9 w-4/5"
-                  style={{
-                    backgroundImage: "repeating-linear-gradient(90deg, #0f172a 0 2px, transparent 2px 3px, #0f172a 3px 4px, transparent 4px 6px, #0f172a 6px 9px, transparent 9px 11px)",
-                  }}
-                />
-              </div>
-            )
-          }
-          if ("qr" in line) {
-            return (
-              <div key={i} className="my-2 flex flex-col items-center gap-0.5 text-[10px] text-slate-600">
-                <div className="grid size-14 place-items-center rounded border border-slate-900 bg-white">
-                  <QrCodeIcon className="size-10 text-slate-950" aria-hidden />
+const svgDataUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+
+export function RollPaperPreview({ lines, density, bare = false }: { lines: RollPreviewLine[]; density: "normal" | "tebal"; bare?: boolean }) {
+  // Container-query font sizing (`100cqi / 20.6`) keeps all 32 monospace columns strictly inside the 58 mm paper at
+  // any card width (sidebar 308px, PrintDrawer, Zoom modal, or 390px phone) — zero horizontal overflow.
+  const paper = (
+    <div
+      aria-label="Pratinjau label 58 mm"
+      className={`mx-auto w-full max-w-[272px] overflow-hidden rounded-sm border border-slate-200 bg-white px-2.5 py-3 text-slate-950 shadow-sm ${density === "tebal" ? "font-semibold" : ""}`}
+    >
+      <div className="[container-type:inline-size] w-full overflow-hidden">
+        <div className="font-mono text-[clamp(7.5px,calc(100cqi/20.6),11px)] leading-[1.38]">
+          {lines.map((line, i) => {
+            if ("cut" in line) {
+              return (
+                <div key={i} className="my-2 flex items-center gap-1.5 border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-500">
+                  <ScissorsIcon className="size-3 shrink-0" aria-hidden />
+                  <span className="truncate">Potong kertas di sini</span>
                 </div>
-                <span>QR Lacak</span>
-              </div>
-            )
-          }
-          const isCutMarker = line.text.includes("Potong Disini")
-          if (isCutMarker) {
+              )
+            }
+            if ("barcode" in line) {
+              const svg = code128Svg(line.barcode)
+              return (
+                <div key={i} className="my-1.5 flex flex-col items-center py-0.5" aria-label={`Barcode ${line.barcode}`}>
+                  {svg ? (
+                    <img src={svgDataUri(svg)} alt={`Barcode ${line.barcode}`} className="h-9 w-[92%] object-fill" />
+                  ) : null}
+                </div>
+              )
+            }
+            if ("qr" in line) {
+              return (
+                <div key={i} className="my-2 flex flex-col items-center gap-1 text-[10px] text-slate-600">
+                  <img
+                    src={svgDataUri(qrSvg(line.qr, { title: "QR Lacak Mini-Site" }))}
+                    alt={`QR lacak ${line.qr}`}
+                    className="size-20 rounded border border-slate-200 bg-white"
+                  />
+                  <span className="font-sans text-[10px] text-slate-600">Scan QR lacak di mini-site</span>
+                </div>
+              )
+            }
+            const isCutMarker = line.text.includes("Potong Disini")
+            if (isCutMarker) {
+              return (
+                <div key={i} className="my-2 flex items-center gap-1.5 border-y border-dashed border-slate-400 py-1 text-[10px] font-medium text-slate-600">
+                  <ScissorsIcon className="size-3 shrink-0" aria-hidden />
+                  <span className="mx-auto truncate">Potong di sini — bukti pengirim</span>
+                </div>
+              )
+            }
             return (
-              <div key={i} className="my-2 flex items-center gap-1.5 border-y border-dashed border-slate-400 py-1 text-[10px] font-medium text-slate-600">
-                <ScissorsIcon className="size-3 shrink-0" aria-hidden />
-                <span className="mx-auto">Potong di sini — pisahkan bukti kirim</span>
+              <div
+                key={i}
+                className={`overflow-hidden whitespace-pre ${line.invert ? "my-0.5 bg-slate-950 text-white" : ""} ${line.bold ? "font-bold" : ""}`}
+              >
+                {line.text || "\u00a0"}
               </div>
             )
-          }
-          return (
-            <div
-              key={i}
-              className={`whitespace-pre ${line.invert ? "my-0.5 bg-slate-950 px-0.5 text-white" : ""} ${line.bold ? "font-bold" : ""}`}
-            >
-              {line.text || "\u00a0"}
-            </div>
-          )
-        })}
+          })}
+        </div>
       </div>
     </div>
   )
+  if (bare) return paper
+  return <div className="rounded-xl border border-slate-200 bg-slate-100/90 p-3">{paper}</div>
 }
 
 export function PrintDrawer({ slug, printCount, firstPrintedAt, onPrinted }: { slug: string; printCount: number; firstPrintedAt: number | null; onPrinted: () => void }) {

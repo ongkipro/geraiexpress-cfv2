@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { escposBytes, FORMAT_SIZE_MM, labelSvg, labelsPdf, rollLines, type LabelData } from "@gx/thermal-print"
-import { Maximize2Icon, PrinterIcon } from "lucide-react"
+import { BluetoothIcon, ExternalLinkIcon, Maximize2Icon, PrinterIcon } from "lucide-react"
 import { Button } from "../../../components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group"
 import { api } from "../../../lib/api"
 import { RollPaperPreview } from "../../../print/drawer"
-import { connectBluetooth, FORMAT_LABEL, printPdf, type Format } from "../../../print/print"
+import { connectBluetooth, FORMAT_LABEL, printRollHtml, printSvgHtml, type Format } from "../../../print/print"
 
 export type SampleKind = "non_cod" | "cod"
 
@@ -157,8 +157,18 @@ export function LabelPreview({ format, remark, density, outletName, outletWhatsa
   const [kind, setKind] = useState<SampleKind>("non_cod")
   const [zoomOpen, setZoomOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
-  const [printNote, setPrintNote] = useState<string | null>(null)
+  const [printResult, setPrintResult] = useState<{ key: string; note: string; pdfUrl: string | null } | null>(null)
   const logo = useOutletLogo(miniSiteHost)
+  const hasBluetooth = typeof navigator !== "undefined" && "bluetooth" in navigator
+  const activeKey = `${format}|${kind}|${density}`
+  const visiblePrint = printResult?.key === activeKey ? printResult : null
+
+  useEffect(() => {
+    const url = printResult?.pdfUrl
+    return () => {
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [printResult?.pdfUrl])
 
   const sample = useMemo(
     () => buildSampleLabel({ outletName, outletWhatsapp, outletLogoDataUrl: logo.dataUrl, outletLogoJpeg: logo.jpeg, miniSiteHost, remark, kind }),
@@ -173,26 +183,35 @@ export function LabelPreview({ format, remark, density, outletName, outletWhatsa
 
   const roll = useMemo(() => (format === "roll_58mm" ? rollLines(sample) : null), [sample, format])
 
-  async function testPrint() {
+  async function testPrint(via: "default" | "bluetooth" = "default") {
     if (printing) return
     setPrinting(true)
-    setPrintNote(null)
+    setPrintResult(null)
     try {
       if (format === "roll_58mm") {
-        const write = await connectBluetooth()
-        if (!write) {
-          setPrintNote("Printer Bluetooth 58 mm tidak terhubung. Pasangkan printer atau pilih format 10×15 untuk cetak lewat PDF.")
+        const lines = rollLines(sample)
+        if (via === "bluetooth") {
+          const write = await connectBluetooth()
+          if (!write) {
+            setPrintResult({ key: activeKey, note: "Printer Bluetooth 58 mm tidak terhubung. Anda tetap bisa klik Cetak Uji Contoh untuk cetak via driver USB/sistem.", pdfUrl: null })
+            return
+          }
+          await write(escposBytes(lines, density))
+          setPrintResult({ key: activeKey, note: "Contoh label & struk 58 mm terkirim ke printer Bluetooth.", pdfUrl: null })
           return
         }
-        await write(escposBytes(rollLines(sample), density))
-        setPrintNote("Contoh label 58 mm terkirim ke printer Bluetooth.")
+        printRollHtml(lines, density)
+        setPrintResult({ key: activeKey, note: "Dialog cetak 58 mm dibuka. Pilih printer thermal 58 mm (margin: None, skala: 100%).", pdfUrl: null })
         return
       }
+      const svg = labelSvg(sample, format)
       const pdfBytes = labelsPdf([sample], format)
       const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" })
-      printPdf(blob)
+      const nextUrl = URL.createObjectURL(blob)
+      printSvgHtml(svg, FORMAT_SIZE_MM[format], `Cetak Uji ${FORMAT_LABEL[format]}`)
+      setPrintResult({ key: activeKey, note: `Dialog cetak ${sizeBadge(format)} dibuka (skala 100%, tanpa margin).`, pdfUrl: nextUrl })
     } catch {
-      setPrintNote("Gagal membuka dialog cetak uji. Periksa izin popup browser.")
+      setPrintResult({ key: activeKey, note: "Gagal membuka dialog cetak uji. Gunakan tombol Buka PDF di bawah atau periksa izin popup browser.", pdfUrl: null })
     } finally {
       setPrinting(false)
     }
@@ -203,7 +222,7 @@ export function LabelPreview({ format, remark, density, outletName, outletWhatsa
   const paperView =
     format === "roll_58mm" && roll ? (
       <div className="max-h-[430px] overflow-y-auto rounded-lg">
-        <RollPaperPreview lines={roll} density={density} />
+        <RollPaperPreview lines={roll} density={density} bare />
       </div>
     ) : svgUrl ? (
       <button
@@ -257,19 +276,29 @@ export function LabelPreview({ format, remark, density, outletName, outletWhatsa
         {paperView}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => void testPrint()} disabled={printing} className="flex-1 bg-white">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => void testPrint("default")} disabled={printing} className="flex-1 bg-white">
           <PrinterIcon aria-hidden /> {printing ? "Menyiapkan…" : "Cetak Uji Contoh"}
         </Button>
+        {format === "roll_58mm" && hasBluetooth ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => void testPrint("bluetooth")} disabled={printing} className="shrink-0 bg-white" title="Kirim contoh langsung ke printer Bluetooth 58 mm">
+            <BluetoothIcon aria-hidden /> BT
+          </Button>
+        ) : null}
         <Button type="button" variant="ghost" size="sm" onClick={() => setZoomOpen(true)} className="shrink-0">
           <Maximize2Icon aria-hidden /> Perbesar
         </Button>
       </div>
 
-      {printNote ? (
-        <p role="status" className="text-xs text-slate-700">
-          {printNote}
-        </p>
+      {visiblePrint ? (
+        <div role="status" className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700">
+          <p>{visiblePrint.note}</p>
+          {format !== "roll_58mm" && visiblePrint.pdfUrl ? (
+            <a href={visiblePrint.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-1 font-medium text-primary hover:underline">
+              <ExternalLinkIcon aria-hidden className="size-3" /> Buka / Unduh PDF Uji
+            </a>
+          ) : null}
+        </div>
       ) : null}
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">

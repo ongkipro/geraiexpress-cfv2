@@ -24,6 +24,35 @@ test("Pengaturan dan Akun Saya", async ({ page, context, request }) => {
   await expect(page.locator("body")).not.toContainText("012345678901234")
 
   await page.goto(`${APP}/pengaturan/printer`)
+  // Roll 58 mm preview fits strictly within the paper box (zero horizontal overflow) with real SVG barcode & QR,
+  // and Cetak Uji Contoh works for both Roll 58 mm (USB/system print iframe) and 10×15 PDF formats.
+  await page.getByRole("radio", { name: /Roll 58 mm/ }).click()
+  const rollPaper = page.locator('[aria-label="Pratinjau label 58 mm"]')
+  await expect(rollPaper).toBeVisible()
+  const rollMetrics = await rollPaper.evaluate((el) => {
+    const imgs = [...el.querySelectorAll("img")]
+    return {
+      overflow: el.scrollWidth - el.clientWidth,
+      barcodeOk: imgs.some((img) => img.alt.startsWith("Barcode ") && img.src.startsWith("data:image/svg+xml")),
+      qrAlt: imgs.find((img) => img.alt.startsWith("QR lacak "))?.alt ?? "",
+      docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }
+  })
+  expect(rollMetrics.overflow).toBeLessThanOrEqual(1)
+  expect(rollMetrics.docOverflow).toBeLessThanOrEqual(1)
+  expect(rollMetrics.barcodeOk).toBe(true)
+  expect(rollMetrics.qrAlt).toMatch(/^QR lacak https:\/\/.+\/lacak\/8k4m2p7$/)
+  await page.getByRole("button", { name: "Cetak Uji Contoh" }).click()
+  await expect(page.getByText(/Dialog cetak 58 mm dibuka/)).toBeVisible()
+  await expect(page.locator('iframe[data-print-frame="roll58"]')).toHaveCount(1)
+
+  await page.getByRole("radio", { name: /10×15 · Paket \+ Bukti/ }).click()
+  await expect(page.getByText("100 × 150 mm")).toBeVisible()
+  await page.getByRole("button", { name: "Cetak Uji Contoh" }).click()
+  await expect(page.getByText(/Dialog cetak 100 × 150 mm dibuka/)).toBeVisible()
+  await expect(page.getByRole("link", { name: /Buka \/ Unduh PDF Uji/ })).toBeVisible()
+  await expect(page.locator('iframe[data-print-frame="label"]')).toHaveCount(1)
+
   await page.getByRole("radio", { name: /10×10 · Paket saja/ }).click()
   await page.getByRole("button", { name: "Simpan" }).click()
   await expect(page.getByText("Perubahan tersimpan.")).toBeVisible()

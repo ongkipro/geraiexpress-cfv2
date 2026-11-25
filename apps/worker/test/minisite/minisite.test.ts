@@ -91,6 +91,12 @@ describe("mini-site", () => {
     expect(awb).toMatch(/^JT/)
     const ch = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ entry_channel: string }>("SELECT entry_channel FROM shipments WHERE slug = ?", slug).one().entry_channel)
     expect(ch).toBe("minisite_qr")
+    // QR code on sender receipt/stub links straight to `/lacak/<slug>` (GET & HEAD) → 302 `/lacak?q=<SLUG>`.
+    for (const method of ["GET", "HEAD"] as const) {
+      const qrHit = await exports.default.fetch(`${t.base}/lacak/${slug}`, { method, headers: { "cf-connecting-ip": ip() }, redirect: "manual" })
+      expect(qrHit.status, method).toBe(302)
+      expect(qrHit.headers.get("location"), method).toBe(`/lacak?q=${slug.toUpperCase()}`)
+    }
     for (const q of [slug.toUpperCase(), awb]) {
       const page = await (await get(`${t.base}/lacak?q=${q}`)).text()
       expect(page).toContain(`INV ${slug.toUpperCase()}`)

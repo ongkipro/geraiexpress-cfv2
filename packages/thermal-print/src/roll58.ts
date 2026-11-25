@@ -151,7 +151,7 @@ export function rollLines(d: LabelData): RollLine[] {
   t(rule())
   t(pad("Lacak & struk digital aman:"))
   for (const l of splitUrl(d.trackingUrl)) t(l)
-  L.push({ qr: `https://${d.trackingUrl}` })
+  L.push({ qr: /^https?:\/\//i.test(d.trackingUrl) ? d.trackingUrl : `https://${d.trackingUrl}` })
   t(center("Simpan struk ini sbg bukti sah"))
   L.push({ cut: true })
   return L

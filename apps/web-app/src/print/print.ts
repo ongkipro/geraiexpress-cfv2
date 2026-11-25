@@ -1,13 +1,15 @@
 // Print client (TASK-306, DEC-224): PC-first = open the exact-size PDF in the browser's print dialog (the OS driver
 // prints at 100 % on the 100 mm thermal printer). 58 mm = ESC/POS bytes sent over Web Bluetooth when available,
-// otherwise the same PDF path. Never retries silently; the server records the print.
+// otherwise a 58 mm `@page` HTML print document (for USB 58 mm thermal printers) or the PDF path.
+import { code128Modules, qrSvg, totalModules } from "@gx/thermal-print"
+
 export type Format = "label_10x15_with_stub" | "label_10x10" | "label_10x15" | "roll_58mm"
 export const FORMAT_LABEL: Record<Format, string> = { label_10x15_with_stub: "10×15 · Paket + Bukti", label_10x10: "10×10 · Paket saja", label_10x15: "10×15 · Paket saja", roll_58mm: "Roll 58 mm" }
 export const FORMAT_SUB: Record<Format, string> = {
   label_10x15_with_stub: "Stiker paket + sobekan bukti kirim",
   label_10x10: "Stiker paket ringkas, hemat kertas",
   label_10x15: "Stiker paket lega tanpa bukti kirim",
-  roll_58mm: "Label + struk via printer Bluetooth",
+  roll_58mm: "Label + struk 58 mm (USB / Bluetooth)",
 }
 export const PAPER_HINT: Record<Format, string> = { label_10x15_with_stub: "Pakai kertas thermal 100×150 mm", label_10x10: "Pakai kertas thermal 100×100 mm", label_10x15: "Pakai kertas thermal 100×150 mm", roll_58mm: "Pakai roll thermal 58 mm" }
 
@@ -59,30 +61,135 @@ export async function fetchPrint(body: { slugs: string[]; format: Format; reason
   return { blob: await res.blob(), refused: Number(res.headers.get("x-refused") ?? "0") }
 }
 
-/** Opens the PDF in a hidden iframe and triggers the system print dialog (fallback: new tab). */
+/** Renders a real, scannable Code 128 SVG with 10-module quiet zones on both sides (for 58 mm preview & USB print). */
+export function code128Svg(text: string): string {
+  try {
+    const mods = code128Modules(text)
+    const quiet = 10
+    const total = totalModules(mods) + quiet * 2
+    let x = quiet
+    let d = ""
+    mods.forEach((m, i) => {
+      if (i % 2 === 0) d += `M${x} 0h${m}v44h-${m}z`
+      x += m
+    })
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} 44" preserveAspectRatio="none" shape-rendering="crispEdges" role="img" aria-label="Barcode ${text.replace(/["<>]/g, "")}"><rect width="${total}" height="44" fill="#fff"/><path d="${d}" fill="#000"/></svg>`
+  } catch {
+    return ""
+  }
+}
+
+const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
+/** Opens an offscreen real-sized iframe for the exact-mm PDF and triggers the system print dialog (fallback: new tab). */
 export function printPdf(blob: Blob): void {
   const url = URL.createObjectURL(blob)
   const frame = document.createElement("iframe")
   frame.style.position = "fixed"
-  frame.style.width = "0"
-  frame.style.height = "0"
+  frame.style.left = "-9999px"
+  frame.style.top = "0"
+  frame.style.width = "210mm"
+  frame.style.height = "297mm"
   frame.style.border = "0"
+  frame.style.opacity = "0"
+  frame.style.pointerEvents = "none"
   frame.src = url
   frame.onload = () => {
-    // The PDF viewer may take the print call asynchronously; never block the counter on it.
+    // Allow Chrome PDFium / browser viewer to finish initial layout before invoking print().
     setTimeout(() => {
       try {
         frame.contentWindow?.focus()
         frame.contentWindow?.print()
       } catch {
-        window.open(url, "_blank", "noopener")
+        const tab = window.open(url, "_blank")
+        if (tab) tab.opener = null
       }
-    }, 0)
+    }, 350)
     setTimeout(() => {
       frame.remove()
       URL.revokeObjectURL(url)
-    }, 60_000)
+    }, 120_000)
   }
+  document.body.appendChild(frame)
+}
+
+/** Prints an exact-mm vector SVG label via same-origin HTML `@page` print iframe (reliable across all browsers & USB thermal drivers). */
+export function printSvgHtml(svg: string, sizeMm: { w: number; h: number }, title = "Cetak Uji Label"): void {
+  const doc = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${escHtml(title)}</title><style>
+@page{size:${sizeMm.w}mm ${sizeMm.h}mm;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;width:${sizeMm.w}mm;height:${sizeMm.h}mm;background:#fff;overflow:hidden}
+svg{display:block;width:${sizeMm.w}mm;height:${sizeMm.h}mm}
+</style></head><body>${svg}</body></html>`
+  const frame = document.createElement("iframe")
+  frame.dataset.printFrame = "label"
+  frame.style.position = "fixed"
+  frame.style.left = "-9999px"
+  frame.style.top = "0"
+  frame.style.width = `${sizeMm.w}mm`
+  frame.style.height = `${sizeMm.h}mm`
+  frame.style.border = "0"
+  frame.style.opacity = "0"
+  frame.style.pointerEvents = "none"
+  frame.onload = () => {
+    setTimeout(() => {
+      try {
+        frame.contentWindow?.focus()
+        frame.contentWindow?.print()
+      } finally {
+        setTimeout(() => frame.remove(), 60_000)
+      }
+    }, 100)
+  }
+  frame.srcdoc = doc
+  document.body.appendChild(frame)
+}
+
+/** Prints a 58 mm thermal roll receipt via the browser print dialog (`@page { size: 58mm auto; margin: 0 }`) for USB printers. */
+export function printRollHtml(lines: RollPreviewLine[], density: "normal" | "tebal"): void {
+  const rows = lines
+    .map((line) => {
+      if ("cut" in line) return `<div class="cut">--- Potong kertas di sini ---</div>`
+      if ("barcode" in line) return `<div class="bar">${code128Svg(line.barcode)}</div>`
+      if ("qr" in line) return `<div class="qr">${qrSvg(line.qr, { title: "QR Lacak" })}<div class="qrcap">Scan untuk lacak paket</div></div>`
+      if (line.text.includes("Potong Disini")) return `<div class="cut">--- Potong di sini ---</div>`
+      const cls = [line.invert ? "inv" : "", line.bold ? "b" : ""].filter(Boolean).join(" ")
+      return `<div class="ln${cls ? ` ${cls}` : ""}">${escHtml(line.text) || "&nbsp;"}</div>`
+    })
+    .join("")
+  const doc = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Cetak Uji Roll 58 mm</title><style>
+@page{size:58mm auto;margin:0}
+*{box-sizing:border-box}
+body{margin:0;padding:2mm 1.5mm;width:58mm;background:#fff;color:#000;font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;font-size:8.2pt;line-height:1.32;${density === "tebal" ? "font-weight:600;" : ""}}
+.ln{white-space:pre;overflow:hidden;letter-spacing:-0.01em}
+.b{font-weight:700}
+.inv{background:#000;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0.4mm 0}
+.bar{margin:1.5mm 0;text-align:center}.bar svg{width:92%;height:11mm;display:block;margin:0 auto}
+.qr{margin:2mm 0;text-align:center}.qr svg{width:24mm;height:24mm;display:block;margin:0 auto}
+.qrcap{font-size:7pt;margin-top:0.8mm}
+.cut{margin:2.5mm 0;padding:1mm 0;border-top:1px dashed #000;border-bottom:1px dashed #000;text-align:center;font-size:7pt}
+</style></head><body>${rows}</body></html>`
+  const frame = document.createElement("iframe")
+  frame.dataset.printFrame = "roll58"
+  frame.style.position = "fixed"
+  frame.style.left = "-9999px"
+  frame.style.top = "0"
+  frame.style.width = "58mm"
+  frame.style.height = "260mm"
+  frame.style.border = "0"
+  frame.style.opacity = "0"
+  frame.style.pointerEvents = "none"
+  frame.onload = () => {
+    setTimeout(() => {
+      try {
+        frame.contentWindow?.focus()
+        frame.contentWindow?.print()
+      } finally {
+        setTimeout(() => frame.remove(), 60_000)
+      }
+    }, 150)
+  }
+  frame.srcdoc = doc
   document.body.appendChild(frame)
 }
 

@@ -37,7 +37,7 @@ export function PresetPicker({ value, onChange, preview, reseller, cod }: { valu
       ) : (
         <ChoiceGroup
           label="Preset label"
-          layout="grid"
+          layout="column"
           value={value}
           onValueChange={onChange}
           choices={s.presets.map((p) => {

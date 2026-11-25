@@ -43,6 +43,8 @@ export function drawQr(p: PdfPage, text: string, x: number, y: number, sizeMm: n
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (data[r]![c]) p.rect(x + c * cell, y + r * cell, cell, cell)
 }
 
+const fullUrl = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`)
+
 function hline(p: PdfPage, y: number, h = 0.35) {
   p.rect(PAD, y, IW, h)
 }
@@ -293,7 +295,7 @@ function parcelSticker(p: PdfPage, d: LabelData, roomy: boolean): void {
     const qrX = W - PAD - qr
     const qrY = 150 - PAD - qr
     hline(p, qrY - 2.6, 0.3)
-    drawQr(p, `https://${d.trackingUrl}`, qrX, qrY, qr)
+    drawQr(p, fullUrl(d.trackingUrl), qrX, qrY, qr)
     const leftTrackW = qrX - PAD - 3
     p.text(PAD, qrY + 3.6, 6.8, "LACAK & BUKTI DIGITAL", { font: "B" })
     let ly2 = qrY + 7.4
@@ -396,12 +398,14 @@ function stubBlock(p: PdfPage, d: LabelData, y0: number) {
     p.text(PAD, y, 8.4, "Tidak ada tagihan di loket", { font: "B" })
   }
 
-  // Stub QR anchored cleanly at bottom-right (x = 85 mm, size = 12 mm; keeps left text <= 83 mm).
-  const qr = 12
-  const qrX = W - PAD - qr // 85 mm
-  const qrY = Math.max(boxY + boxH + 1.5, Math.min(150 - PAD - qr, cutY + 34))
-  drawQr(p, `https://${d.trackingUrl}`, qrX, qrY, qr)
-  const leftW = qrX - PAD - 2.2 // 79.8 mm
+  // Stub QR anchored cleanly at bottom-right (up to 14 mm for effortless phone-camera scanning on thermal paper).
+  const maxQrY = 150 - PAD
+  const minQrY = boxY + boxH + 1.2
+  const qr = Math.max(12, Math.min(14, maxQrY - minQrY))
+  const qrX = W - PAD - qr
+  const qrY = Math.max(minQrY, maxQrY - qr)
+  drawQr(p, fullUrl(d.trackingUrl), qrX, qrY, qr)
+  const leftW = qrX - PAD - 2.2
 
   y = boxY + boxH
   if (s.senderPayableIdr !== null && s.feeMode !== "none" && s.feeMode !== "dfod") {
