@@ -1,13 +1,13 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-26
-Status: **LIVE** on dedicated Cloudflare account `GeraiExpress` (`f235ecdb5517054b386c6d413569a103`), commit `b923860` (`REL-2026-11-26-hygiene-and-panduan`) deployed 2026-11-26 (staging Worker `ccbb248e-1f11-4821-8ba0-68fb01db30a2`, 5/5 probes PASS; production Worker `c603faca-59c7-4c56-b417-63832e5e998e`, 6/6 probes PASS; control `0000`–`0020` current; all DO objects v25 — staging 2/2, prod 4/4; hosted `ci.yml` run `45802206472` **green**; Coolify `partner-relay` `RELAY VERIFY PASS 6/6`). Live `https://geraiexpress.com/panduan` (200, 63 WebP desktop/phone assets, sitemap 11 URLs) and `TASK-706..714` are live.
+Status: **LIVE** on dedicated Cloudflare account `GeraiExpress` (`f235ecdb5517054b386c6d413569a103`), commit `16c2f20` (`REL-2026-11-26-mengantar-prod-parity`) deployed 2026-11-26 (staging Worker `57f770dc-511f-4eee-bf66-4d8c7c52d290`, 5/5 probes PASS; production Worker `9c918bef-f47d-4935-ac40-a3036815e0bc`, 6/6 probes PASS; control `0000`–`0021` current; all DO objects v26 `ok` — staging 2/2, prod 4/4; hosted `ci.yml` run `45816090614` **green**; Coolify `partner-relay` `RELAY VERIFY PASS 6/6`). Live `https://geraiexpress.com/panduan`, `TASK-603` remote restore drill, and all 6 live Mengantar production-drift fixes are live.
 State: LIVE
-Review-Risk: R4 (released; `TASK-706..713` R4 APPROVE, `TASK-714` `/panduan` R2/R4 APPROVE)
-Independent-Review: `TASK-706` **APPROVE** (`claude`, `docs/review/task-706/`); `TASK-707` & `TASK-708..713` R1–R4 **APPROVE** (`cx/gpt-6.2-sol`, `docs/review/{unrecorded-2026-11-25,task-708-713}/`); `TASK-714` `/panduan` R1–R4 **APPROVE** (`cx/gpt-6.2-sol`, `docs/review/panduan/{R1-R4-sol.md,DISPOSITION.md}`). Prior history archived verbatim in `docs/archive/STATUS-HISTORY-2026-11-25.md`.
+Review-Risk: R4 (released; `16c2f20` R2 delta review **APPROVE**; prior `TASK-706..714` R4 APPROVE)
+Independent-Review: `16c2f20` (`TASK-604` live Mengantar drifts) R1–R2 **APPROVE** (isolated adversarial R4 reviewer `944d5612`, 2 P1 + 3 P2 fixed); `TASK-706` **APPROVE** (`claude`, `docs/review/task-706/`); `TASK-707..714` R1–R4 **APPROVE** (`cx/gpt-6.2-sol`, `docs/review/{unrecorded-2026-11-25,task-708-713,panduan}/`). Prior history archived verbatim in `docs/archive/STATUS-HISTORY-2026-11-25.md`.
 Primary-Worker: Antigravity session, 2026-11-26
-Independent-Reviewer: `cx/gpt-6.2-sol` (`TASK-707..714`), `claude` (`TASK-706`)
-Independent-Review-Head: `b923860` (live on staging & production)
+Independent-Reviewer: Isolated R4 Reviewer `944d5612` (`16c2f20`), `cx/gpt-6.2-sol` (`TASK-707..714`), `claude` (`TASK-706`)
+Independent-Review-Head: `16c2f20` (live on staging & production)
 
 ## Now
 
