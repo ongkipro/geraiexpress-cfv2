@@ -2,19 +2,24 @@
 
 Release-ID: REL-2026-11-26-hygiene-and-panduan
 Base: e43804d
+Head: b923860
 Environment: production
 Declared-Risk: R4
+Staging-Worker: ccbb248e-1f11-4821-8ba0-68fb01db30a2
+Production-Worker: c603faca-59c7-4c56-b417-63832e5e998e
 Rollback-Ref: 46aeac71-33c4-4258-a4d7-2b21edea8792
 Rollback-Command: pnpm exec wrangler rollback 46aeac71-33c4-4258-a4d7-2b21edea8792 --env production
 Backup-Proof: NOT_REQUIRED
-Status: IN_PREPARATION
+Status: DEPLOYED (2026-11-26)
 
 ## Contract
 
-This file defines the current release boundary and MUST describe only the release currently being prepared.
+This file defines the current release boundary and MUST describe only the latest release.
 Staging and production have been live since 2026-11-18; the current live production Worker is version
-`46aeac71-33c4-4258-a4d7-2b21edea8792` (deployed from `e43804d`, control `0000`–`0020`, tenant DO v25, 6/6 probes PASS;
-logged in `docs/runbooks/production-zones.md` §5.1 and `BUILD-LOG.md`).
+`c603faca-59c7-4c56-b417-63832e5e998e` (deployed 2026-11-26 from `b923860`, hosted `ci.yml` `45802206472` PASS, control
+`0000`–`0020`, tenant DO v25, 6/6 production probes PASS, staging `ccbb248e-1f11-4821-8ba0-68fb01db30a2` 5/5 probes PASS;
+logged in `docs/runbooks/production-zones.md` §5.1 and `BUILD-LOG.md`). Prior live rollback target:
+`46aeac71-33c4-4258-a4d7-2b21edea8792` (`e43804d`).
 
 - `Base` is the last deployed/accepted commit (`e43804d`) and must be an ancestor of `HEAD`.
 - `Declared-Risk` is `R0`–`R4` as defined in `docs/WORKFLOW.md` §2. This release is `R4` (combines `TASK-706..713` on

@@ -25,8 +25,11 @@ tenant B's record).
   (`149.28.129.53`, DEC-235), `RELAY VERIFY PASS 6/6`, production `relay-health` probe PASS (`BUILD-LOG.md`,
   `docs/runbooks/production-zones.md` §6).
 - **TASK-706..TASK-713 (2026-11-25 docs-refresh findings F1–F8, DEC-255) + Kasir UX & `pollStatus` auto-reconcile:**
-  all DONE 2026-11-25 (`c1f3221..4d0bafc`, hosted `ci.yml` run `45660870990` green, `claude` + `cx/gpt-6.2-sol` R4
-  APPROVE) → `docs/archive/TASKS-706-713-2026-11-26.md`.
+  all DONE 2026-11-25 (`c1f3221..4d0bafc`, live 2026-11-26 in `b923860`, `claude` + `cx/gpt-6.2-sol` R4 APPROVE) →
+  `docs/archive/TASKS-706-713-2026-11-26.md`.
+- **TASK-714 (`/panduan` illustrated user guide, R2):** DONE & LIVE 2026-11-26 (`b923860`, staging `ccbb248e`, prod
+  `c603faca`, hosted `ci.yml` `45802206472` green, SEO 11/11 0 fail 0 warn, `cx/gpt-6.2-sol` R4 APPROVE in
+  `docs/review/panduan/`).
 
 ## Plan conventions
 
@@ -38,17 +41,6 @@ tenant B's record).
 - **Every task's Done when** also includes: `pnpm check` green (using `vitest.config.ts`); for UI,
   `dotuiux check --surface admin` and device-local `admin-geometry.mjs` 0 fail at 390/1366, plus Playwright at
   390/768/1280 (`ROADMAP.md`); for new signals, the `OBSERVABILITY.md` row emitted and redaction-tested.
-
----
-
-## Ready to commit & deploy
-
-### TASK-714: `/panduan` illustrated user guide (`geraiexpress.com/panduan`)
-- **Requirement:** Owner request 2026-11-25, `docs/visual/09` §3.1 & §7, `DESIGN.md` C4/C5
-- **Risk Level:** R2 (public SSR marketing page + static WebP allow-list + local capture scripts)
-- **Status:** READY TO COMMIT (`panduan-final` on `4d0bafc`) — `pnpm check` 67/67 (502/502 Workers), `e2e/brand.spec.ts`
-  390/1280 PASS, `check-page.mjs` 11/11 pages 0 fail 0 warn, `dotuiux check` 0 fail, `cx/gpt-6.2-sol` R4 **APPROVE**
-  (`docs/review/panduan/`); awaiting owner commit/merge/push and deploy approval.
 
 ---
 
