@@ -4,8 +4,9 @@
 import { env } from "cloudflare:workers"
 import { runInDurableObject } from "cloudflare:test"
 import { beforeEach, describe, expect, it } from "vitest"
+import { roundIdr, signedAmountIdr } from "../../src/do/gerai-vault/finance"
 import { hostCache } from "../../src/host/lookup"
-import { mockInvoices, mockSeller, resetMock } from "../../src/mengantar/mock"
+import { mockFaults, mockInvoices, mockSeller, resetMock } from "../../src/mengantar/mock"
 import { appUser } from "../onboarding/helpers"
 import { appGet } from "../webhooks/helpers"
 import { checkoutGerai, post, readyInv } from "../dispatch/helpers"
@@ -241,5 +242,113 @@ describe("finance sync", () => {
     ])
     expect((await appGet("/finance", k.cookie)).status).toBe(403)
     expect((await post("/finance/sync", k.cookie, {})).status).toBe(403)
+  })
+
+  it("live Mengantar prod shapes: float balanceAmount, positive debits, negative claim refunds, typeAddBalance.total, ±Rp1 residue, and DELETE /order typeRefund (TASK-604)", async () => {
+    const t = await checkoutGerai("financelive")
+    const { non, cod } = await issuedPair(t)
+    // Open approved claims on `non` and `cod`: claim refund marks `cod` paid, while `DELETE /order` refund leaves `non` approved.
+    await runInDurableObject(t.vault, (_i, st) => {
+      st.storage.sql.exec(
+        "INSERT INTO shipment_claims (id, tenant_id, shipment_slug, kind, status, created_by, created_at, updated_at) VALUES ('clm-live-non', ?, ?, 'rusak', 'approved', 'u1', 1, 1), ('clm-live-cod', ?, ?, 'hilang', 'approved', 'u1', 1, 1)",
+        t.tenantId,
+        non.slug,
+        t.tenantId,
+        cod.slug,
+      )
+    })
+    // Mirrors exact live production `/invoices` payloads captured 2026-11-26:
+    // - typeAddBalance: `total` (96610) is credited (not `amount` 95787), balance carries `.6478313487` float residue.
+    // - typePayment: positive `amount` (51800) debits balance; subItems[].amount is negative on Non-COD batch.
+    // - typeRefund (claim): negative `amount` (-36999) credits balance; matches `cod` and marks claims paid if present.
+    // - typeRefund (DELETE /order): positive `amount` (+10500), `"Return for deleted Non-COD order <ORDER_ID> from batch <BATCH>"` -> links to `non`, does NOT mark claim paid.
+    // - typeWithdraw: positive `amount` (20000) debits balance.
+    mockInvoices.push(
+      { _id: "lv1", type: "typeAddBalance", status: "statusCleared", amount: 95787, total: 96610, balanceAmount: 96610.6478313487, createdAt: iso(1) },
+      { _id: "lv2", type: "typePayment", status: "statusCleared", amount: 10500, total: 10500, balanceAmount: 86110.6478313487, createdAt: iso(2), description: "Payment for Non-COD batch B-LIVE", subItems: [{ cnote_no: non.awb_number, ORDER_ID: non.mengantar_order_code, amount: -10500, estimatedSpecialPrice: 10500 }] },
+      { _id: "lv3", type: "typePayment", status: "statusCleared", amount: 51800, total: 51800, balanceAmount: 34310, createdAt: iso(3), description: `Payment for returned order ${non.awb_number}` },
+      { _id: "lv4", type: "typeRefund", status: "statusCleared", amount: -36999, total: -36999, balanceAmount: 71309.6478313487, createdAt: iso(4), description: `Claim approved for returned order ${cod.awb_number}` },
+      { _id: "lv5", type: "typeRefund", status: "statusCleared", amount: 10500, total: 10500, balanceAmount: 81810, createdAt: iso(5), description: `Return for deleted Non-COD order ${non.mengantar_order_code} from batch B-LIVE` },
+      { _id: "lv6", type: "typeWithdraw", status: "statusCleared", amount: 20000, total: 20000, balanceAmount: 61810, createdAt: iso(6) },
+    )
+    const r = await t.vault.financeSync(t.tenantId, "manual")
+    expect(r).toMatchObject({ ok: true, value: { rows: 6, gaps: 0, balance: 61810, error: null } })
+    const state = await runInDurableObject(t.vault, (_i, st) => ({
+      mirror: st.storage.sql.exec<{ invoice_id: string; amount_idr: number; balance_amount_idr: number; link_state: string }>("SELECT invoice_id, amount_idr, balance_amount_idr, link_state FROM mengantar_invoice_mirror ORDER BY invoice_id").toArray(),
+      claims: st.storage.sql.exec<{ id: string; status: string; paid_invoice_id: string | null }>("SELECT id, status, paid_invoice_id FROM shipment_claims ORDER BY id").toArray(),
+      unmatched: st.storage.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM finance_discrepancies WHERE kind = 'unmatched' AND resolved_at IS NULL").one().n,
+      bal: st.storage.sql.exec<{ b: number | null }>("SELECT synced_balance_idr AS b FROM mengantar_connections").one().b,
+    }))
+    expect(state.bal).toBe(61810)
+    expect(state.unmatched).toBe(0)
+    // Claim refund marked `cod` claim paid; DELETE /order refund linked to `non` without marking its open claim paid.
+    expect(state.claims).toEqual([
+      { id: "clm-live-cod", status: "paid", paid_invoice_id: "lv4" },
+      { id: "clm-live-non", status: "approved", paid_invoice_id: null },
+    ])
+    const byId = Object.fromEntries(state.mirror.map((m) => [m.invoice_id, m]))
+    expect(byId.lv1).toMatchObject({ amount_idr: 96610, balance_amount_idr: 96611 })
+    expect(byId.lv2).toMatchObject({ amount_idr: -10500, balance_amount_idr: 86111, link_state: "linked" })
+    expect(byId.lv3).toMatchObject({ amount_idr: -51800, balance_amount_idr: 34310, link_state: "linked" })
+    expect(byId.lv4).toMatchObject({ amount_idr: 36999, balance_amount_idr: 71310, link_state: "linked" })
+    expect(byId.lv5).toMatchObject({ amount_idr: 10500, balance_amount_idr: 81810, link_state: "linked" })
+    expect(byId.lv6).toMatchObject({ amount_idr: -20000, balance_amount_idr: 61810 })
+
+    // A real gap >= Rp2 is still flagged (never masked by the ±Rp1 float tolerance).
+    mockInvoices.push({ _id: "lv7", type: "typeWithdraw", status: "statusCleared", amount: 10000, total: 10000, balanceAmount: 51812, createdAt: iso(7) })
+    await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec("UPDATE finance_sync_state SET last_manual_at = 0"))
+    expect(await t.vault.financeSync(t.tenantId, "manual")).toMatchObject({ ok: true, value: { gaps: 1, balance: 51812 } })
+  })
+
+  it("pending_rescan discards legacy bare WIB rescan_range + stale cursor so 00:00–06:59 WIB rows are never dropped (TASK-604)", async () => {
+    const t = await checkoutGerai("financerescan")
+    // 2026-10-06T20:00:00.000Z is 2026-10-07 03:00 WIB: legacy code stored bare WIB date "2026-10-07" + a non-null cursor.
+    mockInvoices.push({ _id: "pd1", type: "typeAddBalance", status: "statusPending", amount: 50000, total: 50000, balanceAmount: null, createdAt: "2026-10-06T20:00:00.000Z" })
+    mockFaults.topBalance = 10500.4
+    // Before any cleared row exists, top-level float `page.balance` populates `synced_balance_idr` cleanly.
+    expect(await t.vault.financeSync(t.tenantId, "manual")).toMatchObject({ ok: true, value: { balance: 10500 } })
+    await runInDurableObject(t.vault, (_i, st) => {
+      st.storage.sql.exec("UPDATE finance_sync_state SET rescan_range = ?, rescan_cursor = '50' WHERE id = 1", JSON.stringify({ startDate: "2026-10-07", endDate: "2026-10-07" }))
+    })
+    mockInvoices[0]!.status = "statusCleared"
+    mockInvoices[0]!.balanceAmount = 50000
+    expect(await t.vault.financeSync(t.tenantId, "pending_rescan")).toMatchObject({ ok: true, value: { balance: 50000, rows: 1 } })
+  })
+
+  it("roundIdr and signedAmountIdr never emit -0 and claim descriptions mentioning 'deleted' still mark claims paid (TASK-604)", async () => {
+    expect(Object.is(roundIdr(-0.3521686513), 0)).toBe(true)
+    expect(Object.is(roundIdr("-0.4"), 0)).toBe(true)
+    expect(Object.is(signedAmountIdr("typePayment", 0, 0), 0)).toBe(true)
+    expect(Object.is(signedAmountIdr("typeWithdraw", -0, 0), 0)).toBe(true)
+    expect(Object.is(signedAmountIdr("typeRefund", -0, 0), 0)).toBe(true)
+    const t = await checkoutGerai("financeclaimdel")
+    const { cod } = await issuedPair(t)
+    await runInDurableObject(t.vault, (_i, st) => {
+      st.storage.sql.exec("UPDATE shipments SET mengantar_order_code = 'ORD_LIVE_99' WHERE slug = ?", cod.slug)
+      st.storage.sql.exec(
+        "INSERT INTO shipment_claims (id, tenant_id, shipment_slug, kind, status, created_by, created_at, updated_at) VALUES ('clm-del-word', ?, ?, 'rusak', 'approved', 'u1', 1, 1)",
+        t.tenantId,
+        cod.slug,
+      )
+    })
+    mockInvoices.push({ _id: "clm1", type: "typeRefund", status: "statusCleared", amount: -15000, total: -15000, balanceAmount: 15000, createdAt: iso(1), description: "Claim approved for deleted item order ORD_LIVE_99" })
+    await t.vault.financeSync(t.tenantId, "manual")
+    const claim = await runInDurableObject(t.vault, (_i, st) => st.storage.sql.exec<{ status: string; paid_invoice_id: string | null }>("SELECT status, paid_invoice_id FROM shipment_claims WHERE id = 'clm-del-word'").one())
+    expect(claim).toEqual({ status: "paid", paid_invoice_id: "clm1" })
+  })
+
+  it("pay-unpaid maps live Mengantar HTTP 400 'balance is not enough' (no code) to 402 INSUFFICIENT_BALANCE (TASK-604)", async () => {
+    const t = await checkoutGerai("financelowbal")
+    mockSeller.balanceIdr = 0
+    const slug = await readyInv(t)
+    const issued = ((await (await post(`/shipments/${slug}/dispatch`, t.cookie, {})).json()) as { data: { state: string } }).data
+    expect(issued.state).toBe("provider_unpaid_hold")
+    mockFaults.payUnpaid = "live_low_balance"
+    const res = await post(`/shipments/${slug}/pay-unpaid`, t.cookie, {})
+    expect(res.status).toBe(402)
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: { code: "INSUFFICIENT_BALANCE", message: "Saldo Mengantar belum cukup. Isi saldo dulu, lalu coba lagi." },
+    })
   })
 })

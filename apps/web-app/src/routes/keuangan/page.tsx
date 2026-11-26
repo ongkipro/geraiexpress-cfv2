@@ -43,6 +43,10 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]["id"]
 const TYPE_LABEL: Record<string, string> = { typeAddBalance: "Top-up saldo", typePayment: "Pembayaran", typeReconciliation: "COD cair", typeRefund: "Klaim disetujui", typeWithdraw: "Penarikan ke bank" }
+const typeLabel = (m: Pick<Mutation, "type" | "description">) =>
+  m.type === "typeRefund" && !/\bclaim\b/i.test(m.description ?? "") && /\bdeleted\b.*\border\b/i.test(m.description ?? "")
+    ? "Pengembalian batal"
+    : (TYPE_LABEL[m.type] ?? "Mutasi lainnya")
 const KIND_LABEL: Record<string, string> = { unknown_type: "Tipe belum dikenali", unmatched: "Tidak cocok dengan INV", cod_credit_differs: "COD cair berbeda", debit_differs: "Potongan berbeda", adjustment: "Penyesuaian berat/tujuan", balance_gap: "Saldo berjalan tidak cocok" }
 const when = (ms: number | null) => (ms ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(ms) : "—")
 const ago = (ms: number | null) => {
@@ -172,7 +176,7 @@ function Mutations({ rows }: { rows: Mutation[] }) {
         footer={<PageNav page={paged.page} totalPages={paged.totalPages} total={paged.total} pageSize={paged.pageSize} onPageChange={setPage} itemLabel="mutasi" />}
         columns={[
           { key: "waktu", header: "Waktu", cell: (m) => <span className="tabular-nums">{when(m.provider_created_at)}</span> },
-          { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{TYPE_LABEL[m.type] ?? "Mutasi lainnya"}</span> },
+          { key: "jenis", header: "Jenis", cell: (m) => <span className="font-medium">{typeLabel(m)}</span> },
           { key: "ref", header: "Referensi", className: "whitespace-normal", cell: (m) => <span className="tabular-nums">{m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span> },
           { key: "status", header: "Status", cell: (m) => <StatusBadge tone={m.link_state === "unlinked" || m.link_state === "partial" ? "warn" : m.status === "statusCleared" || !m.status ? "safe" : "muted"}>{m.link_state === "unlinked" || m.link_state === "partial" ? "Belum cocok semua" : (STATUS_TEXT[m.status ?? "statusCleared"] ?? "Diproses")}</StatusBadge> },
           { key: "jumlah", header: "Jumlah", align: "right", cell: (m) => <span className={(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span> },
@@ -180,7 +184,7 @@ function Mutations({ rows }: { rows: Mutation[] }) {
         ]}
         mobile={(m) => (
           <div className="flex flex-col gap-1 text-base md:text-sm">
-            <span className="flex justify-between gap-2"><span className="font-medium">{TYPE_LABEL[m.type] ?? "Mutasi lainnya"}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
+            <span className="flex justify-between gap-2"><span className="font-medium">{typeLabel(m)}</span><span className={`tabular-nums ${(m.amount_idr ?? 0) > 0 ? "font-medium text-safe" : "font-medium"}`}>{m.amount_idr === null ? "—" : `${m.amount_idr > 0 ? "+" : ""}${rp(m.amount_idr)}`}</span></span>
             <span className="text-muted-foreground tabular-nums">{when(m.provider_created_at)} · {m.inv_number ?? m.invoice_id}{m.slugs ? ` · INV ${m.slugs.toUpperCase()}` : ""}</span>
             <span className="text-muted-foreground tabular-nums">Saldo {m.balance_amount_idr === null ? "—" : rp(m.balance_amount_idr)}{m.link_state === "unlinked" || m.link_state === "partial" ? " · belum cocok semua" : ""}</span>
           </div>

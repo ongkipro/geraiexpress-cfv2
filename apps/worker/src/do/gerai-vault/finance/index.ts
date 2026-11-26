@@ -9,6 +9,38 @@ export const KNOWN_TYPES = new Set(["typeAddBalance", "typePayment", "typeReconc
 
 type Raw = Record<string, unknown>
 const int = (v: unknown): number | null => (typeof v === "number" && Number.isSafeInteger(v) ? v : typeof v === "string" && /^-?\d+$/.test(v.trim()) ? Number(v.trim()) : null)
+const normZero = (n: number): number => (n === 0 ? 0 : n)
+/**
+ * Rounds a finite numeric Rupiah value (or decimal numeric string) to integer Rupiah, preserving NULL and avoiding `-0`.
+ * Required for Mengantar `balanceAmount` / top-level `balance`, which carry floating-point residue from
+ * internal `COD_FEE` calculations in ~68.5% of live production `/invoices` rows (TASK-604, 2026-11-26).
+ */
+export const roundIdr = (v: unknown): number | null => {
+  if (typeof v === "number") return Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER ? normZero(Math.round(v)) : null
+  if (typeof v === "string" && /^-?\d+(?:\.\d+)?$/.test(v.trim())) {
+    const n = Number(v.trim())
+    return Number.isFinite(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER ? normZero(Math.round(n)) : null
+  }
+  return null
+}
+
+/**
+ * Normalizes Mengantar's per-type `/invoices` amount into signed seller-wallet cashflow (positive = credit,
+ * negative = debit, never `-0`), verified against 200 live production invoices (TASK-604, 2026-11-26):
+ * - `typeAddBalance`: wallet increases by `total` (fallback `amount`), always positive.
+ * - `typePayment` / `typeWithdraw`: Mengantar emits positive `amount` for debits (mock fixtures used negative) -> `-|amount|`.
+ * - `typeRefund`: claim credits emit negative `amount`, deleted Non-COD returns emit positive `amount` -> `+|amount|`.
+ * - `typeReconciliation` and unknown types: pass through verbatim.
+ */
+export function signedAmountIdr(type: string, amount: number | null, total: number | null): number | null {
+  if (type === "typeAddBalance") {
+    const credited = total ?? amount
+    return credited === null ? null : normZero(Math.abs(credited))
+  }
+  if (type === "typePayment" || type === "typeWithdraw") return amount === null ? null : amount === 0 ? 0 : -Math.abs(amount)
+  if (type === "typeRefund") return amount === null ? null : normZero(Math.abs(amount))
+  return amount === null ? null : normZero(amount)
+}
 const str = (v: unknown, max = 120): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null)
 const ms = (v: unknown): number | null => {
   if (typeof v !== "string" && typeof v !== "number") return null
@@ -72,6 +104,10 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
   const description = str(raw.description, 300)
   const subs = Array.isArray(raw.subItems) ? (raw.subItems as Raw[]) : []
   const clean = stripPii(raw)
+  const rawAmount = int(raw.amount)
+  const rawTotal = int(raw.total)
+  const signedAmount = signedAmountIdr(type, rawAmount, rawTotal)
+  const balanceAmount = roundIdr(raw.balanceAmount)
   const known = sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM mengantar_invoice_mirror WHERE invoice_id = ?", id).one().c > 0
   sql.exec(
     `INSERT INTO mengantar_invoice_mirror (invoice_id, inv_number, type, status, courier, order_code, awb_number, amount_idr, total_idr, balance_amount_idr, description, provider_created_at, provider_updated_at, raw_json, link_state, first_seen_at, last_seen_at)
@@ -84,9 +120,9 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
     str(raw.courier, 40),
     str(raw.ORDER_ID, 60),
     str(raw.cnote_no, 60),
-    int(raw.amount),
-    int(raw.total),
-    int(raw.balanceAmount),
+    signedAmount,
+    rawTotal,
+    balanceAmount,
     description,
     ms(raw.createdAt),
     ms(raw.updatedAt),
@@ -119,7 +155,7 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
 
   if (!KNOWN_TYPES.has(type)) {
     state = "unknown_type"
-    flag(sql, id, "unknown_type", null, null, int(raw.amount), `Tipe ${type} belum dikenali${description ? `: ${description}` : ""}`, now)
+    flag(sql, id, "unknown_type", null, null, signedAmount, `Tipe ${type} belum dikenali${description ? `: ${description}` : ""}`, now)
   } else if (type === "typeReconciliation") {
     subs.forEach((s, i) => {
       const ref = findSlug(sql, { awb: str(s.cnote_no, 60), order: str(s.ORDER_ID, 60) })
@@ -147,10 +183,10 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
       if (ref) {
         linked++
         // A single-INV adjustment without sub-items still links (Mutasi Sync shows the INV).
-        if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
+        if (!subs.length) sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, signedAmount, ref.slug)
         else subs.forEach((_s, i) => link(i, ref))
       } else unlinked++
-      if (cleared) flag(sql, id, "adjustment", ref?.slug ?? null, null, int(raw.amount), "Penyesuaian berat/tujuan dari Mengantar", now)
+      if (cleared) flag(sql, id, "adjustment", ref?.slug ?? null, null, signedAmount, "Penyesuaian berat/tujuan dari Mengantar", now)
     } else if (returned) {
       // Top-level references, then sub-item AWB/order, then the description token.
       const ref =
@@ -159,11 +195,11 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         findSlug(sql, { awb: returned[1]!, order: returned[1]! })
       if (!ref) {
         unlinked++
-        flag(sql, id, "unmatched", null, null, int(raw.amount), `Ongkir retur untuk resi ${returned[1]} tidak ditemukan di gerai ini`, now)
+        flag(sql, id, "unmatched", null, null, signedAmount, `Ongkir retur untuk resi ${returned[1]} tidak ditemukan di gerai ini`, now)
       } else {
         linked++
         if (subs.length) subs.forEach((_s, i) => link(i, ref))
-        else sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, returned[1]!, int(raw.amount), ref.slug)
+        else sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, returned[1]!, signedAmount, ref.slug)
         // Sum of every CLEARED return debit linked to this INV, per invoice first: the sub-item amounts only when ALL
         // are known, else the invoice amount ONCE (never multiplied, never a partial total); re-reads never double-count.
         sql.exec(
@@ -199,8 +235,11 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
       })
     }
   } else if (type === "typeRefund") {
-    const m = /order\s+([A-Za-z0-9-]+)\s*$/i.exec(description ?? "")
-    const awb = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? m?.[1] ?? null
+    // Matches both claim credits ("Claim approved for ... order <AWB>") and live `DELETE /order` cancellation returns
+    // ("Return for deleted Non-COD order <ORDER_ID> from batch <BATCH>", TASK-604). Only claim credits mark claims paid.
+    const isDeleteReturn = !/\bclaim\b/i.test(description ?? "") && /\bdeleted\b.*\border\b/i.test(description ?? "")
+    const m = /\border\s+([A-Za-z0-9_-]+)/i.exec(description ?? "")
+    const refToken = str(raw.cnote_no, 60) ?? subs.map((s) => str(s.cnote_no, 60)).find(Boolean) ?? str(raw.ORDER_ID, 60) ?? m?.[1] ?? null
     if (subs.length) {
       // Each sub-item stands for its own order: resolve and link it independently (never borrow another's INV).
       // A single sub-item may rely on the invoice's own reference or its description token (spec 09 §2.2).
@@ -209,34 +248,35 @@ export function applyInvoice(sql: SqlStorage, raw: Raw, now: number): Outcome | 
         const ref = findSlug(sql, { awb: str(x.cnote_no, 60), order: str(x.ORDER_ID, 60) }) ?? (subs.length === 1 ? top : null)
         if (!ref) {
           unlinked++
-          flag(sql, id, "unmatched", `#${i}`, null, int(x.amount), `Pengembalian dana untuk resi ${str(x.cnote_no, 60) ?? str(x.ORDER_ID, 60) ?? "?"} tidak ditemukan di gerai ini`, now)
+          flag(sql, id, "unmatched", `#${i}`, null, signedAmountIdr(type, int(x.amount), null), `Pengembalian dana untuk resi ${str(x.cnote_no, 60) ?? str(x.ORDER_ID, 60) ?? "?"} tidak ditemukan di gerai ini`, now)
           return
         }
         linked++
         link(i, ref)
-        if (cleared) markClaimPaid(sql, ref.slug, id, now)
+        if (cleared && !isDeleteReturn) markClaimPaid(sql, ref.slug, id, now)
       })
     } else {
       // Top-level AWB/order, then the description token (as AWB or order id).
       const ref = findSlug(sql, { awb: str(raw.cnote_no, 60), order: str(raw.ORDER_ID, 60) }) ?? (m?.[1] ? findSlug(sql, { awb: m[1], order: m[1] }) : null)
       if (ref) {
         linked++
-        sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, awb, int(raw.amount), ref.slug)
-        if (cleared) markClaimPaid(sql, ref.slug, id, now)
+        sql.exec("INSERT INTO mengantar_invoice_subitems (invoice_id, idx, awb_number, amount_idr, shipment_slug) VALUES (?, 0, ?, ?, ?)", id, refToken, signedAmount, ref.slug)
+        if (cleared && !isDeleteReturn) markClaimPaid(sql, ref.slug, id, now)
       } else {
         unlinked++
-        flag(sql, id, "unmatched", null, null, int(raw.amount), `Pengembalian dana untuk resi ${awb ?? "?"} tidak ditemukan di gerai ini`, now)
+        flag(sql, id, "unmatched", null, null, signedAmount, `Pengembalian dana untuk resi ${refToken ?? "?"} tidak ditemukan di gerai ini`, now)
       }
     }
   }
   if (state !== "unknown_type" && (type === "typeReconciliation" || type === "typePayment" || type === "typeRefund")) state = unlinked === 0 ? "linked" : linked === 0 ? "unlinked" : "partial"
   sql.exec("UPDATE mengantar_invoice_mirror SET link_state = ? WHERE invoice_id = ?", state, id)
-  return { invoiceId: id, type, linked, unlinked, final: status !== null && FINAL_STATUSES.has(status), status, balance: int(raw.balanceAmount), created: ms(raw.createdAt), isNew: !known }
+  return { invoiceId: id, type, linked, unlinked, final: status !== null && FINAL_STATUSES.has(status), status, balance: balanceAmount, created: ms(raw.createdAt), isNew: !known }
 }
 
 /**
  * Balance from the newest `statusCleared` row (spec 09 §4) and a running-balance check: for cleared rows in time order,
- * `previous balance + amount` must equal `balanceAmount`; a gap is recorded once as `balance_gap` (never "fixed").
+ * `previous balance + signed amount` must equal `balanceAmount` within ±Rp1 (absorbs Mengantar's verified float
+ * `COD_FEE` balance residue without masking any real missing mutation ≥ Rp2); gaps are recorded once as `balance_gap`.
  */
 export function settleBalance(sql: SqlStorage, now: number): { balance: number | null; gaps: number } {
   const rows = sql
@@ -249,11 +289,12 @@ export function settleBalance(sql: SqlStorage, now: number): { balance: number |
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1]!
     const cur = rows[i]!
-    if (cur.amount_idr === null || prev.balance_amount_idr === null) continue
-    if (prev.balance_amount_idr + cur.amount_idr !== cur.balance_amount_idr) {
+    if (cur.amount_idr === null || prev.balance_amount_idr === null || cur.balance_amount_idr === null) continue
+    const expected = prev.balance_amount_idr + cur.amount_idr
+    if (Math.abs(expected - cur.balance_amount_idr) > 1) {
       gaps++
       open.add(cur.invoice_id)
-      flag(sql, cur.invoice_id, "balance_gap", null, prev.balance_amount_idr + cur.amount_idr, cur.balance_amount_idr, "Saldo berjalan tidak cocok dengan mutasi sebelumnya", now)
+      flag(sql, cur.invoice_id, "balance_gap", null, expected, cur.balance_amount_idr, "Saldo berjalan tidak cocok dengan mutasi sebelumnya", now)
     }
   }
   // A gap that no longer appears (the missing row arrived later) is closed, never left open forever.

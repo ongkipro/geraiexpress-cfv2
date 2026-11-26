@@ -19,7 +19,9 @@ describe("weight (spec 02 §1, DEC-215)", () => {
     expect(billedKg(2000)).toBe(2)
     expect(billedKg(2300)).toBe(2)
     expect(billedKg(2301)).toBe(3)
-    expect(billedKg(2310, 310)).toBe(2) // Lion Parcel
+    expect(billedKg(2310, 310)).toBe(2) // custom 310 g tolerance
+    expect(billedKg(1299, 299)).toBe(1) // SAP / SPX live tolerance (1.29 kg -> 1 kg)
+    expect(billedKg(1300, 299)).toBe(2) // SAP / SPX live boundary (1.30 kg -> 2 kg)
     expect(billedKg(999)).toBe(1)
   })
   it("sub-kg services send decimal kg; 1 kg-minimum routes send 1", () => {

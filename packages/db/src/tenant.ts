@@ -25,6 +25,7 @@ import m0022 from "../migrations/tenant/0022_rescan_and_api_spend.sql"
 import m0023 from "../migrations/tenant/0023_mengantar_v2.sql"
 import m0024 from "../migrations/tenant/0024_customer_display.sql"
 import m0025 from "../migrations/tenant/0025_contact_history_and_events.sql"
+import m0026 from "../migrations/tenant/0026_normalize_invoice_mirror.sql"
 
 export interface TenantMigration {
   version: number
@@ -58,6 +59,7 @@ export const TENANT_MIGRATIONS: readonly TenantMigration[] = [
   { version: 23, name: "mengantar_v2", sql: m0023 },
   { version: 24, name: "customer_display", sql: m0024 },
   { version: 25, name: "contact_history_and_events", sql: m0025 },
+  { version: 26, name: "normalize_invoice_mirror", sql: m0026 },
 ]
 
 export const TENANT_SCHEMA_VERSION = TENANT_MIGRATIONS.length

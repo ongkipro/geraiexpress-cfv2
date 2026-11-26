@@ -25,6 +25,10 @@ export const mockFaults: {
   /** `GET /order` for these order ids shows them still unpaid (a lagging provider view) while set. */
   readBackLagFor?: Set<string>
   invoices?: "error"
+  /** Optional top-level `balance` returned by `GET /invoices` when no cleared invoice exists (tests `topBalance` fallback). */
+  topBalance?: number
+  /** `POST /order/pay-unpaid` returns live Mengantar's exact HTTP 400 `"balance is not enough"` (no `code`). */
+  payUnpaid?: "live_low_balance"
   /** `sellers/list` ignores the externalUserId filter and returns every seller (loose provider filter). */
   listIgnoresFilter?: true
   /** Every Public API call answers `403 IP_NOT_ALLOWED` (DEC-232 alert drill). */
@@ -289,17 +293,28 @@ export const mockFetch: typeof fetch = async (input, init) => {
     const sellerKey = decodeURIComponent(p.split("/")[3] ?? "")
     let list = mockInvoices.filter((i) => i._seller === undefined || i._seller === sellerKey).map(({ _seller: _s, ...rest }) => rest).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     if (range) {
+      // Mirrors live Mengantar UTC timestamp comparison (TASK-604): equal bare `YYYY-MM-DD` dates evaluate to
+      // `[00:00:00Z, 00:00:00Z]` and return 0 rows, so tests catch any regression back to bare dates.
       const r = JSON.parse(range) as { startDate: string; endDate: string }
-      const day = (s: unknown) => new Date(Date.parse(String(s)) + 7 * 3600_000).toISOString().slice(0, 10)
-      list = list.filter((i) => day(i.createdAt) >= r.startDate && day(i.createdAt) <= r.endDate)
+      const lo = Date.parse(r.startDate)
+      const hi = Date.parse(r.endDate)
+      list = list.filter((i) => {
+        const t = Date.parse(String(i.createdAt))
+        return Number.isFinite(t) && t >= lo && t <= hi
+      })
     }
     const page = list.slice(start, start + size)
     const next = start + size < list.length ? String(start + size) : null
     const newestCleared = list.find((i) => i.status === "statusCleared")
-    return json(200, { success: true, data: page, balance: (newestCleared?.balanceAmount as number | undefined) ?? null, nextCursor: next })
+    const bal = (newestCleared?.balanceAmount as number | undefined) ?? mockFaults.topBalance ?? null
+    return json(200, { success: true, data: page, balance: bal, nextCursor: next })
   }
   if (/^\/api\/public\/[^/]+\/order\/pay-unpaid$/.test(p)) {
     mockSeller.payUnpaidCalls++
+    if (mockFaults.payUnpaid === "live_low_balance") {
+      delete mockFaults.payUnpaid
+      return json(400, { success: false, message: "balance is not enough" })
+    }
     const hit = [...mockCreated.values()].filter((o) => o.batch_id === body.batch_id && !o.isPaid)
     const need = hit.reduce((n, o) => n + o.cost, 0)
     if (mockSeller.balanceIdr < need) return json(402, { success: false, code: "INSUFFICIENT_BALANCE", message: "Saldo tidak cukup" })

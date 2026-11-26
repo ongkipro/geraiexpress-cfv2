@@ -30,7 +30,7 @@ import { counterHome, dailyStatsOf, ownerDashboard, type CounterHome, type Owner
 import { resolvePreset, type Period } from "@gx/domain/period"
 import { DEFAULT_PACKING, maskNpwp, parseBusiness, parsePacking, parseProfile, parseReceipt } from "./settings"
 import { exportCsv, listShipments, tabCounts, type ListQuery, type ListRow, type Tab } from "./listing"
-import { applyInvoice, FINAL_STATUSES, settleBalance } from "./finance"
+import { applyInvoice, FINAL_STATUSES, roundIdr, settleBalance } from "./finance"
 import { financeView, type FinanceView } from "./finance/view"
 import { balanceSufficient } from "./finance/reserve"
 import { batchView, handover as handoverBatch, listBatches as listPickupBatches, openBatch as openPickupBatch, pickupQueue, scan as scanParcel, unscan as unscanParcel, type BatchRow as PickupBatchRow, type BatchView, type PickupError, type QueueGroup, type ScanResult } from "./pickup"
@@ -1237,7 +1237,16 @@ export class GeraiVaultDO extends DurableObject<Env> {
       const e = err as { ambiguous?: boolean; code?: string | null; message?: string }
       if (!e.ambiguous) {
         this.ctx.storage.transactionSync(() => sql.exec("UPDATE dispatch_journal SET state = 'failed', error = ?, updated_at = ? WHERE idempotency_key = ?", `${e.code}: ${e.message}`.slice(0, 300), Date.now(), idem))
-        return { ok: false, error: { status: 402, code: e.code ?? "PAY_UNPAID_FAILED", message: e.code === "INSUFFICIENT_BALANCE" ? "Saldo Mengantar belum cukup. Isi saldo dulu, lalu coba lagi." : "Pembayaran ke Mengantar gagal." } }
+        // Live Mengantar production returns HTTP 400 `{"success":false,"message":"balance is not enough"}` with no `code` (TASK-604).
+        const lowBal = e.code === "INSUFFICIENT_BALANCE" || /balance.*not.*enough|insufficient.*balance|saldo.*tidak.*cukup/i.test(e.message ?? "")
+        return {
+          ok: false,
+          error: {
+            status: 402,
+            code: lowBal ? "INSUFFICIENT_BALANCE" : (e.code ?? "PAY_UNPAID_FAILED"),
+            message: lowBal ? "Saldo Mengantar belum cukup. Isi saldo dulu, lalu coba lagi." : "Pembayaran ke Mengantar gagal.",
+          },
+        }
       }
       payError = e.code ?? "ambiguous"
     }
@@ -1600,18 +1609,23 @@ export class GeraiVaultDO extends DurableObject<Env> {
     }
     sql.exec("UPDATE finance_sync_state SET running_since = ?, last_run_at = ?, last_trigger = ? WHERE id = 1", now, now, trigger)
     const client = publicClient(this.env, key.key, tenantId)
+    let topBalance: number | null = null
     try {
       if (trigger === "pending_rescan") {
-        // Non-final rows: re-read their creation date range (spec 09 §4). The range ends at the NEWEST non-final day
-        // (never "today", which would put every newer invoice in front) and is kept, with its cursor, across runs
-        // until fully read — an old pending invoice is always reached within a bounded number of runs.
-        const day = (t: number) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10)
+        // Non-final rows: re-read their creation date range (spec 09 §4). Live Mengantar parses `dateRange` as UTC
+        // timestamps (equal bare `YYYY-MM-DD` strings return 0 rows, TASK-604), so always send full ISO day bounds.
+        // Any legacy bare-date `rescan_range` (saved in WIB before this release) is discarded alongside its cursor so
+        // `00:00–06:59 WIB` rows are never dropped and a stale cursor is never sent against a mutated range.
+        const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10)
+        const isIso = (d: string) => /^\d{4}-\d{2}-\d{2}T/.test(d)
         const saved = sql.exec<{ c: string | null; r: string | null }>("SELECT rescan_cursor AS c, rescan_range AS r FROM finance_sync_state WHERE id = 1").one()
-        let range: { startDate: string; endDate: string } | null = saved.r ? (JSON.parse(saved.r) as { startDate: string; endDate: string }) : null
-        let cursor: string | null = saved.r ? saved.c : null
+        const parsed = saved.r ? (JSON.parse(saved.r) as { startDate: string; endDate: string }) : null
+        const validSaved = parsed !== null && isIso(parsed.startDate) && isIso(parsed.endDate)
+        let range: { startDate: string; endDate: string } | null = validSaved ? parsed : null
+        let cursor: string | null = validSaved ? saved.c : null
         if (!range) {
           const span = sql.exec<{ lo: number | null; hi: number | null }>("SELECT MIN(provider_created_at) AS lo, MAX(provider_created_at) AS hi FROM mengantar_invoice_mirror WHERE status IS NULL OR status NOT IN ('statusCleared','statusExpired')").one()
-          range = span.lo !== null && span.hi !== null ? { startDate: day(span.lo), endDate: day(span.hi) } : null
+          range = span.lo !== null && span.hi !== null ? { startDate: `${utcDay(span.lo)}T00:00:00.000Z`, endDate: `${utcDay(span.hi)}T23:59:59.999Z` } : null
         }
         if (range) {
           do {
@@ -1630,6 +1644,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
         // backfill from the stored cursor (a capped history is completed over the next runs, never orphaned).
         const readPage = async (cursor: string | null) => {
           const page = await client.invoices({ cursor, size: 50 })
+          if (cursor === null && topBalance === null) topBalance = roundIdr(page.balance)
           result.pages++
           let allKnownFinal = page.data.length > 0
           this.ctx.storage.transactionSync(() => {
@@ -1662,7 +1677,8 @@ export class GeraiVaultDO extends DurableObject<Env> {
       }
       const settled = this.ctx.storage.transactionSync(() => {
         const b = settleBalance(sql, now)
-        if (b.balance !== null) sql.exec("UPDATE mengantar_connections SET synced_balance_idr = ?, last_invoice_synced_at = ?, last_sync_status = 'ok'", b.balance, now)
+        const finalBalance = b.balance ?? topBalance
+        if (finalBalance !== null) sql.exec("UPDATE mengantar_connections SET synced_balance_idr = ?, last_invoice_synced_at = ?, last_sync_status = 'ok'", finalBalance, now)
         else sql.exec("UPDATE mengantar_connections SET last_invoice_synced_at = ?, last_sync_status = 'ok'", now)
         if (result.capped) sql.exec("INSERT INTO finance_discrepancies (id, invoice_id, kind, shipment_slug, detail, created_at) VALUES (?, 'sync', 'balance_gap', '', 'Mutasi lebih dari 5 halaman; sisanya diperiksa pada sinkronisasi berikutnya.', ?) ON CONFLICT(invoice_id, kind, shipment_slug) DO UPDATE SET resolved_at = NULL", crypto.randomUUID(), now)
         else if (trigger !== "pending_rescan") sql.exec("UPDATE finance_discrepancies SET resolved_at = ? WHERE invoice_id = 'sync' AND resolved_at IS NULL", now)
@@ -1672,7 +1688,7 @@ export class GeraiVaultDO extends DurableObject<Env> {
           now,
         )
         sql.exec("UPDATE finance_sync_state SET running_since = NULL, last_ok_at = ?, last_pages = ?, last_error = NULL WHERE id = 1", now, result.pages)
-        return b
+        return { balance: finalBalance, gaps: b.gaps }
       })
       result.balance = settled.balance
       result.gaps = settled.gaps

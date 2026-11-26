@@ -91,6 +91,32 @@ describe("GeraiVaultDO storage foundation (TASK-103, ADR-0006)", () => {
     })
   })
 
+  it("an object at v25 upgrades to v26 normalizing pre-fix invoice signs, float balanceAmount from raw_json, and legacy rescan_range (TASK-604)", async () => {
+    const stub = vault("tenant-v25")
+    expect(await stub.migrate("tenant-v25", 25)).toMatchObject({ ok: true, to: 25 })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      s.storage.sql.exec(
+        `INSERT INTO mengantar_invoice_mirror (invoice_id, type, status, amount_idr, total_idr, balance_amount_idr, raw_json, link_state, first_seen_at, last_seen_at) VALUES
+         ('m1', 'typeAddBalance', 'statusCleared', 95787, 96610, NULL, '{"balanceAmount":96610.6478313487}', 'not_applicable', 1, 1),
+         ('m2', 'typePayment',    'statusCleared', 10500, 10500, NULL, '{"balanceAmount":86110.6478313487}', 'linked',         2, 2),
+         ('m3', 'typeRefund',     'statusCleared', -36999, -36999, NULL, '{"balanceAmount":-0.3521686513}',  'linked',         3, 3),
+         ('m4', 'typeWithdraw',   'statusCleared', 20000, 20000, 50000, '{}',                                'not_applicable', 4, 4)`,
+      )
+      s.storage.sql.exec("UPDATE finance_sync_state SET rescan_cursor = '50', rescan_range = ? WHERE id = 1", JSON.stringify({ startDate: "2026-10-07", endDate: "2026-10-07" }))
+    })
+    expect(await stub.migrate("tenant-v25")).toMatchObject({ ok: true, to: TENANT_SCHEMA_VERSION })
+    await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {
+      const rows = s.storage.sql.exec<{ invoice_id: string; amount_idr: number; balance_amount_idr: number | null }>("SELECT invoice_id, amount_idr, balance_amount_idr FROM mengantar_invoice_mirror ORDER BY invoice_id").toArray()
+      expect(rows).toEqual([
+        { invoice_id: "m1", amount_idr: 96610, balance_amount_idr: 96611 },
+        { invoice_id: "m2", amount_idr: -10500, balance_amount_idr: 86111 },
+        { invoice_id: "m3", amount_idr: 36999, balance_amount_idr: 0 },
+        { invoice_id: "m4", amount_idr: -20000, balance_amount_idr: 50000 },
+      ])
+      expect(s.storage.sql.exec<{ rescan_cursor: string | null; rescan_range: string | null }>("SELECT rescan_cursor, rescan_range FROM finance_sync_state WHERE id = 1").one()).toEqual({ rescan_cursor: null, rescan_range: null })
+    })
+  })
+
   it("N−1 → N upgrade keeps data", async () => {
     const stub = vault("tenant-upgrade")
     await runInDurableObject(stub, (_i: GeraiVaultDO, s) => {

@@ -53,13 +53,21 @@ tenant B's record).
 
 ### TASK-603: Backups and restore drill
 - **Requirement:** ADR-0006 §7 · **Risk Level:** R3 · **Depends On:** TASK-602
-- **Status:** Code + local drill DONE 2026-11-16; remaining owner step: remote scratch-environment restore drill
-  (D1 Time Travel + two objects from R2).
+- **Status:** **DONE 2026-11-26** — local drill (`2026-11-16`, `docs/evidence/TASK-603/drill.md`) + remote staging &
+  production restore drill (`2026-11-26`, `docs/evidence/TASK-603/drill-remote-2026-11-26.md`: D1 Time Travel bookmarks
+  verified on staging & prod, staging D1 exported & restored into APAC scratch D1 `geraiexpress-drill-20261126` with
+  33/33 tables and exact row parity in 4.92 s, R2 daily backups restored into scratch DOs for 2 tenants on both staging
+  and production with exact SHA-256 checksum matches and 422/409 refusals).
 
 ### TASK-604: Live courier pilot and open registration
 - **Requirement:** ROADMAP M6 · **Risk Level:** R4 · **Depends On:** TASK-601..603, TASK-112, TASK-706..713
-- **Done when:** one real parcel per active courier hub-scanned (incl. masked labels); live invoice/balance match;
-  `production-gate` PASS; owner opens registration.
+- **Status:** Live production Mengantar API behavioral checks & zero-debit unpaid probe executed `2026-11-26`
+  (`docs/evidence/TASK-604/mengantar-prod-checks-2026-11-26.md`); all **6 discovered production contract drifts
+  remediated** (`finance/index.ts`, `gerai-vault/index.ts`, `keuangan/page.tsx`, `mock.ts`, `0021_courier_rounding_live.sql`,
+  `docs/spec/02` & `09`).
+- **Done when:** one real parcel per active courier hub-scanned (incl. masked labels) + paid `pay-unpaid` repeat-call
+  check on clean Rp0 pilot account; live invoice/balance match (0 `balance_gap`, 0 `unmatched`); `production-gate`
+  PASS; owner opens registration.
 
 ### Post-launch (P2)
 - **TASK-702** Sender stamp card (PR-23, P2, counsel first) · **TASK-703** Multi-outlet owner (PR-24, P2).
@@ -76,5 +84,5 @@ tenant B's record).
 | **M3** | TASK-301..311, close 399 (archived) | PR-05..10, PR-14, PR-15, PR-18 | DEC-206, 208, 212, 213, 218, 220–225, 229, 231; ADR-0004, 0005 |
 | **M4** | TASK-401..405, close 499 (archived) | PR-12, PR-13, PR-16, PR-17, PR-20 | DEC-206, 216; ADR-0005 |
 | **M5** | TASK-501..505, close 599 (archived) | PR-03, PR-19, PR-21 | DEC-202, 207, 214, 218, 228 |
-| **M6** | TASK-601 (DONE), TASK-602..604 | production readiness | DEC-219, 228, 232, 235; ADR-0006 §7 |
+| **M6** | TASK-601 (DONE), TASK-603 (DONE), TASK-602, TASK-604 | production readiness | DEC-219, 228, 232, 235; ADR-0006 §7 |
 | **Follow-up / Post-launch** | TASK-701, 705, DEC-245..251, TASK-706..713 (archived); TASK-714 (`/panduan`); TASK-702..704 | PR-22..24, 2026-11-25 refresh F1–F8, `/panduan` | DEC-241–255 |

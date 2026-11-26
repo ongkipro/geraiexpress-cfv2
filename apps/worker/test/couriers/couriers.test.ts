@@ -18,13 +18,16 @@ type Row = { courierCode: string; name: string; enabled: boolean; pickupMode: st
 const list = async (cookie: string) => ((await (await appGet("/settings/couriers", cookie)).json()) as { data: { items: Row[] } }).data.items
 
 describe("catalog", () => {
-  it("seeded from verified rules: Ninja inactive, Anteraja pickup-only, cargo Non-COD, Lion tolerance 310 g", async () => {
+  it("seeded from verified rules: Ninja inactive, Anteraja pickup-only, cargo Non-COD, live rounding tolerances", async () => {
     const rows = (await env.DB.prepare("SELECT service_code, courier_code, service_class, pickup_capability, cod_supported, is_active, rounding_tolerance_gram FROM courier_service_catalog").all<Record<string, unknown>>()).results
     const by = Object.fromEntries(rows.map((r) => [r.service_code as string, r]))
     expect(by.ninja).toMatchObject({ is_active: 0 })
     expect(by.anteraja).toMatchObject({ pickup_capability: "pickup_only" })
     for (const r of rows.filter((r) => r.service_class === "cargo")) expect(r.cod_supported).toBe(0)
-    expect(by.lion).toMatchObject({ rounding_tolerance_gram: 310 })
+    expect(by.lion).toMatchObject({ rounding_tolerance_gram: 300 })
+    expect(by.Sap).toMatchObject({ rounding_tolerance_gram: 299 })
+    expect(by.spx).toMatchObject({ rounding_tolerance_gram: 299 })
+    expect(by.JNE).toMatchObject({ rounding_tolerance_gram: 300 })
   })
 
   it("pickup options follow the services' capabilities", () => {
