@@ -61,6 +61,12 @@ export const BRAND_PAGES: Record<string, BrandPageMeta> = {
     description: "Simulasi interaktif meja kasir GeraiExpress dengan data contoh: hitung ongkir per gram atau kargo, pilih layanan COD, dan tinjau struk pelanggan loket.",
     ogAlt: "Simulasi meja kasir agen pengiriman paket dan contoh struk pelanggan GeraiExpress",
   },
+  "/panduan": {
+    crumb: "Panduan",
+    titleStem: "Panduan Pakai Aplikasi Kasir Gerai Kirim Paket",
+    description: "Panduan bergambar langkah demi langkah untuk pemilik gerai dan kasir: daftar, cek ongkir, buat kiriman, cetak resi, COD, serah ke kurir, hingga retur.",
+    ogAlt: "Panduan bergambar memakai aplikasi kasir gerai kirim paket GeraiExpress langkah demi langkah",
+  },
   "/tanya-jawab": {
     crumb: "Tanya Jawab",
     titleStem: "Tanya Jawab Syarat & Operasional Agen Paket",
@@ -102,6 +108,7 @@ export const MENU_ROWS: Array<[string, string, string]> = [
   ["/cara-kerja", "Cara Kerja", "Lima langkah daftar & peralatan loket"],
   ["/biaya-dan-paket", "Biaya & Paket", "Rp 0 pendaftaran, opsi domain Pro"],
   ["/simulasi-kasir", "Simulasi Kasir", "Hitung ongkir & struk tanpa login"],
+  ["/panduan", "Panduan", "Langkah bergambar untuk pemilik & kasir"],
   ["/tanya-jawab", "Tanya Jawab", "Syarat lokasi, saldo, COD & retur"],
   ["/hubungi-kami", "Hubungi Kami", "Email & WhatsApp tim kemitraan"],
 ]
@@ -326,6 +333,7 @@ ${breadcrumbHtml}
 <li><a href="/cara-kerja">Cara Kerja &amp; Peralatan</a></li>
 <li><a href="/biaya-dan-paket">Biaya &amp; Skema Mitra</a></li>
 <li><a href="/simulasi-kasir">Simulasi Kasir Tanpa Login</a></li>
+<li><a href="/panduan">Panduan Pakai Aplikasi</a></li>
 </ul></nav>
 <nav class="fcol" aria-labelledby="ft-bantuan"><h3 id="ft-bantuan">Bantuan &amp; Legal</h3><ul>
 <li><a href="/tanya-jawab">Tanya Jawab Calon Mitra</a></li>

@@ -16,6 +16,7 @@ const PAGES = [
   "/cara-kerja",
   "/biaya-dan-paket",
   "/simulasi-kasir",
+  "/panduan",
   "/tanya-jawab",
   "/hubungi-kami",
   "/ketentuan",
@@ -45,7 +46,7 @@ describe("brand site", () => {
     expect((await get("/tidak-ada")).status).toBe(404)
   })
 
-  it("sitemap lists all ten pages; robots points to it", async () => {
+  it("sitemap lists all eleven pages; robots points to it", async () => {
     const sm = await (await get("/sitemap.xml")).text()
     expect(sm.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true)
     expect([...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])).toEqual(PAGES.map((p) => `https://geraiexpress.localhost${p}`))
@@ -125,7 +126,7 @@ describe("brand site", () => {
   })
 })
 
-// DEC-247 Borderless White-Gallery: one header with the phone [Masuk] [menu] dropdown on all ten pages, the dark
+// DEC-247 Borderless White-Gallery: one header with the phone [Masuk] [menu] dropdown on all eleven pages, the dark
 // closing band retired, no slop eyebrows or orphan links, porcelain closing + footer, the asymmetric radio pricing,
 // the product screenshot served from the allow-list, and the Indonesian validation net on every page.
 describe("brand site DEC-247", () => {
@@ -144,7 +145,7 @@ describe("brand site DEC-247", () => {
       expect(h, p).toContain('<button type="button" id="mnav-btn" class="hround burger" aria-label="Buka menu navigasi" aria-expanded="false" aria-controls="mnav">')
       expect(h, p).toContain('<nav id="mnav" class="mnav" aria-label="Menu navigasi" inert>')
       const menu = h.slice(h.indexOf('<nav id="mnav"'), h.indexOf("</nav>", h.indexOf('<nav id="mnav"')))
-      expect([...menu.matchAll(/<span class="r-h">([^<]+)<\/span>/g)].length, p).toBe(7)
+      expect([...menu.matchAll(/<span class="r-h">([^<]+)<\/span>/g)].length, p).toBe(8)
       expect(menu, p).toContain('Daftar Gerai <span aria-hidden="true">→</span>')
       expect(menu, p).toContain("Sudah terdaftar? <b>Masuk ke ruang kerja</b>")
       expect(h, p).not.toContain('<details class="mnav"')
@@ -291,10 +292,10 @@ describe("brand site DEC-247", () => {
     expect(String.fromCharCode(...bytes.slice(8, 12))).toBe("WEBP")
   })
 
-  it("DEC-247B inner pages: centered PageHead with eyebrow pill and dot grid on all nine inner pages", async () => {
+  it("DEC-247B inner pages: centered PageHead with eyebrow pill and dot grid on all ten inner pages", async () => {
     const eyebrows: Record<string, string> = {
       "/fitur": "Fitur loket", "/ekspedisi": "Jaringan kurir", "/cara-kerja": "Alur kemitraan", "/biaya-dan-paket": "Skema kemitraan",
-      "/simulasi-kasir": "Simulasi meja kasir", "/tanya-jawab": "Pusat jawaban", "/hubungi-kami": "Hubungi kami",
+      "/simulasi-kasir": "Simulasi meja kasir", "/panduan": "Panduan pengguna", "/tanya-jawab": "Pusat jawaban", "/hubungi-kami": "Hubungi kami",
       "/ketentuan": "Ketentuan layanan", "/privasi": "Kebijakan privasi",
     }
     for (const [p, eyebrow] of Object.entries(eyebrows)) {
@@ -485,5 +486,92 @@ describe("brand site DEC-247", () => {
     expect(home).toContain("code{font-family:var(--mono);font-size:.92em;overflow-wrap:break-word}")
     // check-page needs a visible breadcrumb next to BreadcrumbList; it stays, quieter on phones.
     expect(eks).toContain('<nav class="wrap crumbs" aria-label="Breadcrumb">')
+  })
+})
+
+// `/panduan` (visual 09 §7): the illustrated user guide. Step numbers run through each guide so they match the
+// numbered markers drawn into its screenshots; every image is on the allow-list, sized, lazy and described.
+describe("brand /panduan user guide", () => {
+  const html = (p: string) => get(p).then((r) => r.text())
+
+  it("thirteen guides, each reachable from the table of contents and from a `Kembali ke daftar isi` link", async () => {
+    const h = await html("/panduan")
+    const ids = [...h.matchAll(/<section class="guide" id="([a-z-]+)" aria-labelledby="\1-title">/g)].map((m) => m[1])
+    expect(ids).toEqual(["daftar", "persiapan", "mengenal", "cek-ongkir", "kirim", "cetak", "cod", "pengirim-baru", "massal", "pickup", "lacak", "retur", "situs-gerai"])
+    const toc = h.slice(h.indexOf('<nav class="gtoc" id="daftar-isi"'), h.indexOf("</nav>", h.indexOf('<nav class="gtoc"')))
+    // The page follows the table of contents: same topics, same order.
+    expect([...toc.matchAll(/<a href="#([a-z-]+)">/g)].map((m) => m[1])).toEqual(ids)
+    expect(toc.match(/<div class="gtoc-g"><p>/g)?.length).toBe(4)
+    expect(h.match(/<p class="gtop"><a href="#daftar-isi">Kembali ke daftar isi<\/a><\/p>/g)?.length).toBe(13)
+  })
+
+  it("step numbers run through a guide (ol start = previous steps + 1) so they match the markers in its images", async () => {
+    const h = await html("/panduan")
+    for (const g of h.split('<section class="guide" ').slice(1)) {
+      let expected = 1
+      for (const ol of g.matchAll(/<ol class="gsteps" start="(\d+)" style="counter-reset:gstep (\d+)">([\s\S]*?)<\/ol>/g)) {
+        expect(Number(ol[1]), g.slice(0, 40)).toBe(expected)
+        expect(Number(ol[2])).toBe(expected - 1)
+        const n = ol[3]!.match(/<li><span>/g)?.length ?? 0
+        expect(n).toBeGreaterThan(0)
+        expected += n
+      }
+      expect(expected).toBeGreaterThan(1)
+    }
+  })
+
+  it("every screenshot: allow-listed WebP, intrinsic size, lazy, alt 10–125 chars, caption, link, and a phone source", async () => {
+    const h = await html("/panduan")
+    const figs = [...h.matchAll(/<figure class="gshot(?: narrow)?"><a href="(\/panduan\/([a-z0-9-]+)\.webp)" aria-label="Perbesar gambar: [^"]+"><picture>(<source media="\(max-width:700px\)" srcset="\/panduan\/\2-hp\.webp" width="\d+" height="\d+">)?<img src="\1" width="(\d+)" height="(\d+)" alt="([^"]+)" loading="lazy" decoding="async"><\/picture><\/a><figcaption>[^<]+<\/figcaption><\/figure>/g)]
+    expect(figs.length).toBe(h.match(/<figure/g)?.length)
+    expect(figs.length).toBe(32)
+    expect(new Set(figs.map((f) => f[1])).size).toBe(32)
+    for (const f of figs) {
+      expect(f[6]!.length, f[1]).toBeGreaterThanOrEqual(10)
+      expect(f[6]!.length, f[1]).toBeLessThanOrEqual(125)
+      expect(Number(f[4])).toBeGreaterThan(300)
+    }
+    // Side-by-side layout is for pictures of one card or dialog only: a wide picture beside its steps would squeeze
+    // the step text into a sliver (it did, once, after a recapture made one picture wider).
+    const narrow = [...h.matchAll(/<figure class="gshot narrow"><a href="[^"]+" aria-label="[^"]+"><picture>(?:<source[^>]+>)?<img src="[^"]+" width="(\d+)"/g)].map((m) => Number(m[1]))
+    expect(narrow.length).toBeGreaterThan(2)
+    for (const w of narrow) expect(w).toBeLessThanOrEqual(480)
+    const wide = [...h.matchAll(/<figure class="gshot"><a href="[^"]+" aria-label="[^"]+"><picture>(?:<source[^>]+>)?<img src="[^"]+" width="(\d+)"/g)].map((m) => Number(m[1]))
+    for (const w of wide) expect(w).toBeGreaterThan(480)
+    expect(h.match(/<div class="gpair side">/g)?.length).toBe(narrow.length)
+    // A desktop screen scaled to 390 px is unreadable: every shot but the phone-only one carries a phone capture.
+    expect(figs.filter((f) => !f[3]).map((f) => f[2])).toEqual(["hp-1-dashboard"])
+    // Served from the allow-list only (the test bundle has no asset files, so the status is 404 or 200, never the SPA).
+    const first = await get(figs[0]![1]!)
+    expect([200, 404]).toContain(first.status)
+    expect(first.headers.get("set-cookie")).toBeNull()
+    await first.body?.cancel()
+    expect((await get("/panduan/tidak-ada.webp")).status).toBe(404)
+    expect((await get("/panduan/../index.html")).status).toBe(404)
+  })
+
+  it("plain-language rules: no real-looking phone number, no English UI terms, no cost or margin vocabulary", async () => {
+    const h = await html("/panduan")
+    const body = h.slice(h.indexOf('<section class="sec tight gwrap">'), h.indexOf('<section class="closing"'))
+    expect(body).not.toMatch(/(?<![\dA-Za-z])(?:\+?62|0)8\d{8,11}(?!\d)/)
+    for (const banned of ["harga modal Rp", "margin", "spread", "webhook", "dashboard admin", "click", "submit", "login", "password baru"]) expect(body.toLowerCase(), banned).not.toContain(banned)
+    expect(body).toContain("Ketuk atau klik gambar untuk memperbesar.")
+    expect(body).toContain("Angka biru kecil di layar aplikasi adalah nama bagian layar, bukan urutan langkah.")
+    // Button labels stay aligned with the live Kasir UI (Pengirim Baru / Penerima Baru, never stale `+ Baru`).
+    expect(body).toContain("<strong>Pengirim Baru</strong>")
+    expect(body).toContain("<strong>Penerima Baru</strong>")
+    expect(body).not.toContain("<strong>+ Baru</strong>")
+    // The table-of-contents highlighter + phone zoom sync are enhancements only; the page carries no other script.
+    expect(h.match(/IntersectionObserver/g)?.length).toBe(2)
+    expect(h).toContain('setAttribute("aria-current","location")')
+    expect(h).toContain("function syncShots()")
+  })
+
+  it("is linked from the phone menu and the footer, and stays out of the five-item desktop nav", async () => {
+    const h = await html("/")
+    expect(h).toContain('<a href="/panduan"><span class="r-t"><span class="r-l">Panduan</span><span class="r-h">Langkah bergambar untuk pemilik &amp; kasir</span></span>')
+    expect(h).toContain('<li><a href="/panduan">Panduan Pakai Aplikasi</a></li>')
+    const nav = /<nav class="dnav" aria-label="Menu utama">(.*?)<\/nav>/.exec(h)![1]!
+    expect(nav).not.toContain("/panduan")
   })
 })

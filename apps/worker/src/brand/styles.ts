@@ -540,6 +540,47 @@ footer.ftr{background:var(--tile);border-top:var(--hairline);padding:56px 0 40px
 @media(max-width:759px){.bento,main:has(>.hero-bleed) .bento{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:86%;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:4px;padding:2px 4px 10px;margin:0 -4px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .bento>.tile,.bento>.s6,.bento>.s4,.bento>.b5,.bento>.s12{grid-column:auto;scroll-snap-align:start}}
 .bento:focus-visible{outline:2px solid var(--action);outline-offset:4px;border-radius:12px}
+/* /panduan — user guide (visual 09 §7). A reading page: sticky table of contents beside one column of guides. */
+.glayout{display:grid;gap:28px;align-items:start}
+@media(min-width:1000px){.glayout{grid-template-columns:232px minmax(0,1fr);gap:56px}}
+.gtoc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 8px;padding:16px 10px;border-radius:24px;background:var(--tile)}
+@media(min-width:1000px){.gtoc{position:sticky;top:calc(var(--hdr-h) + 20px);max-height:calc(100dvh - var(--hdr-h) - 40px);overflow-y:auto;grid-template-columns:1fr;gap:18px;padding:20px 14px}}
+.gtoc-g p{margin:0 0 4px;padding:0 10px;font-size:.8125rem;font-weight:700;color:var(--slate)}
+.gtoc ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.gtoc a{display:flex;align-items:center;min-height:44px;padding:6px 10px;border-radius:12px;color:var(--ink);font-size:.9375rem;line-height:1.3;font-weight:550;text-decoration:none}
+@media(min-width:1000px){.gtoc a{font-size:1rem;line-height:1.62}}
+.gtoc a:hover{background:#fff;color:var(--action)}
+.gtoc a[aria-current]{background:#fff;color:var(--action);font-weight:700;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.gbody{min-width:0;display:grid;gap:64px}@media(min-width:900px){.gbody{gap:88px}}
+.gnote{margin:0;padding:14px 18px;border-radius:16px;background:var(--tint);color:var(--ink);font-size:1rem;max-width:760px}
+.guide{display:grid;gap:28px;scroll-margin-top:calc(var(--hdr-h) + 20px)}
+.ghead{display:grid;gap:10px}
+.gwho{margin:0;font-size:.875rem;font-weight:700;color:var(--action)}
+.guide h2{margin:0;max-width:26ch;font-size:clamp(1.55rem,1.2rem + 1.3vw,2.1rem)}
+.gintro{margin:0;color:var(--body);font-size:1.125rem;max-width:66ch}
+.gneed{margin-top:6px;padding:16px 20px;border-radius:16px;background:var(--tile);max-width:760px}
+.gneed p{margin:0 0 6px;font-weight:700;font-size:1rem}
+.gneed ul,.gtips ul{margin:0;padding-left:1.2em;display:grid;gap:6px;color:var(--body)}
+.gpart{display:grid;gap:14px}
+.gpart h3{margin:0;font-size:1.1875rem}
+.gpair{display:grid;gap:22px;align-items:start}
+@media(min-width:760px){.gpair.side{grid-template-columns:minmax(300px,1fr) minmax(0,auto);gap:32px}}
+.gsteps{max-width:66ch;list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.gsteps li{counter-increment:gstep;display:grid;grid-template-columns:36px minmax(0,1fr);gap:14px;align-items:start;font-size:1.0625rem;color:var(--ink);line-height:1.6}
+.gsteps li::before{content:counter(gstep);width:36px;height:36px;border-radius:999px;background:#C2410C;color:#fff;font-weight:700;font-size:1.0625rem;line-height:36px;text-align:center;font-variant-numeric:tabular-nums}
+.gsteps strong{font-weight:700}
+.gshot{margin:0;display:grid;gap:10px;justify-items:start}
+.gshot a{display:block;border-radius:18px;overflow:hidden;background:var(--tile);padding:10px;line-height:0;max-width:100%}
+.gshot picture{display:block}
+.gshot a:focus-visible{outline:3px solid var(--action);outline-offset:3px}
+.gshot img{display:block;max-width:100%;height:auto;border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.08),0 12px 28px -18px rgba(15,23,42,.35)}
+.gshot.narrow img{max-width:min(100%,360px)}
+@media(max-width:700px){.gshot{justify-items:stretch}.gshot a{padding:6px;border-radius:14px}.gshot img,.gshot.narrow img{width:100%;max-width:100%;max-height:none}}
+.gshot figcaption{font-size:.9375rem;color:var(--body);max-width:60ch}
+.gtips{padding:18px 22px;border-radius:16px;background:var(--tile);max-width:760px}
+.gtips h3{margin:0 0 8px;font-size:1.0625rem}
+.gtop{margin:0;font-size:.9375rem}
+.gtop a{display:inline-flex;align-items:center;min-height:44px}
 /* DEC-250: a crisper mobile rhythm on every page */
 @media(max-width:760px){section.sec{padding:48px 0}section.sec.tight{padding-top:24px;padding-bottom:32px}.bento .tile,main:has(>.hero-bleed) .bento .tile{padding:1.25rem}main:has(>.hero-bleed) .shead{margin-bottom:24px}.bento>.tile,main:has(>.hero-bleed) .bento>.tile{gap:16px}.bento .float{padding:.9rem 1rem}}
 `

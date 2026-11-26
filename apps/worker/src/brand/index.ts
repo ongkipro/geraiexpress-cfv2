@@ -1,7 +1,7 @@
 // Brand site `geraiexpress.com` (TASK-502, DEC-202, visual 03 §2, visual 09, spec 06 §5):
 // Multi-page SEO SSR, zero cookies (session cookies are host-only on app./owner.), legal footer from
 // `platform_legal_profile` rendering filled fields only (DEC-218), and interactive synthetic counter demos.
-import { notFoundHtml } from "../http/pages"
+import { escapeHtml as e, notFoundHtml } from "../http/pages"
 import {
   BIAYA_SCRIPT,
   CARA_SCRIPT,
@@ -14,6 +14,7 @@ import {
   renderFitur,
   renderHome,
   renderHubungi,
+  renderPanduan,
   renderKetentuan,
   renderPrivasi,
   renderSimulasi,
@@ -21,6 +22,7 @@ import {
   SEL_SCRIPT,
   SIM_SCRIPT,
 } from "./pages"
+import { PANDUAN_ASSETS, PANDUAN_SCRIPT } from "./panduan"
 import { BRAND_PAGES, renderShell, type Legal } from "./seo"
 
 const BRAND_ASSETS = new Set([
@@ -35,6 +37,8 @@ const BRAND_ASSETS = new Set([
   PRODUCT_SHOT.src,
   LOKET_3D.src,
   ...["jne", "jt", "sicepat", "sap", "lion", "anteraja", "idexpress", "pos", "spx"].map((c) => `/couriers/${c}.svg`),
+  // `/panduan` screenshots (WebP, produced by scripts/panduan/).
+  ...PANDUAN_ASSETS,
 ])
 
 export async function handleBrand(request: Request, env: Env, host: string): Promise<Response> {
@@ -73,8 +77,9 @@ export async function handleBrand(request: Request, env: Env, host: string): Pro
   }
 
   if (path === "/sitemap.xml") {
+    const safeHost = e(host)
     const urls = Object.keys(BRAND_PAGES)
-      .map((p) => `<url><loc>https://${host}${p === "/" ? "/" : p}</loc></url>`)
+      .map((p) => `<url><loc>https://${safeHost}${p === "/" ? "/" : p}</loc></url>`)
       .join("")
     return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`, {
       headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" },
@@ -101,15 +106,17 @@ export async function handleBrand(request: Request, env: Env, host: string): Pro
               ? renderBiaya(appOrigin)
               : path === "/simulasi-kasir"
                 ? renderSimulasi(appOrigin)
-                : path === "/tanya-jawab"
-                  ? renderTanyaJawab(appOrigin)
+                : path === "/panduan"
+                  ? renderPanduan(appOrigin)
+                  : path === "/tanya-jawab"
+                    ? renderTanyaJawab(appOrigin)
                   : path === "/hubungi-kami"
                     ? renderHubungi(legal, appOrigin)
                     : path === "/ketentuan"
                       ? renderKetentuan(legal, appOrigin)
                       : renderPrivasi(legal, appOrigin)
 
-  const script = path === "/" ? HOME_SCRIPT + BIAYA_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT + SEL_SCRIPT : path === "/cara-kerja" ? CARA_SCRIPT : path === "/biaya-dan-paket" ? BIAYA_SCRIPT : undefined
+  const script = path === "/" ? HOME_SCRIPT + BIAYA_SCRIPT : path === "/simulasi-kasir" ? SIM_SCRIPT + SEL_SCRIPT : path === "/cara-kerja" ? CARA_SCRIPT : path === "/biaya-dan-paket" ? BIAYA_SCRIPT : path === "/panduan" ? PANDUAN_SCRIPT : undefined
   const html = renderShell({
     path,
     meta,

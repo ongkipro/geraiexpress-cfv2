@@ -130,10 +130,10 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
   })
 }
 
-// DEC-247 Borderless White-Gallery: ten pages with zero console/page/CSP errors and zero horizontal overflow on every
+// DEC-247 Borderless White-Gallery: eleven pages with zero console/page/CSP errors and zero horizontal overflow on every
 // viewport project; the product screenshot loads.
-const BRAND_PAGES = ["/", "/fitur", "/ekspedisi", "/cara-kerja", "/biaya-dan-paket", "/simulasi-kasir", "/tanya-jawab", "/hubungi-kami", "/ketentuan", "/privasi"]
-test("Brand DEC-247: sepuluh halaman tanpa error konsol/CSP dan tanpa geser horizontal", async ({ page }) => {
+const BRAND_PAGES = ["/", "/fitur", "/ekspedisi", "/cara-kerja", "/biaya-dan-paket", "/simulasi-kasir", "/panduan", "/tanya-jawab", "/hubungi-kami", "/ketentuan", "/privasi"]
+test("Brand DEC-247: sebelas halaman tanpa error konsol/CSP dan tanpa geser horizontal", async ({ page }) => {
   const apex = APP.replace("app.", "")
   const errors: string[] = []
   page.on("console", (m) => { if (m.type() === "error") errors.push(`${page.url()} console: ${m.text()}`) })
@@ -604,5 +604,39 @@ test("Brand DEC-250: tabel bertumpuk tanpa geser di 390, pill Raka di bawah gamb
   await page.goto(`${apex}/simulasi-kasir`)
   await expect(page.getByRole("link", { name: "Daftar Gerai Sekarang" })).toHaveCount(0)
   await expect(page.locator("main").getByRole("link", { name: "Lihat Semua Fitur" })).toHaveCount(1)
+})
+
+// /panduan (visual 09 §7): TOC navigation, 32 screenshots loaded without broken images, zoom links match the active
+// viewport source (-hp.webp at <= 700px, desktop .webp above), and zero horizontal overflow.
+test("Brand /panduan: daftar isi, gambar termuat, dan tautan perbesar sesuai layar", async ({ page }, info) => {
+  const apex = APP.replace("app.", "")
+  const errors: string[] = []
+  page.on("pageerror", (e) => errors.push(e.message))
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()) })
+  await page.goto(`${apex}/panduan`)
+  await expect(page.locator("section.guide")).toHaveCount(13)
+  await expect(page.locator("figure.gshot")).toHaveCount(32)
+  // Zoom href matches the displayed picture source on phone vs desktop.
+  const firstHref = await page.locator("figure.gshot a").first().getAttribute("href")
+  if (info.project.name === "phone-390") expect(firstHref).toMatch(/-hp\.webp$/)
+  else expect(firstHref).toMatch(/(?<!-hp)\.webp$/)
+  // Clicking a TOC link scrolls that guide into view and highlights it.
+  await page.locator('.gtoc a[href="#kirim"]').click()
+  await expect(page).toHaveURL(/#kirim$/)
+  await expect(page.locator("#kirim-title")).toBeInViewport()
+  await expect(page.locator('.gtoc a[href="#kirim"]')).toHaveAttribute("aria-current", "location")
+  // Scroll through to load lazy screenshots and verify none is broken.
+  await page.evaluate(async () => {
+    for (const img of document.querySelectorAll("figure.gshot img")) {
+      img.scrollIntoView({ behavior: "instant", block: "center" })
+      await new Promise((r) => setTimeout(r, 25))
+    }
+  })
+  await expect.poll(
+    () => page.locator("figure.gshot img").evaluateAll((els) => els.filter((i) => !((i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0)).length),
+    { timeout: 15_000 },
+  ).toBe(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+  expect(errors).toEqual([])
 })
 

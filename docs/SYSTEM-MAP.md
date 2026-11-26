@@ -78,7 +78,7 @@ on the remote environments.
 
 | Host (production · staging · local) | Context | Audience | Served |
 |---|---|---|---|
-| `geraiexpress.com` · `staging.geraiexpress.com` · `geraiexpress.localhost:8787` | `MARKETING_APEX` | public | brand SSR, ten pages: `/`, `/fitur`, `/ekspedisi`, `/cara-kerja`, `/biaya-dan-paket`, `/simulasi-kasir`, `/tanya-jawab`, `/hubungi-kami`, `/ketentuan`, `/privasi`; `sitemap.xml`, `robots.txt`; static files from `ASSETS /app/*` through the `BRAND_ASSETS` allow-list; no cookies, no `/api`. `www.geraiexpress.com` (production only) → 301 to the apex |
+| `geraiexpress.com` · `staging.geraiexpress.com` · `geraiexpress.localhost:8787` | `MARKETING_APEX` | public | brand SSR, eleven pages: `/`, `/fitur`, `/ekspedisi`, `/cara-kerja`, `/biaya-dan-paket`, `/panduan`, `/simulasi-kasir`, `/tanya-jawab`, `/hubungi-kami`, `/ketentuan`, `/privasi`; `sitemap.xml`, `robots.txt`; static files from `ASSETS /app/*` through the `BRAND_ASSETS` allow-list (incl. `/panduan/*.webp`); no cookies, no `/api`. `www.geraiexpress.com` (production only) → 301 to the apex |
 | `app.` · `app-staging.` · `app.geraiexpress.localhost` | `GERAI_WORKSPACE` | gerai owner, Kasir; integrations | SPA + `/api/app/*`; `/api/v1/*` and `POST /mcp` (Bearer `gx_live_` keys only) |
 | `owner.` · `owner-staging.` · `owner.geraiexpress.localhost` | `PLATFORM_OWNER` | Super Admin | SPA + `/api/owner/*` + `/internal/ops/*` |
 | `hooks.` · `hooks-staging.` · `hooks.geraiexpress.localhost` | `WEBHOOK_INGEST` | Mengantar | `POST /webhooks/mengantar/:token`; everything else is a bodiless 404 |
@@ -109,10 +109,11 @@ Vars: `GX_ENV` (`local` · `staging` · `production`), `PLATFORM_APEX`, `TENANT_
 `MENGANTAR_PARTNER_ID`, `MAIL_FROM`, `TURNSTILE_SITE_KEY`, `CF_SAAS_ZONE_ID` (`mock` locally).
 
 Required secrets (names only; values in `.dev.vars` locally, `wrangler secret` remotely): `AUTH_SESSION_PEPPER`,
-`KEK_SECRET`, `PROBE_SECRET`, `TURNSTILE_SECRET_KEY`, `MENGANTAR_PARTNER_SECRET`, `PARTNER_RELAY_URL`,
-`PARTNER_RELAY_SECRET`, `CF_SAAS_API_TOKEN`, `OPS_TOKEN`, `ALERT_WEBHOOK_URL`.
-Optional secret, not in `secrets.required`: `MENGANTAR_PUBLIC_READ_KEY` — the seller key used for area search;
-without it, area search outside mock mode answers `503 AREA_SEARCH_UNAVAILABLE` (`couriers/areas.ts`).
+`KEK_SECRET`, `PROBE_SECRET`, `TURNSTILE_SECRET_KEY`, `MENGANTAR_PARTNER_SECRET`, `MENGANTAR_PUBLIC_READ_KEY`
+(required in `env.staging` / `env.production` `secrets.required`, optional only in local mock mode; without it outside
+mock mode, area search answers `503 AREA_SEARCH_UNAVAILABLE` and `areaSearchKeyConfigured` alerts),
+`PARTNER_RELAY_URL`, `PARTNER_RELAY_SECRET`, `CF_SAAS_API_TOKEN` (production only; staging omits it and sets
+`CF_SAAS_ZONE_ID = "disabled"` per DEC-255), `OPS_TOKEN`, `ALERT_WEBHOOK_URL`.
 
 Mengantar Partner settings resolve in `mengantar/factory.ts`: the singleton D1 row `platform_partner_config` (Super
 Admin `Sistem & Audit › Integrasi Mengantar`; secrets encrypted with `KEK_SECRET`, only a tail is ever returned)

@@ -1,6 +1,6 @@
 # Release Manifest — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Release-ID: REL-2026-11-25-doc-hygiene
+Release-ID: REL-2026-11-26-hygiene-and-panduan
 Base: e43804d
 Environment: production
 Declared-Risk: R4
@@ -17,8 +17,9 @@ Staging and production have been live since 2026-11-18; the current live product
 logged in `docs/runbooks/production-zones.md` §5.1 and `BUILD-LOG.md`).
 
 - `Base` is the last deployed/accepted commit (`e43804d`) and must be an ancestor of `HEAD`.
-- `Declared-Risk` is `R0`–`R4` as defined in `docs/WORKFLOW.md` §2. This release is `R4` (touches CI non-impersonation
-  allowlist, staging Cloudflare for SaaS refusal, demo isolation, and `GeraiVaultDO` dispatch/reconcile paths).
+- `Declared-Risk` is `R0`–`R4` as defined in `docs/WORKFLOW.md` §2. This release is `R4` (combines `TASK-706..713` on
+  `4d0bafc` — CI non-impersonation allowlist, staging Cloudflare for SaaS refusal, demo isolation, `GeraiVaultDO`
+  dispatch/reconcile, Kasir UX — plus the R2 `/panduan` illustrated user guide).
 - **Rollback rule (DEC-254, DEC-255, ADR-0006 §4, `docs/WORKFLOW.md` §8):**
   - **Code-only releases (no `TENANT_SCHEMA_VERSION` bump — including this release):** `Rollback-Command`
     (`pnpm exec wrangler rollback <previous-version-id> --env production`, with owner approval per action) is safe; D1
@@ -31,5 +32,5 @@ logged in `docs/runbooks/production-zones.md` §5.1 and `BUILD-LOG.md`).
   already on v25). It becomes required again on any future release that adds a D1 or tenant migration: a D1 Time Travel
   bookmark plus the per-object R2 export reference (ADR-0006 §7).
 - Set `Status: READY` only after the release commits are finalized on `main`, `pnpm check` and hosted `ci.yml` pass,
-  and `delivery-ledger snapshot-release --release-id REL-2026-11-25-doc-hygiene` records it; owner approval gates
+  and `delivery-ledger snapshot-release --release-id REL-2026-11-26-hygiene-and-panduan` records it; owner approval gates
   every deploy.

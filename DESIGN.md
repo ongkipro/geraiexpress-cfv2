@@ -86,6 +86,8 @@ Colour/opacity transitions ≤ 150 ms; none on scroll; reduced motion removes al
 allow: primary-actions — admin shell: the count includes the header, in-page tabs and segmented controls; never more than one filled primary per screen (visual 07 §1.1)
 allow: nav-label — tab labels are the spec's business terms (`Pickup & Manifest`, `Mutasi Sync Mengantar`); shortening them breaks the menu contract in spec 06
 allow: marker-count — status badges are per table row in operational lists; each is dot + text, neutral chip
+allow: emphasis — `/panduan` steps: bold marks the exact label printed on a button or field, the thing the reader has to find on screen; a step that names two controls has two bold runs
+allow: first-viewport-words — `/panduan` < 1000 px: the table of contents (13 topic links) sits right under the page head in two columns; at ≥ 1000 px it sits sticky beside the guide column, so the reader picks a topic immediately in the first viewport
 allow: icon-overload — settings list on phones: a trailing chevron on every row is the platform cue that the row opens its own page (visual 08 §2.2); no icon tiles
 
 ## Direction — mini-site `<slug>.geraimitra.com` (TASK-501)
@@ -113,7 +115,9 @@ C3: anonymous tracking shows initials + district/city only; the 4-digit gate is 
 
 Picked-by: owner directive 2026-11-17 (DEC-245). Full tokens, page map, SEO contract and wireframes:
 `docs/visual/09-BRAND-MARKETING-DESIGN-SYSTEM-AND-SEO.md`; extends visual 03 §2.
-Surface/job: shop owners deciding "is this worth signing up for and does it fit my counter?" — ten SSR pages.
+Surface/job: shop owners deciding "is this worth signing up for and does it fit my counter?" — ten SSR pages, plus
+`/panduan` (visual 09 §7): the illustrated user guide for gerai owners and Kasir, a reading page inside the same
+tokens. Picked-by for `/panduan`: owner approval 2026-11-26 (built on owner request of 2026-11-25).
 Sections (home): frosted header (logo + `by Mengantar`) → full-bleed 3D studio hero → `#ringkasan` (h1, CTAs,
 synthetic rate preview with courier logos) → partner strip (9 Mengantar couriers) → benefits band → closing band.
 DEC-247 (2026-11-18): borderless white-gallery per visual 09 §6 — one header with the `[Masuk][menu]` mobile
@@ -124,6 +128,11 @@ C1: SSR, no client framework, no cookies on the apex; JS only for the home previ
 three.js is loaded on `/` only, deferred, paused off-screen, reduced-motion aware, with a pause control.
 C2: real courier logos only; no invented customers, metrics, testimonials or counts (nine couriers, never `10+`).
 C3: titles 55–70 with ` - GeraiExpress`, descriptions 120–155, single h1, breadcrumbs on sub-pages.
+C4 (`/panduan`): ≥ 1000 px a 232 px sticky table of contents beside one reading column; below it the contents sit
+on top in two columns. A guide = audience line, `h2`, one-sentence purpose, `Siapkan dulu`, then parts of numbered
+steps followed by one screenshot, then `Kalau ada kendala`.
+C5 (`/panduan`): step numbers run through a guide and equal the orange (`#C2410C`) markers drawn in its
+screenshots; screens ≤ 700 px get the same step captured in a 390 px window, never a scaled desktop screen.
 
 ## Workspace additions (DEC-247B, released after the brand site)
 

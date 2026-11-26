@@ -75,7 +75,7 @@ Palet diturunkan langsung dari vektor logo resmi **GeraiExpress (`GE`)** dan dij
 
 Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis tersendiri** (bukan satu halaman panjang yang mencampur semua topik), sehingga Google mengindeks masing-masing halaman untuk kata kunci berintensi spesifik.
 
-### 3.1 Peta Situs (`10` Rute Publik Kanonis pada `geraiexpress.com`)
+### 3.1 Peta Situs (`11` Rute Publik Kanonis pada `geraiexpress.com`)
 
 | URL Slug | Peran di Navigasi | Target Intensi Pencarian (SEO) | Judul `<title>` (55–70 karakter) |
 | --- | --- | --- | --- |
@@ -85,6 +85,7 @@ Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis terse
 | `/cara-kerja` | Menu Utama | Cara daftar agen paket modal kecil, syarat alat loket | `Cara Daftar & Peralatan Buka Loket Kirim Paket - GeraiExpress` (61) |
 | `/biaya-dan-paket` | Menu Utama | Biaya buka agen ekspedisi, komisi ongkir, website nama toko | `Biaya Pendaftaran & Skema Komisi Mitra Loket - GeraiExpress` (59) |
 | `/simulasi-kasir` | Menu Utama (Aksen) | Coba aplikasi kasir pengiriman tanpa login, contoh struk | `Simulasi Meja Kasir & Struk Agen Kirim Paket - GeraiExpress` (59) |
+| `/panduan` | Menu Ponsel & Footer | Cara pakai aplikasi kasir agen paket, cara cetak resi, cara kirim COD (§7) | `Panduan Pakai Aplikasi Kasir Gerai Kirim Paket - GeraiExpress` (61) |
 | `/tanya-jawab` | Tautan Konteks & Footer | FAQ syarat ruko/rumah, pencairan COD, dropship, klaim | `Tanya Jawab Syarat & Operasional Agen Paket - GeraiExpress` (58) |
 | `/hubungi-kami` | Menu Bawah & CTA Konteks | Kontak resmi pendaftaran mitra & bantuan teknis | `Hubungi Tim Kemitraan & Bantuan Agen Paket - GeraiExpress` (57) |
 | `/ketentuan` | Tautan Bawah (Legal) | Ketentuan layanan perangkat lunak gerai mitra | `Ketentuan Layanan Perangkat Lunak Gerai Mitra - GeraiExpress` (60) |
@@ -187,13 +188,13 @@ Setiap topik pencarian calon pemilik gerai dipetakan ke **satu URL kanonis terse
 ## 5. Daftar Periksa Kepatuhan Kualitas (`Gate Checklist`)
 
 - [x] **Zero Cookies di Apex:** `geraiexpress.com` tidak pernah membaca atau menulis `Set-Cookie` walaupun browser mengirim cookie sesi `app.`.
-- [x] **10/10 Halaman Lulus `check-page.mjs`:** `0 fail, 0 warn` — panjang `<title>` `55–70` karakter, `meta description` `120–155` karakter berakhiran titik, `canonical` absolut `https://`, `og:image` + `og:image:alt`, `Organization` + `BreadcrumbList` valid dengan `<nav aria-label="Breadcrumb">` terlihat.
+- [x] **11/11 Halaman Lulus `check-page.mjs`:** `0 fail, 0 warn` — panjang `<title>` `55–70` karakter, `meta description` `120–155` karakter berakhiran titik, `canonical` absolut `https://`, `og:image` + `og:image:alt`, `Organization` + `BreadcrumbList` valid dengan `<nav aria-label="Breadcrumb">` terlihat.
 - [x] **Zero Overflow & Kenyamanan Baca (`dotuiux`):** `horizontalOverflowPx === 0` pada `1440×900` dan `390×844`, target sentuh `>= 44px`, kontras teks lulus WCAG AA, nol ikon dekoratif `Sparkles`.
 - [x] **Kompatibilitas Penuh Tes Otomatis:** `apps/worker/test/brand/brand.test.ts` dan `e2e/brand.spec.ts` hijau 100%.
 
 ---
 
-## 6. DEC-247 — *Borderless White-Gallery* (berlaku untuk 10 halaman `geraiexpress.com` dan mini-site)
+## 6. DEC-247 — *Borderless White-Gallery* (berlaku untuk 11 halaman `geraiexpress.com` dan mini-site)
 
 Diadaptasi dari sistem `adsbook.id` (referensi baca-saja) ke identitas loket GeraiExpress.
 
@@ -216,7 +217,7 @@ Diadaptasi dari sistem `adsbook.id` (referensi baca-saja) ke identitas loket Ger
 - **Logo (DEC-249):** `logo.svg` digambar ulang geometris (Bézier `M/L/H/C/Q/Z`, 792 B, tanpa undakan hasil tracing; warna `#00A6FE`, `#012676`, `#0060FE`), favicon app (tile putih) dan owner (tile navy) memakai path yang sama; bukti `docs/evidence/DEC-249/logo-before-after-zoom.png`.
 - **Panggung penutup (semua halaman):** tenang — judul, satu kalimat, dua tombol (`Daftar Gerai` + tautan kedua). DEC-248 (owner 2026-11-19) menghapus tiga pil langkah bernomor dari DEC-247A.
 - **`/biaya-dan-paket`:** kolom kiri `5fr` radio asli (`Mitra Gerai Standar — Rp 0`, `Mitra Gerai + Domain Sendiri (Pro)`) dengan `:has()` + cadangan JS `data-active` + `@media (forced-colors: active)`; kanan `7fr` panel `#F4F6FA` berisi rincian pilihan, CTA dan daftar fitur sesuai keputusan (tanpa angka diskon karangan). Matriks perbandingan terbuka bergaris rambut: *Manual ekspedisi satu-satu* · *Sistem keagenan kunci perangkat* · **GeraiExpress** (kolom ber-*wash* `#F4F6FA`, tanpa nama merek pesaing).
-- **Kepala halaman dalam (DEC-247B, paritas `PageHead` `adsbook.id`, owner 2026-11-18):** sembilan halaman dalam dibuka satu kepala berpusat: grid titik arsitektural `radial-gradient(rgb(15 23 42 / .09) 1px, transparent 1.4px)` `22px` ber-*mask* elips, pil *eyebrow* mono huruf kapital dengan kotak biru (`Fitur loket`, `Jaringan kurir`, `Alur kemitraan`, `Skema kemitraan`, `Simulasi meja kasir`, `Pusat jawaban`, `Hubungi kami`, `Ketentuan layanan`, `Kebijakan privasi`), `h1` maks `22ch`, *lead* maks `58ch`. Pil *eyebrow* hanya di kepala halaman, tidak di atas seksi. Breadcrumb kecil tetap tampil (berpusat) karena `BreadcrumbList` JSON-LD §3 harus sama dengan breadcrumb yang terlihat.
+- **Kepala halaman dalam (DEC-247B, paritas `PageHead` `adsbook.id`, owner 2026-11-18):** sepuluh halaman dalam dibuka satu kepala berpusat: grid titik arsitektural `radial-gradient(rgb(15 23 42 / .09) 1px, transparent 1.4px)` `22px` ber-*mask* elips, pil *eyebrow* mono huruf kapital dengan kotak biru (`Fitur loket`, `Jaringan kurir`, `Alur kemitraan`, `Skema kemitraan`, `Simulasi meja kasir`, `Panduan pengguna`, `Pusat jawaban`, `Hubungi kami`, `Ketentuan layanan`, `Kebijakan privasi`), `h1` maks `22ch`, *lead* maks `58ch`. Pil *eyebrow* hanya di kepala halaman, tidak di atas seksi. Breadcrumb kecil tetap tampil (berpusat) karena `BreadcrumbList` JSON-LD §3 harus sama dengan breadcrumb yang terlihat.
 - **`/fitur`:** enam baris bolak-balik `5fr / 7fr` (indeks mono `01`–`06` + label, `h2`, tiga poin berbutir kotak `7px`), seberangnya layar Kasir nyata (pilar 01), kartu UI sintetis di panggung `#F4F6FA` (QR `INV`, Surat Jalan, Meja Retur) atau alas spesifikasi 2×2 berangka besar (`200 baris`, `100×150 mm`, `58 mm`, `9 kurir`; `1:1`, `2 buku`, `0`, `2 peran`), lalu daftar terbuka 3 kolom bergaris rambut *Dan yang Anda perlukan setiap hari* (enam kemampuan, tanpa kartu).
 - **`/cara-kerja`:** strip lompat porselen 5 pil (`#langkah-1..5`), lima baris langkah bolak-balik dengan dua baris peran (pelaku · *Sistem GeraiExpress & Mengantar*) dan kartu contoh di seberang, lalu pipeline 5 titik *Alur satu paket dari meja loket sampai saldo cair* dengan denyut kotak biru yang hanya berjalan saat terlihat (`IntersectionObserver`) dan diam dalam keadaan selesai di `prefers-reduced-motion: reduce`; tabel peralatan bergaris rambut tetap.
 - **`/tanya-jawab`:** indeks pil di kepala halaman ke empat grup (`#pendaftaran-lokasi`, `#perangkat-cetak`, `#saldo-cod-keuangan`, `#operasional-retur`); tiap grup `4fr / 8fr` (judul lengket di kiri pada desktop, akordion `<details>` garis rambut di kanan, bukan kartu).
@@ -248,8 +249,68 @@ Jam Buka* di samping tautan peta dan sebagai baris sekunder di bawah menu ponsel
 
 ### 6.4 Gate tambahan (DEC-247)
 
-`check-page.mjs` 0 fail 0 warn di 10 halaman; `dotuiux` 0 fail; screenshot `1440×900` dan `390×844` (beranda atas
+`check-page.mjs` 0 fail 0 warn di 11 halaman; `dotuiux` 0 fail; screenshot `1440×900` dan `390×844` (beranda atas
 sampai footer, menu ponsel terbuka, `/biaya-dan-paket`, mini-site `/` dan `/kirim`) tanpa *overflow* dan tanpa
 galat konsol/CSP; mutasi merah tercatat di `docs/evidence/DEC-247/` (rilis A) dan `docs/evidence/DEC-247B/` (rilis B:
 halaman dalam, simulasi, mini-site, logo kurir dan validasi di aplikasi).
 
+## 7. `/panduan` — panduan pengguna bergambar
+
+Halaman ke-11 di `geraiexpress.com`, dibuat atas permintaan pemilik (2026-11-25). Pembaca: pemilik gerai dan kasir
+awam usia 35–55+ yang sedang memegang aplikasi dan ingin tahu "tombol mana yang ditekan". Halaman baca, bukan halaman
+jual: token §6.1, tanpa bento, tanpa artefak melayang.
+
+### 7.1 Isi dan urutan
+
+Tiga belas panduan dalam empat kelompok, mengikuti urutan yang dialami gerai baru:
+
+| Kelompok | Panduan (`id`) |
+| --- | --- |
+| Mulai | `daftar` · `persiapan` · `mengenal` |
+| Melayani pelanggan | `cek-ongkir` · `kirim` · `cetak` · `cod` · `pengirim-baru` · `massal` |
+| Setelah paket dibuat | `pickup` · `lacak` · `retur` |
+| Untuk pelanggan Anda | `situs-gerai` |
+
+Setiap panduan: baris pelaku (`Dikerjakan pemilik gerai` / `kasir`), `h2`, satu kalimat kapan dipakai, kotak
+`Siapkan dulu` (bila perlu), lalu bagian-bagian berisi **langkah bernomor diikuti satu gambar**, ditutup kotak
+`Kalau ada kendala` berisi kesalahan yang benar-benar sering terjadi. Tidak ada istilah teknis (webhook, API, sinkron
+skema); nama tombol ditulis persis seperti di layar dan dicetak tebal.
+
+### 7.2 Gambar
+
+- Diambil dari aplikasi asli dengan data sintetis oleh `scripts/panduan/` (`seed.mjs` → `capture.mjs` →
+  `optimize.mjs`); tidak ada gambar tiruan. Menjalankan ulang tiga skrip itu memperbarui semua gambar setelah UI
+  berubah.
+- **Nomor di gambar = nomor langkah.** Penanda bulat jingga `#C2410C` (kontras 5,17:1 terhadap putih) digambar ke
+  halaman sebelum dipotret; nomor langkah berjalan terus dalam satu panduan supaya keduanya selalu sama.
+- Dipotret sebagai **Kasir** bila memungkinkan; layar khusus pemilik (`Pengaturan`) dipotret tanpa angka modal, laba,
+  atau saldo (§6.2).
+- Nomor HP disamarkan menjadi `08xx-xxxx-NNNN` dan host lokal ditulis sebagai `namagerai.geraimitra.com` sesaat
+  sebelum dipotret (AGENTS "Example data policy").
+- **Ponsel:** layar ≤ 700 px menerima langkah yang sama dipotret di jendela 390 px (`<nama>-hp.webp`, 2×) lewat
+  `<picture>`; layar desktop yang dikecilkan ke ponsel tidak terbaca. Layar ponsel yang lebih panjang dari 1.300 px
+  CSS dibingkai pada pita yang memuat semua penanda langkahnya (bukan dipotong buta dari atas), dan `capture.mjs`
+  gagal bila ada penanda yang jatuh di luar gambar.
+- Penanda tidak pernah menutupi label atau tombol yang ditunjuknya: bawaannya di atas ujung kanan kolom isian; satu
+  penanda boleh melingkari beberapa kontrol sekaligus (mis. empat pilihan cara bayar).
+- WebP, `width`/`height` asli dari `apps/worker/src/brand/panduan-shots.json`, `loading="lazy"`, `alt` 10–125
+  karakter, keterangan terlihat, dan tautan ke gambar utuh untuk diperbesar. Disajikan hanya lewat daftar izin
+  `BRAND_ASSETS`.
+
+### 7.3 Tata letak dan navigasi
+
+- ≥ 1000 px: daftar isi lengket 232 px di kiri (kelompok + tautan, target 44 px, topik yang sedang dibaca ditandai)
+  dan satu kolom baca; langkah maksimal 66 karakter per baris, gambar di bawah langkahnya. Gambar sempit (satu
+  kartu, satu dialog) duduk di samping langkah mulai 760 px.
+- < 1000 px: daftar isi di atas dalam dua kolom; setiap panduan ditutup tautan `Kembali ke daftar isi`.
+- Masuk dari menu ponsel (`Panduan`) dan footer (`Panduan Pakai Aplikasi`); **tidak** masuk menu desktop yang tetap
+  lima butir.
+- Tanpa JavaScript halaman tetap utuh (tautan perbesar gambar jatuh balik ke berkas `.webp` resolusi penuh); saat
+  JavaScript aktif, skrip menandai topik aktif di daftar isi (`aria-current="location"`) dan menyelaraskan tautan
+  perbesar pada layar `≤ 700 px` ke varian `-hp.webp`.
+
+### 7.4 Gate
+
+`apps/worker/test/brand/brand.test.ts` blok `brand /panduan user guide`: 13 panduan dan daftar isinya, penomoran
+langkah bersambung, 32 gambar dengan atribut lengkap dan sumber ponsel, aturan bahasa awam, serta tautan masuk.
+`dotuiux check` 0 fail; render 1440 dan 390 tanpa geser horizontal, tanpa galat konsol, tanpa gambar rusak.

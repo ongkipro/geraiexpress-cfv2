@@ -2,6 +2,7 @@
 // Every claim reflects real v2 product mechanics (DEC-245 guards: nine couriers, no invented counters, testimonials or
 // discount percentages); every UI artifact on the page is synthetic example data; the demos make no network call.
 import { escapeHtml as e } from "../http/pages"
+import { renderPanduanBody } from "./panduan"
 import type { Legal } from "./seo"
 
 /** The nine active Mengantar partner couriers (Ninja discontinued 2026-09-01). Width is the SVG width at 20 px tall. */
@@ -920,6 +921,13 @@ const faqList = (items: Array<[string, string]>, openFirst = true) =>
 /** The five homepage questions, picked from the `/tanya-jawab` groups (same wording on both pages). */
 const faqAt = (g: number, q: number) => FAQ_GROUPS[g]![2][q]!
 const HOME_FAQ: Array<[string, string]> = [faqAt(0, 0), faqAt(1, 0), faqAt(2, 0), faqAt(2, 2), faqAt(3, 0)]
+
+/** `/panduan`: illustrated step-by-step guide. Content and markup live in `./panduan`. */
+export function renderPanduan(app: string): string {
+  return `${pageHead("Panduan pengguna", "Panduan pakai aplikasi kasir gerai kirim paket", "Langkah demi langkah dengan gambar, dari mendaftar sampai menyerahkan paket ke kurir. Pilih topik yang Anda perlukan; tidak harus dibaca berurutan.")}
+${renderPanduanBody()}
+${closing(app, "/tanya-jawab", "Baca Tanya Jawab")}`
+}
 
 export function renderTanyaJawab(app: string): string {
   const index = `<nav class="faq-index" aria-label="Kelompok pertanyaan">${FAQ_GROUPS.map(([id, title]) => `<a href="#${id}">${title}</a>`).join("")}</nav>`

@@ -1,0 +1,254 @@
+{
+  "cetak-1-laci": {
+    "w": 514,
+    "h": 900
+  },
+  "cod-1-harga-barang": {
+    "w": 740,
+    "h": 559
+  },
+  "cod-2-ringkasan": {
+    "w": 436,
+    "h": 569
+  },
+  "daftar-2-kode": {
+    "w": 777,
+    "h": 900
+  },
+  "daftar-3-akun": {
+    "w": 777,
+    "h": 900
+  },
+  "daftar-4-gerai": {
+    "w": 777,
+    "h": 900
+  },
+  "daftar-5-titik-jemput": {
+    "w": 777,
+    "h": 900
+  },
+  "daftar-6-status": {
+    "w": 777,
+    "h": 900
+  },
+  "hp-1-dashboard": {
+    "w": 390,
+    "h": 844
+  },
+  "kirim-1-pengirim-penerima": {
+    "w": 740,
+    "h": 414
+  },
+  "kirim-2-detail-paket": {
+    "w": 740,
+    "h": 400
+  },
+  "kirim-3-pilih-ekspedisi": {
+    "w": 740,
+    "h": 900
+  },
+  "kirim-4-bayar": {
+    "w": 437,
+    "h": 746
+  },
+  "kirim-5-resi-terbit": {
+    "w": 700,
+    "h": 355
+  },
+  "kontak-1-pengirim-baru": {
+    "w": 576,
+    "h": 717
+  },
+  "lacak-1-detail-inv": {
+    "w": 705,
+    "h": 528
+  },
+  "lacak-2-daftar-kiriman": {
+    "w": 964,
+    "h": 721
+  },
+  "massal-1-unggah": {
+    "w": 832,
+    "h": 1523
+  },
+  "minisite-1-cek-ongkir": {
+    "w": 1000,
+    "h": 1500
+  },
+  "minisite-2-kirim-dari-rumah": {
+    "w": 1000,
+    "h": 1126
+  },
+  "minisite-3-kode-qr": {
+    "w": 1000,
+    "h": 817
+  },
+  "mulai-dashboard": {
+    "w": 1100,
+    "h": 700
+  },
+  "ongkir-1-kecamatan": {
+    "w": 824,
+    "h": 794
+  },
+  "ongkir-2-hasil": {
+    "w": 824,
+    "h": 1481
+  },
+  "pickup-1-antrean": {
+    "w": 824,
+    "h": 226
+  },
+  "pickup-2-pindai-serah": {
+    "w": 824,
+    "h": 1108
+  },
+  "pickup-3-surat-jalan": {
+    "w": 834,
+    "h": 369
+  },
+  "retur-1-terima": {
+    "w": 824,
+    "h": 720
+  },
+  "retur-2-kode-ambil": {
+    "w": 824,
+    "h": 911
+  },
+  "siap-1-mengantar": {
+    "w": 834,
+    "h": 1085
+  },
+  "siap-2-anggota": {
+    "w": 824,
+    "h": 710
+  },
+  "siap-3-printer": {
+    "w": 824,
+    "h": 1973
+  },
+  "cetak-1-laci-hp": {
+    "w": 720,
+    "h": 2600
+  },
+  "cod-1-harga-barang-hp": {
+    "w": 772,
+    "h": 1568
+  },
+  "cod-2-ringkasan-hp": {
+    "w": 780,
+    "h": 1144
+  },
+  "daftar-2-kode-hp": {
+    "w": 764,
+    "h": 894
+  },
+  "daftar-3-akun-hp": {
+    "w": 764,
+    "h": 1014
+  },
+  "daftar-4-gerai-hp": {
+    "w": 764,
+    "h": 1322
+  },
+  "daftar-5-titik-jemput-hp": {
+    "w": 764,
+    "h": 1698
+  },
+  "daftar-6-status-hp": {
+    "w": 780,
+    "h": 1688
+  },
+  "kirim-1-pengirim-penerima-hp": {
+    "w": 772,
+    "h": 1668
+  },
+  "kirim-2-detail-paket-hp": {
+    "w": 772,
+    "h": 1008
+  },
+  "kirim-3-pilih-ekspedisi-hp": {
+    "w": 772,
+    "h": 2600
+  },
+  "kirim-4-bayar-hp": {
+    "w": 780,
+    "h": 1568
+  },
+  "kirim-5-resi-terbit-hp": {
+    "w": 772,
+    "h": 782
+  },
+  "kontak-1-pengirim-baru-hp": {
+    "w": 716,
+    "h": 1518
+  },
+  "lacak-1-detail-inv-hp": {
+    "w": 772,
+    "h": 1550
+  },
+  "lacak-2-daftar-kiriman-hp": {
+    "w": 772,
+    "h": 2600
+  },
+  "massal-1-unggah-hp": {
+    "w": 776,
+    "h": 3310
+  },
+  "minisite-1-cek-ongkir-hp": {
+    "w": 780,
+    "h": 2600
+  },
+  "minisite-2-kirim-dari-rumah-hp": {
+    "w": 780,
+    "h": 2600
+  },
+  "minisite-3-kode-qr-hp": {
+    "w": 780,
+    "h": 1964
+  },
+  "mulai-dashboard-hp": {
+    "w": 780,
+    "h": 1688
+  },
+  "ongkir-1-kecamatan-hp": {
+    "w": 772,
+    "h": 2304
+  },
+  "ongkir-2-hasil-hp": {
+    "w": 772,
+    "h": 2600
+  },
+  "pickup-1-antrean-hp": {
+    "w": 772,
+    "h": 814
+  },
+  "pickup-2-pindai-serah-hp": {
+    "w": 776,
+    "h": 3158
+  },
+  "pickup-3-surat-jalan-hp": {
+    "w": 772,
+    "h": 1020
+  },
+  "retur-1-terima-hp": {
+    "w": 772,
+    "h": 1726
+  },
+  "retur-2-kode-ambil-hp": {
+    "w": 772,
+    "h": 2514
+  },
+  "siap-1-mengantar-hp": {
+    "w": 772,
+    "h": 2600
+  },
+  "siap-2-anggota-hp": {
+    "w": 772,
+    "h": 1554
+  },
+  "siap-3-printer-hp": {
+    "w": 772,
+    "h": 3502
+  }
+}
