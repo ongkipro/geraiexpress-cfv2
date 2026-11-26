@@ -23,13 +23,15 @@ const CSP: Record<SpaName, string> = {
 
 // Static files the SPA build emits; everything else is a client-side route and gets the shell.
 const STATIC_FILE = /^\/(?:assets\/[A-Za-z0-9._-]+|[A-Za-z0-9._-]+\.(?:ico|png|svg|webp|txt|webmanifest|json))$/
+const WIDE_COOKIE = /(?:^|;\s*)gx_wide=1(?:;|$)/
 
-function withHeaders(res: Response, cache: string, spa: SpaName): Response {
+function withHeaders(res: Response, cache: string, spa: SpaName, varyCookie = false): Response {
   const out = new Response(res.body, res)
   for (const [k, v] of Object.entries(BASE_HEADERS)) out.headers.set(k, v)
   out.headers.set("permissions-policy", PERMISSIONS_POLICY[spa])
   out.headers.set("content-security-policy", CSP[spa])
   out.headers.set("cache-control", cache)
+  if (varyCookie) out.headers.append("vary", "Cookie")
   return out
 }
 
@@ -57,7 +59,16 @@ export async function serveSpa(request: Request, assets: Fetcher, spa: SpaName):
   if (path.startsWith("/assets/")) return notFound()
 
   // Client-side route (incl. `/` and `/index.html`): always the shell, never cached long.
-  const shell = await assets.fetch(new Request(new URL(`/${spa}/index.html`, url.origin), { method: request.method }))
+  // SSR wide-mode: stamp `data-shell-wide="1"` on `<html>` when the host-only `gx_wide=1` cookie is set so first paint
+  // has zero layout shift from 1440 px to full width. Both GET and HEAD use the rewritten response so ETag/length match.
+  const isWide = WIDE_COOKIE.test(request.headers.get("cookie") ?? "")
+  const shell = await assets.fetch(new Request(new URL(`/${spa}/index.html`, url.origin), { method: isWide ? "GET" : request.method }))
   if (shell.status !== 200) return new Response("Aplikasi belum dibangun", { status: 503, headers: { "cache-control": "no-store" } })
-  return withHeaders(shell, "no-cache", spa)
+  if (isWide) {
+    const raw = await shell.text()
+    const html = raw.includes("data-shell-wide=") ? raw : raw.replace(/<html(?=[\s>])/i, '$& data-shell-wide="1"')
+    const headers = new Headers({ "content-type": shell.headers.get("content-type") ?? "text/html; charset=utf-8" })
+    return withHeaders(new Response(request.method === "HEAD" ? null : html, { status: 200, headers }), "no-cache", spa, true)
+  }
+  return withHeaders(shell, "no-cache", spa, true)
 }

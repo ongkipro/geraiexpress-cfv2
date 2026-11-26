@@ -1,7 +1,7 @@
 import { forwardRef, Fragment, useEffect, useMemo, useState, type ComponentProps, type ForwardedRef, type ReactNode } from "react"
 import { Link, useLinkProps, useNavigate } from "@tanstack/react-router"
-import { ArrowUpRightIcon, ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, GlobeIcon, HelpCircleIcon, LogOutIcon, SearchIcon, UserIcon } from "lucide-react"
-import { applyTextSize, storedTextSize, TEXT_SIZE_EVENT, TEXT_SIZES, type TextSize } from "../../shell/workspace"
+import { ArrowUpRightIcon, ChevronDownIcon, ChevronRightIcon, CornerDownLeftIcon, GlobeIcon, HelpCircleIcon, LogOutIcon, Maximize2Icon, Minimize2Icon, SearchIcon, UserIcon } from "lucide-react"
+import { applyShellWide, applyTextSize, SHELL_WIDE_EVENT, storedShellWide, storedTextSize, syncShellWideDom, TEXT_SIZE_EVENT, TEXT_SIZES, type TextSize } from "../../shell/workspace"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "../ui/breadcrumb"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog"
 import {
@@ -128,6 +128,20 @@ export function AdminShell({
   bottomBar?: ReactNode
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
+  const [wide, setWide] = useState<boolean>(storedShellWide)
+  const updateWide = (next: boolean) => {
+    setWide(next)
+    applyShellWide(next)
+  }
+  useEffect(() => syncShellWideDom(wide), [wide])
+  useEffect(() => {
+    const onSync = (e: Event) => {
+      const next = Boolean((e as CustomEvent<boolean>).detail)
+      setWide(next)
+    }
+    window.addEventListener(SHELL_WIDE_EVENT, onSync)
+    return () => window.removeEventListener(SHELL_WIDE_EVENT, onSync)
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
@@ -140,36 +154,14 @@ export function AdminShell({
   }, [])
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <Sidebar collapsible="icon" className="border-r border-slate-200/80">
-          <SidebarHeader className="gap-2 px-3 pt-3 pb-1">
-            {brand}
-            {quickActions ? <div className="group-data-[collapsible=icon]:hidden">{quickActions}</div> : null}
-          </SidebarHeader>
-          <SidebarContent className="px-1">
-            <nav aria-label={navLabel}>
-              {groups.map((g) => (
-                <SidebarGroup key={g.label} className="py-1.5">
-                  <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
-                  <SidebarMenu className="gap-0.5">
-                    {g.items.map((n) => (
-                      <NavItem key={n.key} item={n} />
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroup>
-              ))}
-            </nav>
-          </SidebarContent>
-          {sidebarStatus ? <SidebarFooter className="p-3 group-data-[collapsible=icon]:hidden">{sidebarStatus}</SidebarFooter> : null}
-        </Sidebar>
-        <SidebarInset data-admin-shell className="min-w-0 bg-background">
-          {/* DEC-243 3-zone topbar. ≥ 1024 px it is a 3-column grid (1fr | 260–380 px | 1fr): the breadcrumb lives in
-              its own flexible track, so a longer trail never moves the search bar — it sits at the same x on every page.
-              The right track holds only what fits beside it: an avatar-only account chip below xl and the labelled
-              pills (mini-site, TOTP) from 2xl, so utilities never run into the search (Sol R1 DEC-243 #1). With enlarged
-              text below xl the search track narrows to 220–320 px (still fixed per page) so the owner's status icon,
-              bell and avatar fit at 125 % (DEC-244). */}
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur md:px-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)] lg:gap-4 lg:in-data-text:grid-cols-[minmax(0,1fr)_minmax(200px,300px)_minmax(0,1fr)] xl:in-data-text:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)]">
+      <SidebarProvider className="flex-col bg-background">
+        {/* DEC-257 full-bleed topbar: spans 100% viewport width with a centered inner rail (`max-w-(--shell-max-w)`:
+            1440 px default, full width in SSR wide mode) aligned directly over the in-flow sidebar + main shell. */}
+        <header className="sticky top-0 z-30 h-16 w-full shrink-0 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+          <div
+            data-shell-topbar-inner
+            className="mx-auto flex h-full w-full max-w-(--shell-max-w) items-center gap-2 px-2 md:px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)] lg:gap-4 lg:in-data-text:grid-cols-[minmax(0,1fr)_minmax(200px,300px)_minmax(0,1fr)] xl:px-4 xl:in-data-text:grid-cols-[minmax(0,1fr)_minmax(240px,360px)_minmax(0,1fr)]"
+          >
             <div className="flex min-w-0 items-center gap-2">
               <SidebarTrigger className="size-11 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 md:size-9" />
               <span aria-hidden className="hidden h-4 w-px shrink-0 bg-slate-200 md:block" />
@@ -195,13 +187,55 @@ export function AdminShell({
                 <SearchIcon aria-hidden className="size-[18px]" />
               </button>
               {toolbar}
+              {/* Visible only above 1440 px where centered vs wide mode actually changes width; also in AccountMenu. */}
+              <button
+                type="button"
+                data-shell-wide-toggle
+                aria-pressed={wide}
+                aria-label="Mode lebar penuh"
+                title={wide ? "Kembali ke lebar standar (1440px)" : "Aktifkan mode lebar penuh"}
+                onClick={() => updateWide(!wide)}
+                className={cn(
+                  "hidden size-9 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none min-[1441px]:inline-flex",
+                  wide ? "bg-accent text-primary" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                )}
+              >
+                {wide ? <Minimize2Icon aria-hidden className="size-4" /> : <Maximize2Icon aria-hidden className="size-4" />}
+              </button>
               <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-slate-200/80 sm:block" />
-              <AccountMenu {...user} />
+              <AccountMenu {...user} wide={wide} onWideChange={updateWide} />
             </div>
-          </header>
-          <main className={cn("mx-auto w-full max-w-[1480px] min-w-0 flex-1 px-4 pt-5 pb-8 md:px-6 md:pt-6 xl:px-8", bottomBar && "pb-24 md:pb-8")}>{children}</main>
-          {bottomBar}
-        </SidebarInset>
+          </div>
+        </header>
+
+        {/* Centered App Shell (`max-w-[1440px]` default, full-width in SSR wide mode) on a uniform `#F6F7F9` canvas. */}
+        <div data-admin-shell data-shell-frame className="mx-auto flex w-full max-w-(--shell-max-w) flex-1 bg-background">
+          <Sidebar collapsible="icon" className="border-r border-slate-200/70">
+            <SidebarHeader className="gap-1.5 px-3 pt-2.5 pb-0.5">
+              {brand}
+              {quickActions ? <div className="group-data-[collapsible=icon]:hidden">{quickActions}</div> : null}
+            </SidebarHeader>
+            <SidebarContent className="px-1">
+              <nav aria-label={navLabel}>
+                {groups.map((g) => (
+                  <SidebarGroup key={g.label} className="py-1">
+                    <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
+                    <SidebarMenu className="gap-0.5">
+                      {g.items.map((n) => (
+                        <NavItem key={n.key} item={n} />
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroup>
+                ))}
+              </nav>
+            </SidebarContent>
+            {sidebarStatus ? <SidebarFooter className="px-3 py-2 group-data-[collapsible=icon]:hidden">{sidebarStatus}</SidebarFooter> : null}
+          </Sidebar>
+          <SidebarInset className="min-w-0 bg-background">
+            <main className={cn("w-full min-w-0 flex-1 px-4 pt-5 pb-8 md:px-6 md:pt-6 xl:px-8", bottomBar && "pb-24 md:pb-8")}>{children}</main>
+            {bottomBar}
+          </SidebarInset>
+        </div>
       </SidebarProvider>
       <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} commands={commands} placeholder={searchPlaceholder} />
       <Toaster position="bottom-center" />
@@ -226,7 +260,7 @@ function NavItem({ item: n }: { item: ShellNavItem }) {
     <SidebarMenuButton
       isActive={n.active}
       tooltip={n.label}
-      className="relative data-active:bg-accent data-active:text-primary"
+      className="relative hover:bg-slate-200/60 data-active:bg-white data-active:text-primary data-active:shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
       render={<NavLink target={n.to} aria-current={self ? "page" : undefined} onClick={close} />}
     >
       {n.active ? <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-1 rounded-r-full bg-primary group-data-[collapsible=icon]:hidden" /> : null}
@@ -436,8 +470,8 @@ const initials = (name: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join("") || "?"
 
-/** Top-right account chip (AdsBookCMS / TokoPhi): avatar + name/role; menu with profile, text size, help and Keluar. */
-export function AccountMenu({ name, email, role, status, onLogout, profileTo, helpTo, externalLinks, labelFrom = "xl" }: NavUserProps) {
+/** Top-right account chip (AdsBookCMS / TokoPhi): avatar + name/role; menu with profile, text size, wide mode, help and Keluar. */
+export function AccountMenu({ name, email, role, status, onLogout, profileTo, helpTo, externalLinks, labelFrom = "xl", wide = false, onWideChange }: NavUserProps & { wide?: boolean; onWideChange?: (wide: boolean) => void }) {
   const [textSize, setTextSize] = useState<TextSize>(storedTextSize)
   useEffect(() => applyTextSize(textSize), [textSize])
   useEffect(() => {
@@ -452,7 +486,7 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Menu akun"
-        className={cn("flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent py-0.5 pr-1 pl-1 text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:border-slate-200 data-popup-open:bg-slate-100 md:min-h-9 md:min-w-0", labelFrom === "2xl" ? "2xl:pr-2" : "xl:pr-2")}
+        className={cn("flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent py-0.5 pr-1 pl-1 text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-popup-open:border-slate-200 data-popup-open:bg-slate-100 md:min-h-9 md:min-w-0", labelFrom === "2xl" ? "2xl:pr-2" : "xl:pr-2")}
       >
         <span aria-hidden className="grid size-8 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white md:size-7">
           {initials(name)}
@@ -511,6 +545,18 @@ export function AccountMenu({ name, email, role, status, onLogout, profileTo, he
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        {onWideChange ? (
+          <>
+            <DropdownMenuSeparator className="hidden min-[1441px]:block" />
+            <DropdownMenuGroup className="hidden min-[1441px]:block">
+              <DropdownMenuLabel className="text-xs">Lebar Tampilan</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={wide ? "lebar" : "standar"} onValueChange={(v) => onWideChange(v === "lebar")}>
+                <DropdownMenuRadioItem value="standar">Standar (1440px)</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="lebar">Lebar Penuh</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onLogout}>
           <LogOutIcon aria-hidden /> Keluar

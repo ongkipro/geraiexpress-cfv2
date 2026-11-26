@@ -102,11 +102,14 @@
   --danger-bg: #ffebeb;
   --pickup-warn: #6b2fba;
   --pickup-warn-bg: #f4ecff;
+  --shell-max-w: 1440px;
 }
 
 /* Text size preference (visual 01 §1): root rem only, never zoom. */
 html[data-text="besar"] { font-size: 112.5%; }
 html[data-text="sangat-besar"] { font-size: 125%; }
+/* SSR wide-mode toggle (DEC-257): Worker stamps data-shell-wide="1" from host cookie gx_wide=1 before first paint. */
+html[data-shell-wide="1"] { --shell-max-w: none; }
 
 @layer base {
   * { @apply border-border outline-ring/50; }

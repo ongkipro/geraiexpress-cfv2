@@ -123,19 +123,23 @@ function OwnerDashboard() {
       {header}
       {/* One KPI strip (TokoPhi money strip): volume, money in, money owed, safe balance and the two profit figures —
           Estimasi Laba and Laba Kas stay two separate tiles, never summed. */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard icon={PackageIcon} label="Kiriman" value={`${nf.format(k.shipments)} paket`} trend={shipTrend === null ? null : { value: shipTrend, label: vs }} footer={`Non-COD ${nf.format(k.nonCod)} · COD ${nf.format(k.cod)}`} to="/kiriman" />
-        <MetricCard icon={BanknoteIcon} label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={paidFooter} to="/keuangan" />
-        <MetricCard icon={ReceiptIcon} label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman?tab=belum-dibayar" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
-        <MetricCard
-          icon={WalletIcon}
-          label="Saldo Mengantar aman"
-          value={k.balance.safe_balance_idr === null ? "Belum sinkron" : short(k.balance.safe_balance_idr)}
-          footer={k.balance.synced_balance_idr === null ? "Aktif setelah Keuangan tersambung" : `Saldo ${short(k.balance.synced_balance_idr)} − retur ${short(k.balance.reserve_idr)}`}
-          to="/keuangan"
-        />
-        <MetricCard icon={TrendingUpIcon} label="Estimasi Laba" value={short(k.estimated_margin_idr)} footer="Selisih tarif saat resi terbit" to="/keuangan?tab=laba" />
-        <MetricCard icon={CircleCheckIcon} label="Laba Kas" value={short(k.cash_profit_idr)} footer={k.cashProfitPending ? `${nf.format(k.cashProfitPending)} INV belum direkonsiliasi` : "Cocok dengan tagihan Mengantar"} to="/keuangan?tab=laba" />
+      {/* DEC-257: scope @container strictly to the KPI wrapper (never <main>, which hosts mobile fixed bottom bars)
+          so the 6-column strip activates only when ≥ 1280 px is available (wide mode), staying 3×2 in 1440 px mode. */}
+      <div className="@container">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 @[1280px]:grid-cols-6">
+          <MetricCard icon={PackageIcon} label="Kiriman" value={`${nf.format(k.shipments)} paket`} trend={shipTrend === null ? null : { value: shipTrend, label: vs }} footer={`Non-COD ${nf.format(k.nonCod)} · COD ${nf.format(k.cod)}`} to="/kiriman" />
+          <MetricCard icon={BanknoteIcon} label="Tercatat dibayar" value={short(k.paidIdr)} trend={paidTrend === null ? null : { value: paidTrend, label: vs }} footer={paidFooter} to="/keuangan" />
+          <MetricCard icon={ReceiptIcon} label="Belum dibayar" value={short(k.unpaidIdr)} footer={`${nf.format(k.unpaidCount)} INV menunggu pembayaran`} to={k.unpaidCount ? "/kiriman?tab=belum-dibayar" : undefined} tone={k.unpaidCount ? "warn" : undefined} />
+          <MetricCard
+            icon={WalletIcon}
+            label="Saldo Mengantar aman"
+            value={k.balance.safe_balance_idr === null ? "Belum sinkron" : short(k.balance.safe_balance_idr)}
+            footer={k.balance.synced_balance_idr === null ? "Aktif setelah Keuangan tersambung" : `Saldo ${short(k.balance.synced_balance_idr)} − retur ${short(k.balance.reserve_idr)}`}
+            to="/keuangan"
+          />
+          <MetricCard icon={TrendingUpIcon} label="Estimasi Laba" value={short(k.estimated_margin_idr)} footer="Selisih tarif saat resi terbit" to="/keuangan?tab=laba" />
+          <MetricCard icon={CircleCheckIcon} label="Laba Kas" value={short(k.cash_profit_idr)} footer={k.cashProfitPending ? `${nf.format(k.cashProfitPending)} INV belum direkonsiliasi` : "Cocok dengan tagihan Mengantar"} to="/keuangan?tab=laba" />
+        </div>
       </div>
       <div className="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
         <SectionCard

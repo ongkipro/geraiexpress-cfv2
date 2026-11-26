@@ -23,9 +23,10 @@ async function searchGap(page: Page) {
   const read = () =>
     page.evaluate(() => {
       const h = document.querySelector("header")!
-      const s = h.querySelector("[data-shell-search]")!.getBoundingClientRect()
-      const left = h.children[0]!.getBoundingClientRect()
-      const right = [...h.children[2]!.children].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0)
+      const row = h.querySelector("[data-shell-topbar-inner]") ?? h
+      const s = row.querySelector("[data-shell-search]")!.getBoundingClientRect()
+      const left = row.children[0]!.getBoundingClientRect()
+      const right = [...row.children[2]!.children].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0)
       return { x: s.left, before: s.left - left.right, after: Math.min(...right.map((r) => r.left)) - s.right }
     })
   let prev = await read()
@@ -358,4 +359,111 @@ test("DEC-244: Super Admin periksa ulang, verifikasi diskon, antrean sinkronisas
   // DEC-246: the console account menu opens the admin's own `/akun`; no marketing-site link.
   await expect(page.getByRole("menuitem", { name: "Profil Saya" })).toBeVisible()
   await expect(page.getByRole("menuitem", { name: /Situs Utama GeraiExpress/ })).toHaveCount(0)
+})
+
+// DEC-257: full-bleed topbar + centered 1440 px app shell + in-flow sticky sidebar + uniform inner canvas + SSR wide mode.
+test("DEC-257: full-bleed topbar, centered 1440px shell, in-flow sidebar, uniform canvas, SSR wide-mode toggle", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop-1280", "ultrawide layout checked once on desktop project")
+  await page.setViewportSize({ width: 1920, height: 900 })
+  await seeded(page, "e2e-rapi-wide")
+  await page.goto(`${APP}/pengaturan/profil`)
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+
+  // 1. Full-bleed topbar spans viewport; inner rail & app shell center at 1440 px; sidebar is in-flow sticky & aligned.
+  const centered = await page.evaluate(() => {
+    const header = document.querySelector("header")!.getBoundingClientRect()
+    const topInner = document.querySelector("[data-shell-topbar-inner]")!.getBoundingClientRect()
+    const frame = document.querySelector("[data-shell-frame]")!.getBoundingClientRect()
+    const sidebar = document.querySelector("[data-slot=sidebar-container]")!
+    const sidebarBox = sidebar.getBoundingClientRect()
+    const sidebarStyle = getComputedStyle(sidebar)
+    const bodyBg = getComputedStyle(document.body).backgroundColor
+    const sidebarBg = getComputedStyle(document.querySelector("[data-slot=sidebar-inner]")!).backgroundColor
+    const insetBg = getComputedStyle(document.querySelector("[data-slot=sidebar-inset]")!).backgroundColor
+    return {
+      vw: document.documentElement.clientWidth,
+      headerW: header.width,
+      headerH: header.height,
+      topInnerW: topInner.width,
+      topInnerX: topInner.left,
+      frameW: frame.width,
+      frameX: frame.left,
+      sidebarPos: sidebarStyle.position,
+      sidebarX: sidebarBox.left,
+      sidebarY: sidebarBox.top,
+      sidebarW: sidebarBox.width,
+      bodyBg,
+      sidebarBg,
+      insetBg,
+      wideAttr: document.documentElement.dataset.shellWide ?? null,
+    }
+  })
+  expect(centered.headerW).toBe(centered.vw)
+  expect(centered.headerH).toBe(64)
+  expect(centered.topInnerW).toBe(1440)
+  expect(centered.frameW).toBe(1440)
+  expect(Math.abs(centered.topInnerX - centered.frameX)).toBeLessThan(1)
+  expect(centered.sidebarPos).toBe("sticky")
+  expect(Math.abs(centered.sidebarX - centered.frameX)).toBeLessThan(1)
+  expect(centered.sidebarY).toBe(64)
+  expect(centered.sidebarW).toBe(256)
+  expect(centered.sidebarBg).toBe(centered.bodyBg)
+  expect(centered.insetBg).toBe(centered.bodyBg)
+  expect(centered.wideAttr).toBeNull()
+
+  // 2. Sticky in-flow sidebar stays pinned at y = 64 while scrolling, and Ctrl+B collapses 256 -> 56 -> 256.
+  await page.evaluate(() => window.scrollTo(0, 600))
+  expect(await page.locator("[data-slot=sidebar-container]").evaluate((e) => Math.round(e.getBoundingClientRect().top))).toBe(64)
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.keyboard.press("Control+b")
+  await expect.poll(() => page.locator("[data-slot=sidebar-container]").evaluate((e) => Math.round(e.getBoundingClientRect().width))).toBe(56)
+  await page.keyboard.press("Control+b")
+  await expect.poll(() => page.locator("[data-slot=sidebar-container]").evaluate((e) => Math.round(e.getBoundingClientRect().width))).toBe(256)
+
+  // 3. Toggle wide mode via topbar button -> expands immediately & persists through SSR reload without FOUC.
+  const toggle = page.locator("[data-shell-wide-toggle]")
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toHaveAttribute("aria-label", "Mode lebar penuh")
+  await expect(toggle).toHaveAttribute("aria-pressed", "false")
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-pressed", "true")
+  expect(await page.evaluate(() => document.documentElement.dataset.shellWide)).toBe("1")
+  expect(await page.locator("[data-shell-frame]").evaluate((e) => e.getBoundingClientRect().width)).toBeGreaterThan(1440)
+
+  // Verify SSR HTML itself carries data-shell-wide="1" on reload (true SSR wide mode).
+  const reloadRes = await page.reload()
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  expect(await reloadRes!.text()).toContain('data-shell-wide="1"')
+  const wideRects = await page.evaluate(() => ({
+    vw: document.documentElement.clientWidth,
+    topInnerW: document.querySelector("[data-shell-topbar-inner]")!.getBoundingClientRect().width,
+    frameW: document.querySelector("[data-shell-frame]")!.getBoundingClientRect().width,
+    sidebarX: document.querySelector("[data-slot=sidebar-container]")!.getBoundingClientRect().left,
+  }))
+  expect(wideRects.topInnerW).toBe(wideRects.vw)
+  expect(wideRects.frameW).toBe(wideRects.vw)
+  expect(wideRects.sidebarX).toBe(0)
+
+  // 4. Cross-host isolation: app. gx_wide=1 must never leak onto owner. (host-only cookie), and owner. toggles cleanly.
+  const ops = (await import("node:fs")).readFileSync(".dev.vars", "utf8").match(/^OPS_TOKEN=(.*)$/m)![1]!.trim().replace(/^(["'])(.*)\1$/, "$2")
+  const admin = await seededAdmin(page)
+  await page.goto(`${OWNER}/internal/dev/preview?token=${ops}&as=${encodeURIComponent(admin)}&to=%2Fgerai`)
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.dataset.shellWide ?? null)).toBeNull()
+  expect(await page.locator("[data-shell-frame]").evaluate((e) => e.getBoundingClientRect().width)).toBe(1440)
+  await page.locator("[data-shell-wide-toggle]").click()
+  await expect(page.locator("[data-shell-wide-toggle]")).toHaveAttribute("aria-pressed", "true")
+  const ownerReload = await page.reload()
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  expect(await ownerReload!.text()).toContain('data-shell-wide="1"')
+  expect(await page.locator("[data-shell-frame]").evaluate((e) => e.getBoundingClientRect().width)).toBeGreaterThan(1440)
+
+  // 5. Toggle back to standard 1440 px via AccountMenu radio and confirm SSR clears data-shell-wide.
+  await page.getByRole("button", { name: "Menu akun" }).click()
+  await page.getByRole("menuitemradio", { name: "Standar (1440px)" }).click()
+  await expect(page.locator("[data-shell-wide-toggle]")).toHaveAttribute("aria-pressed", "false")
+  await page.reload()
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.dataset.shellWide ?? null)).toBeNull()
+  expect(await page.locator("[data-shell-frame]").evaluate((e) => e.getBoundingClientRect().width)).toBe(1440)
 })

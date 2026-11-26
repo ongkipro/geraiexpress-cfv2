@@ -90,4 +90,39 @@ describe("SPA shells via ASSETS (spec 07 §3.1)", () => {
     expect(ownerCsp).toContain("frame-ancestors 'none'")
     expect(ownerRes.headers.get("permissions-policy")).toContain("geolocation=()")
   })
+
+  it("SSR wide-mode: stamps data-shell-wide=1 on <html> only when host cookie gx_wide=1 is set", async () => {
+    const appJs = await bundlePath(APP)
+    const staticAsset = await exports.default.fetch(`${APP}${appJs}`)
+    expect(staticAsset.headers.get("vary")).toBeNull()
+
+    for (const origin of [APP, OWNER]) {
+      const def = await exports.default.fetch(`${origin}/`)
+      expect(def.headers.get("vary")).toContain("Cookie")
+      expect(await def.text()).not.toContain("data-shell-wide=")
+
+      for (const cookie of ["gx_wide=1", "other=foo; gx_wide=1; sidebar_state=true"]) {
+        const wide = await exports.default.fetch(`${origin}/`, { headers: { cookie } })
+        expect(wide.status).toBe(200)
+        expect(wide.headers.get("cache-control")).toBe("no-cache")
+        expect(wide.headers.get("vary")).toContain("Cookie")
+        expect(await wide.text()).toContain('<html data-shell-wide="1" lang="id">')
+      }
+
+      // HEAD with gx_wide=1 returns empty body and does not leak stale non-wide ETag / Content-Length.
+      const headWide = await exports.default.fetch(`${origin}/`, { method: "HEAD", headers: { cookie: "gx_wide=1" } })
+      expect(headWide.status).toBe(200)
+      expect(headWide.headers.get("vary")).toContain("Cookie")
+      expect(headWide.headers.get("etag")).toBeNull()
+      expect(await headWide.text()).toBe("")
+
+      // Invalid, substring, or falsy values never trigger wide mode and never echo cookie text into HTML.
+      for (const cookie of ['gx_wide=0; evil="><script>', "not_gx_wide=1", "gx_wide=10"]) {
+        const bad = await exports.default.fetch(`${origin}/`, { headers: { cookie } })
+        const badHtml = await bad.text()
+        expect(badHtml, cookie).not.toContain("data-shell-wide=")
+        expect(badHtml, cookie).not.toContain("evil")
+      }
+    }
+  })
 })
