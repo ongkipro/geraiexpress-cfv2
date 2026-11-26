@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// `pnpm do:migrate --env <local|staging|production> [--dry-run] [--batch 25]`
+// `pnpm do:migrate --env <local|staging|production> [--dry-run] [--json] [--batch 25] [--expect-version <N|auto|none>]`
 // Walks tenants in batches through the Worker's ops endpoint (POST /internal/ops/do-migrate on the owner host), which
 // migrates each GeraiVaultDO by explicit RPC, records progress in D1 `tenant_schema_versions`, and stops on the first
-// failure (that tenant enters `recovery`; the others keep serving). ADR-0006 §4, spec 07 §6.
+// failure (that tenant enters `recovery`; the others keep serving). Automatically retries on post-deploy stale Worker
+// isolates (`409 STALE_ISOLATE` or `targetVersion < expectVersion`). ADR-0006 §4, spec 07 §6.
 // The ops token is read from the environment (GX_OPS_TOKEN); it is never printed.
 import { readFileSync } from "node:fs"
 import { parseArgs } from "node:util"
+import { readLocalTenantSchemaVersion, runDoMigrate } from "./do-migrate-lib.mjs"
 
 const { values } = parseArgs({
   options: {
@@ -13,6 +15,7 @@ const { values } = parseArgs({
     "dry-run": { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     batch: { type: "string", default: "25" },
+    "expect-version": { type: "string", default: "auto" },
     origin: { type: "string" },
     port: { type: "string", default: "8787" },
   },
@@ -43,42 +46,59 @@ function localOpsToken() {
     return undefined
   }
 }
-const batch = Math.max(1, Math.min(100, Number(values.batch) || 25))
 
-let cursor = null
-let migrated = 0
-let alreadyCurrent = 0
-let pending = 0
-const allReport = []
-for (;;) {
-  const res = await fetch(`${origin}/internal/ops/do-migrate`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ cursor, batch, dryRun: values["dry-run"] }),
-    signal: AbortSignal.timeout(120_000),
-  })
-  const body = await res.json().catch(() => null)
-  if (!res.ok || !body?.ok) {
-    console.error(`do:migrate: FAIL — HTTP ${res.status} ${body?.error?.code ?? ""}`)
-    process.exit(1)
+const batch = Math.max(1, Math.min(100, Number(values.batch) || 25))
+const localVersion = readLocalTenantSchemaVersion()
+let expectVersion = null
+if (values["expect-version"] === "auto") {
+  if (!values["dry-run"] && localVersion === null) {
+    console.error("do:migrate: FAIL — could not parse local TENANT_SCHEMA_VERSION from packages/db/src/tenant.ts (pass --expect-version <N|none> to override)")
+    process.exit(2)
   }
-  const d = body.data
-  migrated += d.migrated
-  alreadyCurrent += d.alreadyCurrent
-  if (values["dry-run"]) pending += d.report.length
-  allReport.push(...d.report)
-  if (!values.json) {
-    for (const line of d.report) console.log(`  ${line}`)
+  expectVersion = localVersion
+} else if (values["expect-version"] !== "none") {
+  const n = Number(values["expect-version"])
+  if (!Number.isSafeInteger(n) || n < 1) {
+    console.error(`do:migrate: invalid --expect-version ${values["expect-version"]}`)
+    process.exit(2)
   }
-  if (d.failed) {
-    console.error(`do:migrate: STOPPED at tenant ${d.failed.tenantId} (now in recovery): ${d.failed.error}`)
-    process.exit(1)
-  }
-  if (!d.nextCursor) break
-  cursor = d.nextCursor
+  expectVersion = n
 }
+
+const result = await runDoMigrate({
+  origin,
+  token,
+  batch,
+  dryRun: values["dry-run"],
+  expectVersion,
+  onLog: (line) => {
+    if (!values.json) console.log(line)
+  },
+})
+
+if (!result.ok) {
+  console.error(`do:migrate: ${result.code === "TENANT_FAILED" ? result.message : `FAIL — ${result.message}`}`)
+  process.exit(1)
+}
+
 if (values.json) {
-  console.log(JSON.stringify({ env: values.env, dryRun: values["dry-run"], pending, migrated, alreadyCurrent, report: allReport }))
+  console.log(
+    JSON.stringify({
+      env: values.env,
+      dryRun: values["dry-run"],
+      targetVersion: result.targetVersion,
+      localVersion,
+      pending: result.pending,
+      migrated: result.migrated,
+      alreadyCurrent: result.alreadyCurrent,
+      retries: result.retries,
+      report: result.report,
+    }),
+  )
 } else {
-  console.log(`do:migrate: ${values["dry-run"] ? "DRY RUN " : ""}PASS (${values.env}) — migrated ${migrated}, already current ${alreadyCurrent}`)
+  const retryNote = result.retries > 0 ? `, retries ${result.retries}` : ""
+  const verNote = values["dry-run"] ? ` [live v${result.targetVersion ?? "?"}, local v${localVersion ?? "?"}]` : ""
+  console.log(
+    `do:migrate: ${values["dry-run"] ? "DRY RUN " : ""}PASS (${values.env}) — migrated ${result.migrated}, already current ${result.alreadyCurrent}${retryNote}${verNote}`,
+  )
 }

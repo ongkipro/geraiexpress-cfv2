@@ -49,7 +49,73 @@ function capture(cmd, args) {
   return execFileSync(cmd, args, { encoding: "utf8", env: childEnv }).trim()
 }
 
+/**
+ * Guard 3 (TASK-710 / DEC-254 / DEC-255): inspect live vs local TENANT_SCHEMA_VERSION and pending tenant DO migrations
+ * before deploy. Refuses roll-backward deploys (`localVersion < targetVersion`), warns prominently on any roll-forward
+ * migration (`pending > 0` or `localVersion > targetVersion`), and warns `UNKNOWN ROLLBACK SAFETY` if version cannot be determined.
+ */
+function checkTenantMigrationSafety() {
+  let dryJson
+  try {
+    dryJson = JSON.parse(capture("node", ["scripts/do-migrate/do-migrate.mjs", "--env", target, "--dry-run", "--json"]))
+    if (!dryJson || !Number.isSafeInteger(dryJson.pending) || dryJson.pending < 0) {
+      throw new Error("invalid do-migrate dry-run JSON payload")
+    }
+  } catch {
+    console.warn(
+      [
+        "",
+        "========================================================================",
+        `WARNING (DEC-254/DEC-255): UNKNOWN ROLLBACK SAFETY on ${target}!`,
+        "Pre-deploy DO migration probe failed; verify TENANT_SCHEMA_VERSION manually",
+        "before assuming 'wrangler rollback' is safe after this deploy.",
+        "========================================================================",
+        "",
+      ].join("\n"),
+    )
+    return
+  }
+  const versionKnown = Number.isSafeInteger(dryJson.targetVersion) && Number.isSafeInteger(dryJson.localVersion)
+  if (versionKnown && dryJson.localVersion < dryJson.targetVersion) {
+    console.error(
+      `deploy: refusing to downgrade TENANT_SCHEMA_VERSION v${dryJson.targetVersion} → v${dryJson.localVersion} on ${target} — roll-forward only (DEC-254/DEC-255).`,
+    )
+    process.exit(2)
+  }
+  const schemaBump = versionKnown && dryJson.localVersion > dryJson.targetVersion
+  if (dryJson.pending > 0 || schemaBump) {
+    const detail = schemaBump
+      ? `TENANT_SCHEMA_VERSION bump v${dryJson.targetVersion} → v${dryJson.localVersion} on ${target}`
+      : `${dryJson.pending} tenant DO migration(s) pending on ${target}`
+    console.warn(
+      [
+        "",
+        "========================================================================",
+        `WARNING (DEC-254/DEC-255): ${detail}!`,
+        "Once deployed, healthy gerai objects lazy-upgrade on their first request.",
+        "This release is ROLL-FORWARD ONLY: 'wrangler rollback' will refuse upgraded",
+        "gerai with 503 TENANT_NOT_READY until newer code is redeployed.",
+        "========================================================================",
+        "",
+      ].join("\n"),
+    )
+  } else if (!versionKnown) {
+    console.warn(
+      [
+        "",
+        "========================================================================",
+        `WARNING (DEC-254/DEC-255): UNKNOWN ROLLBACK SAFETY on ${target}!`,
+        `Live (v${dryJson.targetVersion ?? "?"}) or local (v${dryJson.localVersion ?? "?"}) TENANT_SCHEMA_VERSION unavailable;`,
+        "verify manually before assuming 'wrangler rollback' is safe after this deploy.",
+        "========================================================================",
+        "",
+      ].join("\n"),
+    )
+  }
+}
+
 if (values["dry-run"]) {
+  checkTenantMigrationSafety()
   run("Dry-run tenant DO migrations", "node", ["scripts/do-migrate/do-migrate.mjs", "--env", target, "--dry-run"])
   run("Live probes", "node", ["scripts/probes/probes.mjs", "--env", target])
   console.log(`\ndeploy: DRY RUN PASS (${target})`)
@@ -98,40 +164,7 @@ if (!values["skip-build"]) {
   run("Bundle security audit", "pnpm", ["security:bundle-audit"])
 }
 
-// Guard 3 (TASK-710 / DEC-254 / DEC-255): inspect structured pending tenant DO migration count before deploy and warn
-// prominently whenever a tenant migration is pending (roll-forward only) OR if the probe cannot determine safety.
-try {
-  const dryJson = JSON.parse(capture("node", ["scripts/do-migrate/do-migrate.mjs", "--env", target, "--dry-run", "--json"]))
-  if (!dryJson || !Number.isSafeInteger(dryJson.pending) || dryJson.pending < 0) {
-    throw new Error("invalid do-migrate dry-run JSON payload")
-  }
-  if (dryJson.pending > 0) {
-    console.warn(
-      [
-        "",
-        "========================================================================",
-        `WARNING (DEC-254/DEC-255): ${dryJson.pending} tenant DO migration(s) pending on ${target}!`,
-        "Once deployed, healthy gerai objects lazy-upgrade on their first request.",
-        "This release is ROLL-FORWARD ONLY: 'wrangler rollback' will refuse upgraded",
-        "gerai with 503 TENANT_NOT_READY until newer code is redeployed.",
-        "========================================================================",
-        "",
-      ].join("\n"),
-    )
-  }
-} catch {
-  console.warn(
-    [
-      "",
-      "========================================================================",
-      `WARNING (DEC-254/DEC-255): UNKNOWN ROLLBACK SAFETY on ${target}!`,
-      "Pre-deploy DO migration probe failed; verify TENANT_SCHEMA_VERSION manually",
-      "before assuming 'wrangler rollback' is safe after this deploy.",
-      "========================================================================",
-      "",
-    ].join("\n"),
-  )
-}
+checkTenantMigrationSafety()
 
 run("Apply D1 control migrations", "pnpm", [
   "exec",

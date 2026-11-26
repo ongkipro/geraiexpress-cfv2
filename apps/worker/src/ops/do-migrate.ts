@@ -12,6 +12,7 @@ interface Body {
   cursor?: string | null
   batch?: number
   dryRun?: boolean
+  expectVersion?: number | null
 }
 
 type Progress = "ok" | "migrating" | "recovery"
@@ -26,20 +27,34 @@ export async function handleDoMigrate(request: Request, env: Env): Promise<Respo
   const batch = Math.max(1, Math.min(100, Math.trunc(Number(body.batch) || 25)))
   const cursor = typeof body.cursor === "string" ? body.cursor : ""
   const dryRun = body.dryRun === true
+  const expectVersion = typeof body.expectVersion === "number" && Number.isSafeInteger(body.expectVersion) && body.expectVersion > 0 ? body.expectVersion : null
+  // Post-deploy edge propagation guard: refuse immediately without touching any tenant or D1 if a draining isolate is
+  // behind the newly deployed TENANT_SCHEMA_VERSION (the caller retries until the new isolate serves).
+  if (!dryRun && expectVersion !== null && TENANT_SCHEMA_VERSION < expectVersion) {
+    return fail(409, "STALE_ISOLATE", `Isolate masih di v${TENANT_SCHEMA_VERSION}, menunggu v${expectVersion}.`)
+  }
   const rows = await env.DB.prepare(
-    `SELECT t.id, v.schema_version AS d1_version, v.state AS d1_state FROM tenants t LEFT JOIN tenant_schema_versions v ON v.tenant_id = t.id
+    `SELECT t.id, v.schema_version AS d1_version, v.state AS d1_state, v.last_error AS d1_last_error FROM tenants t LEFT JOIN tenant_schema_versions v ON v.tenant_id = t.id
      WHERE t.status IN ('active','suspended','pending_review') AND t.id > ? ORDER BY t.id LIMIT ?`,
   )
     .bind(cursor, batch + 1)
-    .all<{ id: string; d1_version: number | null; d1_state: Progress | null }>()
+    .all<{ id: string; d1_version: number | null; d1_state: Progress | null; d1_last_error: string | null }>()
   const page = rows.results.slice(0, batch)
   const nextCursor = rows.results.length > batch ? (page.at(-1)?.id ?? null) : null
   const report: string[] = []
   let migrated = 0
   let alreadyCurrent = 0
-  for (const { id, d1_version, d1_state } of page) {
+  for (const { id, d1_version, d1_state, d1_last_error } of page) {
     const stub = vaultFor(env, id)
     const state = await stub.schemaState()
+    if (state.version > TENANT_SCHEMA_VERSION) {
+      // Never downgrade or mark a healthy newer-schema tenant as `recovery` when hit by a draining older isolate.
+      if (dryRun) {
+        report.push(`${id}: v${state.version} > isolate v${TENANT_SCHEMA_VERSION} (stale isolate)`)
+        continue
+      }
+      return fail(409, "STALE_ISOLATE", `Objek sudah di v${state.version}, melebihi isolate v${TENANT_SCHEMA_VERSION}.`)
+    }
     const objectCurrent = state.version === TENANT_SCHEMA_VERSION && state.state === "ok" && state.tenantId === id
     if (objectCurrent) {
       alreadyCurrent++
@@ -54,7 +69,7 @@ export async function handleDoMigrate(request: Request, env: Env): Promise<Respo
       report.push(`${id}: v${state.version}${state.state === "recovery" ? " (recovery)" : ""} → v${TENANT_SCHEMA_VERSION} (dry run)`)
       continue
     }
-    await setProgress(env, id, state.version, "migrating", null, false)
+    const migratingAt = await setProgress(env, id, state.version, "migrating", null, false)
     let error: string | null = null
     let reached = state.version
     try {
@@ -68,19 +83,48 @@ export async function handleDoMigrate(request: Request, env: Env): Promise<Respo
     } catch (e) {
       error = `RPC_FAILED: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300)
     }
+    if (error === "FORWARD_ONLY") {
+      // Concurrent lazy-upgrade on a newer isolate raced between schemaState() and migrate(): conditionally revert
+      // ONLY our own `migrating` write so a newer isolate's committed `ok(vN+1)` row is never clobbered.
+      await revertMigratingProgress(env, id, { version: state.version, updatedAt: migratingAt }, { version: d1_version, state: d1_state, lastError: d1_last_error })
+      return fail(409, "STALE_ISOLATE", `Objek sudah melampaui isolate v${TENANT_SCHEMA_VERSION}.`)
+    }
     if (error !== null) {
       await setProgress(env, id, reached, "recovery", error, true)
-      return ok({ migrated, alreadyCurrent, report, nextCursor: null, failed: { tenantId: id, error } })
+      return ok({ targetVersion: TENANT_SCHEMA_VERSION, migrated, alreadyCurrent, report, nextCursor: null, failed: { tenantId: id, error } })
     }
     await setProgress(env, id, reached, "ok", null, d1_state === "recovery")
     migrated++
     report.push(`${id}: v${state.version} → v${reached}`)
   }
-  return ok({ migrated, alreadyCurrent, report, nextCursor, failed: null })
+  return ok({ targetVersion: TENANT_SCHEMA_VERSION, migrated, alreadyCurrent, report, nextCursor, failed: null })
+}
+
+/**
+ * Conditionally reverts a `migrating` marker written by a stale isolate that hit `FORWARD_ONLY` (CAS on
+ * `state='migrating' AND schema_version AND updated_at`) so concurrent progress from a newer isolate is never clobbered.
+ */
+export async function revertMigratingProgress(
+  env: Env,
+  tenantId: string,
+  marker: { version: number; updatedAt: number },
+  prior: { version: number | null; state: Progress | null; lastError: string | null },
+): Promise<void> {
+  if (prior.state === null) {
+    await env.DB.prepare("DELETE FROM tenant_schema_versions WHERE tenant_id = ?1 AND state = 'migrating' AND schema_version = ?2 AND updated_at = ?3")
+      .bind(tenantId, marker.version, marker.updatedAt)
+      .run()
+    return
+  }
+  await env.DB.prepare(
+    "UPDATE tenant_schema_versions SET schema_version = ?1, state = ?2, last_error = ?3, updated_at = ?4 WHERE tenant_id = ?5 AND state = 'migrating' AND schema_version = ?6 AND updated_at = ?7",
+  )
+    .bind(prior.version ?? marker.version, prior.state, prior.lastError, Date.now(), tenantId, marker.version, marker.updatedAt)
+    .run()
 }
 
 /** Writes progress; a routing change (into or out of recovery) bumps routing_version and drops this isolate's cache. */
-async function setProgress(env: Env, tenantId: string, version: number, state: Progress, error: string | null, routingChanged: boolean) {
+async function setProgress(env: Env, tenantId: string, version: number, state: Progress, error: string | null, routingChanged: boolean): Promise<number> {
   const now = Date.now()
   const stmts = [
     env.DB.prepare(
@@ -91,4 +135,5 @@ async function setProgress(env: Env, tenantId: string, version: number, state: P
   if (routingChanged) stmts.push(env.DB.prepare("UPDATE tenants SET routing_version = routing_version + 1, updated_at = ? WHERE id = ?").bind(now, tenantId))
   await env.DB.batch(stmts)
   if (routingChanged) hostCache.clear()
+  return now
 }
