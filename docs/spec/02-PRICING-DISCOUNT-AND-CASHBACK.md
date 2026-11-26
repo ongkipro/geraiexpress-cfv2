@@ -95,6 +95,24 @@ This specification defines exact integer arithmetic for weights, customer tariff
   platform band (covered by `apps/worker/test/pricing/rules.test.ts`). A later manual edit of such a rule remains
   validated against the courier/platform band (`422 DISCOUNT_OUT_OF_BAND`).
 
+### 2.2 Partner Master Discount Schedule & 500 bps Margin Split (`ongkirich`, DEC-256)
+
+Owner-recorded baseline shipping discount schedule granted by Mengantar to partner `ongkirich` (2026-11-27), together with the target commercial split: **GeraiExpress retains `500 bps` (5%)** as partner revenue share and passes the remainder to the gerai/seller.
+
+| Courier (`courier_code`) | Mengantar Partner Master Rate | Extra Promo Note | Target Platform Margin (`_bps`) | Target Gerai / Seller Discount (`_bps`) |
+|---|---:|---|---:|---:|
+| **SPX Express** (`spx`) | `30% + 5%*` (`3000 + 500`) | `*5%` extra discount for SPX | `5%` (`500`) | `25%` base (`2500`) + `5%*` extra (`30%` effective while promo active) |
+| **J&T Express** (`JT` / J&T EZ) | `30% + 5%*` (`3000 + 500`) | `*5%` extra discount for J&T EZ | `5%` (`500`) | `25%` base (`2500`) + `5%*` extra (`30%` effective while promo active) |
+| **Anteraja** (`anteraja`) | `30%` (`3000`) | — | `5%` (`500`) | `25%` (`2500`) |
+| **Lion Parcel** (`lion`) | `30%` (`3000`) | — | `5%` (`500`) | `25%` (`2500`) |
+| **iDexpress** (`iDexpress`) | `30%` (`3000`) | Standard `>= 1 kg` (live `<= 500 g` `iDlite` observed at `10%`) | `5%` (`500`) | `25%` (`2500`) |
+| **SAP Express** (`Sap`) | `30%` (`3000`) | — | `5%` (`500`) | `25%` (`2500`) |
+| **SiCepat** (`SiCepat`) | `30%` (`3000`) | — | `5%` (`500`) | `25%` (`2500`) |
+| **Pos Indonesia** (`pos`) | `15%` (`1500`) | Below default `2000 bps` platform floor; requires per-courier `courier_discount_policy` floor `<= 1000 bps` | `5%` (`500`) | `10%` (`1000`) |
+| **JNE** (`JNE`) | `30%` (`3000`) | Standard percentage routes (flat-discount routes observed live on specific lanes) | `5%` (`500`) | `25%` (`2500`) |
+
+> **Enforcement boundary:** Under Scheme 1 (`DEC-203`), this split takes commercial effect only once Mengantar provisions sub-seller accounts at the target gerai rate and settles the `500 bps` partner spread to `ongkirich`. Until then, all GeraiExpress accounting flows continue to use actual provider net `N` (`§2.1`, `§3`), never booking an uncollected spread.
+
 ---
 
 ## 3. Collection Modes and Exact Money Flows (DEC-220, DEC-225)
