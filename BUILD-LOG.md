@@ -1587,3 +1587,16 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - Hosted `ci.yml` run `45816090614` PASS (`14m54s`, `pnpm check` + Playwright 390/768/1280).
   - Staging (`pnpm deploy:staging`): Worker `57f770dc-511f-4eee-bf66-4d8c7c52d290`, D1 `0021_courier_rounding_live.sql` applied, DO `2/2` migrated `v25 → v26`, 5/5 probes PASS.
   - Production (`pnpm deploy:production --skip-build`): Worker `9c918bef-f47d-4935-ac40-a3036815e0bc`, D1 `0021_courier_rounding_live.sql` applied (`Sap=299`, `spx=299`, `lion=300`, `JNE=300` verified live), DO `4/4` `ok` at `v26` (note: first sweep immediately after upload hit a draining v25 isolate and flagged `5301bad3` `recovery(v26): FORWARD_ONLY`; re-running `deploy:production --skip-build` reconciled `5301bad3` to `ok(v26)` cleanly), 6/6 probes PASS (incl. `relay-health`).
+
+## 2026-11-26 — `do:migrate` stale-isolate hardening & pre-launch checks (`REL-2026-11-26-do-migrate-hardening`, commit `a1f0647`)
+
+- **Scope:** Eliminated the post-deploy Cloudflare edge propagation race observed during `16c2f20` (where a draining v25 isolate saw an already-upgraded v26 DO and marked it `recovery: FORWARD_ONLY` in D1) and fixed pre-deploy Guard 3 to detect `TENANT_SCHEMA_VERSION` bumps/downgrades before `wrangler deploy`.
+  - `apps/worker/src/ops/do-migrate.ts`: returns `targetVersion: TENANT_SCHEMA_VERSION`, refuses `expectVersion > TENANT_SCHEMA_VERSION` or `state.version > TENANT_SCHEMA_VERSION` with `409 STALE_ISOLATE` (never marking `recovery` or bumping `routing_version`), and uses conditional CAS (`revertMigratingProgress`) on concurrent `FORWARD_ONLY` races so newer isolate commits are never clobbered.
+  - `scripts/do-migrate/{do-migrate-lib,do-migrate}.mjs`: parses `TENANT_MIGRATIONS` (comment-stripped, fail-closed on `--expect-version auto`), retries bounded backoff on `409 STALE_ISOLATE`, missing/older `targetVersion`, or legacy `FORWARD_ONLY`, and outputs `targetVersion`/`localVersion` in `--dry-run`.
+  - `scripts/deploy/deploy.mjs`: extracted `checkTenantMigrationSafety()` for both `--dry-run` and live deploys; hard-refuses roll-backward (`localVersion < targetVersion`), warns on `pending > 0 || localVersion > targetVersion`, and warns `UNKNOWN ROLLBACK SAFETY` when versions are unavailable.
+- **Additional pre-launch checks executed:** `pnpm email:deliverability --dkim-selector cf2024-1` (`SPF`, `DMARC`, `DKIM` 3/3 PASS) and `bash scripts/ci/red-fixtures.sh` (`4/4` red fixtures PASS).
+- **Evidence & live rollout (owner-authorized 2026-11-26):**
+  - Local `pnpm check` PASS (typecheck 8/8, ESLint 0 warn, unit 32/32 incl. `do-migrate.test.mjs`, build + `bundle-audit` 175 files / 0 maps / 0 secrets, Workers 67/67 files / 508/508 tests incl. `do-migrate.test.ts` 7/7); R1–R3 isolated adversarial review **APPROVE**.
+  - Hosted `ci.yml` run `45824328702` PASS (`15m8s`, `pnpm check` + Playwright 390/768/1280).
+  - Staging (`pnpm deploy:staging`): Worker `fba56b52-21c5-45c1-b941-64b739cf80b9`, DO 2/2 v26, 5/5 probes PASS.
+  - Production (`pnpm deploy:production --skip-build`): Worker `c442e04f-c95f-41b8-9cd6-e522b75ff002`, DO 4/4 v26, 6/6 probes PASS; live `pnpm deploy:production --dry-run` verified `[live v26, local v26]` PASS with 0 warnings.
