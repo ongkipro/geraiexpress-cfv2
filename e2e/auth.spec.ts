@@ -77,7 +77,7 @@ test.describe("TASK-105 accounts", () => {
     await page.getByRole("button", { name: "Buat Akun" }).click()
     // The Kasir lands in the workspace: Kasir home, no Keuangan menu.
     await expect(page.getByRole("heading", { name: "Tugas Loket Hari Ini" })).toBeVisible()
-    if ((page.viewportSize()?.width ?? 0) >= 768) await expect(page.getByText("Toko E2E").first()).toBeVisible()
+    if ((page.viewportSize()?.width ?? 0) >= 768) await expect(page.locator("[data-slot=sidebar]").getByText("Toko E2E", { exact: true })).toBeVisible()
     await expect(page.getByRole("link", { name: "Keuangan" })).toHaveCount(0)
     await context.clearCookies()
     await page.goto(link)
