@@ -271,3 +271,51 @@ describe("sync actual Mengantar discounts per expedition (BYOK / varied discount
     ).toBeNull()
   })
 })
+
+describe("DEC-256 partner master schedule, margin split, and standard presets", () => {
+  it("exposes seeded DEC-256 partner master rates on /tarif/kebijakan and /tarif/gerai/:tenantId", async () => {
+    const g = await approved("tarifdec256")
+    const pol = (await (await ownerGet("/tarif/kebijakan", g.admin)).json()) as {
+      data: { couriers: Array<{ courierCode: string; schedule: { masterDiscountBps: number; extraPromoBps: number; platformMarginBps: number; targetGeraiBps: number } | null }> }
+    }
+    const byCode = new Map(pol.data.couriers.map((c) => [c.courierCode, c.schedule]))
+    expect(byCode.get("JNE")).toMatchObject({ masterDiscountBps: 3000, extraPromoBps: 0, platformMarginBps: 500, targetGeraiBps: 2500 })
+    expect(byCode.get("spx")).toMatchObject({ masterDiscountBps: 3000, extraPromoBps: 500, platformMarginBps: 500, targetGeraiBps: 2500 })
+    expect(byCode.get("JT")).toMatchObject({ masterDiscountBps: 3000, extraPromoBps: 500, platformMarginBps: 500, targetGeraiBps: 2500 })
+    expect(byCode.get("pos")).toMatchObject({ masterDiscountBps: 1500, extraPromoBps: 0, platformMarginBps: 500, targetGeraiBps: 1000 })
+
+    const geraiRules = (await (await ownerGet(`/tarif/gerai/${g.tenantId}`, g.admin)).json()) as {
+      data: { items: Array<{ courier_code: string; schedule: { masterDiscountBps: number; platformMarginBps: number; targetGeraiBps: number } | null }> }
+    }
+    expect(geraiRules.data.items.find((x) => x.courier_code === "pos")?.schedule).toMatchObject({ masterDiscountBps: 1500, platformMarginBps: 500, targetGeraiBps: 1000 })
+  })
+
+  it("edits a courier partner master rate with validation + audit, applies DEC-256 bands (unlocking pos 10%), and bulk-applies defaults to a gerai", async () => {
+    const g = await approved("tarifpreset")
+    // Margin > master is rejected.
+    expect(
+      (await ownerPost("/tarif/kebijakan/master/pos", g.admin, { masterDiscountBps: 1500, extraPromoBps: 0, platformMarginBps: 1600, reason: "margin tidak valid" })).status,
+    ).toBe(422)
+    // Valid master update succeeds and is audited.
+    expect(
+      (await ownerPost("/tarif/kebijakan/master/lion", g.admin, { masterDiscountBps: 3200, extraPromoBps: 0, platformMarginBps: 500, reason: "revisi master lion" })).status,
+    ).toBe(200)
+    const masterAudit = await env.DB.prepare("SELECT action, target_id, reason FROM audit_logs WHERE action = 'pricing.partner_schedule_update' AND target_id = 'lion'").first()
+    expect(masterAudit).toEqual({ action: "pricing.partner_schedule_update", target_id: "lion", reason: "revisi master lion" })
+
+    // Applying standard DEC-256 courier bands sets pos min/default = 1000, max = 1500; spx/JT max = 3500; regulars default = 2500.
+    const applyBands = await ownerPost("/tarif/kebijakan/terapkan-standar", g.admin, { reason: "aktifkan batas standar DEC-256" })
+    expect(applyBands.status).toBe(200)
+    expect((await ownerPost(`/tarif/gerai/${g.tenantId}/pos`, g.admin, { assignedBps: 1000, reason: "sesuai target pos 10 persen" })).status).toBe(200)
+    expect((await ruleOf(g.tenantId, "pos"))?.assigned_bps).toBe(1000)
+
+    // Bulk apply standard policy defaults to the gerai: updates JNE to 2500, lion to 2700, keeps pos at 1000.
+    const bulk = await ownerPost(`/tarif/gerai/${g.tenantId}/terapkan-standar`, g.admin, { reason: "terapkan target standar gerai" })
+    expect(bulk.status).toBe(200)
+    const bulkOut = (await bulk.json()) as { data: { updated: number; unchanged: number } }
+    expect(bulkOut.data.updated).toBeGreaterThanOrEqual(8)
+    expect((await ruleOf(g.tenantId, "JNE"))).toMatchObject({ assigned_bps: 2500, verification_state: "belum_diterapkan" })
+    expect((await ruleOf(g.tenantId, "lion"))).toMatchObject({ assigned_bps: 2700, verification_state: "belum_diterapkan" })
+    expect((await ruleOf(g.tenantId, "pos"))).toMatchObject({ assigned_bps: 1000 })
+  })
+})

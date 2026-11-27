@@ -78,12 +78,14 @@ function SyncQueues() {
       }
     >
       {loading ? <LoadingBlock /> : error ? <ErrorBlock message={error} onRetry={reload} /> : (
-        <MetricGrid>
-          <MetricCard label="Perlu dicocokkan" value={nf.format(n("reconciliation_needed"))} footer="Status penerbitan belum pasti" tone={n("reconciliation_needed") ? "warn" : undefined} />
-          <MetricCard label="Menunggu saldo" value={nf.format(n("provider_unpaid_hold"))} footer="Saldo Mengantar gerai kurang" tone={n("provider_unpaid_hold") ? "warn" : undefined} />
-          <MetricCard label="Sedang diterbitkan" value={nf.format(n("issuing_in_flight"))} footer="Permintaan resi berjalan" />
-          <MetricCard label="Diskon belum sesuai" value={nf.format(data?.discountMismatch ?? 0)} footer="Lihat Tarif › Permintaan" tone={data?.discountMismatch ? "warn" : undefined} to="/tarif?tab=permintaan" />
-        </MetricGrid>
+        <div className="@container">
+          <MetricGrid>
+            <MetricCard label="Perlu dicocokkan" value={nf.format(n("reconciliation_needed"))} footer="Status penerbitan belum pasti" tone={n("reconciliation_needed") ? "warn" : undefined} />
+            <MetricCard label="Menunggu saldo" value={nf.format(n("provider_unpaid_hold"))} footer="Saldo Mengantar gerai kurang" tone={n("provider_unpaid_hold") ? "warn" : undefined} />
+            <MetricCard label="Sedang diterbitkan" value={nf.format(n("issuing_in_flight"))} footer="Permintaan resi berjalan" />
+            <MetricCard label="Diskon belum sesuai" value={nf.format(data?.discountMismatch ?? 0)} footer="Lihat Tarif › Permintaan" tone={data?.discountMismatch ? "warn" : undefined} to="/tarif?tab=permintaan" />
+          </MetricGrid>
+        </div>
       )}
     </SectionCard>
   )
@@ -183,18 +185,42 @@ function RiskRadar() {
       </form>
       {result ? (
         result.items.length === 0 ? (
-          <EmptyBlock title="Belum ada riwayat" body="Nomor ini belum pernah menerima kiriman COD di jaringan." />
+          <div className="mt-4">
+            <EmptyBlock title="Belum ada riwayat" body="Nomor ini belum pernah menerima kiriman COD di jaringan." />
+          </div>
         ) : (
-          <div className="mt-4 flex flex-col gap-3">
-            <p className="text-sm tabular-nums">Total: {result.total.delivered} terkirim · {result.total.rts} retur{result.total.rtsBps !== null ? ` · rasio retur ${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : ""}</p>
-            <ul className="divide-y">
-              {result.items.map((r, i) => (
-                <li key={r.tenant_id ?? r.tenant_slug ?? `${r.tenant_name}-${i}`} className="flex flex-wrap justify-between gap-2 py-2 text-sm tabular-nums">
-                  <span>{r.tenant_name}</span>
-                  <span>{r.delivered_count} terkirim · {r.rts_count} retur · {formatDate(r.last_event_at)}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="mt-4 flex flex-col gap-4 border-t border-slate-100 pt-4">
+            <div className="grid gap-3 sm:grid-cols-3 md:gap-4">
+              <MetricCard label="Total terkirim" value={nf.format(result.total.delivered)} />
+              <MetricCard label="Total retur (RTS)" value={nf.format(result.total.rts)} tone={result.total.rts > 0 ? "warn" : undefined} />
+              <MetricCard
+                label="Rasio retur"
+                value={result.total.rtsBps !== null ? `${(result.total.rtsBps / 100).toLocaleString("id-ID")}%` : "—"}
+                tone={result.total.rtsBps !== null && result.total.rtsBps > 0 ? "warn" : undefined}
+              />
+            </div>
+            <DataTableShell
+              caption="Riwayat penerima COD lintas gerai"
+              rows={result.items}
+              rowKey={(r) => r.tenant_id ?? r.tenant_slug ?? r.tenant_name}
+              columns={[
+                {
+                  key: "gerai",
+                  header: "Gerai",
+                  cell: (r) =>
+                    r.tenant_slug ? (
+                      <Link to="/gerai/$slug" params={{ slug: r.tenant_slug }} className="font-medium text-primary underline-offset-4 hover:underline">
+                        {r.tenant_name}
+                      </Link>
+                    ) : (
+                      <span className="font-medium">{r.tenant_name}</span>
+                    ),
+                },
+                { key: "delivered", header: "Terkirim", align: "right", cell: (r) => nf.format(r.delivered_count) },
+                { key: "rts", header: "Retur", align: "right", cell: (r) => (r.rts_count > 0 ? <StatusChip tone="danger">{nf.format(r.rts_count)}</StatusChip> : "0") },
+                { key: "last", header: "Kejadian terakhir", wide: true, cell: (r) => <span className="text-muted-foreground tabular-nums">{formatDate(r.last_event_at)}</span> },
+              ]}
+            />
           </div>
         )
       ) : null}

@@ -386,6 +386,16 @@ export const courierDiscountPolicy = sqliteTable("courier_discount_policy", {
   updatedBy: text("updated_by"),
 })
 
+export const partnerDiscountSchedule = sqliteTable("partner_discount_schedule", {
+  courierCode: text("courier_code").primaryKey(),
+  masterDiscountBps: integer("master_discount_bps").notNull(),
+  extraPromoBps: integer("extra_promo_bps").notNull().default(0),
+  extraPromoNote: text("extra_promo_note"),
+  platformMarginBps: integer("platform_margin_bps").notNull().default(500),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+})
+
 export const tenantDiscountRules = sqliteTable(
   "tenant_discount_rules",
   {

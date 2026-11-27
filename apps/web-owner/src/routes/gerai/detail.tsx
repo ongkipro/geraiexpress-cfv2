@@ -1,11 +1,16 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, RecheckButton, Section, StatusChip } from "../../components/page"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@shared/components/ui/table"
+import { ArrowLeftIcon } from "lucide-react"
+import { CourierLogo } from "@shared/components/admin/courier-logo"
+import { DataTableShell } from "@shared/components/admin/data-table"
+import { EmptyState, ErrorState, LoadingState, PageHeader, SectionCard, StatusBadge } from "@shared/components/admin/page"
+import { Button } from "@shared/components/ui/button"
+import { formatDate, ONBOARDING_LABEL, RecheckButton } from "../../components/page"
 import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
 
 interface DiscountRule {
   service_code: string
+  courier_code?: string
   display_name: string
   courier_name: string
   service_class: "regular" | "cargo"
@@ -47,8 +52,8 @@ const pct = (bps: number | null) => (bps === null ? "—" : `${(bps / 100).toFix
 export function GeraiDetailPage() {
   const { slug } = useParams({ strict: false }) as { slug: string }
   const { data, error, loading, reload } = useApi<GeraiDetail>(`/gerai/${encodeURIComponent(slug)}`)
-  if (loading) return <div className="flex flex-col gap-4"><PageHead title={`Gerai ${slug}`} /><LoadingBlock /></div>
-  if (error || !data) return <div className="flex flex-col gap-4"><PageHead title={`Gerai ${slug}`} /><ErrorBlock message={error ?? "Gerai tidak ditemukan."} onRetry={reload} /></div>
+  if (loading) return <div className="flex flex-col gap-4"><PageHeader title={`Gerai ${slug}`} /><LoadingState /></div>
+  if (error || !data) return <div className="flex flex-col gap-4"><PageHeader title={`Gerai ${slug}`} /><ErrorState message={error ?? "Gerai tidak ditemukan."} onRetry={reload} /></div>
   const ob = ONBOARDING_LABEL[data.onboarding_state ?? "not_connected"] ?? ONBOARDING_LABEL.not_connected!
   const retryable = data.onboarding_state === "registration_pending" || data.onboarding_state === "registration_unknown"
   const sellerId = data.connection?.sellerId ?? data.seller_id
@@ -57,20 +62,23 @@ export function GeraiDetailPage() {
   const needsResolve = rotationState !== "idle"
   return (
     <div className="flex flex-col gap-4 md:gap-5">
-      <PageHead title={data.name} description={`${data.hostnames.find((h) => h.kind !== "custom")?.hostname ?? data.slug} · disetujui ${formatDate(data.approved_at)}`}>
-        {data.status === "suspended" ? <StatusChip tone="danger">Dibekukan</StatusChip> : <StatusChip tone="safe">Aktif</StatusChip>}
+      <PageHeader title={data.name} description={`${data.hostnames.find((h) => h.kind !== "custom")?.hostname ?? data.slug} · disetujui ${formatDate(data.approved_at)}`}>
+        <Button variant="outline" render={<Link to="/gerai" search={{ tab: "direktori" }} />}>
+          <ArrowLeftIcon aria-hidden /> Direktori
+        </Button>
+        {data.status === "suspended" ? <StatusBadge tone="danger">Dibekukan</StatusBadge> : <StatusBadge tone="safe">Aktif</StatusBadge>}
         {/* DEC-244: operational sync only — never touches this gerai's shipments (DEC-209). */}
         <RecheckButton label="Sinkron & Periksa Ulang" busyLabel="Menyinkronkan…" path={`/gerai/${data.slug}/sinkron`} onDone={reload} done={(d) => syncDone(d as SyncResult)} />
-      </PageHead>
+      </PageHeader>
       <div className="grid gap-4 md:gap-5 lg:grid-cols-2">
-        <Section title="Koneksi Mengantar">
+        <SectionCard title="Koneksi Mengantar">
           <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-            <KV label="Status akun seller"><StatusChip tone={ob.tone}>{ob.label}</StatusChip></KV>
+            <KV label="Status akun seller"><StatusBadge tone={ob.tone}>{ob.label}</StatusBadge></KV>
             <KV label="Webhook">{WEBHOOK[data.connection?.webhookState ?? "unconfigured"]}</KV>
             <KV label="Kunci API">{data.connection?.hasKey ? `Tersimpan terenkripsi · versi ${data.connection.keyVersion}` : "Belum ada"}</KV>
             <KV label="Lingkungan">{data.connection?.environment === "production" ? "Produksi" : data.connection ? "Sandbox" : "—"}</KV>
             {sellerId ? <KV label="Seller ID Mengantar"><span className="font-mono text-xs break-all">{sellerId}</span></KV> : null}
-            {rotationState !== "idle" ? <KV label="Status rotasi kunci"><StatusChip tone="warn">{ROTATION[rotationState]}</StatusChip></KV> : null}
+            {rotationState !== "idle" ? <KV label="Status rotasi kunci"><StatusBadge tone="warn">{ROTATION[rotationState]}</StatusBadge></KV> : null}
             {data.last_error_code ? <KV label="Kode terakhir"><span className="font-mono">{data.last_error_code}</span></KV> : null}
           </dl>
           {retryable || canSyncKey || needsResolve ? (
@@ -80,8 +88,8 @@ export function GeraiDetailPage() {
               {needsResolve ? <ReasonAction label="Selesaikan Rotasi Tertunda" confirmLabel="Periksa Kunci" variant="outline" path={`/sistem/rotasi-kunci/${data.slug}`} extra={{ mode: "resolve" }} onDone={reload} hint="Membaca kunci aktif dari Mengantar untuk menutup rotasi yang belum selesai tanpa merotasi ulang." /> : null}
             </div>
           ) : null}
-        </Section>
-        <Section title="Kontrol">
+        </SectionCard>
+        <SectionCard title="Kontrol">
           <ul className="flex flex-col divide-y divide-slate-100">
             <li className="flex flex-wrap items-center justify-between gap-3 pb-3">
               <span className="flex flex-col"><span className="text-sm font-medium">Masking label</span><span className="text-xs text-muted-foreground">{data.masking_enabled ? "Aktif" : "Nonaktif"} · kuota harian <span className="tabular-nums">{data.masking_daily_quota ?? "tanpa batas"}</span></span></span>
@@ -96,21 +104,24 @@ export function GeraiDetailPage() {
               <ReasonAction label={data.status === "suspended" ? "Aktifkan kembali" : "Bekukan gerai"} confirmLabel={data.status === "suspended" ? "Aktifkan" : "Bekukan"} variant={data.status === "suspended" ? "outline" : "destructive"} path={`/gerai/${data.slug}/status`} extra={{ status: data.status === "suspended" ? "active" : "suspended" }} onDone={reload} />
             </li>
           </ul>
-        </Section>
+        </SectionCard>
       </div>
-      <Section
+      <SectionCard
         title="Diskon Ekspedisi Mengantar"
-        aside={
+        description={
+          data.discounts?.summary ? (
+            <span className="flex flex-wrap gap-1.5 tabular-nums">
+              <StatusBadge tone="safe">{data.discounts.summary.sesuai} sesuai</StatusBadge>
+              {data.discounts.summary.belum ? <StatusBadge tone="warn">{data.discounts.summary.belum} belum</StatusBadge> : null}
+              {data.discounts.summary.selisih ? <StatusBadge tone="danger">{data.discounts.summary.selisih} selisih</StatusBadge> : null}
+            </span>
+          ) : undefined
+        }
+        action={
           <div className="flex flex-wrap items-center gap-2">
-            {data.discounts?.summary ? (
-              <span className="flex flex-wrap gap-1.5 tabular-nums">
-                <StatusChip tone="safe">{data.discounts.summary.sesuai} sesuai</StatusChip>
-                {data.discounts.summary.belum ? <StatusChip tone="warn">{data.discounts.summary.belum} belum</StatusChip> : null}
-                {data.discounts.summary.selisih ? <StatusChip tone="danger">{data.discounts.summary.selisih} selisih</StatusChip> : null}
-              </span>
-            ) : null}
             {data.connection?.hasKey ? (
               <RecheckButton
+                size="sm"
                 label="Cek Diskon Live"
                 busyLabel="Memeriksa…"
                 path="/tarif/verifikasi-ulang"
@@ -132,67 +143,65 @@ export function GeraiDetailPage() {
                 hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan aturan tarif ke angka tersebut — termasuk nilai di luar batas default 20%–30%. Layanan tanpa estimasi aktif dilewati."
               />
             ) : null}
-            <Link
-              to="/tarif/$tenantId"
-              params={{ tenantId: data.id }}
-              className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 hover:bg-slate-50 md:h-9"
-            >
+            <Button size="sm" variant="outline" render={<Link to="/tarif/$tenantId" params={{ tenantId: data.id }} />}>
               Kelola Tarif
-            </Link>
+            </Button>
           </div>
         }
+        flush
       >
-        {data.discounts && data.discounts.items.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-200/85">
-            <Table>
-              <caption className="sr-only">Diskon ekspedisi {data.name}</caption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Layanan</TableHead>
-                  <TableHead className="text-right">Tercatat</TableHead>
-                  <TableHead className="text-right">Aktual Mengantar</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Diperiksa</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.discounts.items.map((r) => (
-                  <TableRow key={r.service_code}>
-                    <TableCell className="font-medium">{r.display_name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{pct(r.assigned_bps)}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{pct(r.observed_bps)}</TableCell>
-                    <TableCell>
-                      <StatusChip tone={DISC_STATE[r.verification_state].tone}>{DISC_STATE[r.verification_state].label}</StatusChip>
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{formatDate(r.observed_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Belum ada aturan diskon. Klik Tarik &amp; Terapkan dari Mengantar setelah akun Mengantar aktif.</p>
-        )}
-      </Section>
-      <Section title="Alamat">
-        <div className="overflow-hidden rounded-xl border border-slate-200/85">
-          <Table>
-            <caption className="sr-only">Alamat gerai</caption>
-            <TableHeader>
-              <TableRow><TableHead>Alamat</TableHead><TableHead>Jenis</TableHead><TableHead>Status</TableHead></TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.hostnames.map((h) => (
-                <TableRow key={h.hostname}>
-                  <TableCell className="font-mono whitespace-normal break-all">{h.hostname}</TableCell>
-                  <TableCell>{h.kind === "custom" ? "Domain sendiri" : "Bawaan"}</TableCell>
-                  <TableCell><StatusChip tone={h.state === "active" ? "safe" : h.state === "pending" ? "warn" : "danger"}>{HOST_STATE[h.state] ?? h.state}</StatusChip></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </Section>
+        <DataTableShell
+          bare
+          caption={`Diskon ekspedisi ${data.name}`}
+          rows={data.discounts?.items ?? []}
+          rowKey={(r) => r.service_code}
+          empty={<EmptyState title="Belum ada aturan diskon" body="Klik Tarik & Terapkan dari Mengantar setelah akun Mengantar aktif." />}
+          columns={[
+            {
+              key: "svc",
+              header: "Layanan",
+              cell: (r) => (
+                <div className="flex items-center gap-2.5">
+                  <CourierLogo code={r.courier_code ?? r.service_code} name={r.display_name} decorative />
+                  <span className="font-medium">{r.display_name}</span>
+                </div>
+              ),
+            },
+            { key: "assigned", header: "Tercatat", align: "right", cell: (r) => pct(r.assigned_bps) },
+            { key: "observed", header: "Aktual Mengantar", align: "right", cell: (r) => <span className="font-medium">{pct(r.observed_bps)}</span> },
+            { key: "state", header: "Status", cell: (r) => <StatusBadge tone={DISC_STATE[r.verification_state].tone}>{DISC_STATE[r.verification_state].label}</StatusBadge> },
+            { key: "at", header: "Diperiksa", wide: true, cell: (r) => <span className="text-muted-foreground tabular-nums">{formatDate(r.observed_at)}</span> },
+          ]}
+          mobile={(r) => (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <CourierLogo code={r.courier_code ?? r.service_code} name={r.display_name} decorative />
+                  <span className="font-medium">{r.display_name}</span>
+                </div>
+                <StatusBadge tone={DISC_STATE[r.verification_state].tone}>{DISC_STATE[r.verification_state].label}</StatusBadge>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
+                <span>Tercatat: <strong className="text-slate-900">{pct(r.assigned_bps)}</strong></span>
+                <span>Aktual: <strong className="text-slate-900">{pct(r.observed_bps)}</strong></span>
+              </div>
+            </div>
+          )}
+        />
+      </SectionCard>
+      <SectionCard title="Alamat" flush>
+        <DataTableShell
+          bare
+          caption="Alamat gerai"
+          rows={data.hostnames}
+          rowKey={(h) => h.hostname}
+          columns={[
+            { key: "host", header: "Alamat", cell: (h) => <span className="font-mono whitespace-normal break-all">{h.hostname}</span> },
+            { key: "kind", header: "Jenis", cell: (h) => (h.kind === "custom" ? "Domain sendiri" : "Bawaan") },
+            { key: "state", header: "Status", cell: (h) => <StatusBadge tone={h.state === "active" ? "safe" : h.state === "pending" ? "warn" : "danger"}>{HOST_STATE[h.state] ?? h.state}</StatusBadge> },
+          ]}
+        />
+      </SectionCard>
     </div>
   )
 }

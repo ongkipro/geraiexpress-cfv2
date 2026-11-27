@@ -1,5 +1,6 @@
-import { useParams, useRouter } from "@tanstack/react-router"
-import { ExternalLinkIcon } from "lucide-react"
+import { Link, useParams, useRouter } from "@tanstack/react-router"
+import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react"
+import { Button } from "@shared/components/ui/button"
 import { ErrorBlock, formatDate, LoadingBlock, ONBOARDING_LABEL, PageHead, Section, StatusChip } from "../../components/page"
 import { ReasonAction } from "../../components/reason-dialog"
 import { useApi } from "../../lib/use-api"
@@ -46,6 +47,9 @@ export function PengajuanPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHead title={data.business_name}>
+        <Button variant="outline" render={<Link to="/gerai" search={{ tab: "pengajuan" }} />}>
+          <ArrowLeftIcon aria-hidden /> Semua Pengajuan
+        </Button>
         {decided ? <StatusChip tone={data.state === "approved" ? "safe" : "danger"}>{data.state === "approved" ? "Disetujui" : "Ditolak"}</StatusChip> : <StatusChip tone="warn">Menunggu ditinjau</StatusChip>}
       </PageHead>
       <div className="grid gap-4 md:gap-5 lg:grid-cols-[3fr_2fr]">

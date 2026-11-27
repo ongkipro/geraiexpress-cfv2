@@ -5,7 +5,7 @@ import { register } from "../../api/registry"
 import { auditStatement, ownerGuard, requireReason, type OwnerCtx } from "../../api/owner"
 import { hit } from "../../auth/throttle"
 import { AppError, ok } from "../../http/envelope"
-import { courierBands, listRules, runDiscountVerifier, markRequested, platformPolicy, requestList, requestListCsv, syncDiscountsFromMengantar, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
+import { applyDefaultBandToTenant, applyScheduleBands, courierBands, listRules, runDiscountVerifier, markRequested, partnerSchedules, platformPolicy, requestList, requestListCsv, syncDiscountsFromMengantar, updatePartnerSchedule, updatePlatformPolicy, updateRule, upsertCourierPolicy } from "."
 
 async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
   try {
@@ -49,13 +49,17 @@ export function registerPricingAdmin(app: Hono<any>): void {
     return ok({ ...r, checkedAt: now })
   })
   // Pull & adopt actual per-expedition discounts directly from the tenant's connected Mengantar account.
-  // Registered before `/:serviceCode` so Hono matches the static action segment first.
+  // Registered before `/:serviceCode` so Hono matches static action segments first.
   r("POST", "/tarif/gerai/:tenantId/tarik-mengantar", "owner_recent", async (c) => {
     const b = await body(c)
     const now = Date.now()
     const lim = await hit(c.env.DB, `owner-discount-sync:${c.get("session").user.id}`, 6, 60_000, now)
     if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum menarik diskon ulang.")
     return ok(await syncDiscountsFromMengantar(c.env, { tenantId: c.req.param("tenantId") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), now }))
+  })
+  r("POST", "/tarif/gerai/:tenantId/terapkan-standar", "owner_recent", async (c) => {
+    const b = await body(c)
+    return ok(await applyDefaultBandToTenant(c.env, { tenantId: c.req.param("tenantId") ?? "", actorId: c.get("session").user.id, reason: requireReason(b.reason), now: Date.now() }))
   })
   r("POST", "/tarif/gerai/:tenantId/:serviceCode", "owner_recent", async (c) => {
     const b = await body(c)
@@ -72,16 +76,44 @@ export function registerPricingAdmin(app: Hono<any>): void {
     return ok(await markRequested(c.env, { keys: b.keys as Array<{ tenantId: string; serviceCode: string }>, actorId: c.get("session").user.id, reason: requireReason(b.reason), now: Date.now() }))
   })
   r("GET", "/tarif/kebijakan", "owner_aal2", async (c) => {
-    const [platform, bands, couriers] = await Promise.all([
+    const [platform, bands, schedules, couriers] = await Promise.all([
       platformPolicy(c.env.DB),
       courierBands(c.env.DB),
+      partnerSchedules(c.env.DB),
       c.env.DB.prepare("SELECT courier_code, MIN(courier_name) AS courier_name FROM courier_service_catalog WHERE is_active = 1 GROUP BY courier_code ORDER BY MIN(sort_order)").all<{ courier_code: string; courier_name: string }>(),
     ])
-    return ok({ platform, couriers: couriers.results.map((x) => ({ courierCode: x.courier_code, name: x.courier_name, band: bands.get(x.courier_code) ?? null })) })
+    return ok({
+      platform,
+      couriers: couriers.results.map((x) => ({
+        courierCode: x.courier_code,
+        name: x.courier_name,
+        band: bands.get(x.courier_code) ?? null,
+        schedule: schedules.get(x.courier_code) ?? null,
+      })),
+    })
   })
   r("POST", "/tarif/kebijakan/platform", "owner_recent", async (c) => {
     const b = await body(c)
     return ok(await updatePlatformPolicy(c.env, { band: b.band, applySlaMinutes: b.applySlaMinutes, actorId: c.get("session").user.id, reason: requireReason(b.reason), now: Date.now() }))
+  })
+  r("POST", "/tarif/kebijakan/terapkan-standar", "owner_recent", async (c) => {
+    const b = await body(c)
+    return ok(await applyScheduleBands(c.env, { actorId: c.get("session").user.id, reason: requireReason(b.reason), now: Date.now() }))
+  })
+  r("POST", "/tarif/kebijakan/master/:courierCode", "owner_recent", async (c) => {
+    const b = await body(c)
+    return ok({
+      schedule: await updatePartnerSchedule(c.env, {
+        courierCode: c.req.param("courierCode") ?? "",
+        masterDiscountBps: b.masterDiscountBps,
+        extraPromoBps: b.extraPromoBps,
+        extraPromoNote: b.extraPromoNote,
+        platformMarginBps: b.platformMarginBps,
+        actorId: c.get("session").user.id,
+        reason: requireReason(b.reason),
+        now: Date.now(),
+      }),
+    })
   })
   r("POST", "/tarif/kebijakan/kurir/:courierCode", "owner_recent", async (c) => {
     const b = await body(c)

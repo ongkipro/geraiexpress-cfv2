@@ -89,19 +89,21 @@ export function RingkasanPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       {header}
-      <MetricGrid>
-        <MetricCard icon={StoreIcon} label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
-        <MetricCard icon={PackageIcon} label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" to="/pengawasan" />
-        <MetricCard icon={InboxIcon} label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
-        <MetricCard
-          icon={ActivityIcon}
-          label="Kesehatan sinkron & relay"
-          value={k.health === "ok" ? "Baik" : "Perlu dicek"}
-          footer={k.partnerQuota ? `Kuota Partner: ${k.partnerQuota.minute}/60 per menit` : "Relay & kuota Partner"}
-          to="/sistem"
-          tone={k.health === "ok" ? undefined : "warn"}
-        />
-      </MetricGrid>
+      <div className="@container">
+        <MetricGrid>
+          <MetricCard icon={StoreIcon} label="Gerai aktif" value={nf.format(k.active_tenants)} footer="Gerai yang sudah disetujui dan aktif" to="/gerai?tab=direktori" />
+          <MetricCard icon={PackageIcon} label="Kiriman hari ini" value={nf.format(k.shipments_today)} footer="Semua gerai, sejak 00.00 WIB" to="/pengawasan" />
+          <MetricCard icon={InboxIcon} label="Pengajuan menunggu" value={nf.format(k.pending_applications)} footer={k.pending_applications ? "Perlu ditinjau Super Admin" : "Tidak ada antrean"} to="/gerai" tone={k.pending_applications ? "warn" : undefined} />
+          <MetricCard
+            icon={ActivityIcon}
+            label="Kesehatan sinkron & relay"
+            value={k.health === "ok" ? "Baik" : "Perlu dicek"}
+            footer={k.partnerQuota ? `Kuota Partner: ${k.partnerQuota.minute}/60 per menit` : "Relay & kuota Partner"}
+            to="/sistem"
+            tone={k.health === "ok" ? undefined : "warn"}
+          />
+        </MetricGrid>
+      </div>
       <div className="grid items-start gap-4 md:gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <SectionCard id="volume" title="Kiriman 14 hari terakhir" description={`${nf.format(total14)} paket · per hari · semua gerai`}>
           <AdminBarChart

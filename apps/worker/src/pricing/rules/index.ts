@@ -13,6 +13,14 @@ export interface PlatformPolicy extends DiscountBand {
   applySlaMinutes: number
 }
 
+export interface PartnerSchedule {
+  masterDiscountBps: number
+  extraPromoBps: number
+  extraPromoNote: string | null
+  platformMarginBps: number
+  targetGeraiBps: number
+}
+
 export interface RuleRow {
   tenant_id: string
   service_code: string
@@ -47,6 +55,26 @@ export async function courierBands(db: D1Database): Promise<Map<string, Discount
   return new Map(rows.map((r) => [r.courier_code, { defaultBps: r.default_discount_bps, minBps: r.min_discount_bps, maxBps: r.max_discount_bps }]))
 }
 
+export async function partnerSchedules(db: D1Database): Promise<Map<string, PartnerSchedule>> {
+  const rows = (
+    await db
+      .prepare("SELECT courier_code, master_discount_bps, extra_promo_bps, extra_promo_note, platform_margin_bps FROM partner_discount_schedule")
+      .all<{ courier_code: string; master_discount_bps: number; extra_promo_bps: number; extra_promo_note: string | null; platform_margin_bps: number }>()
+  ).results
+  return new Map(
+    rows.map((r) => [
+      r.courier_code,
+      {
+        masterDiscountBps: r.master_discount_bps,
+        extraPromoBps: r.extra_promo_bps,
+        extraPromoNote: r.extra_promo_note,
+        platformMarginBps: r.platform_margin_bps,
+        targetGeraiBps: Math.max(0, r.master_discount_bps - r.platform_margin_bps),
+      },
+    ]),
+  )
+}
+
 /**
  * Gives a newly approved gerai a rule at the courier default (platform default when the courier has no band) for every
  * active service, state `belum_diterapkan`. Part of the approval batch and guarded by THIS approval (its
@@ -63,11 +91,12 @@ export function seedRulesOnApproval(env: Env, input: { tenantId: string; applica
   ).bind(input.tenantId, input.defaultBps, input.now, verificationCheckAt(input.now, 0), input.applicationId, input.nonce)
 }
 
-/** Rules of one gerai with the band that applies to each. */
+/** Rules of one gerai with the band and DEC-256 partner master schedule that apply to each. */
 export async function listRules(env: Env, tenantId: string) {
-  const [policy, bands, rows, tenant] = await Promise.all([
+  const [policy, bands, schedules, rows, tenant] = await Promise.all([
     platformPolicy(env.DB),
     courierBands(env.DB),
+    partnerSchedules(env.DB),
     env.DB.prepare(
       `SELECT r.*, c.display_name, c.courier_name FROM tenant_discount_rules r JOIN courier_service_catalog c ON c.service_code = r.service_code
        WHERE r.tenant_id = ? ORDER BY c.sort_order`,
@@ -80,7 +109,11 @@ export async function listRules(env: Env, tenantId: string) {
   return {
     tenant,
     applySlaMinutes: policy.applySlaMinutes,
-    items: rows.results.map((r) => ({ ...r, band: bandForCourier(bands.get(r.courier_code), policy) })),
+    items: rows.results.map((r) => ({
+      ...r,
+      band: bandForCourier(bands.get(r.courier_code), policy),
+      schedule: schedules.get(r.courier_code) ?? null,
+    })),
   }
 }
 
@@ -202,6 +235,153 @@ export async function upsertCourierPolicy(env: Env, input: { courierCode: string
     auditStatement(env, { actorId: input.actorId, action: "pricing.courier_policy_update", targetType: "courier_discount_policy", targetId: input.courierCode, reason: input.reason, metadata: band, now: input.now }),
   ])
   return band
+}
+
+/** Update Mengantar partner master rate & platform margin split (DEC-256) for one courier. TOTP + reason + audit. */
+export async function updatePartnerSchedule(
+  env: Env,
+  input: { courierCode: string; masterDiscountBps: unknown; extraPromoBps: unknown; extraPromoNote: unknown; platformMarginBps: unknown; actorId: string; reason: string; now: number },
+): Promise<PartnerSchedule> {
+  const known = await env.DB.prepare("SELECT 1 FROM courier_service_catalog WHERE courier_code = ? LIMIT 1").bind(input.courierCode).first()
+  if (!known) throw new AppError(404, "COURIER_NOT_FOUND", "Ekspedisi tidak ditemukan.")
+  const master = input.masterDiscountBps
+  const extra = input.extraPromoBps === undefined ? 0 : input.extraPromoBps
+  const margin = input.platformMarginBps
+  if (typeof master !== "number" || !Number.isSafeInteger(master) || master < 0 || master > 10_000) {
+    throw new AppError(422, "INVALID_SCHEDULE", "Diskon master Mengantar harus antara 0% dan 100%.")
+  }
+  if (typeof extra !== "number" || !Number.isSafeInteger(extra) || extra < 0 || extra > 10_000 || master + extra > 10_000) {
+    throw new AppError(422, "INVALID_SCHEDULE", "Promo ekstra tidak valid (total master + promo maksimal 100%).")
+  }
+  if (typeof margin !== "number" || !Number.isSafeInteger(margin) || margin < 0 || margin > master) {
+    throw new AppError(422, "INVALID_SCHEDULE", "Margin platform tidak boleh melebihi diskon master Mengantar.")
+  }
+  const note = typeof input.extraPromoNote === "string" && input.extraPromoNote.trim() ? input.extraPromoNote.trim().slice(0, 200) : null
+  const before = (await partnerSchedules(env.DB)).get(input.courierCode) ?? null
+  const next: PartnerSchedule = { masterDiscountBps: master, extraPromoBps: extra, extraPromoNote: note, platformMarginBps: margin, targetGeraiBps: master - margin }
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO partner_discount_schedule (courier_code, master_discount_bps, extra_promo_bps, extra_promo_note, platform_margin_bps, updated_at, updated_by)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+       ON CONFLICT(courier_code) DO UPDATE SET
+         master_discount_bps = ?2, extra_promo_bps = ?3, extra_promo_note = ?4, platform_margin_bps = ?5, updated_at = ?6, updated_by = ?7`,
+    ).bind(input.courierCode, master, extra, note, margin, input.now, input.actorId),
+    auditStatement(env, {
+      actorId: input.actorId,
+      action: "pricing.partner_schedule_update",
+      targetType: "partner_discount_schedule",
+      targetId: input.courierCode,
+      reason: input.reason,
+      metadata: { from: before, to: next },
+      now: input.now,
+    }),
+  ])
+  return next
+}
+
+/**
+ * Applies `courier_discount_policy` bands derived from the current `partner_discount_schedule` (DEC-256):
+ *   default = master - margin (e.g. 25% regulars, 10% pos),
+ *   min = min(platform.minBps, default) (unlocks pos 10% while keeping 20% floor for regulars),
+ *   max = min(10000, master + extraPromo) (e.g. 30% regulars, 35% SPX/J&T, 15% pos).
+ * Existing tenant rules are never rewritten automatically.
+ */
+export async function applyScheduleBands(env: Env, input: { actorId: string; reason: string; now: number }): Promise<{ applied: number }> {
+  const [platform, schedules, activeCouriers] = await Promise.all([
+    platformPolicy(env.DB),
+    partnerSchedules(env.DB),
+    env.DB.prepare("SELECT DISTINCT courier_code FROM courier_service_catalog WHERE is_active = 1").all<{ courier_code: string }>(),
+  ])
+  const stmts: D1PreparedStatement[] = []
+  const appliedCouriers: Record<string, DiscountBand> = {}
+  for (const { courier_code } of activeCouriers.results) {
+    const s = schedules.get(courier_code)
+    if (!s) continue
+    const defaultBps = s.targetGeraiBps
+    const minBps = Math.min(platform.minBps, defaultBps)
+    const maxBps = Math.min(10_000, Math.max(defaultBps, s.masterDiscountBps + s.extraPromoBps))
+    appliedCouriers[courier_code] = { defaultBps, minBps, maxBps }
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO courier_discount_policy (courier_code, default_discount_bps, min_discount_bps, max_discount_bps, updated_at, updated_by)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(courier_code) DO UPDATE SET default_discount_bps = ?2, min_discount_bps = ?3, max_discount_bps = ?4, updated_at = ?5, updated_by = ?6`,
+      ).bind(courier_code, defaultBps, minBps, maxBps, input.now, input.actorId),
+    )
+  }
+  if (stmts.length === 0) return { applied: 0 }
+  stmts.push(
+    auditStatement(env, {
+      actorId: input.actorId,
+      action: "pricing.courier_policy_preset_apply",
+      targetType: "courier_discount_policy",
+      reason: input.reason,
+      metadata: { applied: stmts.length, bands: appliedCouriers },
+      now: input.now,
+    }),
+  )
+  await env.DB.batch(stmts)
+  return { applied: Object.keys(appliedCouriers).length }
+}
+
+/**
+ * Bulk-applies each courier's effective policy default (`band.defaultBps`) to all active rules of one gerai.
+ * Changed rows reset to `belum_diterapkan` for Mengantar CS application; unchanged rows stay untouched.
+ */
+export async function applyDefaultBandToTenant(
+  env: Env,
+  input: { tenantId: string; actorId: string; reason: string; now: number },
+): Promise<{ tenantId: string; updated: number; unchanged: number; changes: Array<{ serviceCode: string; fromBps: number; toBps: number }> }> {
+  const [tenant, policy, bands, rows] = await Promise.all([
+    env.DB.prepare("SELECT id FROM tenants WHERE id = ?").bind(input.tenantId).first<{ id: string }>(),
+    platformPolicy(env.DB),
+    courierBands(env.DB),
+    env.DB.prepare(
+      `SELECT r.service_code, r.courier_code, r.assigned_bps
+       FROM tenant_discount_rules r
+       JOIN courier_service_catalog c ON c.service_code = r.service_code
+       WHERE r.tenant_id = ? AND c.is_active = 1`,
+    )
+      .bind(input.tenantId)
+      .all<{ service_code: string; courier_code: string; assigned_bps: number }>(),
+  ])
+  if (!tenant) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
+  const stmts: D1PreparedStatement[] = []
+  const changes: Array<{ serviceCode: string; fromBps: number; toBps: number }> = []
+  let unchanged = 0
+  const nextCheck = verificationCheckAt(input.now, 0)
+  for (const r of rows.results) {
+    const band = bandForCourier(bands.get(r.courier_code), policy)
+    const target = band.defaultBps
+    if (r.assigned_bps === target) {
+      unchanged++
+      continue
+    }
+    changes.push({ serviceCode: r.service_code, fromBps: r.assigned_bps, toBps: target })
+    stmts.push(
+      env.DB.prepare(
+        `UPDATE tenant_discount_rules
+         SET assigned_bps = ?1, effective_from = ?2, updated_at = ?2, updated_by = ?3,
+             requested_at = ?2, request_sent_at = NULL, applied_at = NULL, verified_at = NULL,
+             verification_state = 'belum_diterapkan', next_check_at = ?4, check_step = 0, alerted_at = NULL
+         WHERE tenant_id = ?5 AND service_code = ?6`,
+      ).bind(target, input.now, input.actorId, nextCheck, input.tenantId, r.service_code),
+    )
+  }
+  stmts.push(
+    auditStatement(env, {
+      actorId: input.actorId,
+      action: "pricing.rule_bulk_preset",
+      targetType: "tenant",
+      targetId: input.tenantId,
+      tenantId: input.tenantId,
+      reason: input.reason,
+      metadata: { updated: changes.length, unchanged, changes },
+      now: input.now,
+    }),
+  )
+  await env.DB.batch(stmts)
+  return { tenantId: input.tenantId, updated: changes.length, unchanged, changes }
 }
 
 /** Observed discount per service class (regular: `discountPercent` or `discount/price`; cargo: `cargoDiscount/cargoPrice` or percent). */

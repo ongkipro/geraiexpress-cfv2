@@ -122,10 +122,10 @@ function Health() {
             ))}
           </dl>
         </Section>
-        <Section title="Rotasi Kunci Seller">
-          <RotateKey />
-        </Section>
       </div>
+      <Section title="Rotasi Kunci Seller">
+        <RotateKey />
+      </Section>
     </div>
   )
 }
