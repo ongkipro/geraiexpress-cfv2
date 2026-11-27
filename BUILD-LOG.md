@@ -1613,3 +1613,20 @@ Durable implementation changes, validation evidence and gotchas for the next mai
   - Hosted `ci.yml` run `45893235194` PASS (`pnpm check` + Playwright 390/768/1280 175/175).
   - Staging (`pnpm deploy:staging`): Worker `a3498b90-0481-4861-80a7-1c8366893abf`, DO 2/2 v26, 5/5 probes PASS, live SSR `Cookie: gx_wide=1` → `<html data-shell-wide="1" lang="id">` (`vary: Cookie`) verified on `app-staging.geraiexpress.com` & `owner-staging.geraiexpress.com`.
   - Production (`pnpm deploy:production --skip-build`): Worker `780b5172-4772-4076-afe5-18c4c882b355`, DO 4/4 v26, 6/6 probes PASS, live SSR `Cookie: gx_wide=1` (`GET` & `HEAD`) verified on `app.geraiexpress.com` & `owner.geraiexpress.com`.
+
+## 2026-11-28 — `REL-2026-11-28-super-admin-discount-ux` (`DEC-256` Partner Discount Matrix & Super Admin UI/UX Parity, `cc4f56c`)
+
+- Scope:
+  - D1 expand-only migration `0022_partner_discount_schedule.sql` + Drizzle schema (`partner_discount_schedule`) seeded with the 9 active Mengantar Partner master rates (`30%` regulars, `30% + 5%*` SPX & J&T EZ, `15%` Pos Indonesia) and `500 bps` (5%) platform margin split (`DEC-256`), guarded by integer `_bps` `CHECK` constraints.
+  - Super Admin pricing routes (`apps/worker/src/pricing/rules/{index,routes}.ts`): `POST /tarif/kebijakan/master/:courierCode`, `POST /tarif/kebijakan/terapkan-standar`, and `POST /tarif/gerai/:tenantId/terapkan-standar` — all `owner_recent` (TOTP) + `requireReason` + atomic D1 batch audit logging, filtering active catalog services only (`c.is_active = 1`).
+  - Super Admin `Tarif & Kurir` UI (`apps/web-owner/src/routes/tarif/{index,gerai}.tsx`): KPI metric strips, search & status filters, `<CourierLogo>`, Master / Margin / Target Gerai / Est. Margin columns, dialog editors with live margin preview + blank/NaN client guards, reset-to-platform-default action, one-click `Terapkan Batas Standar Partner` & `Terapkan Target Kebijakan`, and CS Mengantar summary copy button.
+  - Super Admin UI/UX parity with Gerai Admin across `Ringkasan`, `Gerai` (`Pengajuan`, `Direktori`, `Domain`, `Detail`, `Pengajuan Detail`), `Pengawasan` (`Antrean`, `Cari Kiriman`, `Radar Risiko COD`), and `Sistem & Audit` (`DataTableShell`, `<CourierLogo>`, `@container` KPI strips, full-width `Rotasi Kunci Seller`).
+- Verification:
+  - Local `pnpm check` PASS (typecheck 0 error, lint 0 warn, unit 32/32, Worker 67/67 files / 511/511 tests incl. 2 new `DEC-256` tests in `apps/worker/test/pricing/rules.test.ts`, bundle-audit PASS 0 source maps / 0 secrets).
+  - Playwright E2E (`super-admin.spec.ts` + `admin-shell.spec.ts`): 11/11 PASS.
+  - Visual & DOM inspection across 9 Super Admin routes at `1366px` and `390px` (18/18 renders: `overflow: false`, `dupIds: 0`; caught and fixed right-edge clipping of `AKSI` column on `Kebijakan Diskon` 1366px).
+  - Isolated independent review (`7d5b9633`): 1 P1 (`toBps` blank-string coercion guard) + 4 P2 (`CHECK (master + extra <= 10000)`, 390px dialog stacking, `c.is_active = 1` filter, plain Indonesian UI labels) fixed and re-verified.
+  - Hosted CI `ci.yml` run `46059991861`: **PASS** (`check` + full Playwright 390/768/1280).
+- Deploy:
+  - Staging: D1 `0022_partner_discount_schedule.sql` ✅ (0.37 ms), Worker `55ddbb4e-3f75-4211-996a-7eae3d077007`, `do:migrate` 2/2 current (v26), probes **5/5 PASS**.
+  - Production: D1 `0022_partner_discount_schedule.sql` ✅ (0.70 ms), Worker `4cf6a4f6-8306-4eb9-ae45-84cd048f1e7c`, `do:migrate` 4/4 current (v26), probes **6/6 PASS**.

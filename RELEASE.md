@@ -1,35 +1,37 @@
 # Release Manifest — GeraiExpress v2 (`geraiexpress-cfv2`)
 
-Release-ID: REL-2026-11-27-centered-app-shell
-Base: a1f0647
-Head: b447d1b
+Release-ID: REL-2026-11-28-super-admin-discount-ux
+Base: b447d1b
+Head: cc4f56c
 Environment: production
 Declared-Risk: R2
-Staging-Worker: a3498b90-0481-4861-80a7-1c8366893abf
-Production-Worker: 780b5172-4772-4076-afe5-18c4c882b355
-Rollback-Ref: c442e04f-c95f-41b8-9cd6-e522b75ff002
-Rollback-Command: pnpm exec wrangler rollback c442e04f-c95f-41b8-9cd6-e522b75ff002 --env production
+Staging-Worker: 55ddbb4e-3f75-4211-996a-7eae3d077007
+Production-Worker: 4cf6a4f6-8306-4eb9-ae45-84cd048f1e7c
+Rollback-Ref: 780b5172-4772-4076-afe5-18c4c882b355
+Rollback-Command: pnpm exec wrangler rollback 780b5172-4772-4076-afe5-18c4c882b355 --env production
 Backup-Proof: NOT_REQUIRED
-Status: DEPLOYED (2026-11-27)
+Status: DEPLOYED (2026-11-28)
 
 ## Contract
 
 This file defines the current release boundary and MUST describe only the latest release.
 Staging and production have been live since 2026-11-18; the current live production Worker is version
-`780b5172-4772-4076-afe5-18c4c882b355` (deployed 2026-11-27 from `b447d1b`, hosted `ci.yml` `45893235194` PASS, control
-`0000`–`0021`, tenant DO v26 4/4 `ok`, 6/6 production probes PASS, live SSR `gx_wide=1` GET+HEAD verified on `app.` and
-`owner.`; staging `a3498b90-0481-4861-80a7-1c8366893abf` DO v26 2/2 `ok`, 5/5 probes PASS, live SSR `gx_wide=1`
-verified on `app-staging.` and `owner-staging.`; logged in `BUILD-LOG.md`).
-Prior live rollback target: `c442e04f-c95f-41b8-9cd6-e522b75ff002` (`a1f0647`, same DO v26 schema).
+`4cf6a4f6-8306-4eb9-ae45-84cd048f1e7c` (deployed 2026-11-28 from `cc4f56c`, hosted `ci.yml` `46059991861` PASS, control
+`0000`–`0022` incl. expand-only `0022_partner_discount_schedule.sql`, tenant DO v26 4/4 `ok`, 6/6 production probes PASS;
+staging `55ddbb4e-3f75-4211-996a-7eae3d077007` control `0000`–`0022`, DO v26 2/2 `ok`, 5/5 probes PASS; logged in
+`BUILD-LOG.md`).
+Prior live rollback target: `780b5172-4772-4076-afe5-18c4c882b355` (`b447d1b`, same DO v26 schema; expand-only D1 table
+`partner_discount_schedule` is ignored by older Worker code).
 
-- `Base` is the last deployed/accepted commit (`a1f0647`) and must be an ancestor of `HEAD`.
-- `Declared-Risk` is `R2` (`DEC-257` dashboard/console UI shell refactor: full-bleed 64 px topbar + centered
-  `max-w-[1440px]` app shell, in-flow sticky desktop sidebar, uniform `#F6F7F9` inner canvas, and host-only `gx_wide=1`
-  SSR wide-mode toggle in `apps/worker/src/assets/spa.ts`, plus `DEC-256` Mengantar partner discount schedule docs).
+- `Base` is the last deployed/accepted commit (`b447d1b`) and must be an ancestor of `HEAD`.
+- `Declared-Risk` is `R2` (`DEC-256` Super Admin partner discount matrix & margin split: expand-only D1 migration
+  `0022_partner_discount_schedule.sql`, Super Admin `Tarif & Kurir` master/margin/preset routes with `owner_recent` TOTP
+  + audit logging, and full Super Admin UI/UX parity across `Ringkasan`, `Gerai`, `Tarif & Kurir`, `Pengawasan`, and
+  `Sistem & Audit`).
 - **Rollback rule (DEC-254, DEC-255, ADR-0006 §4, `docs/WORKFLOW.md` §8):**
-  - **Code-only release (no `TENANT_SCHEMA_VERSION` bump — stays v26):** `Rollback-Command` to `c442e04f` is safe with
-    owner approval; releases that bump `TENANT_SCHEMA_VERSION` remain roll-forward only.
-- `Backup-Proof` is `NOT_REQUIRED` for this code-only release (no new D1 or tenant DO migration; live DO objects are
-  already on v26).
+  - **Expand-only D1 control release (no `TENANT_SCHEMA_VERSION` bump — stays v26):** `Rollback-Command` to `780b5172`
+    is safe with owner approval; releases that bump `TENANT_SCHEMA_VERSION` remain roll-forward only.
+- `Backup-Proof` is `NOT_REQUIRED` for this expand-only release (additive reference table only, no destructive D1 or
+  tenant DO schema change; live DO objects remain on v26).
 - Set `Status: READY` only after the release commits are finalized on `main`, `pnpm check` and hosted `ci.yml` pass,
   and owner approval gates every deploy.
