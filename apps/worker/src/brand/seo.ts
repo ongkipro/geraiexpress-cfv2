@@ -27,9 +27,9 @@ export interface BrandPageMeta {
 export const BRAND_PAGES: Record<string, BrandPageMeta> = {
   "/": {
     crumb: "Beranda",
-    titleStem: "Aplikasi Kasir Agen Kirim Paket Multi-Ekspedisi",
-    description: "Perangkat lunak kasir untuk konter, fotokopi, dan agen ekspedisi: cek ongkir multi-kurir, cetak resi 100 mm, kelola COD, dan rekonsiliasi saldo otomatis.",
-    ogAlt: "Aplikasi kasir agen kirim paket multi-ekspedisi GeraiExpress untuk loket dan toko",
+    titleStem: "Aplikasi Kasir Agen Paket, Diskon Ongkir Sampai 25%",
+    description: "Aplikasi kasir agen kirim paket multi-ekspedisi dengan diskon ongkir mitra sampai 25%, cetak resi 100 mm, kelola COD, dan rekonsiliasi saldo otomatis.",
+    ogAlt: "Aplikasi kasir agen kirim paket multi-ekspedisi GeraiExpress dengan diskon ongkir sampai 25%",
   },
   "/fitur": {
     crumb: "Fitur",
@@ -51,9 +51,9 @@ export const BRAND_PAGES: Record<string, BrandPageMeta> = {
   },
   "/biaya-dan-paket": {
     crumb: "Biaya & Paket",
-    titleStem: "Biaya Pendaftaran & Skema Komisi Mitra Loket",
-    description: "Skema kemitraan agen kirim paket yang transparan: tanpa sewa mesin khusus, komisi diskon ongkir per kurir, halaman publik gratis, dan opsi domain toko Pro.",
-    ogAlt: "Skema biaya kemitraan loket, komisi diskon ongkir, dan paket domain toko GeraiExpress",
+    titleStem: "Biaya Rp 0 & Komisi Diskon Ongkir Sampai 25%",
+    description: "Buka loket kirim paket tanpa biaya pendaftaran: nikmati diskon ongkir mitra sampai 25%, halaman publik gratis, dan opsi domain toko sendiri (Pro).",
+    ogAlt: "Skema biaya Rp 0 kemitraan loket, diskon ongkir mitra sampai 25%, dan paket domain Pro GeraiExpress",
   },
   "/simulasi-kasir": {
     crumb: "Simulasi Kasir",
@@ -106,7 +106,7 @@ export const MENU_ROWS: Array<[string, string, string]> = [
   ["/fitur", "Fitur", "Kasir, cetak resi, retur & keuangan"],
   ["/ekspedisi", "Ekspedisi", "Sembilan kurir mitra, Reguler & Kargo"],
   ["/cara-kerja", "Cara Kerja", "Lima langkah daftar & peralatan loket"],
-  ["/biaya-dan-paket", "Biaya & Paket", "Rp 0 pendaftaran, opsi domain Pro"],
+  ["/biaya-dan-paket", "Biaya & Paket", "Rp 0 daftar, diskon ongkir sampai 25%"],
   ["/simulasi-kasir", "Simulasi Kasir", "Hitung ongkir & struk tanpa login"],
   ["/panduan", "Panduan", "Langkah bergambar untuk pemilik & kasir"],
   ["/tanya-jawab", "Tanya Jawab", "Syarat lokasi, saldo, COD & retur"],

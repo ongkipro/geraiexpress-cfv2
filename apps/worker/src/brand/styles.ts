@@ -242,10 +242,10 @@ ul.rates li:last-child{border-bottom:0}
 @media(max-width:520px){.chips{gap:8px}.chips li{min-height:40px;padding:6px 10px;font-size:.8125rem;gap:7px}.chips li::before{width:6px;height:6px;box-shadow:0 0 0 3px var(--tint)}}
 @media(max-width:339px){.chips{grid-template-columns:1fr}}
 /* DEC-249: a slimmer home (<= 6,200px at 1440): tighter rhythm, one-line section titles, compact pricing and FAQ */
-@media(min-width:900px){main:has(>.hero-bleed) section.sec{padding-bottom:56px}main:has(>.hero-bleed) .shead{margin-bottom:28px}main:has(>.hero-bleed) .shead .sub{max-width:76ch}main:has(>.hero-bleed) .shead h2{max-width:none}}
+@media(min-width:900px){main:has(>.hero-bleed) section.sec{padding-bottom:48px}main:has(>.hero-bleed) .shead{margin-bottom:28px}main:has(>.hero-bleed) .shead .sub{max-width:76ch}main:has(>.hero-bleed) .shead h2{max-width:none}}
 main:has(>.hero-bleed) .readout .incl{margin-top:14px;gap:6px;font-size:.9rem}
 main:has(>.hero-bleed) .bento{gap:16px}main:has(>.hero-bleed) .bento .tile{padding:1.5rem}
-main:has(>.hero-bleed) .closing{padding-bottom:64px}
+main:has(>.hero-bleed) .closing{padding-bottom:52px}
 @media(min-width:900px){main:has(>.hero-bleed) .closing .callout{padding:40px}}main:has(>.hero-bleed) .more{margin-top:12px}
 @media(min-width:900px){main:has(>.hero-bleed) #ringkasan{padding-top:40px}main:has(>.hero-bleed) h2{font-size:clamp(1.6rem,1.2rem + 1.2vw,2rem)}main:has(>.hero-bleed) .raka-copy h2{max-width:26ch}}
 main:has(>.hero-bleed) .shot-stage{max-height:340px}
@@ -581,6 +581,31 @@ footer.ftr{background:var(--tile);border-top:var(--hairline);padding:56px 0 40px
 .gtips h3{margin:0 0 8px;font-size:1.0625rem}
 .gtop{margin:0;font-size:.9375rem}
 .gtop a{display:inline-flex;align-items:center;min-height:44px}
+/* DEC-256 sales promo highlight & /biaya-dan-paket profit estimator (white-gallery tokens, zero extra borders) */
+.promo-kicker{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:5px 13px;border-radius:999px;background:var(--tint);color:var(--action);font-size:.875rem;font-weight:700;letter-spacing:-.01em}
+.promo-kicker b{font-weight:800}
+.promo-dot{width:7px;height:7px;border-radius:999px;background:var(--action);flex-shrink:0}
+.r-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.r-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:#fff;color:var(--action);font-size:.8125rem;font-weight:750;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+main:has(>.hero-bleed) .panel{padding:1.75rem}
+.profit-stage{margin-bottom:36px;display:grid;gap:24px;align-items:center;padding:2rem;border-radius:24px;background:var(--tile)}
+@media(min-width:900px){.profit-stage{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:40px;padding:2.25rem}}
+@media(max-width:640px){.profit-stage{padding:1.25rem;border-radius:20px}}
+.profit-copy{display:grid;gap:10px;align-content:start}
+.profit-copy h3{margin:0;font-size:clamp(1.25rem,1.05rem + .8vw,1.6rem);letter-spacing:-.02em}
+.profit-copy p{margin:0;color:var(--body);font-size:.95rem}
+.profit-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.profit-tabs button{min-height:44px;padding:0 14px;border:0;border-radius:999px;background:#fff;color:var(--body);font:650 .9rem/1 inherit;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.06);transition:background-color .15s,color .15s}
+.profit-tabs button:hover{color:var(--ink)}
+.profit-tabs button[aria-pressed=true]{background:var(--action);color:#fff;box-shadow:0 8px 18px -10px rgba(11,79,227,.55)}
+.profit-card{display:grid;gap:14px}
+.profit-nums{display:grid;gap:12px 16px;grid-template-columns:repeat(2,minmax(0,1fr));padding-top:12px;border-top:var(--hairline)}
+.profit-nums>div:last-child{grid-column:1/-1}
+@media(min-width:520px){.profit-nums{grid-template-columns:repeat(3,minmax(0,1fr))}.profit-nums>div:last-child{grid-column:auto}}
+.profit-nums div{display:grid;gap:2px}
+.profit-nums dt{font-size:.78rem;color:var(--slate);font-weight:600}
+.profit-nums dd{margin:0;font-size:1.05rem;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.profit-nums dd.hi{color:var(--action)}
 /* DEC-250: a crisper mobile rhythm on every page */
 @media(max-width:760px){section.sec{padding:48px 0}section.sec.tight{padding-top:24px;padding-bottom:32px}.bento .tile,main:has(>.hero-bleed) .bento .tile{padding:1.25rem}main:has(>.hero-bleed) .shead{margin-bottom:24px}.bento>.tile,main:has(>.hero-bleed) .bento>.tile{gap:16px}.bento .float{padding:.9rem 1rem}}
 `

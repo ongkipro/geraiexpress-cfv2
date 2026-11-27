@@ -4,8 +4,8 @@
 import { env, exports } from "cloudflare:workers"
 import { describe, expect, it } from "vitest"
 
-/** SHA-256 of the home 3D studio hero markup on `main` before DEC-249 (owner: "do not modify it at all"). */
-const HERO_SHA256 = "0c41edbc5b85f6e3f6e79771f53968b4ecc1eb19a30a73dbddc217cee2250ca1"
+/** SHA-256 of the home 3D studio hero markup (3D canvas/HUD untouched; stage-pill updated to `sampai 25%` per DEC-256). */
+const HERO_SHA256 = "ef4eae6a4b2d77228b06013b9d0a48ef50b81ff4101c05bc927199d4fb5ed64d"
 
 const APEX = "http://geraiexpress.localhost:8787"
 const get = (path: string, headers: Record<string, string> = {}) => exports.default.fetch(`${APEX}${path}`, { headers })
@@ -110,18 +110,36 @@ describe("brand site", () => {
     for (const p of ["/", "/simulasi-kasir"]) expect(await (await get(p)).text(), p).not.toMatch(/fetch\(|XMLHttpRequest|\/api\//)
   })
 
-  it("DEC-245 copy stays truthful: nine couriers, no fixed discount, no KYC, catalog services, real volumetric rule", async () => {
-    const all = (await Promise.all(PAGES.map(async (p) => (await get(p)).text()))).join("\n")
-    for (const banned of ["Ninja", "10+ ekspedisi", "10+ kurir", "25%", "KYC", "SAMEDAY", "Next Day", "BIGPACK", "J&amp;T Cargo", "JTR", "GOKIL", "iDtruck", "SAP Lite", "Pos Kargo", "08.30", "20%–30%"]) {
+  it("DEC-245 / DEC-256 copy stays truthful: nine couriers, up-to-25% discount never tied to a courier name, no KYC, catalog services, real volumetric rule", async () => {
+    const pages = await Promise.all(PAGES.map(async (p) => [p, await (await get(p)).text()] as const))
+    const all = pages.map(([, h]) => h).join("\n")
+    for (const banned of ["Ninja", "10+ ekspedisi", "10+ kurir", "KYC", "SAMEDAY", "Next Day", "BIGPACK", "J&amp;T Cargo", "JTR", "GOKIL", "iDtruck", "SAP Lite", "Pos Kargo", "08.30", "20%–30%"]) {
       expect(all, banned).not.toContain(banned)
+    }
+    // DEC-256 public landing promo: "sampai 25%" appears on `/` and `/biaya-dan-paket`, never quotes 30% in visible copy,
+    // and NEVER names a courier in any sentence/clause that mentions a discount percentage.
+    const home = pages.find(([p]) => p === "/")![1]
+    const biaya = pages.find(([p]) => p === "/biaya-dan-paket")![1]
+    expect(home.toLowerCase()).toContain("sampai 25%")
+    expect(biaya.toLowerCase()).toContain("sampai 25%")
+    expect(biaya).toContain('data-profit')
+    const courierRe = /\b(jne|j&t|j&amp;t|sicepat|sap express|sap cargo|lion parcel|anteraja|idexpress|pos indonesia|spx)\b/i
+    for (const [p, html] of pages) {
+      const textOnly = html.replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ")
+      expect(textOnly, `${p}: must not quote 30% master rate publicly`).not.toContain("30%")
+      for (const sentence of textOnly.split(/[.!?\n]+/)) {
+        if (/diskon|25\s*%/i.test(sentence)) {
+          expect(sentence, `${p}: courier name tied to discount copy -> ${sentence.trim()}`).not.toMatch(courierRe)
+        }
+      }
     }
     const eks = await (await get("/ekspedisi")).text()
     expect(eks).toContain("<code>4.000</code> untuk JNE Reguler dan iDexpress Cargo, <code>6.000</code> untuk layanan lain")
     expect([...eks.matchAll(/<img src="\/couriers\/(\w+)\.svg"/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i)).toHaveLength(9)
     for (const cargo of ["JNE Cargo", "SiCepat Cargo", "SAP Cargo", "iDexpress Cargo"]) expect(eks).toContain(`${cargo} (≥ 5 kg, Non-COD)`)
-    const biaya = await (await get("/biaya-dan-paket")).text()
     const standard = biaya.slice(biaya.indexOf('<div class="readout" data-plan="standar"'), biaya.indexOf('<div class="readout" data-plan="pro"'))
     expect(standard).toContain("Kunci API toko &amp; konektor MCP")
+    expect(standard).toContain("Diskon ongkir mitra sampai 25%")
     expect(biaya).toContain("pelanggan tetap membayar tarif publik")
   })
 })

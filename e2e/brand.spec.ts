@@ -263,6 +263,14 @@ test("Brand DEC-247: radio paket mengganti panel rincian", async ({ page }) => {
   await page.getByRole("radio", { name: /Mitra Gerai Standar/ }).check()
   await expect(std).toBeVisible()
   await expect(pro).toBeHidden()
+  // DEC-256: interactive profit estimator on /biaya-dan-paket updates daily/monthly spread with zero network calls.
+  const profit = page.locator("[data-profit]")
+  await expect(profit.locator("[data-out-mo]")).toHaveText("s.d. Rp 4.500.000")
+  await profit.getByRole("button", { name: "50 paket/hari" }).click()
+  await expect(profit.locator("[data-out-day]")).toHaveText("s.d. Rp 250.000")
+  await expect(profit.locator("[data-out-mo]")).toHaveText("s.d. Rp 7.500.000")
+  await profit.getByRole("button", { name: "15 paket/hari" }).click()
+  await expect(profit.locator("[data-out-mo]")).toHaveText("s.d. Rp 2.250.000")
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
 })
 

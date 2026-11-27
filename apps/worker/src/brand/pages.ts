@@ -1,6 +1,7 @@
 // Multi-page SSR marketing content for `geraiexpress.com` (`docs/visual/09` §4, DEC-247 Borderless White-Gallery).
-// Every claim reflects real v2 product mechanics (DEC-245 guards: nine couriers, no invented counters, testimonials or
-// discount percentages); every UI artifact on the page is synthetic example data; the demos make no network call.
+// Every claim reflects real v2 product mechanics (DEC-245 / DEC-256 guards: nine couriers, partner shipping discount up
+// to 25% without tying discount percentages to specific courier names, no invented counters or testimonials); every UI
+// artifact on the page is synthetic example data; the demos make no network call.
 import { escapeHtml as e } from "../http/pages"
 import { renderPanduanBody } from "./panduan"
 import type { Legal } from "./seo"
@@ -151,7 +152,7 @@ export function renderHome(app: string): string {
 <div id="calloutDesc" class="callout-desc">Daftar akun Gerai Express secara online tanpa proses rumit.</div>
 </div></div>
 
-<div class="glass-surface stage-pill"><span class="stage-dot"></span><span>Diskon kirim mitra</span><span class="stage-off">sesuai akun gerai</span></div>
+<div class="glass-surface stage-pill"><span class="stage-dot"></span><span>Diskon ongkir mitra</span><span class="stage-off">sampai 25%</span></div>
 
 <div id="hudControls">
 <div class="glass-surface hud-bar">
@@ -173,8 +174,9 @@ export function renderHome(app: string): string {
 
 <section class="sec" id="ringkasan"><div class="wrap intro-grid">
 <div>
+<p class="promo-kicker"><span class="promo-dot" aria-hidden="true"></span><span>Daftar <b>Rp 0</b> · Diskon ongkir mitra <b>sampai 25%</b></span></p>
 <h1 class="intro-title">Aplikasi kasir agen kirim paket multi-ekspedisi</h1>
-<p class="lead">Satu meja kasir untuk konter pulsa, fotokopi, toko kelontong, dan ruko jasa: bandingkan tarif sembilan ekspedisi mitra Mengantar untuk Reguler maupun Kargo, cetak resi thermal 100 mm, kelola kiriman COD, lalu cocokkan saldo Mengantar sampai rupiah terakhir.</p>
+<p class="lead">Satu meja kasir untuk konter pulsa, fotokopi, toko kelontong, dan ruko jasa: layani sembilan ekspedisi Reguler maupun Kargo, pelanggan bayar tarif publik resmi, loket Anda nikmati selisih diskon ongkir sampai 25%—tanpa biaya waralaba.</p>
 <div class="row">
 <a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai</a>
 <a class="cta ghost" href="/simulasi-kasir">Coba Simulasi Kasir</a>
@@ -226,7 +228,7 @@ export function renderHome(app: string): string {
 </figure>
 <div class="raka-copy">
 <h2 id="toko-title">Ubah tokomu jadi titik kirim paket warga &amp; penjual online sekitar</h2>
-<p class="sub">Sudah punya meja kasir atau ruko yang buka setiap hari? Tambahkan layanan sembilan ekspedisi tanpa biaya waralaba dan tanpa sewa mesin khusus.</p>
+<p class="sub">Sudah punya meja kasir atau ruko yang buka setiap hari? Tambahkan layanan kirim paket dengan komisi diskon ongkir sampai 25% dari setiap transaksi—tanpa biaya waralaba dan tanpa sewa mesin khusus.</p>
 <ul class="chips" aria-label="Jenis usaha yang cocok membuka loket"><li>Konter Pulsa &amp; Kuota</li><li>Fotokopi &amp; Percetakan</li><li>Warung &amp; Toko Kelontong</li><li>Toko ATK &amp; Buku</li><li>Ruko Jasa &amp; Laundry</li><li>Koperasi &amp; BUMDes</li><li>Dropshipper &amp; Reseller</li><li>Gudang UMKM Online</li></ul>
 </div>
 </div></section>
@@ -515,7 +517,7 @@ const STEPS: Step[] = [
     mitra: "Memantau status pengajuan lewat email dan dasbor.",
     sistem: "Meninjau alamat jemput, lalu membuat dan menghubungkan akun seller Mengantar atas nama usaha Anda.",
     card: `<div class="float"><div class="w-head"><span>Status pengajuan</span><span class="chip on">Disetujui</span></div>
-<ul class="w-rows"><li><span>Tinjauan titik jemput</span><b>Selesai</b></li><li><span>Akun seller Mengantar</span><b>Terhubung</b></li><li><span>Diskon mitra per ekspedisi</span><b>Dikonfirmasi</b></li></ul></div>`,
+<ul class="w-rows"><li><span>Tinjauan titik jemput</span><b>Selesai</b></li><li><span>Akun seller Mengantar</span><b>Terhubung</b></li><li><span>Diskon ongkir mitra</span><b>Sampai 25%</b></li></ul></div>`,
   },
   {
     label: "Webhook &amp; Printer",
@@ -604,8 +606,8 @@ ${closing(app, "/biaya-dan-paket", "Lihat Biaya & Paket")}`
 }
 
 const STANDARD_INCLUDES = [
-  "Kasir kiriman satuan, paket massal CSV, cek ongkir &amp; cek resi",
-  "Cetak label thermal 100 mm &amp; struk Bluetooth 58 mm",
+  "<strong>Diskon ongkir mitra sampai 25%</strong> sesuai ketentuan layanan aktif",
+  "Kasir satuan, paket massal CSV, cetak label 100 mm &amp; struk 58 mm",
   "Akun pemilik dan akun kasir terpisah (angka margin tidak bocor)",
   "Halaman publik <strong>namagerai.geraimitra.com</strong> dengan QR kirim dari rumah",
   "Sinkronisasi mutasi saldo, pelacak COD cair, dan Meja Retur",
@@ -629,16 +631,33 @@ const COMPARE: Array<[string, string, string, string]> = [
 ]
 const CMP_COLS = ["Manual ekspedisi satu-satu", "Sistem keagenan kunci perangkat", "GeraiExpress"]
 
-/** `/biaya-dan-paket` readout sync: the JS fallback for browsers without `:has()` (CSS decides where it exists). */
+/** `/biaya-dan-paket` readout sync & interactive profit estimator (zero network calls). */
 export const BIAYA_SCRIPT = `<script>
 (function(){
-  var r=document.querySelector("[data-pricing]");if(!r)return;
-  function sync(){
-    var c=r.querySelector("input[name=paket]:checked"),v=c?c.value:"";
-    [].forEach.call(r.querySelectorAll(".readout"),function(x){if(x.getAttribute("data-plan")===v)x.setAttribute("data-active","");else x.removeAttribute("data-active")});
-    [].forEach.call(r.querySelectorAll(".tier"),function(t){if(t.querySelector("input").checked)t.setAttribute("data-active","");else t.removeAttribute("data-active")});
+  var r=document.querySelector("[data-pricing]");
+  if(r){
+    function sync(){
+      var c=r.querySelector("input[name=paket]:checked"),v=c?c.value:"";
+      [].forEach.call(r.querySelectorAll(".readout"),function(x){if(x.getAttribute("data-plan")===v)x.setAttribute("data-active","");else x.removeAttribute("data-active")});
+      [].forEach.call(r.querySelectorAll(".tier"),function(t){if(t.querySelector("input").checked)t.setAttribute("data-active","");else t.removeAttribute("data-active")});
+    }
+    r.addEventListener("change",sync);sync();
   }
-  r.addEventListener("change",sync);sync();
+  var p=document.querySelector("[data-profit]");
+  if(p){
+    var btns=[].slice.call(p.querySelectorAll("[data-pkt]"));
+    var dEl=p.querySelector("[data-out-day]"),mEl=p.querySelector("[data-out-mo]"),vEl=p.querySelector("[data-out-vol]");
+    function rp(n){return"Rp "+n.toLocaleString("id-ID")}
+    function setVol(n){
+      btns.forEach(function(b){b.setAttribute("aria-pressed",+b.getAttribute("data-pkt")===n?"true":"false")});
+      var perDay=n*5000;
+      if(vEl)vEl.textContent=n+" paket/hari";
+      if(dEl)dEl.textContent="s.d. "+rp(perDay);
+      if(mEl)mEl.textContent="s.d. "+rp(perDay*30);
+    }
+    btns.forEach(function(b){b.addEventListener("click",function(){setVol(+b.getAttribute("data-pkt"))})});
+    setVol(30);
+  }
 })();
 </script>`
 
@@ -648,14 +667,14 @@ const incl = (items: string[], label: string) => `<ul class="incl" aria-label="$
 function pricingBlock(app: string): string {
   return `<div class="pricing" data-pricing>
 <fieldset class="tiers"><legend>Pilih jenis kemitraan</legend>
-<label class="tier"><input type="radio" name="paket" value="standar" checked><span class="t-main"><span class="t-top"><span class="t-label">Mitra Gerai Standar</span><span class="t-price">Rp 0</span></span><span class="t-note">Biaya pendaftaran &amp; pemakaian aplikasi kasir · Halaman namagerai.geraimitra.com gratis</span></span></label>
+<label class="tier"><input type="radio" name="paket" value="standar" checked><span class="t-main"><span class="t-top"><span class="t-label">Mitra Gerai Standar</span><span class="t-price">Rp 0</span></span><span class="t-note">Diskon ongkir mitra sampai 25% · Biaya daftar &amp; aplikasi kasir gratis · namagerai.geraimitra.com</span></span></label>
 <label class="tier"><input type="radio" name="paket" value="pro"><span class="t-main"><span class="t-top"><span class="t-label">Mitra Gerai + Domain Sendiri (Pro)</span><span class="t-price">Hubungi kami</span></span><span class="t-note">Pakai domain .com / .id milik toko sendiri dengan SSL Cloudflare otomatis</span></span></label>
 </fieldset>
 <div class="panel">
 <div class="readout" data-plan="standar" data-active>
-<p class="r-label">Mitra Gerai Standar</p>
+<div class="r-top"><p class="r-label">Mitra Gerai Standar</p><span class="r-badge">Diskon ongkir mitra sampai 25%</span></div>
 <p class="r-price"><strong>Rp 0</strong><small>biaya pendaftaran &amp; aplikasi kasir</small></p>
-<p class="r-desc">Keuntungan gerai datang dari selisih diskon ongkir mitra pada setiap resi, sementara pelanggan tetap membayar tarif publik.</p>
+<p class="r-desc">Keuntungan gerai datang dari selisih diskon ongkir mitra sampai 25% pada setiap resi, sementara pelanggan tetap membayar tarif publik.</p>
 <a class="cta" href="${e(app)}/daftar-akun">Daftar Gerai</a>
 ${incl(STANDARD_INCLUDES, "Termasuk di Mitra Gerai Standar")}
 </div>
@@ -679,26 +698,52 @@ function compareTable(): string {
 }
 
 export function renderBiaya(app: string): string {
-  return `${pageHead("Skema kemitraan", "Biaya pendaftaran &amp; skema komisi mitra loket", "Biaya dan pembagian margin kami buka sejak awal agar pemilik toko dapat menghitung perputaran modal loket secara realistis.")}
+  return `${pageHead("Skema kemitraan", "Biaya Rp 0 &amp; diskon ongkir mitra sampai 25%", "Mulai tanpa biaya langganan atau waralaba. Pelanggan membayar tarif publik resmi, sedangkan gerai Anda menikmati selisih diskon ongkir sampai 25% ditambah jasa packing.")}
 
 <section class="sec tight" aria-labelledby="paket-title"><div class="wrap">
-<div class="shead"><h2 id="paket-title">Pilih cara bermitra</h2><p class="sub">Mulai tanpa biaya langganan aplikasi, lalu tambahkan domain toko sendiri hanya bila dibutuhkan.</p></div>
+<div class="shead"><h2 id="paket-title">Pilih cara bermitra</h2><p class="sub">Mulai gratis dengan diskon ongkir mitra sampai 25%, lalu tambahkan domain toko sendiri hanya bila dibutuhkan.</p></div>
 ${pricingBlock(app)}
+</div></section>
+
+<section class="sec tight" aria-labelledby="untung-title"><div class="wrap">
+<div class="shead"><h2 id="untung-title">Dari mana keuntungan gerai datang</h2><p class="sub">Pelanggan membayar tarif publik resmi; saldo gerai terpotong lebih hemat setelah diskon ongkir mitra sampai 25% diterapkan pada akunnya.</p></div>
+<div class="profit-stage" data-profit>
+<div class="profit-copy">
+<span class="chip on">Ilustrasi potensi laba loket</span>
+<h3>Bayangkan selisih ongkir dari paket harian di toko Anda</h3>
+<p>Contoh dengan rata-rata ongkir publik Rp 20.000/paket dan batas atas diskon mitra <strong>sampai 25%</strong> (hemat hingga Rp 5.000/paket), belum termasuk tambahan jasa packing.</p>
+<div class="profit-tabs" role="group" aria-label="Pilih contoh jumlah paket harian">
+<button type="button" data-pkt="15" aria-pressed="false">15 paket/hari</button>
+<button type="button" data-pkt="30" aria-pressed="true">30 paket/hari</button>
+<button type="button" data-pkt="50" aria-pressed="false">50 paket/hari</button>
+</div>
+</div>
+<div class="float profit-card">
+<div class="w-head"><span>Simulasi selisih ongkir</span><span class="chip on" data-out-vol>30 paket/hari</span></div>
+<dl class="w-rows">
+<div><dt>Contoh tarif publik / paket</dt><dd class="num">Rp 20.000</dd></div>
+<div><dt>Diskon ongkir mitra</dt><dd class="num">Sampai 25% (s.d. Rp 5.000)</dd></div>
+<div><dt>Biaya pendaftaran &amp; aplikasi</dt><dd class="num">Rp 0</dd></div>
+</dl>
+<dl class="profit-nums">
+<div><dt>Potensi / hari</dt><dd data-out-day>s.d. Rp 150.000</dd></div>
+<div><dt>Potensi / bulan (30 hr)</dt><dd class="hi" data-out-mo>s.d. Rp 4.500.000</dd></div>
+<div><dt>Tambahan packing</dt><dd>100% milik gerai</dd></div>
+</dl>
+<p class="note" style="margin:0;font-size:.8125rem">Ilustrasi perhitungan contoh, bukan jaminan pendapatan. Besaran diskon aktual mengikuti ketentuan layanan aktif pada akun gerai.</p>
+</div>
+</div>
+<div class="open-cols two">
+<div><h3>Margin diskon ongkir sampai 25%</h3><p>Pelanggan di loket membayar tarif publik resmi (misalnya Rp 20.000). Akun mitra gerai Anda mendapatkan potongan diskon ongkir sampai 25% sesuai ketentuan layanan aktif, sehingga saldo yang terpotong lebih rendah dari uang yang masuk di laci kasir.</p></div>
+<div><h3>Packing &amp; biaya layanan loket</h3><p>Gerai bebas menetapkan harga bubble wrap, kardus, lakban, atau biaya jasa loket, dan semuanya tercantum rapi di struk pelanggan.</p></div>
+<div><h3>Kiriman Non-COD</h3><p>Butuh saldo Mengantar aktif sebesar ongkir bersih mitra saat resi terbit. Uang tunai penuh dari pelanggan Anda terima di meja kasir saat itu juga. GeraiExpress tidak menahan deposit Anda.</p></div>
+<div><h3>Kiriman COD</h3><p>Ongkos kirim dipotong saat dana COD cair dari kurir. Jaga Saldo Aman untuk cadangan ongkir bila ada paket retur yang ditolak penerima.</p></div>
+</div>
 </div></section>
 
 <section class="sec tight" aria-labelledby="banding-title"><div class="wrap">
 <div class="shead"><h2 id="banding-title">Dibanding cara lain membuka loket</h2><p class="sub">Gambaran umum tanpa menyebut merek, dan hanya pada hal yang benar-benar dikerjakan GeraiExpress.</p></div>
 ${compareTable()}
-</div></section>
-
-<section class="sec tight" aria-labelledby="untung-title"><div class="wrap">
-<div class="shead"><h2 id="untung-title">Dari mana keuntungan gerai datang</h2><p class="sub">Pelanggan membayar tarif publik resmi; saldo gerai terpotong lebih rendah setelah diskon mitra diterapkan pada akunnya.</p></div>
-<div class="open-cols two">
-<div><h3>Margin diskon ongkir ekspedisi</h3><p>Pelanggan di loket membayar tarif publik resmi (misalnya Rp 20.000). GeraiExpress menetapkan diskon mitra untuk akun Mengantar gerai Anda, nilainya per ekspedisi dan dikonfirmasi saat pendaftaran disetujui, lalu tim Mengantar menerapkannya. Saldo yang terpotong jadi lebih rendah dari uang di laci kasir, sementara pelanggan tetap membayar tarif publik.</p></div>
-<div><h3>Packing &amp; biaya layanan loket</h3><p>Gerai bebas menetapkan harga bubble wrap, kardus, lakban, atau biaya jasa loket, dan semuanya tercantum rapi di struk pelanggan.</p></div>
-<div><h3>Kiriman Non-COD</h3><p>Butuh saldo Mengantar aktif sebesar ongkir bersih mitra saat resi terbit. Uang tunai penuh dari pelanggan Anda terima di meja kasir saat itu juga. GeraiExpress tidak menahan deposit Anda.</p></div>
-<div><h3>Kiriman COD</h3><p>Ongkos kirim dipotong saat dana COD cair dari kurir. Jaga Saldo Aman untuk cadangan ongkir bila ada paket retur yang ditolak penerima.</p></div>
-</div>
 </div></section>
 ${closing(app, "/cara-kerja", "Pelajari Cara Daftar")}`
 }
@@ -896,7 +941,7 @@ const FAQ_GROUPS: Array<[string, string, Array<[string, string]>]> = [
     "saldo-cod-keuangan",
     "Saldo, Komisi Ongkir &amp; Pencairan COD",
     [
-      ["Dari mana keuntungan pemilik gerai berasal?", "Pelanggan di loket membayar tarif pengiriman publik resmi sesuai struk, sedangkan saldo pengiriman gerai hanya dipotong tarif bersih setelah diskon mitra ekspedisi. Selisih diskon tersebut—ditambah jasa packing bila ada—menjadi laba kotor loket Anda."],
+      ["Dari mana keuntungan pemilik gerai berasal?", "Pelanggan di loket membayar tarif pengiriman publik resmi sesuai struk, sedangkan saldo pengiriman gerai dipotong lebih hemat dengan diskon ongkir mitra sampai 25% (mengikuti ketentuan layanan aktif pada akun gerai). Selisih diskon tersebut—ditambah jasa packing bila ada—menjadi laba kotor loket Anda."],
       ["Bagaimana alur uang untuk paket COD (Bayar di Tempat)?", "Penerima membayar harga barang plus biaya layanan COD kepada kurir pengantar saat paket tiba. Setelah status paket Terkirim dan dana cair ke mutasi akun Mengantar gerai, sistem mencocokkan nilai pencairan per nomor resi secara otomatis."],
       ["Apa yang dimaksud dengan indikator Saldo Aman di menu Keuangan?", "Saldo Aman adalah saldo akun Mengantar dikurangi estimasi cadangan biaya ongkir pergi-pulang untuk kiriman COD yang masih dalam perjalanan, sehingga pemilik gerai tahu berapa dana yang benar-benar bebas ditarik tanpa mengganggu operasional."],
       ["Apakah karyawan kasir saya bisa melihat besaran diskon modal dan saldo pemilik?", "Tidak bisa. Akun dengan peran Kasir disaring di tingkat server sehingga hanya menerima tarif publik pelanggan dan ringkasan pembayaran loket; angka modal, persentase diskon kurir, mutasi Mengantar, dan laba bersih khusus untuk akun Pemilik."],
