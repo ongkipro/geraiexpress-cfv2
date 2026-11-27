@@ -1630,3 +1630,15 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Deploy:
   - Staging: D1 `0022_partner_discount_schedule.sql` ✅ (0.37 ms), Worker `55ddbb4e-3f75-4211-996a-7eae3d077007`, `do:migrate` 2/2 current (v26), probes **5/5 PASS**.
   - Production: D1 `0022_partner_discount_schedule.sql` ✅ (0.70 ms), Worker `4cf6a4f6-8306-4eb9-ae45-84cd048f1e7c`, `do:migrate` 4/4 current (v26), probes **6/6 PASS**.
+
+## 2026-11-28 — `REL-2026-11-28-brand-promo-25` (`DEC-256` Landing-Page Up-to-25% Promo on `geraiexpress.com`, `d28956c`)
+
+- Scope:
+  - Public marketing landing (`apps/worker/src/brand/{pages,seo,styles}.ts`, `DECISIONS.md`): highlights **"diskon ongkir mitra sampai 25%"** across `/` (3D hero overlay pill, intro kicker & lead, Raka section, pricing block), `/biaya-dan-paket` (headline, pricing readout badge, interactive zero-network `15/30/50 paket/hari` profit estimator), `/cara-kerja`, `/tanya-jawab`, and calibrated SEO titles/descriptions — without ever tying any courier name to a discount percentage.
+  - Automated guardrails (`apps/worker/test/brand/brand.test.ts`, `e2e/brand.spec.ts`): asserts `"sampai 25%"` on `/` and `/biaya-dan-paket`, forbids quoting `30%` master rates publicly, asserts zero courier names in any sentence mentioning discounts or `25%`, and tests interactive estimator buttons across `390/768/1280` viewports within DEC-249/250 home height budgets (`6258 <= 6300` at 1440px, `7868 <= 7900` at 390px, `overflow: 0`).
+- Verification:
+  - `brand.test.ts` 28/28 PASS; Playwright `e2e/brand.spec.ts` PASS; 6 visual screenshots inspected (`/` & `/biaya-dan-paket` at `1440px` & `390px`).
+  - Hosted CI `ci.yml` run `46072234794`: **PASS**.
+- Deploy:
+  - Staging: Worker `24e06174-5800-4557-8269-fe899776b6f0`, `do:migrate` 2/2 current (v26), probes **5/5 PASS**.
+  - Production: Worker `0e59c7d3-d6b6-4c8e-8f8c-8de1caaca1ab`, `do:migrate` 4/4 current (v26), probes **6/6 PASS**, live `https://geraiexpress.com/` & `/biaya-dan-paket` verified (`sampai 25%`, `Simulasi selisih ongkir`).

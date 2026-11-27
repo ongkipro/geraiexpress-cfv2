@@ -1,13 +1,13 @@
 # Status — GeraiExpress v2 (`geraiexpress-cfv2`)
 
 Updated: 2026-11-28
-Status: **LIVE** on dedicated Cloudflare account `GeraiExpress` (`f235ecdb5517054b386c6d413569a103`), commit `cc4f56c` (`REL-2026-11-28-super-admin-discount-ux`, `DEC-256`) deployed 2026-11-28 (staging Worker `55ddbb4e-3f75-4211-996a-7eae3d077007`, 5/5 probes PASS; production Worker `4cf6a4f6-8306-4eb9-ae45-84cd048f1e7c`, 6/6 probes PASS; control `0000`–`0022` current incl. `0022_partner_discount_schedule.sql`; all DO objects v26 `ok` — staging 2/2, prod 4/4; hosted `ci.yml` run `46059991861` **green**; Coolify `partner-relay` `RELAY VERIFY PASS 6/6`; live DNS `SPF`/`DMARC`/`DKIM cf2024-1` 3/3 PASS; `red-fixtures` 4/4 PASS).
+Status: **LIVE** on dedicated Cloudflare account `GeraiExpress` (`f235ecdb5517054b386c6d413569a103`), commit `d28956c` (`REL-2026-11-28-brand-promo-25`, `DEC-256`) deployed 2026-11-28 (staging Worker `24e06174-5800-4557-8269-fe899776b6f0`, 5/5 probes PASS; production Worker `0e59c7d3-d6b6-4c8e-8f8c-8de1caaca1ab`, 6/6 probes PASS + live `geraiexpress.com` promo check PASS; control `0000`–`0022` current; all DO objects v26 `ok` — staging 2/2, prod 4/4; hosted `ci.yml` run `46072234794` **green**; Coolify `partner-relay` `RELAY VERIFY PASS 6/6`; live DNS `SPF`/`DMARC`/`DKIM cf2024-1` 3/3 PASS; `red-fixtures` 4/4 PASS).
 State: LIVE
-Review-Risk: R2 (released; `cc4f56c` `DEC-256` Super Admin discount matrix + UI/UX parity reviewed with all P1/P2 findings resolved; `DEC-257` `3a59636`/`b447d1b` R1–R2 **APPROVE**; `a1f0647` R3 **APPROVE**; `16c2f20` R2 **APPROVE**)
+Review-Risk: R2 (released; `d28956c` `DEC-256` landing-page up-to-25% promo verified by `brand.test.ts` 28/28, `e2e/brand.spec.ts`, & 6 desktop/mobile screenshots; `cc4f56c` Super Admin discount matrix + UI/UX parity reviewed with all P1/P2 findings resolved; `DEC-257` `3a59636`/`b447d1b` R1–R2 **APPROVE**)
 Independent-Review: `cc4f56c` (`DEC-256` Super Admin partner discount schedule + UI/UX parity) isolated reviewer `7d5b9633` (1 P1 + 4 P2 fixed and re-verified); `DEC-257` (`3a59636`/`b447d1b`, centered app shell + SSR wide mode) R1–R2 **APPROVE** (`9ad2ce47`); `a1f0647` (`do:migrate` stale-isolate guard) R1–R3 **APPROVE** (`2a4441e5`); `16c2f20` (`TASK-604` live Mengantar drifts) R1–R2 **APPROVE** (`944d5612`); `TASK-706..714` R1–R4 **APPROVE** (`cx/gpt-6.2-sol`, `claude`). Prior history archived verbatim in `docs/archive/STATUS-HISTORY-2026-11-25.md`.
 Primary-Worker: Antigravity session, 2026-11-28
 Independent-Reviewer: Isolated Reviewer `7d5b9633` (`cc4f56c`), `9ad2ce47` (`3a59636`), `2a4441e5` (`a1f0647`), `944d5612` (`16c2f20`), `cx/gpt-6.2-sol` (`TASK-707..714`), `claude` (`TASK-706`)
-Independent-Review-Head: `cc4f56c` (live on staging & production)
+Independent-Review-Head: `d28956c` (live on staging & production)
 
 ## Now
 
