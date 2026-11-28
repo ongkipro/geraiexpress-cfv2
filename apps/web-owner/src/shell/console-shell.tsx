@@ -28,7 +28,7 @@ const NAV: Array<{ to: string; label: string; icon: typeof StoreIcon; children?:
     label: "Tarif & Kurir",
     icon: TagIcon,
     children: [
-      { to: "/tarif", label: "Diskon & Cashback" },
+      { to: "/tarif", label: "Diskon Gerai" },
       { to: "/tarif?tab=permintaan", label: "Permintaan" },
       { to: "/tarif?tab=kebijakan", label: "Kebijakan Diskon" },
     ],

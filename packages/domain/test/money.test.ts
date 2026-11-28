@@ -163,11 +163,12 @@ describe("discounts (spec 02 §2, §2.1; DEC-230, DEC-233)", () => {
     expect(observedBpsFromDiscount(2_400, 12_000)).toBe(2000)
     expect(observedBpsFromDiscount(15_000, 60_000)).toBe(2500)
   })
-  it("platform band 2000..3000, default 2000; per-courier band overrides with platform fallback", () => {
-    expect(PLATFORM_DISCOUNT_BAND).toEqual({ defaultBps: 2000, minBps: 2000, maxBps: 3000 })
+  it("platform band 2000..2500, default 2500 (DEC-258); per-courier band overrides with platform fallback", () => {
+    expect(PLATFORM_DISCOUNT_BAND).toEqual({ defaultBps: 2500, minBps: 2000, maxBps: 2500 })
     expect(isAssignedBpsAllowed(1999, bandForCourier(null))).toBe(false)
     expect(isAssignedBpsAllowed(2000, bandForCourier(null))).toBe(true)
-    expect(isAssignedBpsAllowed(3001, bandForCourier(undefined))).toBe(false)
+    expect(isAssignedBpsAllowed(2500, bandForCourier(null))).toBe(true)
+    expect(isAssignedBpsAllowed(2501, bandForCourier(undefined))).toBe(false)
     const jne = { defaultBps: 2200, minBps: 2200, maxBps: 2800 }
     expect(isAssignedBpsAllowed(2100, bandForCourier(jne))).toBe(false)
     expect(isAssignedBpsAllowed(2900, bandForCourier(jne))).toBe(false)

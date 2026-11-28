@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { vaultFor } from "../../src/do/gerai-vault/stub"
 import { dispatchDue } from "../../src/email/mailer"
 import { hostCache } from "../../src/host/lookup"
-import { resetMock } from "../../src/mengantar/mock"
+import { mockDiscountBps, mockFaults, resetMock } from "../../src/mengantar/mock"
 import { adminSession, APP, appPost, appUser, application, ownerGet, ownerPost, submit } from "./helpers"
 
 const statusEmails = (tenantId: string) =>
@@ -93,10 +93,15 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
     expect((await vaultFor(env, tenantId).connectionView(tenantId))).toMatchObject({ ok: true, value: { onboardingState: "connected", hasKey: true } })
   })
 
-  it("409 EMAIL_ALREADY_REGISTERED → existing_account_required → BYOK by the owner", async () => {
+  it("409 EMAIL_ALREADY_REGISTERED → existing_account_required → BYOK auto-syncs actual Mengantar discounts as sesuai", async () => {
     const { tenantId, applicationId, user } = await submit("punyaakun", "sudahada@contoh.test")
     const admin = await adminSession()
     expect(await (await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, { reason: "email sudah terdaftar" })).json()).toMatchObject({ data: { provisioning: { state: "existing_account_required" } } })
+    // Existing Mengantar BYOK account has varied high discounts (synthetic fixture).
+    mockDiscountBps.set("JNE", 3000)
+    mockDiscountBps.set("JT", 3500)
+    mockDiscountBps.set("pos", 1500)
+    mockDiscountBps.set("JNECargo", 1500)
     // The owner's session belongs to the tenant now (submitted). Paste own key.
     expect((await appPost("/onboarding/byok", user.cookie, { apiKey: "bad key" })).status).toBe(422)
     const ok = await appPost("/onboarding/byok", user.cookie, { apiKey: "BYOK-KEY-12345678" })
@@ -108,6 +113,57 @@ describe("approve → seller → key stored → connected (PR-02, PR-03)", () =>
       const outlet = s.storage.sql.exec<{ whatsapp: string | null }>("SELECT whatsapp FROM tenant_outlets WHERE is_default = 1").one()
       expect(outlet.whatsapp).toBe("081234567890")
     })
+    // DEC-258: BYOK automatically adopts live Mengantar discounts as `sesuai` with a system audit row.
+    const byokRules = (
+      await env.DB.prepare("SELECT service_code, assigned_bps, observed_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ?")
+        .bind(tenantId)
+        .all<{ service_code: string; assigned_bps: number; observed_bps: number | null; verification_state: string }>()
+    ).results
+    const bySvc = new Map(byokRules.map((r) => [r.service_code, r]))
+    expect(bySvc.get("JNE")).toMatchObject({ assigned_bps: 3000, observed_bps: 3000, verification_state: "sesuai" })
+    expect(bySvc.get("JT")).toMatchObject({ assigned_bps: 3500, observed_bps: 3500, verification_state: "sesuai" })
+    expect(bySvc.get("pos")).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+    expect(bySvc.get("JNECargo")).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+    const syncAudit = await env.DB.prepare("SELECT actor_type, actor_id, action FROM audit_logs WHERE tenant_id = ? AND action = 'pricing.sync_from_mengantar'").bind(tenantId).first()
+    expect(syncAudit).toEqual({ actor_type: "system", actor_id: "system", action: "pricing.sync_from_mengantar" })
+    // Rapid repeated BYOK updates are rate-limited on the auto-sync fan-out (max 3/min) so audit_logs cannot be flooded.
+    for (let i = 0; i < 4; i++) {
+      expect((await appPost("/onboarding/byok", user.cookie, { apiKey: `BYOK-KEY-REPEAT0${i}` })).status).toBe(200)
+    }
+    const syncCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE tenant_id = ? AND action = 'pricing.sync_from_mengantar'").bind(tenantId).first<{ n: number }>()
+    expect(syncCount!.n).toBe(3)
+  })
+
+  it("reconcileRegistration read-back recovery runs immediate discount verification when connecting a seller", async () => {
+    const { reconcileRegistration } = await import("../../src/onboarding/service")
+    const { tenantId, applicationId } = await submit("reconcilediskon", "timeout.reconcile@contoh.test")
+    const admin = await adminSession()
+    // Timeout during initial approve leaves seller uncreated; seed Mengantar partner seller externally as if created
+    // before timeout, then recover via reconcileRegistration.
+    await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, { reason: "uji reconcile diskon" })
+    const { resolvePartnerClient } = await import("../../src/mengantar/factory")
+    const reg = await (await resolvePartnerClient(env)).register({ name: "Reconcile Diskon", email: "reconcile.ok@contoh.test", phone: "081234567890", externalUserId: tenantId })
+    expect(reg.kind).toBe("ok")
+    mockDiscountBps.set("JNE", 2500)
+    mockDiscountBps.set("pos", 1000)
+    mockDiscountBps.set("JNECargo", 1500)
+    const r = await reconcileRegistration(env, tenantId, Date.now())
+    expect(r).toEqual({ state: "connected" })
+    const jne = await env.DB.prepare("SELECT assigned_bps, observed_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ? AND service_code = 'JNE'").bind(tenantId).first()
+    const cargo = await env.DB.prepare("SELECT assigned_bps, observed_bps, verification_state FROM tenant_discount_rules WHERE tenant_id = ? AND service_code = 'JNECargo'").bind(tenantId).first()
+    expect(jne).toEqual({ assigned_bps: 2500, observed_bps: 2500, verification_state: "sesuai" })
+    expect(cargo).toEqual({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+  })
+
+  it("BYOK connection still succeeds cleanly when Mengantar estimate probe transiently fails", async () => {
+    const { tenantId, applicationId, user } = await submit("byokfault", "sudahada@contoh.test")
+    const admin = await adminSession()
+    expect((await ownerPost(`/gerai/applications/${applicationId}/approve`, admin, { reason: "uji fault byok" })).status).toBe(200)
+    mockFaults.publicIpNotAllowed = true
+    const ok = await appPost("/onboarding/byok", user.cookie, { apiKey: "BYOK-KEY-FAULT99" })
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toMatchObject({ data: { state: "byok_connected" } })
+    expect((await env.DB.prepare("SELECT onboarding_state FROM tenant_onboarding WHERE tenant_id = ?").bind(tenantId).first<{ onboarding_state: string }>())?.onboarding_state).toBe("byok_connected")
   })
 })
 

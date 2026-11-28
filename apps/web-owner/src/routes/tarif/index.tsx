@@ -81,8 +81,8 @@ const totpRedirect = () => window.location.assign(`/totp?mode=required&kembali=$
 
 const META: Record<Tab, { title: string; description: string }> = {
   gerai: {
-    title: "Diskon & Cashback",
-    description: "Pantau penerapan diskon per gerai. Pelanggan selalu membayar tarif normal Mengantar; selisih diskon dipantau terhadap estimasi live.",
+    title: "Diskon Gerai",
+    description: "Pantau penerapan diskon ongkir per gerai. Pelanggan selalu membayar tarif normal Mengantar; selisih diskon dipantau otomatis terhadap estimasi live.",
   },
   permintaan: {
     title: "Permintaan ke Mengantar",
@@ -574,7 +574,7 @@ function Policy() {
     <div className="flex flex-col gap-4 md:gap-5">
       <SectionCard
         title="Matriks Master Partner Mengantar & Batas per Ekspedisi"
-        description="Tarif master dari Mengantar dikurangi Margin Platform (5%) menghasilkan Target Diskon Gerai. Mengubah batas tidak otomatis menimpa aturan gerai yang sudah berjalan."
+        description="Tarif master dari Mengantar dikurangi Margin Platform (5%) menghasilkan Target Diskon Gerai (maks. 25% reguler, 10% Pos). Mengubah batas tidak otomatis menimpa aturan gerai yang sudah berjalan."
         action={
           <ReasonAction
             label="Terapkan Batas Standar Partner"
@@ -582,7 +582,7 @@ function Policy() {
             variant="outline"
             path="/tarif/kebijakan/terapkan-standar"
             onDone={reload}
-            hint="Mengisi batas khusus per ekspedisi sesuai jadwal Master Mengantar & Margin Platform (termasuk Pos Indonesia 10%–15% dan promo ekstra SPX/J&T hingga 35%). Aturan gerai lama tidak otomatis berubah."
+            hint="Mengunci batas khusus per ekspedisi ke Target Gerai (Master − Margin: 20%–25% reguler, 10% Pos Indonesia) agar margin 5% platform terlindungi. Aturan gerai lama (seperti akun BYOK) tidak otomatis berubah."
           />
         }
         flush
@@ -744,10 +744,9 @@ function CourierBandDialog({ courier, platform, onClose, onSaved }: { courier: C
     if (!courier.schedule) return
     const target = courier.schedule.targetGeraiBps
     const minBps = Math.min(platform.minBps, target)
-    const maxBps = Math.min(10_000, Math.max(target, courier.schedule.masterDiscountBps + courier.schedule.extraPromoBps))
     setMin(toPctInput(minBps))
     setDef(toPctInput(target))
-    setMax(toPctInput(maxBps))
+    setMax(toPctInput(target))
   }
 
   async function save(e: FormEvent) {
@@ -804,9 +803,9 @@ function CourierBandDialog({ courier, platform, onClose, onSaved }: { courier: C
         <form onSubmit={save} className="flex flex-col gap-4" noValidate>
           {courier.schedule ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">Isi otomatis dari jadwal Master Partner?</span>
+              <span className="text-muted-foreground">Kunci default &amp; plafon atas ke Target Gerai?</span>
               <Button type="button" size="sm" variant="outline" onClick={fillFromMaster}>
-                <SparklesIcon aria-hidden /> Pakai Target Master
+                <SparklesIcon aria-hidden /> Pakai Target Gerai
               </Button>
             </div>
           ) : null}

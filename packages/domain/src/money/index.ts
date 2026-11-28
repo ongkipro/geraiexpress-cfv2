@@ -121,8 +121,8 @@ export interface DiscountBand {
   maxBps: number
 }
 
-/** Platform defaults (DEC-230, DEC-233); `courier_discount_policy` rows override per courier. */
-export const PLATFORM_DISCOUNT_BAND: DiscountBand = { defaultBps: 2000, minBps: 2000, maxBps: 3000 }
+/** Platform defaults (DEC-230, DEC-233, DEC-258); `courier_discount_policy` rows override per courier. */
+export const PLATFORM_DISCOUNT_BAND: DiscountBand = { defaultBps: 2500, minBps: 2000, maxBps: 2500 }
 export const DEFAULT_APPLY_SLA_MINUTES = 60
 
 /** Per-courier band with platform fallback for a courier without a policy row. */

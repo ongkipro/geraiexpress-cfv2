@@ -29,7 +29,6 @@ interface RuleItem {
   display_name: string
   service_class: "regular" | "cargo"
   assigned_bps: number
-  cashback_bps: number
   verification_state: "belum_diterapkan" | "sesuai" | "selisih"
   observed_bps: number | null
   band: { defaultBps: number; minBps: number; maxBps: number }
@@ -90,7 +89,9 @@ export function TarifGeraiPage() {
       align: "right",
       wide: true,
       cell: (r) =>
-        r.schedule ? (
+        r.service_class === "cargo" ? (
+          <span className="text-xs text-muted-foreground">Tarif Cargo</span>
+        ) : r.schedule ? (
           <span className="text-muted-foreground">
             {bpsText(r.schedule.masterDiscountBps)}
             {r.schedule.extraPromoBps > 0 ? <span className="ml-1 text-xs text-primary">+{bpsText(r.schedule.extraPromoBps)}*</span> : null}
@@ -110,7 +111,7 @@ export function TarifGeraiPage() {
       header: "Est. Margin",
       align: "right",
       cell: (r) => {
-        if (!r.schedule) return "—"
+        if (r.service_class === "cargo" || !r.schedule) return <span className="text-muted-foreground">—</span>
         const spread = r.schedule.masterDiscountBps - r.assigned_bps
         const tone = spread < 0 ? "danger" : spread < r.schedule.platformMarginBps ? "warn" : "safe"
         return <StatusBadge tone={tone}>{bpsText(spread)}</StatusBadge>
@@ -121,13 +122,6 @@ export function TarifGeraiPage() {
       header: "Teramati",
       align: "right",
       cell: (r) => bpsText(r.observed_bps),
-    },
-    {
-      key: "cashback",
-      header: "Cashback",
-      align: "right",
-      wide: true,
-      cell: (r) => <span className="text-muted-foreground">{bpsText(r.cashback_bps)}</span>,
     },
     {
       key: "state",
@@ -150,7 +144,7 @@ export function TarifGeraiPage() {
     <div className="flex flex-col gap-4 md:gap-5">
       <PageHeader
         title={`Diskon · ${data.tenant.name}`}
-        description={`${data.tenant.slug}.geraimitra.com · SLA verifikasi Mengantar ${data.applySlaMinutes} menit. Cashback saat ini bersifat konfigurasi tampilan saja.`}
+        description={`${data.tenant.slug}.geraimitra.com · SLA verifikasi Mengantar ${data.applySlaMinutes} menit · Target standar: Master − 5% (maks. 25% reguler, 10% Pos).`}
       >
         <Button variant="outline" render={<Link to="/tarif" search={{}} />}>
           <ArrowLeftIcon aria-hidden /> Semua Gerai
@@ -172,7 +166,7 @@ export function TarifGeraiPage() {
           variant="outline"
           path={`/tarif/gerai/${data.tenant.id}/terapkan-standar`}
           onDone={reload}
-          hint="Menyamakan diskon semua layanan gerai ini ke nilai default kebijakan aktif per ekspedisi. Layanan yang berubah statusnya menjadi Belum diterapkan untuk diajukan ke tim Mengantar."
+          hint="Menyamakan diskon layanan reguler ke target kebijakan aktif per ekspedisi (layanan Cargo yang sudah teramati di bawah plafon tetap mengikuti angka aktual Mengantar). Layanan yang berubah statusnya menjadi Belum diterapkan."
         />
         <ReasonAction
           label="Tarik dari Mengantar"
@@ -195,7 +189,7 @@ export function TarifGeraiPage() {
 
       <SectionCard
         title="Matriks Diskon per Layanan"
-        description="Estimasi Margin dihitung dari Master Mengantar dikurangi Diskon Gerai (belum termasuk promo ekstra bersyarat SPX/J&T EZ)."
+        description="Estimasi Margin layanan reguler dihitung dari Master Mengantar dikurangi Diskon Gerai (belum termasuk promo ekstra bersyarat SPX/J&T EZ). Layanan Cargo mengikuti diskon aktual Mengantar."
         flush
       >
         <DataTableShell
@@ -205,7 +199,7 @@ export function TarifGeraiPage() {
           rows={data.items}
           rowKey={(r) => r.service_code}
           mobile={(r) => {
-            const spread = r.schedule ? r.schedule.masterDiscountBps - r.assigned_bps : null
+            const spread = r.service_class === "regular" && r.schedule ? r.schedule.masterDiscountBps - r.assigned_bps : null
             const spreadTone = spread === null ? "muted" : spread < 0 ? "danger" : spread < (r.schedule?.platformMarginBps ?? 500) ? "warn" : "safe"
             return (
               <div className="flex flex-col gap-2">
@@ -237,7 +231,14 @@ export function TarifGeraiPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <StatusBadge tone={STATE[r.verification_state].tone}>{STATE[r.verification_state].label}</StatusBadge>
-                  {r.schedule ? <span className="text-muted-foreground tabular-nums">Master {bpsText(r.schedule.masterDiscountBps)}</span> : null}
+                  {r.service_class === "cargo" ? (
+                    <span className="text-muted-foreground">Tarif Cargo</span>
+                  ) : r.schedule ? (
+                    <span className="text-muted-foreground tabular-nums">
+                      Master {bpsText(r.schedule.masterDiscountBps)}
+                      {r.schedule.extraPromoBps > 0 ? <span className="ml-1 text-primary">+{bpsText(r.schedule.extraPromoBps)}*</span> : null}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             )
@@ -262,7 +263,6 @@ export function TarifGeraiPage() {
 
 function EditRuleDialog({ tenantId, rule, onClose, onSaved }: { tenantId: string; rule: RuleItem; onClose: () => void; onSaved: () => void }) {
   const [disc, setDisc] = useState(String(rule.assigned_bps / 100))
-  const [cb, setCb] = useState(String(rule.cashback_bps / 100))
   const [reason, setReason] = useState("")
   const [err, setErr] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -272,14 +272,21 @@ function EditRuleDialog({ tenantId, rule, onClose, onSaved }: { tenantId: string
     return t === "" ? Number.NaN : Math.round(Number(t) * 100)
   }
   const parsedDiscBps = parseBps(disc)
-  const marginPreview = rule.schedule && Number.isFinite(parsedDiscBps) ? rule.schedule.masterDiscountBps - parsedDiscBps : null
+  const marginPreview = rule.service_class === "regular" && rule.schedule && Number.isFinite(parsedDiscBps) ? rule.schedule.masterDiscountBps - parsedDiscBps : null
+  const marginBannerTone =
+    marginPreview === null
+      ? "border-slate-200 bg-slate-50 text-slate-700"
+      : marginPreview < 0
+        ? "border-rose-200 bg-rose-50 text-rose-900"
+        : marginPreview < (rule.schedule?.platformMarginBps ?? 500)
+          ? "border-amber-200 bg-amber-50 text-amber-900"
+          : "border-slate-200 bg-slate-50 text-slate-700"
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     const assignedBps = parseBps(disc)
-    const cashbackBps = cb.trim() === "" ? 0 : parseBps(cb)
-    if (!Number.isFinite(assignedBps) || !Number.isFinite(cashbackBps)) {
-      setErr("Isi diskon gerai dan cashback dengan angka persentase yang valid.")
+    if (!Number.isFinite(assignedBps)) {
+      setErr("Isi diskon gerai dengan angka persentase yang valid.")
       return
     }
     setPending(true)
@@ -288,7 +295,6 @@ function EditRuleDialog({ tenantId, rule, onClose, onSaved }: { tenantId: string
       await api(`/tarif/gerai/${tenantId}/${rule.service_code}`, {
         body: {
           assignedBps,
-          cashbackBps,
           reason,
         },
       })
@@ -315,22 +321,18 @@ function EditRuleDialog({ tenantId, rule, onClose, onSaved }: { tenantId: string
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <div className="grid grid-cols-2 gap-3">
-            <Field>
-              <FieldLabel htmlFor="rule-disc">Diskon gerai (%)</FieldLabel>
-              <Input id="rule-disc" inputMode="decimal" value={disc} onChange={(e) => setDisc(e.target.value)} className="tabular-nums" />
-              <FieldDescription>Rentang {bpsText(rule.band.minBps)}–{bpsText(rule.band.maxBps)}</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="rule-cb">Cashback (%)</FieldLabel>
-              <Input id="rule-cb" inputMode="decimal" value={cb} onChange={(e) => setCb(e.target.value)} className="tabular-nums" />
-              <FieldDescription>Konfigurasi tampilan saja</FieldDescription>
-            </Field>
-          </div>
-          {rule.schedule ? (
-            <div className={`rounded-lg border px-3 py-2 text-xs tabular-nums ${marginPreview !== null && marginPreview < 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+          <Field>
+            <FieldLabel htmlFor="rule-disc">Diskon gerai (%)</FieldLabel>
+            <Input id="rule-disc" inputMode="decimal" value={disc} onChange={(e) => setDisc(e.target.value)} className="tabular-nums" />
+            <FieldDescription>
+              Rentang kebijakan: {bpsText(rule.band.minBps)}–{bpsText(rule.band.maxBps)}
+              {rule.service_class === "cargo" ? " · Layanan Cargo umumnya mengikuti diskon aktual Mengantar (5%–20%)." : ""}
+            </FieldDescription>
+          </Field>
+          {rule.service_class === "regular" && rule.schedule ? (
+            <div className={`rounded-lg border px-3 py-2 text-xs tabular-nums ${marginBannerTone}`}>
               Master Mengantar <strong>{bpsText(rule.schedule.masterDiscountBps)}</strong> − Diskon Gerai <strong>{Number.isFinite(parsedDiscBps) ? bpsText(parsedDiscBps) : "—"}</strong> = Est. Margin Platform{" "}
-              <strong className={marginPreview !== null && marginPreview < 0 ? "text-rose-700" : "text-emerald-700"}>
+              <strong className={marginPreview !== null && marginPreview < 0 ? "text-rose-700" : marginPreview !== null && marginPreview < rule.schedule.platformMarginBps ? "text-amber-700" : "text-emerald-700"}>
                 {marginPreview !== null ? bpsText(marginPreview) : "—"}
               </strong>
             </div>

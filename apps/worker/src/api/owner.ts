@@ -76,10 +76,10 @@ async function body(c: OwnerCtx): Promise<Record<string, unknown>> {
 }
 
 /** Audit row for platform-scope actions (D1 audit_logs). Reason is required for every Super Admin mutation. */
-export function auditStatement(env: Env, input: { actorId: string; action: string; targetType?: string; targetId?: string; tenantId?: string | null; reason: string; metadata?: unknown; now: number }) {
+export function auditStatement(env: Env, input: { actorId: string; actorType?: "super_admin" | "system" | "user"; action: string; targetType?: string; targetId?: string; tenantId?: string | null; reason: string; metadata?: unknown; now: number }) {
   return env.DB.prepare(
-    "INSERT INTO audit_logs (id, at, actor_type, actor_id, tenant_id, action, target_type, target_id, reason, metadata_json) VALUES (?, ?, 'super_admin', ?, ?, ?, ?, ?, ?, ?)",
-  ).bind(crypto.randomUUID(), input.now, input.actorId, input.tenantId ?? null, input.action, input.targetType ?? null, input.targetId ?? null, input.reason, input.metadata ? JSON.stringify(input.metadata) : null)
+    "INSERT INTO audit_logs (id, at, actor_type, actor_id, tenant_id, action, target_type, target_id, reason, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), input.now, input.actorType ?? "super_admin", input.actorId, input.tenantId ?? null, input.action, input.targetType ?? null, input.targetId ?? null, input.reason, input.metadata ? JSON.stringify(input.metadata) : null)
 }
 
 export function requireReason(raw: unknown): string {

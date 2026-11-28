@@ -240,7 +240,11 @@ export function registerGeraiAdmin(app: Hono<any>): void {
     const lim = await hit(c.env.DB, `owner-gerai-sync:${t.id}`, 6, 60_000, now)
     if (!lim.allowed) throw new AppError(429, "RECHECK_RATE_LIMITED", "Tunggu sebentar sebelum sinkron ulang gerai ini.")
     let onboardingState = t.onboarding_state
-    if (onboardingState === "registration_unknown") onboardingState = (await reconcileRegistration(c.env, t.id, now)).state
+    let reconciledNow = false
+    if (onboardingState === "registration_unknown") {
+      onboardingState = (await reconcileRegistration(c.env, t.id, now)).state
+      reconciledNow = onboardingState === "connected"
+    }
     // Finance: queue this gerai's regular cron sync (the system runs it in the tenant object) instead of calling the
     // vault from Super Admin code — a sync may end by paying held batches, which a platform admin must never trigger
     // directly (DEC-209, non-impersonation scan).
@@ -248,8 +252,10 @@ export function registerGeraiAdmin(app: Hono<any>): void {
     if (onboardingState === "connected" || onboardingState === "byok_connected") {
       await c.env.FINANCE_SYNC_QUEUE.send({ tenant_id: t.id, trigger: "cron" } satisfies FinanceMessage)
       financeSync = "queued"
-      await c.env.DB.prepare("UPDATE tenant_discount_rules SET next_check_at = ? WHERE tenant_id = ?").bind(now, t.id).run()
-      await runDiscountVerifier(c.env, now, 1, t.id).catch(() => null)
+      if (!reconciledNow) {
+        await c.env.DB.prepare("UPDATE tenant_discount_rules SET next_check_at = ? WHERE tenant_id = ?").bind(now, t.id).run()
+        await runDiscountVerifier(c.env, now, 1, t.id).catch(() => null)
+      }
     }
     let domainsChecked = 0
     try {

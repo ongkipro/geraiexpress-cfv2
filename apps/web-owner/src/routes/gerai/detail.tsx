@@ -140,7 +140,7 @@ export function GeraiDetailPage() {
                 variant="outline"
                 path={`/tarif/gerai/${data.id}/tarik-mengantar`}
                 onDone={reload}
-                hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan aturan tarif ke angka tersebut — termasuk nilai di luar batas default 20%–30%. Layanan tanpa estimasi aktif dilewati."
+                hint="Membaca diskon aktual per ekspedisi (reguler & cargo) dari akun Mengantar gerai ini lalu menyamakan aturan tarif ke angka tersebut — termasuk nilai di luar batas standar kebijakan. Layanan tanpa estimasi aktif dilewati."
               />
             ) : null}
             <Button size="sm" variant="outline" render={<Link to="/tarif/$tenantId" params={{ tenantId: data.id }} />}>

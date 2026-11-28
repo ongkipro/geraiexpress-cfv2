@@ -24,33 +24,85 @@ async function approved(slug: string) {
   return { ...s, admin }
 }
 
-describe("seeding on approval (DEC-233)", () => {
-  it("a newly approved gerai has 20 % rules for every active courier/service in state Belum diterapkan", async () => {
+describe("seeding on approval & immediate Mengantar sync (DEC-233, DEC-258)", () => {
+  it("seeds locked Partner Target defaults (25% regulars, 10% pos), checks Mengantar at once, and auto-adopts Cargo <= ceiling", async () => {
+    // Default offline mock returns 20% for all services: regulars (target 25%) and pos (target 10%) stay
+    // `belum_diterapkan` with observed_bps=2000; Cargo (<= 25% ceiling) auto-adopts 20% as `sesuai`.
     const g = await approved("tarifsatu")
     const items = await rules(g.admin, g.tenantId)
     const active = (await env.DB.prepare("SELECT COUNT(*) AS n FROM courier_service_catalog WHERE is_active = 1").first<{ n: number }>())!.n
     expect(items).toHaveLength(active)
-    expect(items.every((r) => r.assigned_bps === 2000 && r.verification_state === "belum_diterapkan")).toBe(true)
+    const bySvc = new Map(items.map((r) => [r.service_code, r]))
+    expect(bySvc.get("JNE")).toMatchObject({ assigned_bps: 2500, observed_bps: 2000, verification_state: "belum_diterapkan" })
+    expect(bySvc.get("pos")).toMatchObject({ assigned_bps: 1000, observed_bps: 2000, verification_state: "belum_diterapkan" })
+    expect(bySvc.get("JNECargo")).toMatchObject({ assigned_bps: 2000, observed_bps: 2000, verification_state: "sesuai" })
     expect(items.map((r) => r.service_code)).not.toContain("ninja")
+  })
+
+  it("flips all services immediately to `sesuai` on approval when Mengantar already locked partner sub-seller defaults (25% reg, 10% pos, 15% cargo)", async () => {
+    for (const k of ["JNE", "SiCepat", "SAP", "iDexpress", "JT", "JTEco", "lion", "anteraja", "spx"]) mockDiscountBps.set(k, 2500)
+    mockDiscountBps.set("pos", 1000)
+    for (const k of ["JNECargo", "SiCepatCargo", "SapCargo", "iDexpressCargo"]) mockDiscountBps.set(k, 1500)
+    const g = await approved("tariflock")
+    const items = await rules(g.admin, g.tenantId)
+    expect(items.every((r) => r.verification_state === "sesuai")).toBe(true)
+    const bySvc = new Map(items.map((r) => [r.service_code, r]))
+    expect(bySvc.get("JNE")).toMatchObject({ assigned_bps: 2500, observed_bps: 2500, verification_state: "sesuai" })
+    expect(bySvc.get("pos")).toMatchObject({ assigned_bps: 1000, observed_bps: 1000, verification_state: "sesuai" })
+    expect(bySvc.get("JNECargo")).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+    // Verified rules move directly to daily drift cadence (~24h) instead of hitting Mengantar at +15/+60/+120 min.
+    expect((bySvc.get("JNE")!.next_check_at ?? 0) - bySvc.get("JNE")!.requested_at).toBeGreaterThanOrEqual(23 * 3600_000)
+    // Once Cargo is `sesuai`, a later drift to 1000 flags `selisih` (never silently re-adopted).
+    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "JNECargo", observedBps: 1000, now: Date.now(), scheduled: false })).toBe("selisih")
+  })
+
+  it("never auto-adopts Cargo above the locked 25% ceiling (e.g. Mengantar mistakenly gives 30%)", async () => {
+    mockDiscountBps.set("JNECargo", 3000)
+    const g = await approved("tarifkargoleak")
+    const cargo = await ruleOf(g.tenantId, "JNECargo")
+    expect(cargo).toMatchObject({ assigned_bps: 2500, observed_bps: 3000, verification_state: "belum_diterapkan" })
+    await runDiscountVerifier(env, cargo!.requested_at + 120 * 60_000)
+    expect((await ruleOf(g.tenantId, "JNECargo"))!.verification_state).toBe("selisih")
+  })
+
+  it("advances updated_at strictly on Cargo auto-adoption (optimistic lock) and still auto-adopts never-verified Cargo after delayed onboarding (>2×SLA)", async () => {
+    // Simulate a gerai whose Cargo rule escalated to `selisih` without ever being verified (`verified_at IS NULL`,
+    // e.g. delayed onboarding retry > 120 min or temporary route gap).
+    const g = await approved("tarifkargodelay")
+    const beforeAt = 1_700_000_000_000
+    await env.DB.prepare(
+      "UPDATE tenant_discount_rules SET assigned_bps = 2500, observed_bps = NULL, observed_at = NULL, verified_at = NULL, verification_state = 'selisih', updated_by = 'system', updated_at = ? WHERE tenant_id = ? AND service_code = 'JNECargo'",
+    )
+      .bind(beforeAt, g.tenantId)
+      .run()
+    // Even with `now === beforeAt` (same-ms approval/verify), updated_at MUST strictly advance to invalidate stale optimistic locks.
+    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "JNECargo", observedBps: 1500, now: beforeAt, scheduled: false })).toBe("sesuai")
+    const after = await env.DB.prepare("SELECT assigned_bps, observed_bps, verification_state, updated_at, verified_at FROM tenant_discount_rules WHERE tenant_id = ? AND service_code = 'JNECargo'")
+      .bind(g.tenantId)
+      .first<{ assigned_bps: number; observed_bps: number; verification_state: string; updated_at: number; verified_at: number | null }>()
+    expect(after).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
+    expect(after!.updated_at).toBeGreaterThan(beforeAt)
+    expect(after!.verified_at).toBe(beforeAt)
   })
 })
 
 describe("editing rules (TOTP + reason + audit, band per courier)", () => {
-  it("rejects below 20 % and above the ceiling; a change resets to Belum diterapkan with an audit row", async () => {
+  it("rejects below 20% and above the locked 25% ceiling; a change resets to Belum diterapkan with an audit row", async () => {
     const g = await approved("tarifdua")
     const edit = (bps: unknown, reason = "permintaan pemilik") => ownerPost(`/tarif/gerai/${g.tenantId}/JNE`, g.admin, { assignedBps: bps, reason })
     expect((await edit(1999)).status).toBe(422)
-    const over = await edit(3001)
+    const over = await edit(2501)
     expect(over.status).toBe(422)
-    expect(((await over.json()) as { error: { message: string } }).error.message).toBe("Diskon harus antara 20% dan 30%.")
-    expect((await edit(2500, "")).status).toBe(422) // reason required
+    expect(((await over.json()) as { error: { message: string } }).error.message).toBe("Diskon harus antara 20% dan 25%.")
+    expect((await ownerPost(`/tarif/gerai/${g.tenantId}/pos`, g.admin, { assignedBps: 1001, reason: "coba naik pos" })).status).toBe(422)
+    expect((await edit(2200, "")).status).toBe(422) // reason required
     await env.DB.prepare("UPDATE tenant_discount_rules SET verification_state = 'sesuai', verified_at = 1 WHERE tenant_id = ? AND service_code = 'JNE'").bind(g.tenantId).run()
-    expect((await edit(2500)).status).toBe(200)
+    expect((await edit(2200)).status).toBe(200)
     const r = await ruleOf(g.tenantId, "JNE")
-    expect(r).toMatchObject({ assigned_bps: 2500, verification_state: "belum_diterapkan", check_step: 0 })
+    expect(r).toMatchObject({ assigned_bps: 2200, verification_state: "belum_diterapkan", check_step: 0 })
     const audit = await env.DB.prepare("SELECT reason, metadata_json FROM audit_logs WHERE action = 'pricing.rule_update' AND tenant_id = ?").bind(g.tenantId).first<{ reason: string; metadata_json: string }>()
     expect(audit!.reason).toBe("permintaan pemilik")
-    expect(JSON.parse(audit!.metadata_json)).toEqual({ from: { assignedBps: 2000, cashbackBps: 0 }, to: { assignedBps: 2500, cashbackBps: 0 } })
+    expect(JSON.parse(audit!.metadata_json)).toEqual({ from: { assignedBps: 2500, cashbackBps: 0 }, to: { assignedBps: 2200, cashbackBps: 0 } })
   })
 
   it("changing a courier's band needs no code change; two couriers with different bands", async () => {
@@ -62,7 +114,7 @@ describe("editing rules (TOTP + reason + audit, band per courier)", () => {
     expect((await ownerPost(`/tarif/gerai/${g.tenantId}/JT`, g.admin, { assignedBps: 2100, reason: "turun ke 21 persen" })).status).toBe(422)
     const items = await rules(g.admin, g.tenantId)
     expect(items.find((r) => r.service_code === "JT")!.band).toMatchObject({ minBps: 2200, maxBps: 3500 })
-    expect(items.find((r) => r.service_code === "JNE")!.band).toMatchObject({ minBps: 2000, maxBps: 3000 })
+    expect(items.find((r) => r.service_code === "JNE")!.band).toMatchObject({ minBps: 2000, maxBps: 2500 })
     // A new gerai approved after the band change starts at the courier default.
     const g2 = await approved("tarifband2")
     expect((await ruleOf(g2.tenantId, "JT"))!.assigned_bps).toBe(2200)
@@ -74,7 +126,8 @@ describe("verification (fake clock)", () => {
   it("+15/+60/+120 min: Belum diterapkan → Sesuai when Mengantar applied it; → Selisih + alert after 2 × SLA when not", { timeout: 40_000 }, async () => {
     const g = await approved("tarifcek")
     const t0 = (await ruleOf(g.tenantId, "JNE"))!.requested_at
-    // Mengantar gives 20 % on JNE regular, and 15 % on JT (not applied).
+    // Mengantar applies 25 % on JNE regular, and keeps 15 % on JT (not applied).
+    mockDiscountBps.set("JNE", 2500)
     mockDiscountBps.set("JT", 1500)
     await runDiscountVerifier(env, t0 + 15 * 60_000)
     expect((await ruleOf(g.tenantId, "JNE"))!.verification_state).toBe("sesuai")
@@ -90,22 +143,26 @@ describe("verification (fake clock)", () => {
     expect(alert).not.toBeNull()
   })
 
-  it("a verified rule drifting to 1000 → Selisih; back within 1 bp → Sesuai; 2000 vs 1999 → Sesuai", async () => {
+  it("a verified rule drifting to 1000 → Selisih; back within 1 bp → Sesuai; 2500 vs 2499 → Sesuai", async () => {
     const g = await approved("tarifgeser")
     const now = Date.now()
-    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SiCepat", observedBps: 1999, now, scheduled: false })).toBe("sesuai")
+    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SiCepat", observedBps: 2499, now, scheduled: false })).toBe("sesuai")
     expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SiCepat", observedBps: 1000, now, scheduled: false })).toBe("selisih")
-    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SiCepat", observedBps: 2001, now, scheduled: false })).toBe("sesuai")
+    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SiCepat", observedBps: 2501, now, scheduled: false })).toBe("sesuai")
   })
 
-  it("a cargo fixture whose regular and cargo discounts differ verifies against the cargo value", async () => {
+  it("a cargo fixture whose regular and cargo discounts differ verifies strictly against an admin-edited cargo value", async () => {
     expect(observedBpsOf("cargo", { price: 60000, discount: 0, discountPercent: 0, cargoPrice: 60000, cargoDiscount: 15000 })).toBe(2500)
     expect(observedBpsOf("regular", { price: 60000, discount: 0, discountPercent: 0, cargoPrice: 60000, cargoDiscount: 15000 })).toBe(0)
     const g = await approved("tarifkargo")
+    // Manual admin edit (`updated_by !== 'system'`) disables system auto-adoption: 1500 does not overwrite 2500.
     await ownerPost(`/tarif/gerai/${g.tenantId}/JNECargo`, g.admin, { assignedBps: 2500, reason: "kargo 25" })
-    mockDiscountBps.set("JNECargo", 2500)
+    mockDiscountBps.set("JNECargo", 1500)
     const r = await ruleOf(g.tenantId, "JNECargo")
     await runDiscountVerifier(env, r!.requested_at + 15 * 60_000)
+    expect((await ruleOf(g.tenantId, "JNECargo"))).toMatchObject({ assigned_bps: 2500, observed_bps: 1500, verification_state: "belum_diterapkan" })
+    mockDiscountBps.set("JNECargo", 2500)
+    await runDiscountVerifier(env, r!.requested_at + 60 * 60_000)
     expect((await ruleOf(g.tenantId, "JNECargo"))).toMatchObject({ verification_state: "sesuai", observed_bps: 2500 })
   })
 })
@@ -117,7 +174,7 @@ describe("request list and exposure", () => {
     expect(list.some((x) => x.tenant_id === g.tenantId)).toBe(true)
     const csv = await (await ownerGet("/tarif/permintaan.csv", g.admin)).text()
     expect(csv.split("\r\n")[0]).toBe("gerai,alamat_gerai,kode_layanan,layanan,diskon_diminta_persen,diskon_teramati_persen,status,diminta_pada")
-    expect(csv).toContain('"20.00"')
+    expect(csv).toContain('"25.00"')
     const mark = await ownerPost("/tarif/permintaan/tandai", g.admin, { keys: [{ tenantId: g.tenantId, serviceCode: "JNE" }], reason: "dikirim ke tim Mengantar" })
     expect(((await mark.json()) as { data: { marked: number } }).data.marked).toBe(1)
   })
@@ -126,7 +183,7 @@ describe("request list and exposure", () => {
     const g = await approved("tarifdto")
     const owner = await appGet("/settings/couriers", g.user.cookie)
     const body = (await owner.json()) as { data: { items: Array<{ services: Array<{ discount: unknown }> }> } }
-    expect(body.data.items[0]!.services[0]!.discount).toMatchObject({ assignedBps: 2000 })
+    expect(body.data.items[0]!.services[0]!.discount).toMatchObject({ assignedBps: 2500 })
     // Cashier: no route that returns rules.
     const k = await appUser("kasir.tarif@contoh.test")
     await env.DB.prepare("INSERT INTO tenant_members (tenant_id, user_id, role, status, created_at) VALUES (?, ?, 'cashier', 'active', ?)").bind(g.tenantId, k.id, Date.now()).run()
@@ -140,7 +197,7 @@ describe("request list and exposure", () => {
 describe("sync actual Mengantar discounts per expedition (BYOK / varied discounts)", () => {
   it("pulls varied per-courier regular & cargo discounts from Mengantar, adopts them as sesuai, audits, and exposes them in GET /gerai/:slug", async () => {
     const g = await approved("tariftarik")
-    mockDiscountBps.set("JNE", 2500)
+    mockDiscountBps.set("JNE", 2800)
     mockDiscountBps.set("JT", 1500)
     mockDiscountBps.set("SiCepat", 3200)
     mockDiscountBps.set("JNECargo", 2700)
@@ -151,13 +208,13 @@ describe("sync actual Mengantar discounts per expedition (BYOK / varied discount
     expect(out.data.synced).toBeGreaterThanOrEqual(4)
     expect(out.data.changes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ serviceCode: "JNE", toBps: 2500 }),
+        expect.objectContaining({ serviceCode: "JNE", toBps: 2800 }),
         expect.objectContaining({ serviceCode: "JT", toBps: 1500 }),
         expect.objectContaining({ serviceCode: "SiCepat", toBps: 3200 }),
         expect.objectContaining({ serviceCode: "JNECargo", toBps: 2700 }),
       ]),
     )
-    expect(await ruleOf(g.tenantId, "JNE")).toMatchObject({ assigned_bps: 2500, observed_bps: 2500, verification_state: "sesuai" })
+    expect(await ruleOf(g.tenantId, "JNE")).toMatchObject({ assigned_bps: 2800, observed_bps: 2800, verification_state: "sesuai" })
     expect(await ruleOf(g.tenantId, "JT")).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
     expect(await ruleOf(g.tenantId, "SiCepat")).toMatchObject({ assigned_bps: 3200, observed_bps: 3200, verification_state: "sesuai" })
     expect(await ruleOf(g.tenantId, "JNECargo")).toMatchObject({ assigned_bps: 2700, observed_bps: 2700, verification_state: "sesuai" })
@@ -303,19 +360,32 @@ describe("DEC-256 partner master schedule, margin split, and standard presets", 
     const masterAudit = await env.DB.prepare("SELECT action, target_id, reason FROM audit_logs WHERE action = 'pricing.partner_schedule_update' AND target_id = 'lion'").first()
     expect(masterAudit).toEqual({ action: "pricing.partner_schedule_update", target_id: "lion", reason: "revisi master lion" })
 
-    // Applying standard DEC-256 courier bands sets pos min/default = 1000, max = 1500; spx/JT max = 3500; regulars default = 2500.
-    const applyBands = await ownerPost("/tarif/kebijakan/terapkan-standar", g.admin, { reason: "aktifkan batas standar DEC-256" })
+    // Applying standard DEC-256/258 courier bands locks ceiling to Target Gerai (pos 1000/1000/1000, regulars 2000/2500/2500, lion 2000/2700/2700).
+    const applyBands = await ownerPost("/tarif/kebijakan/terapkan-standar", g.admin, { reason: "aktifkan batas standar DEC-258" })
     expect(applyBands.status).toBe(200)
     expect((await ownerPost(`/tarif/gerai/${g.tenantId}/pos`, g.admin, { assignedBps: 1000, reason: "sesuai target pos 10 persen" })).status).toBe(200)
+    expect((await ownerPost(`/tarif/gerai/${g.tenantId}/pos`, g.admin, { assignedBps: 1100, reason: "coba di atas plafon pos" })).status).toBe(422)
+    expect((await ownerPost(`/tarif/gerai/${g.tenantId}/spx`, g.admin, { assignedBps: 2600, reason: "coba di atas plafon spx" })).status).toBe(422)
     expect((await ruleOf(g.tenantId, "pos"))?.assigned_bps).toBe(1000)
 
-    // Bulk apply standard policy defaults to the gerai: updates JNE to 2500, lion to 2700, keeps pos at 1000.
+    // Bulk apply standard policy defaults to the gerai: updates lion to 2700, keeps JNE at 2500 & pos at 1000,
+    // preserves JNECargo's already-observed rate (2000 <= 2500 ceiling), caps over-ceiling Cargo (SiCepatCargo 3000 -> 2500),
+    // and keeps `updated_by = 'system'` on unobserved Cargo (SapCargo) so first-observation auto-adoption still works.
+    await env.DB.prepare("UPDATE tenant_discount_rules SET assigned_bps = 2000 WHERE tenant_id = ? AND service_code = 'JNE'").bind(g.tenantId).run()
+    await env.DB.prepare("UPDATE tenant_discount_rules SET assigned_bps = 3000, observed_bps = 3000, verification_state = 'sesuai' WHERE tenant_id = ? AND service_code = 'SiCepatCargo'").bind(g.tenantId).run()
+    await env.DB.prepare("UPDATE tenant_discount_rules SET assigned_bps = 2000, observed_bps = NULL, observed_at = NULL, verified_at = NULL, verification_state = 'belum_diterapkan', updated_by = 'system' WHERE tenant_id = ? AND service_code = 'SapCargo'").bind(g.tenantId).run()
     const bulk = await ownerPost(`/tarif/gerai/${g.tenantId}/terapkan-standar`, g.admin, { reason: "terapkan target standar gerai" })
     expect(bulk.status).toBe(200)
     const bulkOut = (await bulk.json()) as { data: { updated: number; unchanged: number } }
-    expect(bulkOut.data.updated).toBeGreaterThanOrEqual(8)
+    expect(bulkOut.data.updated).toBeGreaterThanOrEqual(4)
     expect((await ruleOf(g.tenantId, "JNE"))).toMatchObject({ assigned_bps: 2500, verification_state: "belum_diterapkan" })
     expect((await ruleOf(g.tenantId, "lion"))).toMatchObject({ assigned_bps: 2700, verification_state: "belum_diterapkan" })
     expect((await ruleOf(g.tenantId, "pos"))).toMatchObject({ assigned_bps: 1000 })
+    expect((await ruleOf(g.tenantId, "JNECargo"))).toMatchObject({ assigned_bps: 2000, verification_state: "sesuai" })
+    expect((await ruleOf(g.tenantId, "SiCepatCargo"))).toMatchObject({ assigned_bps: 2500, verification_state: "belum_diterapkan" })
+    const sapCargo = await env.DB.prepare("SELECT assigned_bps, updated_by FROM tenant_discount_rules WHERE tenant_id = ? AND service_code = 'SapCargo'").bind(g.tenantId).first<{ assigned_bps: number; updated_by: string | null }>()
+    expect(sapCargo).toEqual({ assigned_bps: 2500, updated_by: "system" })
+    expect(await recordObservation(env, { tenantId: g.tenantId, serviceCode: "SapCargo", observedBps: 1500, now: Date.now(), scheduled: false })).toBe("sesuai")
+    expect((await ruleOf(g.tenantId, "SapCargo"))).toMatchObject({ assigned_bps: 1500, observed_bps: 1500, verification_state: "sesuai" })
   })
 })

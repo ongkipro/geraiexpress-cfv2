@@ -9,11 +9,12 @@ import { vaultFor } from "../do/gerai-vault/stub"
 import type { OnboardingState } from "../do/gerai-vault/connection"
 import { validatePinpoint } from "@gx/domain/geo"
 import { enqueueEmailStatement } from "../email/outbox"
+import { hit } from "../auth/throttle"
 import { hostCache, platformHostOf } from "../host/lookup"
 import { AppError } from "../http/envelope"
 import { resolvePartnerClient } from "../mengantar/factory"
 import { quotaFor } from "../do/partner-quota"
-import { platformPolicy, seedRulesOnApproval } from "../pricing/rules"
+import { platformPolicy, seedRulesOnApproval, syncDiscountsFromMengantar, verifyTenantDiscountsNow } from "../pricing/rules"
 
 export const RESERVED_SLUGS = new Set([
   "www", "app", "api", "owner", "admin", "hq", "hooks", "relay", "custom", "mcp", "docs", "mail", "mengantar",
@@ -236,7 +237,7 @@ export async function approveApplication(env: Env, input: { applicationId: strin
        SELECT ?1, ?2, 'registration_pending', NULL, ?1, NULL, ?3 WHERE (SELECT decision_nonce FROM tenant_applications WHERE id = ?4) = ?5
        ON CONFLICT(tenant_id) DO NOTHING`,
     ).bind(a.tenant_id, env.GX_ENV === "production" ? "production" : "sandbox", input.now, a.id, nonce),
-    // TASK-207: every active service starts at the courier default (20 %), `Belum diterapkan` (DEC-233).
+    // TASK-207 / DEC-258: every active service starts at the courier target default (25% regulars, 10% pos), `Belum diterapkan`.
     seedRulesOnApproval(env, { tenantId: a.tenant_id, applicationId: a.id, nonce, now: input.now, defaultBps: policy.defaultBps }),
   ])
   if ((res[0]?.meta.changes ?? 0) !== 1) throw new AppError(409, "APPLICATION_NOT_PENDING", "Pengajuan ini sudah diputuskan.")
@@ -320,6 +321,8 @@ export async function provisionSeller(env: Env, input: { tenantId: string; name:
   emit("mengantar.partner_api", { route: "/sellers", status: "status" in out ? out.status : 0, outcome: out.kind }, { tenantId: input.tenantId }, { env: env.GX_ENV })
   if (out.kind === "ok" && out.data.apiKey) {
     await record("connected", { sellerId: out.data.sellerId, apiKey: out.data.apiKey })
+    // DEC-258: immediate best-effort discount check against Mengantar so locked partner sellers turn `sesuai` on second 0.
+    await verifyTenantDiscountsNow(env, input.tenantId, input.now).catch(() => null)
     return { state: "connected" }
   }
   if (out.kind === "ok") {
@@ -394,6 +397,8 @@ export async function reconcileRegistration(env: Env, tenantId: string, now: num
     return { state: "provider_restricted", code: "API_KEY_DISABLED" }
   }
   await record("connected", { sellerId: seller.sellerId, apiKey: key.data.apiKey }, null)
+  // DEC-258: immediate best-effort discount check after read-back recovery connects the seller.
+  await verifyTenantDiscountsNow(env, tenantId, now).catch(() => null)
   return { state: "connected" }
 }
 
@@ -421,5 +426,20 @@ export async function connectByok(env: Env, tenantId: string, apiKey: string, no
   )
     .bind(tenantId, environment, now)
     .run()
+  // DEC-258: automatically adopt live per-expedition discounts from the existing Mengantar account (best-effort,
+  // rate-limited per tenant, and guarded against a concurrent Partner connection race).
+  const syncLim = await hit(env.DB, `byok-sync:${tenantId}`, 3, 60_000, now).catch(() => ({ allowed: false }))
+  if (syncLim.allowed) {
+    const latest = await vault.connectionView(tenantId).catch(() => null)
+    if (latest?.ok && latest.value?.onboardingState === "byok_connected") {
+      await syncDiscountsFromMengantar(env, {
+        tenantId,
+        actorId: "system",
+        actorType: "system",
+        reason: "Sinkron otomatis diskon akun Mengantar (BYOK)",
+        now,
+      }).catch(() => null)
+    }
+  }
   return { state: "byok_connected" }
 }

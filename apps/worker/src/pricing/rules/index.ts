@@ -280,10 +280,11 @@ export async function updatePartnerSchedule(
 }
 
 /**
- * Applies `courier_discount_policy` bands derived from the current `partner_discount_schedule` (DEC-256):
+ * Applies `courier_discount_policy` bands locked to the Partner Target Gerai from `partner_discount_schedule`
+ * (DEC-256, DEC-258):
  *   default = master - margin (e.g. 25% regulars, 10% pos),
  *   min = min(platform.minBps, default) (unlocks pos 10% while keeping 20% floor for regulars),
- *   max = min(10000, master + extraPromo) (e.g. 30% regulars, 35% SPX/J&T, 15% pos).
+ *   max = default (locks ceiling at Target Gerai so manual edits never erode the 5% platform margin).
  * Existing tenant rules are never rewritten automatically.
  */
 export async function applyScheduleBands(env: Env, input: { actorId: string; reason: string; now: number }): Promise<{ applied: number }> {
@@ -299,7 +300,7 @@ export async function applyScheduleBands(env: Env, input: { actorId: string; rea
     if (!s) continue
     const defaultBps = s.targetGeraiBps
     const minBps = Math.min(platform.minBps, defaultBps)
-    const maxBps = Math.min(10_000, Math.max(defaultBps, s.masterDiscountBps + s.extraPromoBps))
+    const maxBps = defaultBps
     appliedCouriers[courier_code] = { defaultBps, minBps, maxBps }
     stmts.push(
       env.DB.prepare(
@@ -326,7 +327,8 @@ export async function applyScheduleBands(env: Env, input: { actorId: string; rea
 
 /**
  * Bulk-applies each courier's effective policy default (`band.defaultBps`) to all active rules of one gerai.
- * Changed rows reset to `belum_diterapkan` for Mengantar CS application; unchanged rows stay untouched.
+ * Cargo services that already have an observed Mengantar rate <= `band.defaultBps` preserve that live Cargo rate
+ * (DEC-258) to avoid false `selisih` alarms. Changed rows reset to `belum_diterapkan`; unchanged rows stay untouched.
  */
 export async function applyDefaultBandToTenant(
   env: Env,
@@ -337,13 +339,13 @@ export async function applyDefaultBandToTenant(
     platformPolicy(env.DB),
     courierBands(env.DB),
     env.DB.prepare(
-      `SELECT r.service_code, r.courier_code, r.assigned_bps
+      `SELECT r.service_code, r.courier_code, r.service_class, r.assigned_bps, r.observed_bps
        FROM tenant_discount_rules r
        JOIN courier_service_catalog c ON c.service_code = r.service_code
        WHERE r.tenant_id = ? AND c.is_active = 1`,
     )
       .bind(input.tenantId)
-      .all<{ service_code: string; courier_code: string; assigned_bps: number }>(),
+      .all<{ service_code: string; courier_code: string; service_class: "regular" | "cargo"; assigned_bps: number; observed_bps: number | null }>(),
   ])
   if (!tenant) throw new AppError(404, "TENANT_NOT_FOUND", "Gerai tidak ditemukan.")
   const stmts: D1PreparedStatement[] = []
@@ -352,12 +354,17 @@ export async function applyDefaultBandToTenant(
   const nextCheck = verificationCheckAt(input.now, 0)
   for (const r of rows.results) {
     const band = bandForCourier(bands.get(r.courier_code), policy)
-    const target = band.defaultBps
+    const target =
+      r.service_class === "cargo" && r.observed_bps !== null && r.observed_bps >= 0 && r.observed_bps <= band.defaultBps
+        ? r.observed_bps
+        : band.defaultBps
     if (r.assigned_bps === target) {
       unchanged++
       continue
     }
     changes.push({ serviceCode: r.service_code, fromBps: r.assigned_bps, toBps: target })
+    // Preserve `updated_by = 'system'` on unobserved Cargo rows so first-observation Cargo auto-adoption (DEC-258) stays active.
+    const nextUpdatedBy = r.service_class === "cargo" && r.observed_bps === null ? "system" : input.actorId
     stmts.push(
       env.DB.prepare(
         `UPDATE tenant_discount_rules
@@ -365,7 +372,7 @@ export async function applyDefaultBandToTenant(
              requested_at = ?2, request_sent_at = NULL, applied_at = NULL, verified_at = NULL,
              verification_state = 'belum_diterapkan', next_check_at = ?4, check_step = 0, alerted_at = NULL
          WHERE tenant_id = ?5 AND service_code = ?6`,
-      ).bind(target, input.now, input.actorId, nextCheck, input.tenantId, r.service_code),
+      ).bind(target, input.now, nextUpdatedBy, nextCheck, input.tenantId, r.service_code),
     )
   }
   stmts.push(
@@ -396,8 +403,11 @@ export function observedBpsOf(
 }
 
 /**
- * Apply one observation to a rule (scheduled check or a quote). Records `observed_bps` as-is, moves the state per
- * spec 02 §2.1, schedules the next check, and alerts once when the rule becomes `selisih`.
+ * Apply one observation to a rule (scheduled check, immediate onboarding check, or a quote).
+ * - Unmodified system-seeded Cargo rules (`service_class = 'cargo'`, `updated_by = 'system'`, `belum_diterapkan`)
+ *   adopt the first valid `observedBps <= assigned_bps` as `sesuai` (DEC-258) so Mengantar's dynamic 5%–20% Cargo
+ *   discounts never raise false `selisih` alarms, while still alerting if Cargo exceeds the ceiling or drifts later.
+ * - All other observations follow spec 02 §2.1 strictly without rewriting `assigned_bps`.
  */
 export async function recordObservation(env: Env, input: { tenantId: string; serviceCode: string; observedBps: number | null; now: number; scheduled: boolean }) {
   const [rule, policy] = await Promise.all([
@@ -405,13 +415,50 @@ export async function recordObservation(env: Env, input: { tenantId: string; ser
     platformPolicy(env.DB),
   ])
   if (!rule) return null
+
+  const autoAdoptCargo =
+    rule.service_class === "cargo" &&
+    rule.updated_by === "system" &&
+    rule.verified_at === null &&
+    rule.verification_state !== "sesuai" &&
+    input.observedBps !== null &&
+    Number.isSafeInteger(input.observedBps) &&
+    input.observedBps >= 0 &&
+    input.observedBps <= rule.assigned_bps
+
+  if (autoAdoptCargo && input.observedBps !== null) {
+    const nextDaily = input.now + 24 * 3600_000
+    const nextStep = Math.max(rule.check_step, 3)
+    const res = await env.DB.prepare(
+      `UPDATE tenant_discount_rules
+       SET assigned_bps = ?1, observed_bps = ?1, observed_at = ?2, verified_at = ?2,
+           applied_at = COALESCE(applied_at, ?2), verification_state = 'sesuai',
+           effective_from = CASE WHEN assigned_bps != ?1 THEN ?2 ELSE effective_from END,
+           next_check_at = ?3, check_step = ?4, alerted_at = NULL,
+           updated_at = MAX(updated_at + 1, ?2)
+       WHERE tenant_id = ?5 AND service_code = ?6 AND updated_at = ?7 AND updated_by = 'system' AND verified_at IS NULL AND verification_state != 'sesuai'`,
+    )
+      .bind(input.observedBps, input.now, nextDaily, nextStep, input.tenantId, input.serviceCode, rule.updated_at)
+      .run()
+    if ((res.meta.changes ?? 0) !== 1) return rule.verification_state
+    return "sesuai" as VerificationState
+  }
+
   const next = nextVerificationState({ state: rule.verification_state, assignedBps: rule.assigned_bps, observedBps: input.observedBps, requestedAt: rule.requested_at, now: input.now, applySlaMinutes: policy.applySlaMinutes })
+  const becameSesuai = next === "sesuai" && rule.verification_state !== "sesuai"
   // A late cron run skips the checks already in the past (catch-up), so one run never schedules a past time.
   let step = rule.check_step
-  if (input.scheduled) do step++
-  while (verificationCheckAt(rule.requested_at, step) <= input.now)
-  const nextCheck = input.scheduled ? verificationCheckAt(rule.requested_at, step) : rule.next_check_at
-  const becameSesuai = next === "sesuai" && rule.verification_state !== "sesuai"
+  if (input.scheduled) {
+    do step++
+    while (verificationCheckAt(rule.requested_at, step) <= input.now)
+  } else if (becameSesuai) {
+    step = Math.max(step, 3)
+  }
+  const nextCheck = input.scheduled
+    ? verificationCheckAt(rule.requested_at, step)
+    : becameSesuai
+      ? input.now + 24 * 3600_000
+      : rule.next_check_at
   const alert = next === "selisih" && rule.verification_state !== "selisih"
   const res = await env.DB.prepare(
     `UPDATE tenant_discount_rules SET verification_state = ?1, observed_bps = COALESCE(?2, observed_bps), observed_at = CASE WHEN ?2 IS NULL THEN observed_at ELSE ?3 END,
@@ -427,6 +474,39 @@ export async function recordObservation(env: Env, input: { tenantId: string; ser
     await sendAlert(env, { key: `discount_selisih.${input.tenantId}.${input.serviceCode}`.toLowerCase().replace(/[^a-z0-9_.-]/g, "-").slice(0, 80), severity: "warn", text: `Diskon gerai belum sesuai di Mengantar (${input.serviceCode}): diminta ${rule.assigned_bps / 100}%, teramati ${input.observedBps === null ? "—" : `${input.observedBps / 100}%`}.` }, input.now)
   }
   return next
+}
+
+/**
+ * Immediate best-effort discount check right after a Partner seller becomes `connected` (DEC-258).
+ * Does not advance the `+15/+60/+120 min` SLA schedule for mismatched services, flips matching services immediately to
+ * `sesuai` (daily drift cadence), and lets unmodified Cargo services <= ceiling adopt live Mengantar rates.
+ */
+export async function verifyTenantDiscountsNow(env: Env, tenantId: string, now: number): Promise<{ observed: number }> {
+  const { vaultFor } = await import("../../do/gerai-vault/stub")
+  const vault = vaultFor(env, tenantId)
+  const [rulesRes, outlet, appRow] = await Promise.all([
+    env.DB.prepare("SELECT service_code, service_class FROM tenant_discount_rules WHERE tenant_id = ?")
+      .bind(tenantId)
+      .all<{ service_code: string; service_class: "regular" | "cargo" }>(),
+    vault.defaultOutlet(tenantId).catch(() => null),
+    env.DB.prepare("SELECT json_extract(outlet_json, '$.areaId') AS area_id FROM tenant_applications WHERE tenant_id = ? AND state = 'approved' ORDER BY created_at DESC LIMIT 1")
+      .bind(tenantId)
+      .first<{ area_id: string | null }>(),
+  ])
+  if (rulesRes.results.length === 0) return { observed: 0 }
+  const areaId = (outlet?.ok ? outlet.value?.areaId : null) ?? appRow?.area_id ?? null
+  if (!areaId) return { observed: 0 }
+  const ratesRes = await vault.observeRates(tenantId, areaId).catch(() => null)
+  if (!ratesRes?.ok) return { observed: 0 }
+  const tasks: Array<Promise<unknown>> = []
+  for (const rule of rulesRes.results) {
+    const rate = ratesRes.value[rule.service_code]
+    const bps = rate && !rate.unsupported ? observedBpsOf(rule.service_class, rate) : null
+    if (bps === null) continue
+    tasks.push(recordObservation(env, { tenantId, serviceCode: rule.service_code, observedBps: bps, now, scheduled: false }))
+  }
+  await Promise.allSettled(tasks)
+  return { observed: tasks.length }
 }
 
 /**
@@ -473,12 +553,12 @@ export async function runDiscountVerifier(env: Env, now: number, limitTenants = 
 
 /**
  * Pulls live per-expedition discounts from the tenant's connected Mengantar account (`observeRates`) and adopts them
- * into `tenant_discount_rules` as `sesuai` (TOTP + reason + audit). Ideal for BYOK accounts or gerai with varied
- * per-courier negotiated discounts in Mengantar.
+ * into `tenant_discount_rules` as `sesuai` (TOTP + reason + audit, or `actorType = 'system'` during BYOK onboarding).
+ * Ideal for BYOK accounts or gerai with varied per-courier negotiated discounts in Mengantar.
  */
 export async function syncDiscountsFromMengantar(
   env: Env,
-  input: { tenantId: string; actorId: string; reason: string; now: number },
+  input: { tenantId: string; actorId: string; actorType?: "super_admin" | "system"; reason: string; now: number },
 ): Promise<{
   tenantId: string
   total: number
@@ -557,7 +637,7 @@ export async function syncDiscountsFromMengantar(
          SET assigned_bps = ?1, observed_bps = ?1, observed_at = ?2, verified_at = ?2,
              applied_at = COALESCE(applied_at, ?2), verification_state = 'sesuai',
              effective_from = CASE WHEN assigned_bps != ?1 THEN ?2 ELSE effective_from END,
-             next_check_at = ?3, alerted_at = NULL, updated_at = ?2, updated_by = ?4
+             next_check_at = ?3, check_step = MAX(check_step, 3), alerted_at = NULL, updated_at = ?2, updated_by = ?4
          WHERE tenant_id = ?5 AND service_code = ?6`,
       ).bind(observedBps, input.now, nextDaily, input.actorId, input.tenantId, rule.service_code),
     )
@@ -566,6 +646,7 @@ export async function syncDiscountsFromMengantar(
   stmts.push(
     auditStatement(env, {
       actorId: input.actorId,
+      actorType: input.actorType ?? "super_admin",
       action: "pricing.sync_from_mengantar",
       targetType: "tenant",
       targetId: input.tenantId,

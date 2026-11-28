@@ -29,19 +29,33 @@ This specification defines exact integer arithmetic for weights, customer tariff
 | **1. Base Outlet Discount (`gerai_discount_bps`)** | **Super Admin** (per outlet × courier/service) | **Outlet** (lowers outlet shipping cost) | `assigned_bps` is the **requested** discount (≤ `max_discount_bps`, §2.1); the **effective** discount for cost is always `effective_bps = min(assigned_bps, provider_observed_bps)`, so a requested rate Mengantar has not applied yet never lowers cost (no subsidy, DEC-226/230). `gerai_shipping_cost_idr` (the **commercial estimate** `M`) = `provider_net_shipping_idr` when `assigned_bps >= provider_observed_bps`, else `publish_shipping_idr - floor(publish_shipping_idr * assigned_bps / 10000)`. |
 | **2. Counter Packing Add-On (`packing_addon_idr`)** | **Gerai Admin** (shop cardboard/bubble catalog) | **Outlet 100%** (stays in shop cash drawer) | Added as an explicit receipt line item; never sent to Mengantar. |
 | **3. Counter Promo / Voucher (`promo_discount_idr`)** | **Gerai Admin** (outlet-funded only at launch; platform-funded campaigns are deferred until a settlement ledger exists) | **Walk-in Sender / Reseller** | Subtracted from the counter part only; capped so `counter_due_idr >= 0` **before** it is stored (`V <= P + I0 + K + S` for `none`, `V <= K + S` otherwise). |
-| **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | **Config/display-only at launch (DEC-255, TASK-713b):** stored in `tenant_discount_rules.cashback_bps` and displayed in Super Admin tariff tables; automated ledger accrual (`PENDING` → `RELEASED` 24h after `delivered` → `CLAWBACK` on `RTS`/`cancelled`) is deferred post-launch. |
+| **4. Deferred Cashback (`cashback_bps`)** | **Super Admin** or **Gerai Admin** (for loyal resellers) | **Outlet** or **Sender Contact** | **Dormant schema at launch (DEC-255, DEC-258):** stored as `0` in `tenant_discount_rules.cashback_bps` and stripped from cashier/public DTOs, hidden from Super Admin tariff UI to avoid confusion with Mengantar's "cashback ongkir" shipping discount; automated ledger accrual (`PENDING` → `RELEASED` 24h after `delivered` → `CLAWBACK` on `RTS`/`cancelled`) is deferred post-launch. |
 
 > **Observed Discount & Provider Cost Precedence:** On Mengantar's seller `/order/estimate`, `estimatedSpecialPrice` includes `codFee`. Thus `provider_net_shipping_idr = estimatedSpecialPrice - codFee` (an **exact integer**, stored as-is). `provider_observed_discount_bps = floor((publish_shipping_idr - provider_net_shipping_idr) * 10000 / publish_shipping_idr)` is a **lossy display/control value** (raw `discountPercent` is stored separately for audit). When `assigned_bps >= provider_observed_bps`, `gerai_shipping_cost_idr = provider_net_shipping_idr` (the exact integer — never re-derived from bps); bps arithmetic is used only when the assigned rate is lower. **All money flows and margins in §3 use the provider amount `N = provider_net_shipping_idr`**, because that is what Mengantar actually debits; `M` is shown only as the Super Admin's commercial reference and the gap `M - N` as `Selisih tarif` (§2.1). Once DEC-226's provider-enforced target is active, Mengantar bills the assigned rate, so `N = M` by construction. Regression example (TASK-107): `P = 12000`, provider net `9599` → observed bps `2000`; with assigned bps `2000` the cost is **Rp9.599**, not Rp9.600. `provider_reconciled_cost_idr` records actual billed truth once synced from `GET /invoices`. See §2.1 for what the assigned rate means under Scheme 1.
 
 ### 2.1 Discount control and verification (DEC-226, DEC-230)
 
 - **Who decides:** Super Admin sets `assigned_bps` per gerai × courier/service within the platform band
-  `platform_pricing_policy.min_discount_bps` … `max_discount_bps` (defaults `2000` … `3000` = 20 % … 30 %, DEC-233).
-  Every new gerai starts at `default_discount_bps` (`2000` = 20 %) for every courier/service on approval; Super Admin
-  raises it per gerai later, and each change is applied on the Mengantar account by the Mengantar team. Discounts
-  differ **per courier** (owner, 2026-11-15): the band, default and ceiling are kept per courier in
-  `courier_discount_policy` (falls back to the platform values when a courier has no row); all start at 20 % and are
-  edited later in `Kebijakan Diskon`.
+  `platform_pricing_policy.min_discount_bps` … `max_discount_bps` (locked under **DEC-258** to `2000 / 2500 / 2500` =
+  20 % min, 25 % default & ceiling, amending DEC-233's `2000 … 3000`). Per-courier bands in `courier_discount_policy`
+  are seeded from `partner_discount_schedule` (`default = max = master − margin`: `2500` bps / 25 % for regular couriers,
+  `1000` bps / 10 % for `pos`, `min = min(platform.minBps, target)`) so manual edits cannot accidentally erode the 5 %
+  platform spread unless Super Admin explicitly widens a courier band in `Kebijakan Diskon`. Every new gerai starts at
+  the courier default (`25%` regulars, `10%` Pos) on approval.
+- **Immediate onboarding sync & Cargo adoption (DEC-258):**
+  - **Partner seller (`connected`):** right after `provisionSeller` or `reconcileRegistration` saves the seller key,
+    best-effort `verifyTenantDiscountsNow` runs one `observeRates` check without advancing the `+15/+60/+120 min` retry
+    schedule for still-pending services. Regular services already matching Mengantar's locked partner sub-seller tier
+    flip immediately to `Sesuai` (switching to daily checks); mismatched services immediately record `observed_bps` and
+    remain `Belum diterapkan` (escalating to `Selisih` after `2 × SLA`).
+  - **Cargo services (`service_class = 'cargo'`):** because live Mengantar Cargo services return dynamic `5%–20%`
+    discounts rather than the `30%` regular master rate, an unmodified, never-verified system-seeded Cargo rule
+    (`updated_by = 'system'`, `verified_at IS NULL`, `verification_state != 'sesuai'`) adopts the first valid
+    `0 <= observedBps <= assigned_bps` as `Sesuai` (strictly advancing `updated_at` for optimistic-lock safety, never
+    adopting above ceiling, never overwriting admin edits, and never masking drift once `Sesuai`).
+  - **BYOK existing account (`byok_connected`):** right after `connectByok` saves the key, rate-limited best-effort
+    `syncDiscountsFromMengantar` (`actor_type = 'system'`) automatically adopts the existing Mengantar account's actual
+    per-expedition discounts as `Sesuai`.
 - **How it reaches Mengantar:** no public API exists (sandbox docs checked 2026-11-15). Mengantar applies the change
   from its own system to the seller account, normally within **1 hour** (owner, 2026-11-15). Each rule change records
   `requested_at` and appears in the Super Admin request list (`apply_channel = mengantar_team`); when an endpoint
@@ -91,8 +105,8 @@ This specification defines exact integer arithmetic for weights, customer tariff
   (`POST /api/owner/tarif/gerai/:tenantId/tarik-mengantar`, `owner_recent` + reason, 6 per minute per admin, audit
   action `pricing.sync_from_mengantar`). Each service with a usable observation gets `assigned_bps = observed_bps` and
   state `Sesuai`; services without one are skipped and keep their rule. Because Mengantar discounts are dynamic and
-  differ per expedition, adopted values (0–10000 bps) are stored as-is — including values outside the default 20 %–30 %
-  platform band (covered by `apps/worker/test/pricing/rules.test.ts`). A later manual edit of such a rule remains
+  differ per expedition, adopted values (0–10000 bps) are stored as-is — including values outside the locked
+  courier/platform band (covered by `apps/worker/test/pricing/rules.test.ts`). A later manual edit of such a rule remains
   validated against the courier/platform band (`422 DISCOUNT_OUT_OF_BAND`).
 
 ### 2.2 Partner Master Discount Schedule & 500 bps Margin Split (`ongkirich`, DEC-256)
