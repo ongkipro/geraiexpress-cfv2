@@ -1642,3 +1642,19 @@ Durable implementation changes, validation evidence and gotchas for the next mai
 - Deploy:
   - Staging: Worker `24e06174-5800-4557-8269-fe899776b6f0`, `do:migrate` 2/2 current (v26), probes **5/5 PASS**.
   - Production: Worker `0e59c7d3-d6b6-4c8e-8f8c-8de1caaca1ab`, `do:migrate` 4/4 current (v26), probes **6/6 PASS**, live `https://geraiexpress.com/` & `/biaya-dan-paket` verified (`sampai 25%`, `Simulasi selisih ongkir`).
+
+## 2026-11-28 — `REL-2026-11-28-cashback-lock-autosync` (`DEC-258` Locked Partner Target Ceiling, Onboarding Auto-Sync, Cargo Adoption & Cashback UI Cleanup, `9cbbcbc`)
+
+- Scope:
+  - D1 config-only migration `packages/db/migrations/control/0023_lock_partner_target_bands.sql`: locks `platform_pricing_policy` (`2000/2500/2500`) and all 9 `courier_discount_policy` bands to Partner Target Gerai `Master − 5%` (`2000/2500/2500` regulars, `1000/1000/1000` Pos Indonesia) without modifying any existing `tenant_discount_rules` (preserving existing high-discount BYOK accounts). Aligned `PLATFORM_DISCOUNT_BAND`, `applyScheduleBands`, and `CourierBandDialog.fillFromMaster`.
+  - Immediate best-effort Mengantar discount sync on onboarding (`apps/worker/src/onboarding/service.ts`, `apps/worker/src/pricing/rules/index.ts`): Partner `connected` (`provisionSeller` & `reconcileRegistration`) calls `verifyTenantDiscountsNow` (`Promise.allSettled`); BYOK `byok_connected` (`connectByok`) calls rate-limited (3/min) `syncDiscountsFromMengantar` (`actor_type = 'system'`) with a Partner-race re-check; `POST /gerai/:slug/sinkron` skips duplicate verification right after `reconcileRegistration`.
+  - Guarded Cargo first-observation adoption (`recordObservation`, `applyDefaultBandToTenant`): unmodified, never-verified Cargo rows (`updated_by = 'system'`, `verified_at IS NULL`, `verification_state != 'sesuai'`) adopt `observedBps <= assigned_bps` as `sesuai` while strictly advancing `updated_at = MAX(updated_at + 1, ?2)` for optimistic-lock safety; over-ceiling Cargo, admin edits, and post-verified drift always remain strictly checked.
+  - Super Admin UI cleanup (`apps/web-owner/src/shell/console-shell.tsx`, `routes/tarif/{index,gerai}.tsx`, `routes/gerai/detail.tsx`): removed dormant `0%` `cashback_bps` column and input, labelled section `Diskon Gerai`, and displayed `Tarif Cargo` / `—` for Cargo Master & Est. Margin across desktop and mobile.
+- Verification:
+  - Full `pnpm check`: PASS (`typecheck` 9/9, `eslint --max-warnings=0`, `test:unit` 32/32, `build`, `test:worker` 67/67 files / 516/516 tests, `bundle-audit` 184 files / 0 source maps / 0 secrets).
+  - Playwright `e2e/super-admin.spec.ts` (2/2 PASS) + real-browser visual & interaction checks across `/tarif`, `/tarif?tab=kebijakan`, `/tarif/<tenantId>`, regular & Cargo dialogs at `1366px` & `390px` (0 overflow, 0 console/page error, 7 screenshots inspected).
+  - Independent R3 review (`9c44d1a9`): Round 1 caught 1 P1 (optimistic lock `updated_at` advancement on Cargo adoption) + 5 P2 + 5 Nits; all fixed & regression-tested → Round 2 **APPROVE** (0 P0 / 0 P1 / 0 P2).
+  - Hosted CI `ci.yml` run `46132140231`: **PASS** (`check` + full Playwright 390/768/1280).
+- Deploy:
+  - Staging: D1 `0023_lock_partner_target_bands.sql` ✅ (0.96 ms), Worker `2a6b1c9b-96ce-46d8-84be-008e5a108abf`, `do:migrate` 2/2 current (v26), probes **5/5 PASS**.
+  - Production: D1 `0023_lock_partner_target_bands.sql` ✅ (0.74 ms), Worker `db539bd1-442c-41f1-8881-b4e63a310ad8`, `do:migrate` 5/5 current (v26), probes **6/6 PASS**; remote D1 verified `platform_pricing_policy = 2000/2500/2500`, all 9 `courier_discount_policy` locked (`2500` regulars, `1000` `pos`), and existing tenant rules preserved untouched.
